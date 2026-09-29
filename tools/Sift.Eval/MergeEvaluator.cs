@@ -83,10 +83,21 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             foreach (var project in TestProjects(graph))
             {
                 using var log = File.CreateText(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".record.log"));
-                var (map, _) = recorder.Record(
-                    new RecordRequest(workspace.RepoRoot, graph, project, new RecordOptions("Debug", settings.Framework, settings.Parallelism)), log);
-                workspace.Executor.Cleanup();
-                CoverageMapStore.Write(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".json"), map);
+                try
+                {
+                    var (map, _) = recorder.Record(
+                        new RecordRequest(workspace.RepoRoot, graph, project, new RecordOptions("Debug", settings.Framework, settings.Parallelism)), log);
+                    CoverageMapStore.Write(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".json"), map);
+                }
+                catch (NoTestsRecordedException ex)
+                {
+                    // A project named like a test project that runs no test gets no map, as with sift record.
+                    LogNotRecorded(project.Path, ex.Message);
+                }
+                finally
+                {
+                    workspace.Executor.Cleanup();
+                }
             }
 
             Directory.Move(temporary, directory);
@@ -387,6 +398,9 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         misses.Sort(StringComparer.Ordinal);
         return misses;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} not recorded: {Reason}")]
+    private partial void LogNotRecorded(string project, string reason);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Recorded coverage at {Sha}")]
     private partial void LogRecorded(string sha);

@@ -183,6 +183,7 @@ internal static class ResultWriter
             failed += passed ? 0 : 1;
             var scope = result switch
             {
+                { NotATestProject: true } => "not a test project",
                 { RanUnfiltered: true } => "all tests, filter matched nothing",
                 { Invocation.Selection.Mode: TestRunMode.Filtered } => $"{result.Invocation.Selection.TestClasses.Count} class(es)",
                 _ => "all tests",

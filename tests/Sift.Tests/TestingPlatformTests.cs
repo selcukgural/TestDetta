@@ -141,6 +141,27 @@ public sealed class TestingPlatformRecorderTests : IDisposable
         Assert.DoesNotContain("Sift.Coverage.Runtime", File.ReadAllText(Path.Combine(outputDirectory, "Calc.Tests.deps.json")));
     }
 
+    [Fact]
+    public void Project_named_like_a_test_project_without_tests_is_reported_as_not_recorded()
+    {
+        // Like an AOT smoke-test app: named *Test, but an ordinary executable with no tests.
+        _repo.Write("tests/Calc.AotTest/Calc.AotTest.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+              <ItemGroup><ProjectReference Include="../../src/Calc/Calc.csproj" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Calc.AotTest/Program.cs", "System.Console.WriteLine(new Calc.Calculator().Add(1, 2));");
+        _repo.Commit("aot smoke test");
+
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var aot = graph.Projects.Single(p => p.Path.EndsWith("Calc.AotTest.csproj", StringComparison.Ordinal));
+
+        Assert.True(aot.IsTestProject);
+        Assert.Throws<NoTestsRecordedException>(() =>
+            new CoverageRecorder(NullLoggerFactory.Instance).Record(new RecordRequest(_repo.Root, graph, aot, new RecordOptions()), TextWriter.Null));
+    }
+
     private static HashSet<CoveredMethod> Ran(CoverageMap map, string testClass) =>
         [.. map.Classes[testClass].Select(id => map.Methods[id])];
 

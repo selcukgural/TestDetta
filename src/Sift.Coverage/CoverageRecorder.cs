@@ -47,7 +47,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="request">What to record.</param>
     /// <param name="output">Receives build and test output.</param>
     /// <returns>The map, and whether all tests passed while recording.</returns>
-    /// <exception cref="InvalidOperationException">The build failed, or the test host did not load the collector.</exception>
+    /// <exception cref="InvalidOperationException">The build failed.</exception>
+    /// <exception cref="NoTestsRecordedException">No test ran, so nothing was recorded.</exception>
     public (CoverageMap Map, bool TestsPassed) Record(RecordRequest request, TextWriter output)
     {
         var dotnet = new DotnetProcess(_logger);
@@ -108,8 +109,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             {
                 if (!File.Exists(run.Result.ResultsFile))
                 {
-                    throw new InvalidOperationException(
-                        $"The test host did not write coverage for {project}. Only VSTest runs are supported for recording.");
+                    throw new NoTestsRecordedException(
+                        $"No test ran in {Path.GetFileName(project)} (exit code {run.Result.ExitCode}), so it has no coverage map. Is it a test project?");
                 }
 
                 resultsFiles.Add(run.Result.ResultsFile);

@@ -9,7 +9,11 @@ namespace Sift.Cli;
 /// <param name="ExitCode">Exit code of the final <c>dotnet test</c> run.</param>
 /// <param name="Elapsed">Wall-clock duration, including a fallback run.</param>
 /// <param name="RanUnfiltered">True when the filter matched no test and the project was run again without it.</param>
-internal sealed record TestRunResult(TestInvocation Invocation, int ExitCode, TimeSpan Elapsed, bool RanUnfiltered);
+/// <param name="NotATestProject">
+/// True when <c>dotnet test</c> found no test project to run (a project named like a test project
+/// that is not one); the exit code is then reported as 0.
+/// </param>
+internal sealed record TestRunResult(TestInvocation Invocation, int ExitCode, TimeSpan Elapsed, bool RanUnfiltered, bool NotATestProject = false);
 
 /// <summary>
 /// Runs <c>dotnet test</c> invocations one after another, forwarding their output line by line.
@@ -21,6 +25,9 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
 {
     /// <summary>What VSTest prints when <c>--filter</c> matches nothing; it still exits with 0.</summary>
     private const string VsTestNoMatch = "No test matches the given testcase filter";
+
+    /// <summary>What <c>dotnet test</c> prints, under Microsoft.Testing.Platform, for a project that is not a test project.</summary>
+    private const string NoTestProjects = "No test projects were found";
 
     /// <summary>Exit code of Microsoft.Testing.Platform when zero tests ran.</summary>
     private const int TestingPlatformZeroTests = 8;
@@ -47,7 +54,13 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
     private TestRunResult RunWithFallback(TestInvocation invocation, string workingDirectory, TextWriter stdout)
     {
         var stopwatch = Stopwatch.StartNew();
-        var (exitCode, matchedNothing) = Run(invocation.Arguments, workingDirectory, stdout);
+        var (exitCode, matchedNothing, notATestProject) = Run(invocation.Arguments, workingDirectory, stdout);
+        if (notATestProject)
+        {
+            LogNotATestProject(invocation.Selection.Project.Path);
+            stdout.WriteLine("sift: dotnet test found no test project here; it is skipped.");
+            return new TestRunResult(invocation, 0, stopwatch.Elapsed, RanUnfiltered: false, NotATestProject: true);
+        }
 
         var filtered = invocation.Selection.Mode == TestRunMode.Filtered;
         if (!filtered || !(matchedNothing || exitCode == TestingPlatformZeroTests))
@@ -60,7 +73,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         stdout.WriteLine("sift: please report this with the output of 'sift affected --format json'.");
 
         var unfiltered = WithoutFilter(invocation.Arguments);
-        (exitCode, _) = Run(unfiltered, workingDirectory, stdout);
+        (exitCode, _, _) = Run(unfiltered, workingDirectory, stdout);
         return new TestRunResult(invocation, exitCode, stopwatch.Elapsed, RanUnfiltered: true);
     }
 
@@ -69,7 +82,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
     /// <param name="workingDirectory">Directory the process runs in.</param>
     /// <param name="stdout">Receives the forwarded output.</param>
     /// <exception cref="InvalidOperationException">The dotnet executable could not be started.</exception>
-    private (int ExitCode, bool MatchedNothing) Run(IReadOnlyList<string> arguments, string workingDirectory, TextWriter stdout)
+    private (int ExitCode, bool MatchedNothing, bool NotATestProject) Run(IReadOnlyList<string> arguments, string workingDirectory, TextWriter stdout)
     {
         var psi = new ProcessStartInfo(DotnetExecutable())
         {
@@ -90,6 +103,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
 
         using var process = new Process { StartInfo = psi };
         var matchedNothing = false;
+        var notATestProject = false;
         var gate = new Lock();
 
         // Both streams go to our stdout, in arrival order, so the log reads like a normal dotnet test run.
@@ -106,7 +120,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         process.WaitForExit();
 
         LogFinished(commandLine, process.ExitCode, stopwatch.ElapsedMilliseconds);
-        return (process.ExitCode, matchedNothing);
+        return (process.ExitCode, matchedNothing, notATestProject);
 
         void Forward(string? line)
         {
@@ -118,6 +132,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
             lock (gate)
             {
                 matchedNothing |= line.Contains(VsTestNoMatch, StringComparison.Ordinal);
+                notATestProject |= line.Contains(NoTestProjects, StringComparison.Ordinal);
                 stdout.WriteLine(line);
             }
         }
@@ -154,6 +169,9 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "dotnet {Arguments} exited with {ExitCode} after {ElapsedMs} ms")]
     private partial void LogFinished(string arguments, int exitCode, long elapsedMs);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} is not a test project according to dotnet test; skipped")]
+    private partial void LogNotATestProject(string project);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The filter for {Project} matched no test; running it unfiltered")]
     private partial void LogFilterMatchedNothing(string project);

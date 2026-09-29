@@ -152,8 +152,20 @@ internal static partial class CliApp
 
             foreach (var project in testProjects)
             {
-                var (map, passed) = recorder.Record(
-                    new Sift.Coverage.RecordRequest(root, graph, project, new Sift.Coverage.RecordOptions(options.Record.Configuration, options.Record.Framework, options.Record.Parallelism)), stdout);
+                (CoverageMap Map, bool Passed) recorded;
+                try
+                {
+                    recorded = recorder.Record(
+                        new Sift.Coverage.RecordRequest(root, graph, project, new Sift.Coverage.RecordOptions(options.Record.Configuration, options.Record.Framework, options.Record.Parallelism)), stdout);
+                }
+                catch (Sift.Coverage.NoTestsRecordedException ex)
+                {
+                    // Not a reason to fail the run: selection decides for this project by name.
+                    summary.Add($"  skipped   {Path.GetRelativePath(root, project.Path)}: {ex.Message}");
+                    continue;
+                }
+
+                var (map, passed) = recorded;
                 var path = CoverageMapStore.PathFor(root, project.Path);
                 CoverageMapStore.Write(path, map);
 
