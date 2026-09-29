@@ -34,6 +34,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --mutants <n>          Changed members to mutate per merge (default: 3, 0 turns it off)
           --project <csproj>     Only use this test project (path in the repository); repeat for several
           -f, --framework <tfm>  Build, record and test only this target framework, e.g. net10.0
+          --setup <command>      Shell command run after every checkout, e.g. dotnet tool restore
           --cleanup <command>    Shell command run after every test run, e.g. to remove test containers
           --out <dir>            Work and report directory (default: a new directory under the temp folder)
           -v, --verbose          Debug logs on stderr
@@ -48,7 +49,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
         string? repository = null;
         var branch = "main";
         var merges = 8;
-        var run = new RunSettings(Parallelism: 1, Mutants: 3, Projects: [], Cleanup: null, Framework: null);
+        var run = new RunSettings(Parallelism: 1, Mutants: 3, Projects: [], new RepoCommands(Setup: null, Cleanup: null), Framework: null);
         var logLevel = LogLevel.Information;
         var output = Path.Combine(Path.GetTempPath(), "sift-eval-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
         options = null!;
@@ -85,7 +86,11 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     break;
 
                 case "--cleanup":
-                    run = run with { Cleanup = value };
+                    run = run with { Commands = run.Commands with { Cleanup = value } };
+                    break;
+
+                case "--setup":
+                    run = run with { Commands = run.Commands with { Setup = value } };
                     break;
 
                 case "-f" or "--framework":
@@ -133,6 +138,11 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
 /// <param name="Parallelism">Test processes per project when recording.</param>
 /// <param name="Mutants">Changed members to mutate per merge.</param>
 /// <param name="Projects">Test projects to use (paths in the repository); empty means all.</param>
-/// <param name="Cleanup">Shell command run after every test run, or null.</param>
+/// <param name="Commands">Repository-specific shell commands around checkouts and test runs.</param>
 /// <param name="Framework">Target framework to build, record and test, or null for the projects' defaults.</param>
-internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<string> Projects, string? Cleanup, string? Framework);
+internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<string> Projects, RepoCommands Commands, string? Framework);
+
+/// <summary>Shell commands a repository needs besides dotnet.</summary>
+/// <param name="Setup">Run after every checkout, before building: restoring local tools, for example. Null for none.</param>
+/// <param name="Cleanup">Run after every test run: removing test containers, for example. Null for none.</param>
+internal sealed record RepoCommands(string? Setup, string? Cleanup);

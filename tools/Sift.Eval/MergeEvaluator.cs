@@ -32,6 +32,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             RecordAt(commit.Parent);
 
             workspace.Git.Checkout(commit.Sha);
+            workspace.Executor.Setup();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
             var testProjects = TestProjects(graph);
             Build(testProjects);
@@ -75,6 +76,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         if (!Directory.Exists(directory))
         {
             workspace.Git.Checkout(sha);
+            workspace.Executor.Setup();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
             var recorder = new CoverageRecorder(workspace.LoggerFactory);
             var temporary = directory + ".partial";

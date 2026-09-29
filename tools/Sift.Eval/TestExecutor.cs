@@ -195,9 +195,17 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     }
 
     /// <summary>Runs the cleanup command, if any, and waits for it.</summary>
-    public void Cleanup()
+    public void Cleanup() => RunShell(context.Settings.Commands.Cleanup, "cleanup");
+
+    /// <summary>Runs the setup command, if any, after a checkout.</summary>
+    public void Setup() => RunShell(context.Settings.Commands.Setup, "setup");
+
+    /// <summary>Runs a shell command in the clone and waits for it; its output is discarded.</summary>
+    /// <param name="command">Command, or null for none.</param>
+    /// <param name="label">Name for the log.</param>
+    private void RunShell(string? command, string label)
     {
-        if (context.Settings.Cleanup is not { Length: > 0 } command)
+        if (command is not { Length: > 0 })
         {
             return;
         }
@@ -205,10 +213,14 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         var psi = new ProcessStartInfo("/bin/sh") { WorkingDirectory = context.RepoRoot, RedirectStandardOutput = true, RedirectStandardError = true };
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add(command);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start the cleanup command.");
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException($"Could not start the {label} command.");
+
+        // Both streams are drained, so a chatty command cannot block on a full pipe.
+        var stderr = process.StandardError.ReadToEndAsync();
         process.StandardOutput.ReadToEnd();
+        stderr.GetAwaiter().GetResult();
         process.WaitForExit();
-        LogCleanup(process.ExitCode);
+        LogShell(label, process.ExitCode);
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Label}: {Project} exited with {ExitCode}")]
@@ -217,6 +229,6 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Label}: the test host of {Project} crashed (attempt {Attempt})")]
     private partial void LogCrashed(string label, string project, int attempt);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Cleanup exited with {ExitCode}")]
-    private partial void LogCleanup(int exitCode);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "The {Label} command exited with {ExitCode}")]
+    private partial void LogShell(string label, int exitCode);
 }

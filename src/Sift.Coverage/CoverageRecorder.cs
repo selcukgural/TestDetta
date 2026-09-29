@@ -61,10 +61,12 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             build.AddRange(["-f", targetFramework]);
         }
 
-        var buildExit = dotnet.Run(build, root, new Dictionary<string, string>(), output);
+        var errors = new ErrorCollectingWriter(output);
+        var buildExit = dotnet.Run(build, root, new Dictionary<string, string>(), errors);
         if (buildExit != 0)
         {
-            throw new InvalidOperationException($"Building {project} failed with exit code {buildExit}.");
+            var reason = errors.Errors.Count == 0 ? string.Empty : ": " + string.Join(" / ", errors.Errors);
+            throw new InvalidOperationException($"Building {Path.GetFileName(project)} failed with exit code {buildExit}{reason}");
         }
 
         var (targetPath, framework) = FindTargetPath(dotnet, request);
