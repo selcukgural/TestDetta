@@ -48,8 +48,15 @@ internal static partial class CliApp
             var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
             var root = git.TopLevel(options.RepoPath);
             var changed = git.ChangedFiles(root, options.BaseRef);
+            var mergeBase = git.MergeBase(root, options.BaseRef);
+            var codeChanges = new CodeChangeReader(
+                    git,
+                    new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()),
+                    loggerFactory.CreateLogger<CodeChangeReader>())
+                .Read(root, mergeBase, changed);
             var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>()).Load(root);
-            var result = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>()).Analyze(graph, root, changed);
+            var result = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>())
+                .Analyze(graph, root, changed, codeChanges);
 
             ResultWriter.Write(new ResultReport(options, root, changed.Count, graph.Projects.Count, result), stdout);
             return Success;

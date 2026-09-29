@@ -21,7 +21,13 @@ public sealed record AffectedProject(ProjectNode Project, ImpactReason Reason);
 /// <summary>Outcome of an impact analysis.</summary>
 /// <param name="Affected">Affected projects ordered by path.</param>
 /// <param name="UnmappedFiles">Changed files that belong to no project, as given to the analyzer.</param>
-public sealed record ImpactResult(IReadOnlyList<AffectedProject> Affected, IReadOnlyList<string> UnmappedFiles)
+/// <param name="CosmeticFiles">C# files skipped because only whitespace or comments changed.</param>
+/// <param name="CodeChanges">Symbol-level changes of the C# files that were not cosmetic.</param>
+public sealed record ImpactResult(
+    IReadOnlyList<AffectedProject> Affected,
+    IReadOnlyList<string> UnmappedFiles,
+    IReadOnlyList<string> CosmeticFiles,
+    IReadOnlyList<CodeChange> CodeChanges)
 {
     /// <summary>The affected projects that are test projects.</summary>
     public IEnumerable<AffectedProject> Tests => Affected.Where(static a => a.Project.IsTestProject);

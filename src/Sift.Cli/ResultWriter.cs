@@ -73,6 +73,11 @@ internal static class ResultWriter
             stdout.WriteLine($"  {marker}{Relative(report.RepoRoot, affected.Project.Path)}  ({affected.Reason})");
         }
 
+        if (report.Result.CosmeticFiles.Count > 0)
+        {
+            stdout.WriteLine($"{report.Result.CosmeticFiles.Count} C# file(s) with only whitespace or comment changes (ignored).");
+        }
+
         if (report.Result.UnmappedFiles.Count > 0)
         {
             stdout.WriteLine($"{report.Result.UnmappedFiles.Count} changed file(s) outside any project (ignored).");
@@ -111,10 +116,26 @@ internal static class ResultWriter
             }
             json.WriteEndArray();
 
-            json.WriteStartArray("unmappedFiles"u8);
-            foreach (var file in report.Result.UnmappedFiles)
+            WriteStringArray(json, "unmappedFiles"u8, report.Result.UnmappedFiles);
+            WriteStringArray(json, "cosmeticFiles"u8, report.Result.CosmeticFiles);
+
+            json.WriteStartArray("codeChanges"u8);
+            foreach (var change in report.Result.CodeChanges)
             {
-                json.WriteStringValue(file);
+                json.WriteStartObject();
+                json.WriteString("path"u8, change.Path);
+                json.WriteBoolean("affectsWholeProject"u8, change.AffectsWholeProject);
+                json.WriteStartArray("symbols"u8);
+                foreach (var symbol in change.Symbols)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("type"u8, symbol.TypeName);
+                    json.WriteString("member"u8, symbol.MemberName);
+                    json.WriteString("kind"u8, symbol.Kind.ToString());
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
+                json.WriteEndObject();
             }
             json.WriteEndArray();
 
@@ -122,6 +143,21 @@ internal static class ResultWriter
         }
 
         stdout.WriteLine(System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
+    }
+
+    /// <summary>Writes a JSON array of strings under <paramref name="name"/>.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="name">UTF-8 property name.</param>
+    /// <param name="values">Array items.</param>
+    private static void WriteStringArray(Utf8JsonWriter json, ReadOnlySpan<byte> name, IReadOnlyList<string> values)
+    {
+        json.WriteStartArray(name);
+        foreach (var value in values)
+        {
+            json.WriteStringValue(value);
+        }
+
+        json.WriteEndArray();
     }
 
     /// <summary>Path of <paramref name="path"/> relative to <paramref name="root"/>, with '/' separators.</summary>

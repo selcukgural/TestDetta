@@ -99,10 +99,24 @@ public sealed class ImpactAnalyzerTests : IDisposable
         Assert.Contains("Bare.Tests", TestNames(Analyze("src/Other/Thing.cs")));
     }
 
-    private ImpactResult Analyze(params string[] changed)
+    [Fact]
+    public void Cosmetic_csharp_change_does_not_affect_its_project()
+    {
+        var result = AnalyzeWith(
+            [new CodeChange("src/Domain/Order.cs", IsCosmetic: true, AffectsWholeProject: false, [])],
+            "src/Domain/Order.cs",
+            "src/Other/Thing.cs");
+
+        Assert.Equal(["Other.Tests"], TestNames(result));
+        Assert.Equal(["src/Domain/Order.cs"], result.CosmeticFiles);
+    }
+
+    private ImpactResult Analyze(params string[] changed) => AnalyzeWith([], changed);
+
+    private ImpactResult AnalyzeWith(IReadOnlyList<CodeChange> codeChanges, params string[] changed)
     {
         var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_root);
-        return new ImpactAnalyzer(NullLogger<ImpactAnalyzer>.Instance).Analyze(graph, _root, changed);
+        return new ImpactAnalyzer(NullLogger<ImpactAnalyzer>.Instance).Analyze(graph, _root, changed, codeChanges);
     }
 
     private static string Name(ProjectNode p) => Path.GetFileNameWithoutExtension(p.Path);

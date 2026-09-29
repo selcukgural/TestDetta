@@ -24,17 +24,45 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root that <paramref name="changedFiles"/> are relative to.</param>
     /// <param name="changedFiles">Changed file paths relative to <paramref name="repoRoot"/>, as git prints them.</param>
-    public ImpactResult Analyze(ProjectGraph graph, string repoRoot, IEnumerable<string> changedFiles)
+    /// <param name="codeChanges">
+    /// Code-level changes of the C# files among <paramref name="changedFiles"/>. Files reported as
+    /// cosmetic are skipped; C# files without an entry are treated as changed.
+    /// </param>
+    public ImpactResult Analyze(
+        ProjectGraph graph,
+        string repoRoot,
+        IEnumerable<string> changedFiles,
+        IReadOnlyList<CodeChange> codeChanges)
     {
         var root = Paths.Normalize(repoRoot);
         var reasons = new Dictionary<string, ImpactReason>(Paths.Comparer);
         var unmapped = new List<string>();
+        var cosmetic = new HashSet<string>(StringComparer.Ordinal);
+        var relevantChanges = new List<CodeChange>(codeChanges.Count);
+
+        foreach (var change in codeChanges)
+        {
+            if (change.IsCosmetic)
+            {
+                cosmetic.Add(change.Path);
+            }
+            else
+            {
+                relevantChanges.Add(change);
+            }
+        }
 
         // Deepest directory first, so a nested project owns its files instead of its parent.
         var byDepth = graph.Projects.OrderByDescending(static p => p.Directory.Length).ToArray();
 
         foreach (var relative in changedFiles)
         {
+            if (cosmetic.Contains(relative))
+            {
+                LogCosmetic(relative);
+                continue;
+            }
+
             var file = Paths.Normalize(Path.Combine(root, relative));
 
             if (DirectoryWideFiles.Contains(Path.GetFileName(file)))
@@ -76,7 +104,7 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
             LogSummary(affected.Count, testCount, unmapped.Count);
         }
 
-        return new ImpactResult(affected, unmapped);
+        return new ImpactResult(affected, unmapped, [.. cosmetic.Order(StringComparer.Ordinal)], relevantChanges);
     }
 
     /// <summary>Marks every project in or below the directory of a build-wide <paramref name="file"/>.</summary>
@@ -126,6 +154,9 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{File} belongs to {Project}")]
     private partial void LogDirectChange(string file, string project);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} has only whitespace or comment changes, ignored")]
+    private partial void LogCosmetic(string file);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{File} is outside every project, ignored")]
     private partial void LogUnmapped(string file);
