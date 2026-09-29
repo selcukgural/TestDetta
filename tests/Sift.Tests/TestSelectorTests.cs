@@ -325,6 +325,28 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Generic_fixture_is_matched_with_its_arguments()
+    {
+        // Host<CalcProfile> set up with the changed code; Host<SlugProfile> did not.
+        _repo.Write("tests/Shop.Tests/Hosts.cs", """
+            namespace Shop.Tests;
+            public class Host<TProfile> { }
+            public class CalcProfile { }
+            public class SlugProfile { }
+            public class CalcHostTests(Host<CalcProfile> host) : IClassFixture<Host<CalcProfile>> { [Fact] public void A() => Assert.NotNull(host); }
+            public class SlugHostTests(Host<SlugProfile> host) : IClassFixture<Host<SlugProfile>> { [Fact] public void B() => Assert.NotNull(host); }
+            """);
+        _repo.Commit("add hosts");
+
+        _fixtures["Shop.Tests.Host`1[Shop.Tests.CalcProfile]"] = [5];
+        _fixtures["Shop.Tests.Host`1[Shop.Tests.SlugProfile]"] = [0];
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(["Shop.Tests.CalcHostTests"], Select().TestClasses);
+    }
+
+    [Fact]
     public void Member_no_test_ran_skips_the_project()
     {
         WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));

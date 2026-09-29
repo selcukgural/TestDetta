@@ -107,7 +107,7 @@ public static class SiftTracker
     /// runtime type names the concrete fixture.
     /// </summary>
     /// <param name="instance">The fixture instance (<c>this</c>).</param>
-    public static void EnterFixtureInstance(object instance) => Enter(Fixtures, RuntimeName(instance.GetType()), isFixture: true);
+    public static void EnterFixtureInstance(object instance) => Enter(Fixtures, FixtureName(instance.GetType()), isFixture: true);
 
     /// <summary>Writes the collected data to the file named by <see cref="OutputVariable"/>.</summary>
     public static void WriteResults()
@@ -168,6 +168,22 @@ public static class SiftTracker
     {
         var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
         return definition.FullName ?? definition.Name;
+    }
+
+    /// <summary>
+    /// Name of a fixture type including its generic arguments, <c>App.Tests.ApiHost`1[App.Tests.BlogProfile]</c>:
+    /// each constructed fixture sets up different things, and selection matches the arguments too.
+    /// </summary>
+    /// <param name="type">Runtime type of the fixture.</param>
+    private static string FixtureName(Type type)
+    {
+        if (!type.IsGenericType)
+        {
+            return RuntimeName(type);
+        }
+
+        var arguments = type.GetGenericArguments().Select(FixtureName);
+        return $"{RuntimeName(type)}[{string.Join(",", arguments)}]";
     }
 
     /// <summary>Writes every bucket of <paramref name="buckets"/> as a property with an array of ids.</summary>

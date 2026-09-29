@@ -37,23 +37,45 @@ internal sealed class CoverageSelection
         }
     }
 
-    /// <summary>Test classes of <paramref name="project"/> whose code names the fixture type, typically in a constructor parameter or base list.</summary>
+    /// <summary>
+    /// Test classes of <paramref name="project"/> whose code names the fixture type and each of its
+    /// generic arguments, typically in a constructor parameter or base list:
+    /// <c>ApiHost`1[BlogProfile]</c> is used by classes that name both <c>ApiHost</c> and <c>BlogProfile</c>.
+    /// </summary>
     /// <param name="index">Indexed source code.</param>
     /// <param name="project">Normalized test project path.</param>
-    /// <param name="fixture">Fixture type name from the map, such as <c>App.Tests.ApiHost`1</c>.</param>
+    /// <param name="fixture">Fixture name from the map, such as <c>App.Tests.ApiHost`1[App.Tests.BlogProfile]</c>.</param>
     private static List<string> ClassesUsing(SourceIndex index, string project, string fixture)
     {
-        var simpleName = DeclarationWalker.SimpleTypeName(fixture.Replace('+', '.'));
+        var names = FixtureNames(fixture);
         var classes = new List<string>();
         foreach (var type in index.Types)
         {
-            if (type.CanContainTests && Paths.Comparer.Equals(type.ProjectPath, project) && index.TypeMentions(type.TypeName, simpleName))
+            if (!type.CanContainTests || !Paths.Comparer.Equals(type.ProjectPath, project))
+            {
+                continue;
+            }
+
+            if (names.TrueForAll(name => index.TypeMentions(type.TypeName, name)))
             {
                 classes.Add(type.RuntimeTypeName);
             }
         }
 
         return classes;
+    }
+
+    /// <summary>Simple names of a fixture type and its generic arguments: <c>A.Host`1[A.Profile]</c> gives <c>Host</c>, <c>Profile</c>.</summary>
+    /// <param name="fixture">Fixture name from the map.</param>
+    private static List<string> FixtureNames(string fixture)
+    {
+        var names = new List<string>();
+        foreach (var part in fixture.Split(['[', ']', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            names.Add(DeclarationWalker.SimpleTypeName(part.Replace('+', '.')));
+        }
+
+        return names;
     }
 
     /// <summary>True when at least one affected test project has a coverage map in use.</summary>
