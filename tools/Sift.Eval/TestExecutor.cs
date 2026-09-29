@@ -79,6 +79,13 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         {
             var id = Interlocked.Increment(ref _runs);
             var results = Path.Combine(context.LogDirectory, "trx", $"{id:000}-{label}");
+
+            // A rerun in the same output directory reuses run numbers; an old report would add its
+            // tests and failures to this run.
+            if (Directory.Exists(results))
+            {
+                Directory.Delete(results, recursive: true);
+            }
             arguments.Add("--no-build");
             arguments.AddRange(ReportArguments(project, results));
 

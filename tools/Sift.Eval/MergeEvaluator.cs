@@ -288,31 +288,41 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
     /// </summary>
     /// <param name="analysis">Sift's analysis.</param>
     /// <param name="afterMaps">Maps recorded at the merge.</param>
-    private static List<string> CoverageMisses(AnalysisResult analysis, Dictionary<string, CoverageMap> afterMaps)
+    /// <remarks>
+    /// Maps name types without their assembly, so a change counts for a test project only when the
+    /// changed file's project is one it depends on; otherwise a tool's <c>Program</c> would match the
+    /// application's. A file outside every project counts everywhere, so Sift's blind spots stay visible.
+    /// </remarks>
+    private List<string> CoverageMisses(AnalysisResult analysis, Dictionary<string, CoverageMap> afterMaps)
     {
-        var changed = new List<(string Type, string? Member)>();
-        foreach (var symbol in analysis.Impact.CodeChanges.SelectMany(static c => c.Symbols))
+        var changed = new List<(string Type, string? Member, ProjectNode? Owner)>();
+        foreach (var change in analysis.Impact.CodeChanges)
         {
-            var member = symbol.MemberName switch
+            var owner = analysis.Graph.FindOwner(Path.GetFullPath(Path.Combine(workspace.RepoRoot, change.Path)).Replace('\\', '/'));
+            foreach (var symbol in change.Symbols)
             {
-                null => null,
-                var m when m.StartsWith(".ctor", StringComparison.Ordinal) => ".ctor",
-                var m => DeclarationWalker.ReferenceNames(m) is [var single] ? single : null,
-            };
+                var member = symbol.MemberName switch
+                {
+                    null => null,
+                    var m when m.StartsWith(".ctor", StringComparison.Ordinal) => ".ctor",
+                    var m => DeclarationWalker.ReferenceNames(m) is [var single] ? single : null,
+                };
 
-            if (symbol.MemberName is null || member is not null)
-            {
-                changed.Add((symbol.TypeName, member));
+                if (symbol.MemberName is null || member is not null)
+                {
+                    changed.Add((symbol.TypeName, member, owner));
+                }
             }
         }
 
         var misses = new List<string>();
         foreach (var (project, map) in afterMaps)
         {
+            var relevant = changed.FindAll(c => c.Owner is null || analysis.Graph.WithDependents([c.Owner.Path]).Contains(project));
             foreach (var (testClass, ids) in map.Classes)
             {
                 var ran = ids.Select(id => map.Methods[id]).ToList();
-                var touches = changed.Exists(c => c.Member is null
+                var touches = relevant.Exists(c => c.Member is null
                     ? ran.Exists(m => m.TypeName == c.Type || m.TypeName.StartsWith(c.Type + ".", StringComparison.Ordinal))
                     : ran.Contains(new CoveredMethod(c.Type, c.Member)));
 
