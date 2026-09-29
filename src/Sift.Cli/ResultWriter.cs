@@ -83,7 +83,8 @@ internal static class ResultWriter
     /// <param name="stdout">Destination.</param>
     private static void WriteCommands(ResultReport report, TextWriter stdout)
     {
-        foreach (var invocation in TestInvocationBuilder.Build(report.Tests, report.RepoRoot, []))
+        var mode = DotnetTestModeDetector.Detect(report.RepoRoot);
+        foreach (var invocation in TestInvocationBuilder.Build(report.Tests, report.RepoRoot, [], mode))
         {
             stdout.WriteLine(CommandLine(invocation));
         }

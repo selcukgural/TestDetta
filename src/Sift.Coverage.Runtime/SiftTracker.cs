@@ -50,6 +50,12 @@ public static class SiftTracker
     /// <summary>Bucket entered last on any thread, for code that runs outside every test flow.</summary>
     private static Bucket? _lastEntered;
 
+    /// <summary>
+    /// Writes the results when the process ends. Under Microsoft.Testing.Platform the tests run in
+    /// their own executable, where no VSTest collector exists to say the session is over.
+    /// </summary>
+    static SiftTracker() => AppDomain.CurrentDomain.ProcessExit += static (_, _) => WriteResults();
+
     /// <summary>Records that method <paramref name="id"/> ran. Called by instrumented code; must stay cheap.</summary>
     /// <param name="id">Method id assigned by the instrumenter.</param>
     public static void Hit(int id)

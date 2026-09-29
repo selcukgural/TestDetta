@@ -15,10 +15,15 @@ public static class TestInvocationBuilder
     /// <param name="selections">Decisions from <see cref="TestSelector"/>.</param>
     /// <param name="repoRoot">Repository root; project paths are made relative to it.</param>
     /// <param name="extraArguments">Appended to every invocation as given, for example <c>-c Release --no-build</c>.</param>
+    /// <param name="mode">
+    /// Runner <c>dotnet test</c> uses: VSTest takes the project as an argument, Microsoft.Testing.Platform
+    /// through <c>--project</c>. Both accept the VSTest filter syntax through <c>--filter</c>.
+    /// </param>
     public static IReadOnlyList<TestInvocation> Build(
         IReadOnlyList<TestProjectSelection> selections,
         string repoRoot,
-        IReadOnlyList<string> extraArguments)
+        IReadOnlyList<string> extraArguments,
+        DotnetTestMode mode = DotnetTestMode.VSTest)
     {
         var invocations = new List<TestInvocation>(selections.Count);
         foreach (var selection in selections)
@@ -28,7 +33,8 @@ public static class TestInvocationBuilder
                 continue;
             }
 
-            List<string> arguments = ["test", Path.GetRelativePath(repoRoot, selection.Project.Path).Replace('\\', '/')];
+            var project = Path.GetRelativePath(repoRoot, selection.Project.Path).Replace('\\', '/');
+            List<string> arguments = mode == DotnetTestMode.TestingPlatform ? ["test", "--project", project] : ["test", project];
             if (selection.Mode == TestRunMode.Filtered)
             {
                 arguments.Add("--filter");

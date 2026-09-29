@@ -59,15 +59,16 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var instrumenter = new AssemblyInstrumenter(_logger);
         var testAssemblies = new HashSet<string>(StringComparer.Ordinal) { targetPath };
         var instrumentation = instrumenter.Instrument(assemblies, testAssemblies, Path.Combine(work, "backup"));
+        var mode = DotnetTestModeDetector.Detect(root);
+        RuntimeDeployment? deployment = null;
 
         try
         {
-            var settings = WriteRunSettings(work);
-            List<string> testArguments = ["test", project, "--no-build", "-c", request.Configuration, "--settings", settings];
-            if (framework is not null)
-            {
-                testArguments.AddRange(["-f", framework]);
-            }
+            // Under Microsoft.Testing.Platform the tests run in the test project's own executable,
+            // where no VSTest collector loads the runtime; it goes into the output instead.
+            deployment = mode == DotnetTestMode.TestingPlatform ? new RuntimeDeployment(targetPath) : null;
+            var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework), work);
+            LogMode(project, mode);
 
             var shards = Shards(request);
             var synchronizedOutput = TextWriter.Synchronized(output);
@@ -97,9 +98,48 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
         finally
         {
+            deployment?.Dispose();
             instrumenter.Restore(instrumentation);
             Directory.Delete(work, recursive: true);
         }
+    }
+
+    /// <summary>What <see cref="TestArguments"/> needs to know about the run.</summary>
+    /// <param name="Request">What is recorded.</param>
+    /// <param name="Mode">Runner <c>dotnet test</c> uses.</param>
+    /// <param name="TargetPath">Compiled test assembly.</param>
+    /// <param name="Framework">Target framework to pass, for a multi-targeted project; otherwise null.</param>
+    private sealed record TestRun(RecordRequest Request, DotnetTestMode Mode, string TargetPath, string? Framework);
+
+    /// <summary>
+    /// <c>dotnet test</c> arguments shared by all shards. Tests must run one at a time: VSTest and the
+    /// VSTest bridge of MSTest and NUnit take that from run settings, xUnit v3 from <c>--parallel none</c>.
+    /// </summary>
+    /// <param name="run">The run.</param>
+    /// <param name="work">Work directory for the run settings file.</param>
+    private static List<string> TestArguments(TestRun run, string work)
+    {
+        var project = run.Request.TestProject.Path;
+        List<string> arguments = run.Mode == DotnetTestMode.TestingPlatform
+            ? ["test", "--project", project, "--no-build", "-c", run.Request.Configuration]
+            : ["test", project, "--no-build", "-c", run.Request.Configuration];
+
+        var isXunitV3 = File.Exists(Path.Combine(Path.GetDirectoryName(run.TargetPath)!, "xunit.v3.core.dll"));
+        if (run.Mode == DotnetTestMode.TestingPlatform && isXunitV3)
+        {
+            arguments.AddRange(["--parallel", "none"]);
+        }
+        else
+        {
+            arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: run.Mode == DotnetTestMode.VSTest)]);
+        }
+
+        if (run.Framework is not null)
+        {
+            arguments.AddRange(["-f", run.Framework]);
+        }
+
+        return arguments;
     }
 
     /// <summary>One test host process of a sharded recording.</summary>
@@ -190,8 +230,17 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             File.WriteAllText(resultsFile, EmptyResults);
         }
 
+        // Microsoft.Testing.Platform exits with 8 when no test ran, which is what an empty catch-all should do.
+        if (isCatchAll && exitCode == TestingPlatformZeroTests)
+        {
+            exitCode = 0;
+        }
+
         return (exitCode, resultsFile);
     }
+
+    /// <summary>Exit code of Microsoft.Testing.Platform when zero tests ran.</summary>
+    private const int TestingPlatformZeroTests = 8;
 
     /// <summary>Results of a test host that ran no test.</summary>
     private const string EmptyResults = "{\"classes\":{},\"fixtures\":{},\"ambient\":[]}";
@@ -249,34 +298,44 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return assemblies;
     }
 
-    /// <summary>Writes run settings that load <see cref="SiftInProcCollector"/> into the test host.</summary>
+    /// <summary>
+    /// Writes run settings that make tests run one at a time and, for VSTest, load
+    /// <see cref="SiftInProcCollector"/> into the test host.
+    /// </summary>
     /// <param name="directory">Where to write the file.</param>
-    private static string WriteRunSettings(string directory)
+    /// <param name="withCollector">
+    /// True under VSTest. Under Microsoft.Testing.Platform the runtime is deployed into the test
+    /// output instead, and a second copy loaded by a collector would split the tracker's state.
+    /// </param>
+    private static string WriteRunSettings(string directory, bool withCollector)
     {
-        // The collector type is named, not loaded: it depends on test platform assemblies that only
-        // the test host has. SiftTracker lives in the same assembly and has no such dependency.
-        var runtime = typeof(SiftTracker).Assembly;
-        var collectorName = $"{typeof(SiftTracker).Namespace}.{nameof(SiftInProcCollector)}, {runtime.FullName}";
-        // Tests run one at a time while recording: a hit can only be credited to the tests running at
-        // that moment, and with parallel classes every class would get everyone's hits.
-        var settings = new XDocument(
-            new XElement("RunSettings",
-                new XElement("RunConfiguration", new XElement("DisableParallelization", "true")),
-                new XElement("xUnit",
-                    new XElement("ParallelizeTestCollections", "false"),
-                    new XElement("MaxParallelThreads", "1")),
-                new XElement("NUnit", new XElement("NumberOfTestWorkers", "0")),
-                new XElement("MSTest", new XElement("Parallelize", new XElement("Workers", "1"))),
-                new XElement("InProcDataCollectionRunSettings",
-                    new XElement("InProcDataCollectors",
-                        new XElement("InProcDataCollector",
-                            new XAttribute("friendlyName", "Sift"),
-                            new XAttribute("uri", "InProcDataCollector://Sift/Coverage/1.0"),
-                            new XAttribute("assemblyQualifiedName", collectorName),
-                            new XAttribute("codebase", runtime.Location))))));
+        // Tests run one at a time while recording: code outside every test flow is credited to the
+        // test class entered last, which is only right when one class runs at a time.
+        var root = new XElement("RunSettings",
+            new XElement("RunConfiguration", new XElement("DisableParallelization", "true")),
+            new XElement("xUnit",
+                new XElement("ParallelizeTestCollections", "false"),
+                new XElement("MaxParallelThreads", "1")),
+            new XElement("NUnit", new XElement("NumberOfTestWorkers", "0")),
+            new XElement("MSTest", new XElement("Parallelize", new XElement("Workers", "1"))));
+
+        if (withCollector)
+        {
+            // The collector type is named, not loaded: it depends on test platform assemblies that only
+            // the test host has. SiftTracker lives in the same assembly and has no such dependency.
+            var runtime = typeof(SiftTracker).Assembly;
+            var collectorName = $"{typeof(SiftTracker).Namespace}.{nameof(SiftInProcCollector)}, {runtime.FullName}";
+            root.Add(new XElement("InProcDataCollectionRunSettings",
+                new XElement("InProcDataCollectors",
+                    new XElement("InProcDataCollector",
+                        new XAttribute("friendlyName", "Sift"),
+                        new XAttribute("uri", "InProcDataCollector://Sift/Coverage/1.0"),
+                        new XAttribute("assemblyQualifiedName", collectorName),
+                        new XAttribute("codebase", runtime.Location)))));
+        }
 
         var path = Path.Combine(directory, "sift.runsettings");
-        settings.Save(path);
+        new XDocument(root).Save(path);
         return path;
     }
 
@@ -355,6 +414,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Recording {Project} in {ShardCount} process(es) for {ClassCount} known test class(es), plus a catch-all process")]
     private partial void LogShards(string project, int shardCount, int classCount);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Recording {Project} with the {Mode} runner")]
+    private partial void LogMode(string project, DotnetTestMode mode);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Instrumenting {Count} assembly(ies) in {Directory}")]
     private partial void LogAssemblies(int count, string directory);
