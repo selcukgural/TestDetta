@@ -141,6 +141,26 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.DoesNotContain("Sift.Coverage.Runtime", System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(library)));
     }
 
+    [Fact]
+    public void Recording_in_several_processes_gives_the_same_map()
+    {
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var testProject = graph.Projects.Single(p => p.IsTestProject);
+        var recorder = new CoverageRecorder(NullLoggerFactory.Instance);
+
+        var (sequential, _) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, "Debug"), TextWriter.Null);
+        var (parallel, passed) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, "Debug", Parallelism: 3), TextWriter.Null);
+
+        Assert.True(passed);
+        Assert.Equal(sequential.Classes.Keys.Order(), parallel.Classes.Keys.Order());
+        foreach (var testClass in sequential.Classes.Keys)
+        {
+            Assert.Equal(Ran(sequential, testClass), Ran(parallel, testClass));
+        }
+
+        Assert.Equal(sequential.Fixtures.Keys.Order(), parallel.Fixtures.Keys.Order());
+    }
+
     private static HashSet<CoveredMethod> Ran(CoverageMap map, string testClass) =>
         [.. map.Classes[testClass].Select(id => map.Methods[id])];
 

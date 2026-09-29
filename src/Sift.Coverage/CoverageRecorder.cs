@@ -11,7 +11,17 @@ namespace Sift.Coverage;
 /// <param name="Graph">Projects of the repository.</param>
 /// <param name="TestProject">Test project to run.</param>
 /// <param name="Configuration">Build configuration, such as <c>Debug</c>.</param>
-public sealed record RecordRequest(string RepoRoot, ProjectGraph Graph, ProjectNode TestProject, string Configuration);
+/// <param name="Parallelism">
+/// Number of test host processes to spread the test classes over. Each process still runs its
+/// tests one at a time, which is what keeps attribution exact; the suite must tolerate several
+/// processes at once (no fixed ports or shared local databases).
+/// </param>
+public sealed record RecordRequest(
+    string RepoRoot,
+    ProjectGraph Graph,
+    ProjectNode TestProject,
+    string Configuration,
+    int Parallelism = 1);
 
 /// <summary>
 /// Builds a test project, instruments the repository's assemblies in its output, runs the tests
@@ -53,31 +63,37 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         try
         {
             var settings = WriteRunSettings(work);
-            var resultsFile = Path.Combine(work, "coverage.json");
             List<string> testArguments = ["test", project, "--no-build", "-c", request.Configuration, "--settings", settings];
             if (framework is not null)
             {
                 testArguments.AddRange(["-f", framework]);
             }
 
-            var testExit = dotnet.Run(
-                testArguments,
-                root,
-                new Dictionary<string, string>
-                {
-                    [SiftTracker.MethodCountVariable] = instrumentation.Methods.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    [SiftTracker.OutputVariable] = resultsFile,
-                },
-                output);
-
-            if (!File.Exists(resultsFile))
+            var shards = Shards(request);
+            var synchronizedOutput = TextWriter.Synchronized(output);
+            var runs = new Task<(int ExitCode, string ResultsFile)>[shards.Count];
+            for (var i = 0; i < shards.Count; i++)
             {
-                throw new InvalidOperationException(
-                    $"The test host did not write coverage for {project}. Only VSTest runs are supported for recording.");
+                var shard = new ShardRun(dotnet, testArguments, shards[i], i, shards.Count);
+                runs[i] = Task.Run(() => RunShard(shard, request, instrumentation, work, synchronizedOutput));
             }
 
-            var map = BuildMap(request, instrumentation.Methods, resultsFile);
-            return (map, testExit == 0);
+            Task.WaitAll(runs);
+
+            var resultsFiles = new List<string>(runs.Length);
+            foreach (var run in runs)
+            {
+                if (!File.Exists(run.Result.ResultsFile))
+                {
+                    throw new InvalidOperationException(
+                        $"The test host did not write coverage for {project}. Only VSTest runs are supported for recording.");
+                }
+
+                resultsFiles.Add(run.Result.ResultsFile);
+            }
+
+            var map = BuildMap(request, instrumentation.Methods, resultsFiles);
+            return (map, runs.All(static r => r.Result.ExitCode == 0));
         }
         finally
         {
@@ -85,6 +101,100 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             Directory.Delete(work, recursive: true);
         }
     }
+
+    /// <summary>One test host process of a sharded recording.</summary>
+    /// <param name="Dotnet">Process runner.</param>
+    /// <param name="Arguments">Shared <c>dotnet test</c> arguments.</param>
+    /// <param name="Filter">Filter selecting this shard's tests, or null to run everything.</param>
+    /// <param name="Index">Shard number, for output prefixes and file names.</param>
+    /// <param name="Count">Number of shards.</param>
+    private sealed record ShardRun(DotnetProcess Dotnet, List<string> Arguments, string? Filter, int Index, int Count);
+
+    /// <summary>
+    /// Filters for the shards: the known test classes dealt round-robin into
+    /// <see cref="RecordRequest.Parallelism"/> groups, plus one shard for any test outside the known
+    /// classes, so a class the source index misses is still recorded. A single shard runs unfiltered.
+    /// </summary>
+    /// <param name="request">What to record.</param>
+    private List<string?> Shards(RecordRequest request)
+    {
+        if (request.Parallelism <= 1)
+        {
+            return [null];
+        }
+
+        var classes = new TestClassFinder(loggerFactory.CreateLogger<TestClassFinder>())
+            .Find(request.Graph, request.RepoRoot, request.TestProject);
+        if (classes.Count <= 1)
+        {
+            return [null];
+        }
+
+        var groupCount = Math.Min(request.Parallelism, classes.Count);
+        var groups = new List<string>[groupCount];
+        for (var i = 0; i < groupCount; i++)
+        {
+            groups[i] = [];
+        }
+
+        for (var i = 0; i < classes.Count; i++)
+        {
+            groups[i % groupCount].Add(classes[i]);
+        }
+
+        var filters = new List<string?>(groupCount + 1);
+        foreach (var group in groups)
+        {
+            filters.Add(TestFilter.ForClasses(group));
+        }
+
+        filters.Add(TestFilter.ExcludingClasses(classes));
+        LogShards(request.TestProject.Path, groupCount, classes.Count);
+        return filters;
+    }
+
+    /// <summary>Runs one shard with its own results file, prefixing its output lines with the shard number.</summary>
+    /// <param name="shard">The shard.</param>
+    /// <param name="request">What is recorded.</param>
+    /// <param name="instrumentation">Instrumentation result, for the method count.</param>
+    /// <param name="work">Work directory.</param>
+    /// <param name="output">Shared, synchronized output.</param>
+    private static (int ExitCode, string ResultsFile) RunShard(
+        ShardRun shard,
+        RecordRequest request,
+        InstrumentationResult instrumentation,
+        string work,
+        TextWriter output)
+    {
+        var resultsFile = Path.Combine(work, $"coverage-{shard.Index}.json");
+        List<string> arguments = [.. shard.Arguments];
+        if (shard.Filter is not null)
+        {
+            arguments.AddRange(["--filter", shard.Filter]);
+        }
+
+        var environment = new Dictionary<string, string>
+        {
+            [SiftTracker.MethodCountVariable] = instrumentation.Methods.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            [SiftTracker.OutputVariable] = resultsFile,
+        };
+
+        var writer = shard.Count == 1 ? output : new PrefixWriter(output, $"[shard {shard.Index + 1}/{shard.Count}] ");
+        var exitCode = shard.Dotnet.Run(arguments, request.RepoRoot, environment, writer);
+
+        // The catch-all shard legitimately matches no test when the source index knew every class,
+        // and then the test host never starts the collector.
+        var isCatchAll = shard.Count > 1 && shard.Index == shard.Count - 1;
+        if (isCatchAll && !File.Exists(resultsFile))
+        {
+            File.WriteAllText(resultsFile, EmptyResults);
+        }
+
+        return (exitCode, resultsFile);
+    }
+
+    /// <summary>Results of a test host that ran no test.</summary>
+    private const string EmptyResults = "{\"classes\":{},\"fixtures\":{},\"ambient\":[]}";
 
     /// <summary>
     /// Asks MSBuild for the test assembly path. A multi-targeted project has no single path, so
@@ -170,17 +280,31 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return path;
     }
 
-    /// <summary>Combines the method table with the collector's per-class hits.</summary>
+    /// <summary>Combines the method table with the collectors' per-class hits, merging all shards.</summary>
     /// <param name="request">What was recorded.</param>
     /// <param name="methods">Method table from instrumentation.</param>
-    /// <param name="resultsFile">JSON written by <see cref="SiftTracker.WriteResults"/>.</param>
-    private CoverageMap BuildMap(RecordRequest request, IReadOnlyList<CoveredMethod> methods, string resultsFile)
+    /// <param name="resultsFiles">JSON files written by <see cref="SiftTracker.WriteResults"/>, one per shard.</param>
+    private CoverageMap BuildMap(RecordRequest request, IReadOnlyList<CoveredMethod> methods, IReadOnlyList<string> resultsFiles)
     {
-        using var document = JsonDocument.Parse(File.ReadAllBytes(resultsFile));
-        var root = document.RootElement;
-        var classes = ReadBuckets(root.GetProperty("classes"));
-        var fixtures = ReadBuckets(root.GetProperty("fixtures"));
-        int[] ambient = [.. root.GetProperty("ambient").EnumerateArray().Select(static e => e.GetInt32())];
+        var merged = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
+        var mergedFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
+        var ambientIds = new SortedSet<int>();
+
+        foreach (var file in resultsFiles)
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(file));
+            var root = document.RootElement;
+            MergeBuckets(root.GetProperty("classes"), merged);
+            MergeBuckets(root.GetProperty("fixtures"), mergedFixtures);
+            foreach (var id in root.GetProperty("ambient").EnumerateArray())
+            {
+                ambientIds.Add(id.GetInt32());
+            }
+        }
+
+        var classes = Freeze(merged);
+        var fixtures = Freeze(mergedFixtures);
+        int[] ambient = [.. ambientIds];
 
         var commit = new GitClient(loggerFactory.CreateLogger<GitClient>()).Head(request.RepoRoot);
         LogRecorded(request.TestProject.Path, classes.Count, fixtures.Count, methods.Count);
@@ -192,18 +316,45 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return new CoverageMap(header, methods, new CoverageHits(classes, fixtures, ambient));
     }
 
-    /// <summary>Reads an object of named id arrays written by <see cref="SiftTracker.WriteResults"/>.</summary>
-    /// <param name="element">JSON object.</param>
-    private static Dictionary<string, IReadOnlyList<int>> ReadBuckets(JsonElement element)
+    /// <summary>
+    /// Adds the named id arrays of <paramref name="element"/> to <paramref name="buckets"/>. A fixture
+    /// can appear in several shards, so ids are unioned.
+    /// </summary>
+    /// <param name="element">JSON object written by <see cref="SiftTracker.WriteResults"/>.</param>
+    /// <param name="buckets">Merged buckets; updated in place.</param>
+    private static void MergeBuckets(JsonElement element, Dictionary<string, SortedSet<int>> buckets)
     {
-        var buckets = new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
         foreach (var property in element.EnumerateObject())
         {
-            buckets[property.Name] = [.. property.Value.EnumerateArray().Select(static e => e.GetInt32())];
+            if (!buckets.TryGetValue(property.Name, out var ids))
+            {
+                ids = [];
+                buckets[property.Name] = ids;
+            }
+
+            foreach (var id in property.Value.EnumerateArray())
+            {
+                ids.Add(id.GetInt32());
+            }
+        }
+    }
+
+    /// <summary>Converts merged buckets to the map's read-only shape.</summary>
+    /// <param name="buckets">Merged buckets.</param>
+    private static Dictionary<string, IReadOnlyList<int>> Freeze(Dictionary<string, SortedSet<int>> buckets)
+    {
+        var frozen = new Dictionary<string, IReadOnlyList<int>>(buckets.Count, StringComparer.Ordinal);
+        foreach (var (name, ids) in buckets)
+        {
+            frozen[name] = [.. ids];
         }
 
-        return buckets;
+        return frozen;
     }
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Recording {Project} in {ShardCount} process(es) for {ClassCount} known test class(es), plus a catch-all process")]
+    private partial void LogShards(string project, int shardCount, int classCount);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Instrumenting {Count} assembly(ies) in {Directory}")]
     private partial void LogAssemblies(int count, string directory);

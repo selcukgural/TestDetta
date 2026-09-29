@@ -152,7 +152,7 @@ internal static partial class CliApp
             foreach (var project in testProjects)
             {
                 var (map, passed) = recorder.Record(
-                    new Sift.Coverage.RecordRequest(root, graph, project, options.Record.Configuration), stdout);
+                    new Sift.Coverage.RecordRequest(root, graph, project, options.Record.Configuration, options.Record.Parallelism), stdout);
                 var path = CoverageMapStore.PathFor(root, project.Path);
                 CoverageMapStore.Write(path, map);
 

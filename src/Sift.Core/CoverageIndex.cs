@@ -15,6 +15,9 @@ internal sealed class CoverageIndex
     /// <summary>Members that ran before the first test (discovery, theory data): their callers are unknown.</summary>
     private readonly HashSet<CoveredMethod> _ambient = [];
 
+    /// <summary>Number of buckets (test classes and fixtures, before fixtures are expanded) that ran each member.</summary>
+    private readonly Dictionary<CoveredMethod, int> _bucketCount = [];
+
     /// <summary>Builds the lookups; members that no test ran are still known, with no classes.</summary>
     /// <param name="map">Recorded map.</param>
     /// <param name="classesUsingFixture">
@@ -38,6 +41,7 @@ internal sealed class CoverageIndex
             foreach (var id in ids)
             {
                 var method = map.Methods[id];
+                _bucketCount[method] = _bucketCount.GetValueOrDefault(method) + 1;
                 _classesByMember[method].Add(testClass);
                 foreach (var type in EnclosingTypes(method.TypeName))
                 {
@@ -52,6 +56,7 @@ internal sealed class CoverageIndex
             foreach (var id in ids)
             {
                 var method = map.Methods[id];
+                _bucketCount[method] = _bucketCount.GetValueOrDefault(method) + 1;
                 if (users.Count == 0)
                 {
                     _ambient.Add(method);
@@ -91,6 +96,16 @@ internal sealed class CoverageIndex
 
         return _classesByMember.GetValueOrDefault(key);
     }
+
+    /// <summary>
+    /// How many test classes and fixtures ran the member, counting a fixture once however many classes
+    /// use it. Code that caches its result runs once per test process, for whichever bucket comes first,
+    /// so a count of one is weak evidence for such code.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name.</param>
+    public int BucketsRunning(string typeName, string member) =>
+        _bucketCount.GetValueOrDefault(new CoveredMethod(typeName, member));
 
     /// <summary>Test classes that ran any member of <paramref name="typeName"/> or its nested types; null when none was instrumented.</summary>
     /// <param name="typeName">Qualified type name.</param>

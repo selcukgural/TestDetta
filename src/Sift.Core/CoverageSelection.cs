@@ -113,7 +113,7 @@ internal sealed class CoverageSelection
                 continue;
             }
 
-            if (Lookup(map, change) is not { } classes)
+            if (Lookup(map, change) is not { } classes || MayBeRunOnce(map, change))
             {
                 return false;
             }
@@ -157,6 +157,32 @@ internal sealed class CoverageSelection
         return type is null
                || !type.MayBeFoundByReflection
                || _index.IsReferencedOutside(DeclarationWalker.SimpleTypeName(change.TypeName), change.TypeName);
+    }
+
+    /// <summary>
+    /// True for a constructor or static member that exactly one test class or fixture ran. Such code
+    /// often runs once per test process and caches its result (a static catalogue, a singleton), so
+    /// the map credits only the first class that triggered it; the change is traced by name instead.
+    /// </summary>
+    /// <param name="map">Coverage of one test project.</param>
+    /// <param name="change">A changed member.</param>
+    private bool MayBeRunOnce(CoverageIndex map, SymbolChange change)
+    {
+        if (change.MemberName is null)
+        {
+            return false;
+        }
+
+        var isConstructor = change.MemberName.StartsWith(".ctor", StringComparison.Ordinal);
+        var name = isConstructor ? ".ctor" : DeclarationWalker.ReferenceNames(change.MemberName) is [var single] ? single : null;
+        if (name is null)
+        {
+            return false;
+        }
+
+        var isStatic = _index.FindMember(change.TypeName, change.MemberName) is { IsStatic: true };
+        // Nothing ran it at all means no test runs it; run-once code is still recorded for its first user.
+        return (isConstructor || isStatic) && map.BucketsRunning(change.TypeName, name) == 1;
     }
 
     /// <summary>

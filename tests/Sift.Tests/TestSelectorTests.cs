@@ -311,15 +311,15 @@ public sealed class TestSelectorTests : IDisposable
     {
         _repo.Write("tests/Shop.Tests/HostTests.cs", """
             namespace Shop.Tests;
-            public class ShopHost { public ShopHost() => Slug.Make("warm"); }
+            public class ShopHost { public ShopHost() => new PriceCalculator().Tax(1m); }
             public class HostTests(ShopHost host) : IClassFixture<ShopHost> { [Fact] public void Starts() => Assert.NotNull(host); }
             """);
         _repo.Commit("add host");
 
-        // Only the fixture ran Make; no test class did.
-        _fixtures["Shop.Tests.ShopHost"] = [5];
-        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
-        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+        // Only the fixture ran Tax; no test class did.
+        _fixtures["Shop.Tests.ShopHost"] = [2];
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
 
         Assert.Equal(["Shop.Tests.HostTests"], Select().TestClasses);
     }
@@ -338,12 +338,34 @@ public sealed class TestSelectorTests : IDisposable
             """);
         _repo.Commit("add hosts");
 
-        _fixtures["Shop.Tests.Host`1[Shop.Tests.CalcProfile]"] = [5];
-        _fixtures["Shop.Tests.Host`1[Shop.Tests.SlugProfile]"] = [0];
-        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
-        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+        _fixtures["Shop.Tests.Host`1[Shop.Tests.CalcProfile]"] = [2];
+        _fixtures["Shop.Tests.Host`1[Shop.Tests.SlugProfile]"] = [5];
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
 
         Assert.Equal(["Shop.Tests.CalcHostTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Static_member_run_by_a_single_class_is_also_traced_through_its_callers()
+    {
+        // Make may cache its result per process: the map saw only SlugTests run it, although
+        // ReportTests depends on it through Title.
+        _repo.Write("src/Shop/Report.cs", """
+            namespace Shop;
+            public class Report { public string Title() => Slug.Make("Report"); }
+            """);
+        _repo.Write("tests/Shop.Tests/ReportTests.cs", """
+            namespace Shop.Tests;
+            public class ReportTests { [Fact] public void Titles() => Assert.Equal("report", new Report().Title()); }
+            """);
+        _repo.Commit("add report");
+
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
+                 ("Shop.Tests.ReportTests", [("Shop.Report", "Title")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(["Shop.Tests.ReportTests", "Shop.Tests.SlugTests"], Select().TestClasses);
     }
 
     [Fact]
@@ -425,7 +447,7 @@ public sealed class TestSelectorTests : IDisposable
             // Every production member is known to the map, run or not.
             new("Shop.PriceCalculator", ".ctor"), new("Shop.PriceCalculator", "Total"), new("Shop.PriceCalculator", "Tax"),
             new("Shop.OrderService", ".ctor"), new("Shop.OrderService", "Checkout"),
-            new("Shop.Slug", "Make"), new("Shop.PingHandler", "Handle"),
+            new("Shop.Slug", "Make"), new("Shop.PingHandler", "Handle"), new("Shop.Report", "Title"),
         };
 
         var byClass = new Dictionary<string, IReadOnlyList<int>>();
@@ -443,6 +465,12 @@ public sealed class TestSelectorTests : IDisposable
         // The map must describe the new HEAD, which is what 'main' points to.
         var newHead = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
         CoverageMapStore.Write(path, Map(newHead, methods, byClass));
+    }
+
+    [Fact]
+    public void Excluding_filter_matches_everything_outside_the_classes()
+    {
+        Assert.Equal("FullyQualifiedName!~A.B.&FullyQualifiedName!~A.C\\(1\\).", TestFilter.ExcludingClasses(["A.B", "A.C(1)"]));
     }
 
     [Fact]

@@ -20,6 +20,10 @@ inputs:
     description: Record mode only. Test projects to record, one .csproj path per line. Empty records every test project.
     required: false
     default: ''
+  parallel:
+    description: Record mode only. Test host processes per test project; each still runs its tests one at a time. The suite must tolerate several test processes at once.
+    required: false
+    default: '1'
   dotnet-test-args:
     description: Test mode only. Extra arguments for every dotnet test, separated by spaces.
     required: false
@@ -110,8 +114,13 @@ runs:
         SIFT: ${{ runner.temp }}/sift/Sift.Cli.dll
         CONFIGURATION: ${{ inputs.configuration }}
         PROJECTS: ${{ inputs.projects }}
+        PARALLEL: ${{ inputs.parallel }}
       run: |
-        args=()
+        if [[ ! "$PARALLEL" =~ ^[1-9][0-9]?$ ]]; then
+          echo "::error::'parallel' must be a number from 1 to 99."
+          exit 1
+        fi
+        args=(--parallel "$PARALLEL")
         while IFS= read -r project; do
           if [ -n "$project" ]; then args+=(--project "$project"); fi
         done <<< "$PROJECTS"

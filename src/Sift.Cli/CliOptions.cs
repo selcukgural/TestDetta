@@ -35,7 +35,8 @@ internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTes
 /// <summary>Options of <c>sift record</c>.</summary>
 /// <param name="Configuration">Build configuration used for building and running the tests.</param>
 /// <param name="Projects">Only record these test projects (.csproj paths); empty records every test project.</param>
-internal sealed record RecordSettings(string Configuration, IReadOnlyList<string> Projects);
+/// <param name="Parallelism">Test host processes per test project; each still runs its tests one at a time.</param>
+internal sealed record RecordSettings(string Configuration, IReadOnlyList<string> Projects, int Parallelism);
 
 /// <summary>Parsed command line.</summary>
 /// <param name="Command">Which sub-command to run.</param>
@@ -76,6 +77,8 @@ internal sealed record CliOptions(
         sift record:
           -c, --configuration <name>  Build configuration (default: Debug)
           --project <path>     Record only this test project; repeat for several
+          --parallel <n>       Spread each project's test classes over n processes (default: 1).
+                               The suite must tolerate several test processes at once.
 
         Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed.
         """;
@@ -97,7 +100,7 @@ internal sealed record CliOptions(
             new AnalysisSettings("origin/main", currentDirectory, LogLevel.Warning),
             new AffectedSettings(TestsOnly: false, OutputFormat.Text),
             new TestSettings(DryRun: false, [], SummaryFile: null),
-            new RecordSettings("Debug", []));
+            new RecordSettings("Debug", [], Parallelism: 1));
         error = null;
 
         switch (args)
@@ -173,7 +176,7 @@ internal sealed record CliOptions(
 
             case "--base" or "--repo" or "--log-level":
             case "--format" when options.Command == CliCommand.Affected:
-            case "-c" or "--configuration" or "--project" when options.Command == CliCommand.Record:
+            case "-c" or "--configuration" or "--project" or "--parallel" when options.Command == CliCommand.Record:
             case "--summary-file" when options.Command == CliCommand.Test:
                 break;
 
@@ -205,6 +208,16 @@ internal sealed record CliOptions(
 
             case "--project":
                 options = options with { Record = options.Record with { Projects = [.. options.Record.Projects, value] } };
+                return true;
+
+            case "--parallel":
+                if (!int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parallelism) || parallelism < 1)
+                {
+                    error = $"--parallel needs a positive number, not {value}";
+                    return false;
+                }
+
+                options = options with { Record = options.Record with { Parallelism = parallelism } };
                 return true;
 
             case "--summary-file":

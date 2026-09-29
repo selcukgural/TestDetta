@@ -42,6 +42,10 @@ public sealed class MarkdownSummaryTests
         Assert.True(CliOptions.TryParse(["record", "--project", "a.csproj", "--project", "b.csproj"], "/r", out var record, out _));
         Assert.Equal(["a.csproj", "b.csproj"], record.Record.Projects);
 
+        Assert.True(CliOptions.TryParse(["record", "--parallel", "4"], "/r", out var parallel, out _));
+        Assert.Equal(4, parallel.Record.Parallelism);
+        Assert.False(CliOptions.TryParse(["record", "--parallel", "0"], "/r", out _, out _));
+
         Assert.True(CliOptions.TryParse(["test", "--summary-file", "/tmp/s.md"], "/r", out var test, out _));
         Assert.Equal("/tmp/s.md", test.Test.SummaryFile);
     }
