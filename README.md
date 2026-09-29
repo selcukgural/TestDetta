@@ -114,8 +114,14 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
   turn on their framework's own parallelization.
 - Code that runs once per process (caches, lazy singletons, EF model building) is credited to the
   first test class that triggers it. Keep running the full suite on the default branch; recording does that.
-- Project files are read as XML, not evaluated: conditions, imports and linked source files outside
-  a project directory are not followed. Test projects are also recognised by a `*.Tests`/`*.Test` name.
+- Project files are read as XML, not evaluated. Imports (`<Import>`, `.projitems`, the imports of
+  `Directory.Build.*`), linked items outside the project directory (`<Compile Include="../Shared/*.cs">`)
+  and the common path properties (`$(MSBuildThisFileDirectory)`, `$(MSBuildProjectDirectory)`,
+  `GetPathOfFileAbove`) are followed; conditions are not evaluated. When an import or item uses any
+  other property, changed build or source files that no project claims are assumed to affect that
+  project. Test projects are also recognised by a `*.Tests`/`*.Test` name.
+- F# and Visual Basic projects are part of the project graph, but their code is not analysed: when
+  one is affected, everything that depends on it runs completely.
 
 ## Building
 

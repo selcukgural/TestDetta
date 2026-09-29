@@ -47,9 +47,13 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         var files = new List<(string Path, ProjectNode Owner)>();
         foreach (var file in EnumerateSourceFiles(Paths.Normalize(repoRoot)))
         {
-            if (graph.FindOwner(file) is { } owner && projects.Contains(owner.Path))
+            // A linked file is compiled by every project that includes it, so it is indexed for each.
+            foreach (var owner in graph.ResolveFile(file))
             {
-                files.Add((file, owner));
+                if (owner.Role == FileRole.Source && projects.Contains(owner.Project.Path))
+                {
+                    files.Add((file, owner.Project));
+                }
             }
         }
 
@@ -59,7 +63,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         // Merge in a fixed order so the result, and anything logged from it, is deterministic.
         var members = new List<IndexedMember>();
         var types = new Dictionary<string, IndexedType>(StringComparer.Ordinal);
-        foreach (var index in perFile.OrderBy(static f => f.Path, StringComparer.Ordinal))
+        foreach (var index in perFile.OrderBy(static f => f.Path, StringComparer.Ordinal).ThenBy(static f => f.Project, StringComparer.Ordinal))
         {
             members.AddRange(index.Members);
             foreach (var type in index.Types)
@@ -155,11 +159,12 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         return false;
     }
 
-    /// <summary>Members and types of one file.</summary>
+    /// <summary>Members and types of one file as compiled by one project.</summary>
     /// <param name="Path">Normalized file path.</param>
+    /// <param name="Project">Project that compiles it.</param>
     /// <param name="Members">Indexed members of the file.</param>
     /// <param name="Types">Types declared in the file.</param>
-    private sealed record FileIndex(string Path, List<IndexedMember> Members, List<IndexedType> Types);
+    private sealed record FileIndex(string Path, string Project, List<IndexedMember> Members, List<IndexedType> Types);
 
     /// <summary>Parses one file and indexes its declarations and top-level statements.</summary>
     /// <param name="path">Normalized file path.</param>
@@ -206,7 +211,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         }
 
         AddTopLevelStatements(root, owner, members, types);
-        return new FileIndex(path, members, types);
+        return new FileIndex(path, owner.Path, members, types);
     }
 
     /// <summary>Indexes top-level statements as the generated <c>Program</c> type's entry point.</summary>

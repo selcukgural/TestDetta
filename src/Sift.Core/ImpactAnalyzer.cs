@@ -68,16 +68,27 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
                 continue;
             }
 
-            var owner = graph.FindOwner(file);
-            if (owner is null)
+            var owners = graph.ResolveFile(file);
+            if (owners.Count == 0)
             {
                 LogUnmapped(relative);
                 unmapped.Add(relative);
                 continue;
             }
 
-            LogDirectChange(relative, owner.Path);
-            reasons.TryAdd(owner.Path, ImpactReason.DirectChange);
+            foreach (var owner in owners)
+            {
+                if (owner.Role == FileRole.BuildInput)
+                {
+                    LogImported(relative, owner.Project.Path);
+                    Mark(reasons, owner.Project.Path, ImpactReason.BuildConfiguration);
+                }
+                else
+                {
+                    LogDirectChange(relative, owner.Project.Path);
+                    Mark(reasons, owner.Project.Path, ImpactReason.DirectChange);
+                }
+            }
         }
 
         PropagateToDependents(graph, reasons);
@@ -120,11 +131,27 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
                 continue;
             }
 
-            reasons.TryAdd(project.Path, ImpactReason.BuildConfiguration);
+            Mark(reasons, project.Path, ImpactReason.BuildConfiguration);
             count++;
         }
 
         LogBuildConfiguration(file, count);
+    }
+
+    /// <summary>
+    /// Records why <paramref name="project"/> is affected. A build configuration change outranks a
+    /// direct change, whatever order the files come in, because it is what makes test selection run
+    /// the whole project.
+    /// </summary>
+    /// <param name="reasons">Selected projects so far; updated in place.</param>
+    /// <param name="project">Normalized project path.</param>
+    /// <param name="reason">Reason from the file at hand.</param>
+    private static void Mark(Dictionary<string, ImpactReason> reasons, string project, ImpactReason reason)
+    {
+        if (!reasons.TryGetValue(project, out var existing) || reason == ImpactReason.BuildConfiguration && existing != reason)
+        {
+            reasons[project] = reason;
+        }
     }
 
     /// <summary>Adds, breadth first, every project that transitively references an already selected one.</summary>
@@ -148,6 +175,9 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
             }
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} is imported by the build of {Project}")]
+    private partial void LogImported(string file, string project);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{File} belongs to {Project}")]
     private partial void LogDirectChange(string file, string project);

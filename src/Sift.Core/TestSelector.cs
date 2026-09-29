@@ -77,21 +77,24 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
         foreach (var change in request.Impact.CodeChanges)
         {
-            var owner = request.Graph.FindOwner(Paths.Normalize(Path.Combine(root, change.Path)));
-            if (owner is null || fallbacks.ContainsKey(owner.Path))
+            // A linked file is compiled into every project that includes it; each gets the change.
+            foreach (var owner in request.Graph.ResolveFile(Paths.Normalize(Path.Combine(root, change.Path))))
             {
-                continue;
-            }
-
-            foreach (var symbol in change.Symbols)
-            {
-                if (coverage?.TryResolve(symbol, owner) == true)
+                if (owner.Role != FileRole.Source || fallbacks.ContainsKey(owner.Project.Path))
                 {
-                    LogResolvedByCoverage(symbol.TypeName, symbol.MemberName ?? "(type)");
                     continue;
                 }
 
-                propagation.Seed(symbol, owner.Path);
+                foreach (var symbol in change.Symbols)
+                {
+                    if (coverage?.TryResolve(symbol, owner.Project) == true)
+                    {
+                        LogResolvedByCoverage(symbol.TypeName, symbol.MemberName ?? "(type)");
+                        continue;
+                    }
+
+                    propagation.Seed(symbol, owner.Project.Path);
+                }
             }
         }
 
@@ -108,14 +111,6 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     private Dictionary<string, string> FindProjectLevelChanges(TestSelectionRequest request)
     {
         var fallbacks = new Dictionary<string, string>(Paths.Comparer);
-        foreach (var affected in request.Impact.Affected)
-        {
-            if (affected.Reason == ImpactReason.BuildConfiguration)
-            {
-                AddFallback(fallbacks, affected.Project.Path, "build configuration changed");
-            }
-        }
-
         var codeChanges = new Dictionary<string, CodeChange>(StringComparer.Ordinal);
         foreach (var change in request.Impact.CodeChanges)
         {
@@ -132,27 +127,46 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 continue;
             }
 
-            var owner = request.Graph.FindOwner(Paths.Normalize(Path.Combine(root, file)));
-            if (owner is null)
+            foreach (var owner in request.Graph.ResolveFile(Paths.Normalize(Path.Combine(root, file))))
             {
-                continue;
+                var project = owner.Project.Path;
+                if (owner.Role == FileRole.BuildInput)
+                {
+                    AddFallback(fallbacks, project, $"{file} is part of the project's build");
+                    continue;
+                }
+
+                if (!file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddFallback(fallbacks, project, $"{file} is not C# code");
+                    continue;
+                }
+
+                if (!codeChanges.TryGetValue(file, out var change))
+                {
+                    AddFallback(fallbacks, project, $"{file} could not be compared");
+                    continue;
+                }
+
+                if (change.AffectsWholeProject)
+                {
+                    AddFallback(fallbacks, project, $"{file} changes a global using or an assembly attribute");
+                }
+            }
+        }
+
+        // After the file loop, so the file that caused a fallback is what its reason names.
+        foreach (var affected in request.Impact.Affected)
+        {
+            if (affected.Reason == ImpactReason.BuildConfiguration)
+            {
+                AddFallback(fallbacks, affected.Project.Path, "build configuration changed");
             }
 
-            if (!file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            // Sift reads C# only; a change cannot be traced through F# or Visual Basic code.
+            if (affected.Project.Language != ProjectLanguage.CSharp)
             {
-                AddFallback(fallbacks, owner.Path, $"{file} is not C# code");
-                continue;
-            }
-
-            if (!codeChanges.TryGetValue(file, out var change))
-            {
-                AddFallback(fallbacks, owner.Path, $"{file} could not be compared");
-                continue;
-            }
-
-            if (change.AffectsWholeProject)
-            {
-                AddFallback(fallbacks, owner.Path, $"{file} changes a global using or an assembly attribute");
+                AddFallback(fallbacks, affected.Project.Path, $"{Path.GetFileName(affected.Project.Path)} is not a C# project");
             }
         }
 

@@ -49,6 +49,18 @@ public sealed class EvalToolTests : IDisposable
             public class AddTests { [Fact] public void Adds() => Assert.Equal(3, new Calculator().Add(1, 2)); }
             public class MulTests { [Fact] public void Muls() => Assert.Equal(6, new Calculator().Mul(2, 3)); }
             public class FormatTests { [Fact] public void Formats() => Assert.Equal("7", Formatter.Format(7)); }
+
+            // Reaches a type only through its name in a string: no reference, base list or attribute to trace.
+            public class PluginTests
+            {
+                [Fact]
+                public void Runs_the_plugin() =>
+                    Assert.Equal(42, (int)System.Type.GetType("Calc.Plugin, Calc")!.GetMethod("Run")!.Invoke(null, null)!);
+            }
+            """);
+        _repo.Write("src/Calc/Plugin.cs", """
+            namespace Calc;
+            public static class Plugin { public static int Run() => 42; }
             """);
         _repo.Commit("base");
     }
@@ -70,16 +82,28 @@ public sealed class EvalToolTests : IDisposable
     [Fact]
     public void Missed_test_class_is_found_by_mutants_and_by_coverage()
     {
-        // Sift does not yet follow <Compile Include> outside the project directory, so it selects
-        // nothing for this change; the evaluation has to notice.
+        // Plugin is named by nothing and has no base list or attributes, so Sift treats it as unused;
+        // PluginTests finds it by a string. Sift is blind here by design; the evaluation must not be.
+        _repo.Replace("src/Calc/Plugin.cs", "=> 42;", "=> 40 + 2;");
+        _repo.Commit("compute the answer");
+
+        var (exitCode, merge) = Evaluate();
+
+        Assert.Equal(3, exitCode);
+        Assert.Contains("Calc.Tests.PluginTests", merge.GetProperty("mutants")[0].GetProperty("missed").EnumerateArray().Select(e => e.GetString()));
+        Assert.Contains(merge.GetProperty("coverageMisses").EnumerateArray(), e => e.GetString()!.EndsWith("Calc.Tests.PluginTests", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Change_to_a_linked_source_file_is_selected()
+    {
         _repo.Replace("src/Shared/Formatter.cs", "value.ToString()", "value.ToString(System.Globalization.CultureInfo.InvariantCulture)");
         _repo.Commit("invariant format");
 
         var (exitCode, merge) = Evaluate();
 
-        Assert.Equal(3, exitCode);
-        Assert.Contains("Calc.Tests.FormatTests", merge.GetProperty("mutants")[0].GetProperty("missed").EnumerateArray().Select(e => e.GetString()));
-        Assert.Contains(merge.GetProperty("coverageMisses").EnumerateArray(), e => e.GetString()!.EndsWith("Calc.Tests.FormatTests", StringComparison.Ordinal));
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Calc.Tests.FormatTests", merge.GetProperty("mutants")[0].GetProperty("killed").EnumerateArray().Select(e => e.GetString()));
     }
 
     /// <summary>Evaluates the latest commit and returns the exit code and its JSON entry.</summary>
