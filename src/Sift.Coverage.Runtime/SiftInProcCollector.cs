@@ -7,7 +7,8 @@ namespace Sift.Coverage.Runtime;
 
 /// <summary>
 /// VSTest in-process data collector, loaded into the test host through the run settings that
-/// <c>sift record</c> writes. Forwards test boundaries to <see cref="SiftTracker"/>.
+/// <c>sift record</c> writes. It makes the instrumented assemblies find <see cref="SiftTracker"/>
+/// and writes the results when the session ends.
 /// </summary>
 /// <remarks>
 /// Instrumented assemblies reference this assembly, but the test project's deps.json does not list
@@ -38,24 +39,16 @@ public sealed class SiftInProcCollector : InProcDataCollection
     {
     }
 
-    /// <summary>Opens a test in the tracker.</summary>
-    /// <param name="testCaseStartArgs">The starting test.</param>
+    /// <summary>Nothing to do: test classes mark themselves through their instrumented entry points.</summary>
+    /// <param name="testCaseStartArgs">Unused.</param>
     public void TestCaseStart(TestCaseStartArgs testCaseStartArgs)
     {
-        if (testCaseStartArgs.TestCase is { } testCase)
-        {
-            SiftTracker.BeginTest(testCase.FullyQualifiedName);
-        }
     }
 
-    /// <summary>Closes a test in the tracker.</summary>
-    /// <param name="testCaseEndArgs">The finished test.</param>
+    /// <summary>Nothing to do: test classes mark themselves through their instrumented entry points.</summary>
+    /// <param name="testCaseEndArgs">Unused.</param>
     public void TestCaseEnd(TestCaseEndArgs testCaseEndArgs)
     {
-        if (testCaseEndArgs.DataCollectionContext?.TestCase is { } testCase)
-        {
-            SiftTracker.EndTest(testCase.FullyQualifiedName);
-        }
     }
 
     /// <summary>Writes the collected coverage.</summary>

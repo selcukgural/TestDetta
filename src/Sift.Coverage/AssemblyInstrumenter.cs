@@ -159,7 +159,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var probes = new Probes(
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Hit))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestInstance))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestClass))!));
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestClass))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterFixtureInstance))!));
+        var fixtures = containsTests ? FixtureTypes(module) : [];
 
         foreach (var type in module.GetTypes())
         {
@@ -171,6 +173,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             }
 
             var isTestClass = containsTests && IsTestClass(type, depth: 0);
+            var isFixture = fixtures.Contains(type);
 
             foreach (var method in type.Methods)
             {
@@ -181,7 +184,10 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
                 var id = methods.Count;
                 methods.Add(MethodNames.Map(method));
-                InsertProbes(method, probes, id, isTestClass && IsTestClassEntryPoint(method));
+                var marker = isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
+                    : isFixture && IsFixtureSetup(method) ? Marker.Fixture
+                    : Marker.None;
+                InsertProbes(method, probes, id, marker);
             }
         }
 
@@ -192,22 +198,41 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="Hit"><see cref="SiftTracker.Hit"/>.</param>
     /// <param name="EnterTestInstance"><see cref="SiftTracker.EnterTestInstance"/>.</param>
     /// <param name="EnterTestClass"><see cref="SiftTracker.EnterTestClass"/>.</param>
-    private sealed record Probes(MethodReference Hit, MethodReference EnterTestInstance, MethodReference EnterTestClass);
+    /// <param name="EnterFixtureInstance"><see cref="SiftTracker.EnterFixtureInstance"/>.</param>
+    private sealed record Probes(
+        MethodReference Hit,
+        MethodReference EnterTestInstance,
+        MethodReference EnterTestClass,
+        MethodReference EnterFixtureInstance);
+
+    /// <summary>Which bucket marker, if any, a method starts with.</summary>
+    private enum Marker
+    {
+        /// <summary>Only the hit probe.</summary>
+        None,
+
+        /// <summary>Entry point of a test class.</summary>
+        TestClass,
+
+        /// <summary>Setup of a test fixture.</summary>
+        Fixture,
+    }
 
     /// <summary>
-    /// Inserts the probes before the first instruction: for a test class entry point first the
-    /// class marker (so the hit already counts for the class), then <c>ldc.i4 id; call Hit</c>.
+    /// Inserts the probes before the first instruction: for a test class entry point or fixture
+    /// setup first the bucket marker (so the hit already counts for that bucket), then
+    /// <c>ldc.i4 id; call Hit</c>.
     /// </summary>
     /// <param name="method">Method to instrument.</param>
     /// <param name="probes">Tracker references.</param>
     /// <param name="id">Method id.</param>
-    /// <param name="marksTestClass">True when the method is an entry point of a test class.</param>
+    /// <param name="marker">Bucket marker to insert, if any.</param>
     /// <remarks>
     /// Short branch forms are expanded before and re-optimized after the insertion, so offsets that
     /// no longer fit in a byte do not corrupt the method. In a constructor the marker runs before
     /// the base constructor call; it only reads the object's type, which is set at allocation.
     /// </remarks>
-    private static void InsertProbes(MethodDefinition method, Probes probes, int id, bool marksTestClass)
+    private static void InsertProbes(MethodDefinition method, Probes probes, int id, Marker marker)
     {
         var body = method.Body;
         body.SimplifyMacros();
@@ -215,15 +240,22 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var il = body.GetILProcessor();
         var first = body.Instructions[0];
 
-        if (marksTestClass && method.IsStatic)
+        switch (marker)
         {
-            il.InsertBefore(first, il.Create(OpCodes.Ldstr, method.DeclaringType.FullName.Replace('/', '+')));
-            il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTestClass));
-        }
-        else if (marksTestClass)
-        {
-            il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
-            il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTestInstance));
+            case Marker.TestClass when method.IsStatic:
+                il.InsertBefore(first, il.Create(OpCodes.Ldstr, method.DeclaringType.FullName.Replace('/', '+')));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTestClass));
+                break;
+
+            case Marker.TestClass:
+                il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTestInstance));
+                break;
+
+            case Marker.Fixture:
+                il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterFixtureInstance));
+                break;
         }
 
         il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, id));
@@ -258,6 +290,41 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                && baseType.Resolve() is { } resolved
                && IsTestClass(resolved, depth + 1);
     }
+
+    /// <summary>
+    /// Types of the module used as xUnit class or collection fixtures (<c>IClassFixture&lt;T&gt;</c>,
+    /// <c>ICollectionFixture&lt;T&gt;</c>), plus their base classes in the same module, whose
+    /// constructors and <c>InitializeAsync</c> run as part of the fixture.
+    /// </summary>
+    /// <param name="module">Test module.</param>
+    private static HashSet<TypeDefinition> FixtureTypes(ModuleDefinition module)
+    {
+        var fixtures = new HashSet<TypeDefinition>();
+        foreach (var type in module.GetTypes())
+        {
+            foreach (var implementation in type.Interfaces)
+            {
+                if (implementation.InterfaceType is not GenericInstanceType { ElementType.Name: "IClassFixture`1" or "ICollectionFixture`1" } fixture)
+                {
+                    continue;
+                }
+
+                var argument = fixture.GenericArguments[0] is GenericInstanceType generic ? generic.ElementType : fixture.GenericArguments[0];
+                for (var definition = argument.Module == module ? argument.Resolve() : null;
+                     definition is not null && fixtures.Add(definition);
+                     definition = definition.BaseType is { } baseType && baseType.Module == module ? baseType.Resolve() : null)
+                {
+                }
+            }
+        }
+
+        return fixtures;
+    }
+
+    /// <summary>Constructors and <c>InitializeAsync</c> of a fixture type: the code that sets the fixture up.</summary>
+    /// <param name="method">Method of a fixture type.</param>
+    private static bool IsFixtureSetup(MethodDefinition method) =>
+        (method.IsConstructor && !method.IsStatic) || method.Name == "InitializeAsync";
 
     /// <summary>
     /// Methods a framework calls directly on a test class: constructors, attributed methods

@@ -27,7 +27,7 @@ public static class CoverageMapStore
         json.WriteNumber("version"u8, 1);
         json.WriteString("testProject"u8, map.TestProject);
         json.WriteString("commit"u8, map.Commit);
-        json.WriteString("recordedAt"u8, map.RecordedAt);
+        json.WriteString("recordedAt"u8, map.Header.RecordedAt);
 
         // Methods as [type, member] pairs keep the file compact; the index is the id used below.
         json.WriteStartArray("methods"u8);
@@ -40,13 +40,8 @@ public static class CoverageMapStore
         }
         json.WriteEndArray();
 
-        json.WriteStartObject("classes"u8);
-        foreach (var (testClass, ids) in map.Classes.OrderBy(static c => c.Key, StringComparer.Ordinal))
-        {
-            WriteIds(json, testClass, ids);
-        }
-        json.WriteEndObject();
-
+        WriteBuckets(json, "classes", map.Classes);
+        WriteBuckets(json, "fixtures", map.Fixtures);
         WriteIds(json, "ambient", map.Ambient);
         json.WriteEndObject();
     }
@@ -76,24 +71,53 @@ public static class CoverageMapStore
                 methods.Add(new CoveredMethod(pair[0].GetString()!, pair[1].GetString()!));
             }
 
-            var classes = new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
-            foreach (var property in root.GetProperty("classes").EnumerateObject())
-            {
-                classes[property.Name] = ReadIds(property.Value);
-            }
-
-            return new CoverageMap(
+            var header = new CoverageMapHeader(
                 root.GetProperty("testProject").GetString()!,
                 root.GetProperty("commit").GetString()!,
-                root.GetProperty("recordedAt").GetDateTimeOffset(),
+                root.GetProperty("recordedAt").GetDateTimeOffset());
+
+            // Maps written before fixtures were recorded have no "fixtures" object.
+            var fixtures = root.TryGetProperty("fixtures", out var fixtureElement)
+                ? ReadBuckets(fixtureElement)
+                : new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
+
+            return new CoverageMap(
+                header,
                 methods,
-                classes,
-                ReadIds(root.GetProperty("ambient")));
+                new CoverageHits(ReadBuckets(root.GetProperty("classes")), fixtures, ReadIds(root.GetProperty("ambient"))));
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
         {
             throw new InvalidDataException($"{path} is not a valid coverage map: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>Writes an object of named id arrays, sorted by name so the file is stable.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="name">Property name.</param>
+    /// <param name="buckets">Name to method ids.</param>
+    private static void WriteBuckets(Utf8JsonWriter json, string name, IReadOnlyDictionary<string, IReadOnlyList<int>> buckets)
+    {
+        json.WriteStartObject(name);
+        foreach (var (key, ids) in buckets.OrderBy(static c => c.Key, StringComparer.Ordinal))
+        {
+            WriteIds(json, key, ids);
+        }
+
+        json.WriteEndObject();
+    }
+
+    /// <summary>Reads an object of named id arrays.</summary>
+    /// <param name="element">JSON object.</param>
+    private static Dictionary<string, IReadOnlyList<int>> ReadBuckets(JsonElement element)
+    {
+        var buckets = new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            buckets[property.Name] = ReadIds(property.Value);
+        }
+
+        return buckets;
     }
 
     /// <summary>Writes an array of method ids under <paramref name="name"/>.</summary>

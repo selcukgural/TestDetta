@@ -47,6 +47,27 @@ public sealed class CoverageRecorderTests : IDisposable
             namespace Calc.Tests;
             public class AddTests { [Fact] public void Adds() => Assert.Equal(3, new Calculator().Add(1, 2)); }
             public class MultiplyTests { [Fact] public async Task Multiplies() => Assert.Equal(6, await new Calculator().MultiplyAsync(2, 3)); }
+
+            // The fixture's constructor runs before the class is created; its hits belong to the fixture.
+            public class WarmCalculator { public WarmCalculator() => new Calculator().Unused(); }
+            public class FixtureTests(WarmCalculator warm) : IClassFixture<WarmCalculator> { [Fact] public void HasFixture() => Assert.NotNull(warm); }
+
+            // Like a test server handling a request: the work runs without the test's execution context.
+            public class DetachedTests
+            {
+                [Fact]
+                public void Adds_on_a_detached_thread()
+                {
+                    int result;
+                    using (ExecutionContext.SuppressFlow())
+                    {
+                        var task = Task.Run(() => new Calculator().Add(2, 2));
+                        result = task.GetAwaiter().GetResult();
+                    }
+
+                    Assert.Equal(4, result);
+                }
+            }
             """);
         _repo.Commit("base");
     }
@@ -71,7 +92,9 @@ public sealed class CoverageRecorderTests : IDisposable
         }
 
         Assert.True(passed, output.ToString());
-        Assert.Equal(["Calc.Tests.AddTests", "Calc.Tests.MultiplyTests"], map.Classes.Keys.Order());
+        Assert.Equal(
+            ["Calc.Tests.AddTests", "Calc.Tests.DetachedTests", "Calc.Tests.FixtureTests", "Calc.Tests.MultiplyTests"],
+            map.Classes.Keys.Order());
 
         var add = Ran(map, "Calc.Tests.AddTests");
         var multiply = Ran(map, "Calc.Tests.MultiplyTests");
@@ -80,6 +103,14 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.Contains(new CoveredMethod("Calc.Calculator", "MultiplyAsync"), multiply);
         Assert.DoesNotContain(new CoveredMethod("Calc.Calculator", "Add"), multiply);
         Assert.Contains(new CoveredMethod("Calc.Calculator", "Unused"), map.Methods);
+
+        // Fixture setup is kept apart from every test class.
+        Assert.Contains(new CoveredMethod("Calc.Calculator", "Unused"), map.Fixtures["Calc.Tests.WarmCalculator"].Select(id => map.Methods[id]));
+        Assert.All(map.Classes.Keys, c => Assert.DoesNotContain(new CoveredMethod("Calc.Calculator", "Unused"), Ran(map, c)));
+
+        // Work on a detached thread still counts for the class that was running, and only for it.
+        Assert.Contains(new CoveredMethod("Calc.Calculator", "Add"), Ran(map, "Calc.Tests.DetachedTests"));
+        Assert.DoesNotContain(new CoveredMethod("Calc.Calculator", "Add"), Ran(map, "Calc.Tests.FixtureTests"));
 
         // A plain run after recording must not find any instrumentation left behind.
         var library = Path.Combine(_repo.Root, "tests/Calc.Tests/bin/Debug/net10.0/Calc.dll");

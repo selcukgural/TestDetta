@@ -31,9 +31,29 @@ internal sealed class CoverageSelection
             _affectedTests.Add(test.Project.Path);
             if (request.CoverageMaps.TryGetValue(test.Project.Path, out var map))
             {
-                _maps[test.Project.Path] = new CoverageIndex(map);
+                var project = test.Project.Path;
+                _maps[project] = new CoverageIndex(map, fixture => ClassesUsing(index, project, fixture));
             }
         }
+    }
+
+    /// <summary>Test classes of <paramref name="project"/> whose code names the fixture type, typically in a constructor parameter or base list.</summary>
+    /// <param name="index">Indexed source code.</param>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="fixture">Fixture type name from the map, such as <c>App.Tests.ApiHost`1</c>.</param>
+    private static List<string> ClassesUsing(SourceIndex index, string project, string fixture)
+    {
+        var simpleName = DeclarationWalker.SimpleTypeName(fixture.Replace('+', '.'));
+        var classes = new List<string>();
+        foreach (var type in index.Types)
+        {
+            if (type.CanContainTests && Paths.Comparer.Equals(type.ProjectPath, project) && index.TypeMentions(type.TypeName, simpleName))
+            {
+                classes.Add(type.RuntimeTypeName);
+            }
+        }
+
+        return classes;
     }
 
     /// <summary>True when at least one affected test project has a coverage map in use.</summary>

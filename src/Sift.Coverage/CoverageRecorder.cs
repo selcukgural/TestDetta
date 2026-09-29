@@ -177,28 +177,38 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     private CoverageMap BuildMap(RecordRequest request, IReadOnlyList<CoveredMethod> methods, string resultsFile)
     {
         using var document = JsonDocument.Parse(File.ReadAllBytes(resultsFile));
-        var classes = new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
-        foreach (var property in document.RootElement.GetProperty("classes").EnumerateObject())
-        {
-            classes[property.Name] = [.. property.Value.EnumerateArray().Select(static e => e.GetInt32())];
-        }
+        var root = document.RootElement;
+        var classes = ReadBuckets(root.GetProperty("classes"));
+        var fixtures = ReadBuckets(root.GetProperty("fixtures"));
+        int[] ambient = [.. root.GetProperty("ambient").EnumerateArray().Select(static e => e.GetInt32())];
 
-        int[] ambient = [.. document.RootElement.GetProperty("ambient").EnumerateArray().Select(static e => e.GetInt32())];
         var commit = new GitClient(loggerFactory.CreateLogger<GitClient>()).Head(request.RepoRoot);
-        LogRecorded(request.TestProject.Path, classes.Count, methods.Count);
+        LogRecorded(request.TestProject.Path, classes.Count, fixtures.Count, methods.Count);
 
-        return new CoverageMap(
+        var header = new CoverageMapHeader(
             Path.GetRelativePath(request.RepoRoot, request.TestProject.Path).Replace('\\', '/'),
             commit,
-            DateTimeOffset.UtcNow,
-            methods,
-            classes,
-            ambient);
+            DateTimeOffset.UtcNow);
+        return new CoverageMap(header, methods, new CoverageHits(classes, fixtures, ambient));
+    }
+
+    /// <summary>Reads an object of named id arrays written by <see cref="SiftTracker.WriteResults"/>.</summary>
+    /// <param name="element">JSON object.</param>
+    private static Dictionary<string, IReadOnlyList<int>> ReadBuckets(JsonElement element)
+    {
+        var buckets = new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            buckets[property.Name] = [.. property.Value.EnumerateArray().Select(static e => e.GetInt32())];
+        }
+
+        return buckets;
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Instrumenting {Count} assembly(ies) in {Directory}")]
     private partial void LogAssemblies(int count, string directory);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Recorded {Project}: {ClassCount} test class(es), {MethodCount} method(s)")]
-    private partial void LogRecorded(string project, int classCount, int methodCount);
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Recorded {Project}: {ClassCount} test class(es), {FixtureCount} fixture(s), {MethodCount} method(s)")]
+    private partial void LogRecorded(string project, int classCount, int fixtureCount, int methodCount);
 }

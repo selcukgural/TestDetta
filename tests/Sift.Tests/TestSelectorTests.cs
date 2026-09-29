@@ -307,6 +307,24 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Code_run_by_fixture_setup_selects_the_classes_that_use_the_fixture()
+    {
+        _repo.Write("tests/Shop.Tests/HostTests.cs", """
+            namespace Shop.Tests;
+            public class ShopHost { public ShopHost() => Slug.Make("warm"); }
+            public class HostTests(ShopHost host) : IClassFixture<ShopHost> { [Fact] public void Starts() => Assert.NotNull(host); }
+            """);
+        _repo.Commit("add host");
+
+        // Only the fixture ran Make; no test class did.
+        _fixtures["Shop.Tests.ShopHost"] = [5];
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(["Shop.Tests.HostTests"], Select().TestClasses);
+    }
+
+    [Fact]
     public void Member_no_test_ran_skips_the_project()
     {
         WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
@@ -351,10 +369,12 @@ public sealed class TestSelectorTests : IDisposable
     public void Coverage_map_round_trips_through_the_store()
     {
         var map = new CoverageMap(
-            "tests/A.Tests/A.Tests.csproj", "abc123", DateTimeOffset.Parse("2026-09-29T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            new CoverageMapHeader("tests/A.Tests/A.Tests.csproj", "abc123", DateTimeOffset.Parse("2026-09-29T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture)),
             [new CoveredMethod("A.B", "Run"), new CoveredMethod("A.B`1", ".ctor")],
-            new Dictionary<string, IReadOnlyList<int>> { ["A.Tests.BTests"] = [0, 1] },
-            [1]);
+            new CoverageHits(
+                new Dictionary<string, IReadOnlyList<int>> { ["A.Tests.BTests"] = [0, 1] },
+                new Dictionary<string, IReadOnlyList<int>> { ["A.Tests.Host`1"] = [1] },
+                [1]));
         var path = Path.Combine(_repo.Root, "map.json");
 
         CoverageMapStore.Write(path, map);
@@ -363,8 +383,17 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(map.Methods, read.Methods);
         Assert.Equal(map.Classes["A.Tests.BTests"], read.Classes["A.Tests.BTests"]);
         Assert.Equal(map.Ambient, read.Ambient);
+        Assert.Equal(map.Fixtures["A.Tests.Host`1"], read.Fixtures["A.Tests.Host`1"]);
         Assert.Equal(map.Commit, read.Commit);
     }
+
+    private CoverageMap Map(string commit, List<CoveredMethod> methods, Dictionary<string, IReadOnlyList<int>> byClass) =>
+        new(new CoverageMapHeader("tests/Shop.Tests/Shop.Tests.csproj", commit, DateTimeOffset.UtcNow),
+            methods,
+            new CoverageHits(byClass, _fixtures, []));
+
+    /// <summary>Fixture hits the next <see cref="WriteMap"/> includes.</summary>
+    private readonly Dictionary<string, IReadOnlyList<int>> _fixtures = [];
 
     /// <summary>Writes a coverage map for Shop.Tests recorded at the current HEAD (the merge base in these tests).</summary>
     private void WriteMap(params (string TestClass, (string Type, string Member)[] Methods)[] classes)
@@ -385,13 +414,13 @@ public sealed class TestSelectorTests : IDisposable
 
         var head = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
         var path = CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Shop.Tests/Shop.Tests.csproj"));
-        CoverageMapStore.Write(path, new CoverageMap("tests/Shop.Tests/Shop.Tests.csproj", head, DateTimeOffset.UtcNow, methods, byClass, []));
+        CoverageMapStore.Write(path, Map(head, methods, byClass));
         File.WriteAllText(Path.Combine(_repo.Root, ".gitignore"), ".sift/\n");
         _repo.Commit("ignore maps");
 
         // The map must describe the new HEAD, which is what 'main' points to.
         var newHead = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
-        CoverageMapStore.Write(path, new CoverageMap("tests/Shop.Tests/Shop.Tests.csproj", newHead, DateTimeOffset.UtcNow, methods, byClass, []));
+        CoverageMapStore.Write(path, Map(newHead, methods, byClass));
     }
 
     [Fact]

@@ -17,7 +17,11 @@ internal sealed class CoverageIndex
 
     /// <summary>Builds the lookups; members that no test ran are still known, with no classes.</summary>
     /// <param name="map">Recorded map.</param>
-    public CoverageIndex(CoverageMap map)
+    /// <param name="classesUsingFixture">
+    /// Test classes (runtime names) that use a fixture type. A fixture nobody is known to use makes
+    /// its methods unanswerable, like code that ran outside every test.
+    /// </param>
+    public CoverageIndex(CoverageMap map, Func<string, IReadOnlyCollection<string>> classesUsingFixture)
     {
         Map = map;
         foreach (var method in map.Methods)
@@ -38,6 +42,26 @@ internal sealed class CoverageIndex
                 foreach (var type in EnclosingTypes(method.TypeName))
                 {
                     _classesByType[type].Add(testClass);
+                }
+            }
+        }
+
+        foreach (var (fixture, ids) in map.Fixtures)
+        {
+            var users = classesUsingFixture(fixture);
+            foreach (var id in ids)
+            {
+                var method = map.Methods[id];
+                if (users.Count == 0)
+                {
+                    _ambient.Add(method);
+                    continue;
+                }
+
+                _classesByMember[method].UnionWith(users);
+                foreach (var type in EnclosingTypes(method.TypeName))
+                {
+                    _classesByType[type].UnionWith(users);
                 }
             }
         }
