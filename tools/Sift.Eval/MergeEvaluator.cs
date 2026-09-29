@@ -1,0 +1,341 @@
+using Microsoft.Extensions.Logging;
+using Sift.Core;
+using Sift.Coverage;
+
+namespace Sift.Eval;
+
+/// <summary>Where an evaluation works.</summary>
+/// <param name="Git">Git of the clone.</param>
+/// <param name="RepoRoot">Clone directory.</param>
+/// <param name="MapCache">Directory holding recorded coverage maps, one subdirectory per commit.</param>
+/// <param name="Executor">Runs tests in the clone.</param>
+/// <param name="LoggerFactory">Creates loggers for Sift's own classes.</param>
+internal sealed record EvalWorkspace(EvalGit Git, string RepoRoot, string MapCache, TestExecutor Executor, ILoggerFactory LoggerFactory);
+
+/// <summary>
+/// Evaluates one merge: records coverage at its parent, lets Sift select, runs selection and full
+/// suite, and checks the selection with coverage recorded after the merge and with mutants.
+/// </summary>
+/// <param name="workspace">Where to work.</param>
+/// <param name="settings">Evaluation settings.</param>
+internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSettings settings)
+{
+    private readonly ILogger _logger = workspace.LoggerFactory.CreateLogger<MergeEvaluator>();
+
+    /// <summary>Evaluates <paramref name="commit"/>; a build or run failure is reported, not thrown.</summary>
+    /// <param name="commit">Merge to evaluate.</param>
+    public MergeResult Evaluate(EvalCommit commit)
+    {
+        var info = new MergeInfo(commit.Sha, commit.Parent, commit.Subject, workspace.Git.ChangedFileCount(commit.Parent, commit.Sha));
+        try
+        {
+            RecordAt(commit.Parent);
+
+            workspace.Git.Checkout(commit.Sha);
+            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
+            var testProjects = TestProjects(graph);
+            Build(testProjects);
+
+            PlaceMaps(commit.Parent);
+            var analysis = new AnalysisPipeline(workspace.LoggerFactory).Run(workspace.RepoRoot, commit.Parent);
+            ClearMaps();
+
+            var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);
+            var inScope = new HashSet<string>(testProjects.Select(static p => p.Path), StringComparer.Ordinal);
+            var invocations = TestInvocationBuilder.Build(
+                [.. analysis.Tests.Where(t => inScope.Contains(t.Project.Path))], workspace.RepoRoot, [], mode);
+
+            var selected = workspace.Executor.RunSelected(invocations, "selected");
+            var full = workspace.Executor.RunAll(testProjects, "full");
+            var mutants = RunMutants(analysis, testProjects, full);
+
+            var afterMaps = RecordAt(commit.Sha);
+            var coverageMisses = CoverageMisses(analysis, afterMaps);
+
+            LogEvaluated(commit.Sha, full.Seconds, selected.Seconds);
+            return new MergeResult(info, analysis.Plan, new RunComparison(full, selected), new SafetyCheck(coverageMisses, mutants), null);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException)
+        {
+            LogFailed(commit.Sha, ex);
+            return new MergeResult(info, null, null, null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Records coverage maps at <paramref name="sha"/> unless the cache has them. The maps of a merge
+    /// are the base maps of the next one, so walking the history records each commit once.
+    /// </summary>
+    /// <param name="sha">Commit to record.</param>
+    /// <returns>Maps by normalized test project path.</returns>
+    private Dictionary<string, CoverageMap> RecordAt(string sha)
+    {
+        var directory = Path.Combine(workspace.MapCache, sha);
+        if (!Directory.Exists(directory))
+        {
+            workspace.Git.Checkout(sha);
+            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
+            var recorder = new CoverageRecorder(workspace.LoggerFactory);
+            var temporary = directory + ".partial";
+            Directory.CreateDirectory(temporary);
+
+            foreach (var project in TestProjects(graph))
+            {
+                using var log = File.CreateText(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".record.log"));
+                var (map, _) = recorder.Record(
+                    new RecordRequest(workspace.RepoRoot, graph, project, "Debug", settings.Parallelism), log);
+                workspace.Executor.Cleanup();
+                CoverageMapStore.Write(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".json"), map);
+            }
+
+            Directory.Move(temporary, directory);
+            LogRecorded(sha);
+        }
+
+        var maps = new Dictionary<string, CoverageMap>(StringComparer.Ordinal);
+        foreach (var file in Directory.GetFiles(directory, "*.json"))
+        {
+            if (CoverageMapStore.Read(file) is { } map)
+            {
+                maps[Path.GetFullPath(Path.Combine(workspace.RepoRoot, map.TestProject)).Replace('\\', '/')] = map;
+            }
+        }
+
+        return maps;
+    }
+
+    /// <summary>The test projects to evaluate: all, or those named with <c>--project</c>.</summary>
+    /// <param name="graph">Projects of the checked-out commit.</param>
+    private List<ProjectNode> TestProjects(ProjectGraph graph)
+    {
+        var wanted = settings.Projects
+            .Select(p => Path.GetFullPath(Path.Combine(workspace.RepoRoot, p)).Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        return
+        [
+            .. graph.Projects
+                .Where(p => p.IsTestProject && (wanted.Count == 0 || wanted.Contains(p.Path)))
+                .OrderBy(static p => p.Path, StringComparer.Ordinal),
+        ];
+    }
+
+    /// <summary>Builds the test projects once, so every later run can use <c>--no-build</c>.</summary>
+    /// <param name="testProjects">Projects to build.</param>
+    /// <exception cref="InvalidOperationException">A build failed.</exception>
+    private void Build(List<ProjectNode> testProjects)
+    {
+        var dotnet = new DotnetProcess(_logger);
+        foreach (var project in testProjects)
+        {
+            var exitCode = dotnet.Run(["build", project.Path, "-c", "Debug"], workspace.RepoRoot, new Dictionary<string, string>(), TextWriter.Null);
+            if (exitCode != 0)
+            {
+                throw new InvalidOperationException($"Building {project.Path} failed with exit code {exitCode}.");
+            }
+        }
+    }
+
+    /// <summary>Copies the cached maps of <paramref name="sha"/> to where Sift looks for them.</summary>
+    /// <param name="sha">Commit the maps were recorded at.</param>
+    private void PlaceMaps(string sha)
+    {
+        ClearMaps();
+        var target = Path.Combine(workspace.RepoRoot, CoverageMapStore.Directory);
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(Path.Combine(workspace.MapCache, sha), "*.json"))
+        {
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
+        }
+    }
+
+    /// <summary>Removes the maps from the clone so they never mix with a later commit.</summary>
+    private void ClearMaps()
+    {
+        var directory = Path.Combine(workspace.RepoRoot, ".sift");
+        if (Directory.Exists(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Mutates up to <see cref="RunSettings.Mutants"/> changed members, one at a time, and runs the
+    /// full suite against each. A class that fails only with the mutant must be in Sift's selection.
+    /// Targets and assemblies are found independently of Sift's project mapping, so a file Sift
+    /// cannot place (a linked source file, say) is still checked.
+    /// </summary>
+    /// <param name="analysis">Sift's analysis of the merge.</param>
+    /// <param name="testProjects">Evaluated test projects.</param>
+    /// <param name="baseline">Full run without mutants, whose failures are not the mutant's.</param>
+    private List<MutantResult> RunMutants(AnalysisResult analysis, List<ProjectNode> testProjects, TestRunOutcome baseline)
+    {
+        var results = new List<MutantResult>();
+        var index = 0;
+        var assemblies = RepositoryAssemblies(analysis.Graph, testProjects);
+        foreach (var target in MutationTargets(analysis).Take(settings.Mutants))
+        {
+            index++;
+            using var mutation = MutationInjector.Inject(assemblies, target, Path.Combine(workspace.MapCache, "..", "mutant-backup"));
+            if (mutation.MutatedMethods == 0)
+            {
+                results.Add(new MutantResult(target, 0, [], []));
+                continue;
+            }
+
+            var run = workspace.Executor.RunAll(testProjects, $"mutant-{index}");
+            var killed = new List<string>();
+            var missed = new List<string>();
+            foreach (var (project, failed) in run.FailedByProject)
+            {
+                var before = baseline.FailedByProject.GetValueOrDefault(project) ?? new HashSet<string>();
+                foreach (var testClass in failed.Where(c => !before.Contains(c)).Order(StringComparer.Ordinal))
+                {
+                    killed.Add(testClass);
+                    if (!IsSelected(analysis, project, testClass))
+                    {
+                        missed.Add(testClass);
+                    }
+                }
+            }
+
+            LogMutant(target.TypeName, target.MemberName, killed.Count, missed.Count);
+            results.Add(new MutantResult(target, mutation.MutatedMethods, killed, missed));
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Modified members of every changed C# file outside test projects, including files that belong
+    /// to no project directory.
+    /// </summary>
+    /// <param name="analysis">Sift's analysis of the merge.</param>
+    private IEnumerable<CoveredMethod> MutationTargets(AnalysisResult analysis)
+    {
+        var seen = new HashSet<CoveredMethod>();
+        foreach (var change in analysis.Impact.CodeChanges.OrderBy(static c => c.Path, StringComparer.Ordinal))
+        {
+            var owner = analysis.Graph.FindOwner(Path.GetFullPath(Path.Combine(workspace.RepoRoot, change.Path)).Replace('\\', '/'));
+            if (owner is { IsTestProject: true })
+            {
+                continue;
+            }
+
+            foreach (var symbol in change.Symbols)
+            {
+                if (symbol is not { Kind: SymbolChangeKind.Modified, MemberName: { } member })
+                {
+                    continue;
+                }
+
+                var name = member.StartsWith(".ctor", StringComparison.Ordinal) ? ".ctor"
+                    : DeclarationWalker.ReferenceNames(member) is [var single] ? single
+                    : null;
+                if (name is not null && seen.Add(new CoveredMethod(symbol.TypeName, name)))
+                {
+                    yield return new CoveredMethod(symbol.TypeName, name);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every assembly built from the repository found in the test outputs. The mutant is injected
+    /// wherever its method exists, whichever project Sift thinks the source belongs to.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="testProjects">Evaluated test projects.</param>
+    private static List<string> RepositoryAssemblies(ProjectGraph graph, List<ProjectNode> testProjects)
+    {
+        var names = graph.Projects.Select(static p => p.AssemblyName + ".dll").ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var copies = new List<string>();
+        foreach (var project in testProjects)
+        {
+            var bin = Path.Combine(project.Directory, "bin", "Debug");
+            if (!Directory.Exists(bin))
+            {
+                continue;
+            }
+
+            copies.AddRange(Directory
+                .EnumerateFiles(bin, "*.dll", SearchOption.AllDirectories)
+                .Where(f => names.Contains(Path.GetFileName(f)))
+                .Where(static f => !f.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.Ordinal)));
+        }
+
+        return copies;
+    }
+
+    /// <summary>True when Sift's selection runs <paramref name="testClass"/> of <paramref name="project"/>.</summary>
+    /// <param name="analysis">Sift's analysis.</param>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="testClass">Runtime class name.</param>
+    private static bool IsSelected(AnalysisResult analysis, string project, string testClass)
+    {
+        var selection = analysis.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, project, StringComparison.Ordinal));
+        return selection?.Mode switch
+        {
+            TestRunMode.All => true,
+            TestRunMode.Filtered => selection.TestClasses.Contains(testClass),
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Test classes that, per coverage recorded after the merge, ran a changed member (or any member
+    /// of a changed type) but were not selected.
+    /// </summary>
+    /// <param name="analysis">Sift's analysis.</param>
+    /// <param name="afterMaps">Maps recorded at the merge.</param>
+    private static List<string> CoverageMisses(AnalysisResult analysis, Dictionary<string, CoverageMap> afterMaps)
+    {
+        var changed = new List<(string Type, string? Member)>();
+        foreach (var symbol in analysis.Impact.CodeChanges.SelectMany(static c => c.Symbols))
+        {
+            var member = symbol.MemberName switch
+            {
+                null => null,
+                var m when m.StartsWith(".ctor", StringComparison.Ordinal) => ".ctor",
+                var m => DeclarationWalker.ReferenceNames(m) is [var single] ? single : null,
+            };
+
+            if (symbol.MemberName is null || member is not null)
+            {
+                changed.Add((symbol.TypeName, member));
+            }
+        }
+
+        var misses = new List<string>();
+        foreach (var (project, map) in afterMaps)
+        {
+            foreach (var (testClass, ids) in map.Classes)
+            {
+                var ran = ids.Select(id => map.Methods[id]).ToList();
+                var touches = changed.Exists(c => c.Member is null
+                    ? ran.Exists(m => m.TypeName == c.Type || m.TypeName.StartsWith(c.Type + ".", StringComparison.Ordinal))
+                    : ran.Contains(new CoveredMethod(c.Type, c.Member)));
+
+                if (touches && !IsSelected(analysis, project, testClass))
+                {
+                    misses.Add($"{Path.GetFileNameWithoutExtension(project)}: {testClass}");
+                }
+            }
+        }
+
+        misses.Sort(StringComparer.Ordinal);
+        return misses;
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Recorded coverage at {Sha}")]
+    private partial void LogRecorded(string sha);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Sha}: full {FullSeconds:0.0} s, selected {SelectedSeconds:0.0} s")]
+    private partial void LogEvaluated(string sha, double fullSeconds, double selectedSeconds);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {TypeName}.{MemberName}: {Killed} class(es) failed, {Missed} not selected")]
+    private partial void LogMutant(string typeName, string memberName, int killed, int missed);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Sha} could not be evaluated")]
+    private partial void LogFailed(string sha, Exception exception);
+}

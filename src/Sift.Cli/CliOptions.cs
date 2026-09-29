@@ -76,7 +76,7 @@ internal sealed record CliOptions(
 
         sift record:
           -c, --configuration <name>  Build configuration (default: Debug)
-          --project <path>     Record only this test project; repeat for several
+          --project <path>     Record only this test project (relative to the repository root); repeat for several
           --parallel <n>       Spread each project's test classes over n processes (default: 1).
                                The suite must tolerate several test processes at once.
 

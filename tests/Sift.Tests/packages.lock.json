@@ -138,6 +138,15 @@
       "sift.coverage.runtime": {
         "type": "Project"
       },
+      "sift.eval": {
+        "type": "Project",
+        "dependencies": {
+          "Mono.Cecil": "[0.11.6, )",
+          "Sift.Cli": "[1.0.0, )",
+          "Sift.Core": "[1.0.0, )",
+          "Sift.Coverage": "[1.0.0, )"
+        }
+      },
       "Microsoft.CodeAnalysis.CSharp": {
         "type": "CentralTransitive",
         "requested": "[5.9.0, )",

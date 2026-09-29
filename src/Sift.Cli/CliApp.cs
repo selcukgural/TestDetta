@@ -139,7 +139,7 @@ internal static partial class CliApp
         {
             var root = new GitClient(loggerFactory.CreateLogger<GitClient>()).TopLevel(options.Analysis.RepoPath);
             var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>()).Load(root);
-            var testProjects = SelectTestProjects(graph, options.Record.Projects);
+            var testProjects = SelectTestProjects(graph, root, options.Record.Projects);
             if (testProjects.Count == 0)
             {
                 stderr.WriteLine("sift: no test project to record.");
@@ -182,9 +182,15 @@ internal static partial class CliApp
 
     /// <summary>All test projects, or only those named on the command line.</summary>
     /// <param name="graph">Projects of the repository.</param>
+    /// <param name="root">Repository root as git reports it; relative paths are resolved against it.</param>
     /// <param name="projects">Paths given with <c>--project</c>; empty means all.</param>
     /// <exception cref="InvalidOperationException">A named project is not a test project of the repository.</exception>
-    private static List<ProjectNode> SelectTestProjects(ProjectGraph graph, IReadOnlyList<string> projects)
+    /// <remarks>
+    /// Relative paths are taken from the repository root, not the current directory: the graph uses
+    /// git's spelling of the root, which differs from the current directory's when it is reached
+    /// through a symlink (the temp folder on macOS).
+    /// </remarks>
+    private static List<ProjectNode> SelectTestProjects(ProjectGraph graph, string root, IReadOnlyList<string> projects)
     {
         var result = new List<ProjectNode>();
         if (projects.Count == 0)
@@ -200,7 +206,7 @@ internal static partial class CliApp
 
         foreach (var project in projects)
         {
-            var wanted = Path.GetFullPath(project).Replace('\\', '/');
+            var wanted = Path.GetFullPath(Path.IsPathRooted(project) ? project : Path.Combine(root, project)).Replace('\\', '/');
             var node = graph.Projects.FirstOrDefault(n => n.IsTestProject && string.Equals(n.Path, wanted, StringComparison.Ordinal))
                        ?? throw new InvalidOperationException($"{project} is not a test project of this repository.");
             result.Add(node);
