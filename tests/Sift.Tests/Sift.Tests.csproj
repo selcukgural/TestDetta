@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sift.Core\Sift.Core.csproj" />
+    <ProjectReference Include="..\..\src\Sift.Cli\Sift.Cli.csproj" />
   </ItemGroup>
 
 </Project>

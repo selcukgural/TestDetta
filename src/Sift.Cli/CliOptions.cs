@@ -2,29 +2,65 @@ using Microsoft.Extensions.Logging;
 
 namespace Sift.Cli;
 
-/// <summary>Parsed command line of <c>sift affected</c>.</summary>
+/// <summary>The sub-command given as the first argument.</summary>
+internal enum CliCommand
+{
+    /// <summary><c>sift affected</c>: print what a change affects.</summary>
+    Affected,
+
+    /// <summary><c>sift test</c>: run the tests a change affects.</summary>
+    Test,
+}
+
+/// <summary>Options every command shares: what to compare and how much to log.</summary>
 /// <param name="BaseRef">Git ref to compare against.</param>
 /// <param name="RepoPath">Any path inside the repository.</param>
+/// <param name="LogLevel">Minimum level of the diagnostic log written to stderr.</param>
+internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLevel LogLevel);
+
+/// <summary>Options of <c>sift affected</c>.</summary>
 /// <param name="TestsOnly">Print only test projects.</param>
 /// <param name="Format">Output format for stdout.</param>
-/// <param name="LogLevel">Minimum level of the diagnostic log written to stderr.</param>
-internal sealed record CliOptions(string BaseRef, string RepoPath, bool TestsOnly, OutputFormat Format, LogLevel LogLevel)
+internal sealed record AffectedSettings(bool TestsOnly, OutputFormat Format);
+
+/// <summary>Options of <c>sift test</c>.</summary>
+/// <param name="DryRun">Print the <c>dotnet test</c> commands instead of running them.</param>
+/// <param name="DotnetTestArguments">Arguments after <c>--</c>, passed to every <c>dotnet test</c> as given.</param>
+internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTestArguments);
+
+/// <summary>Parsed command line.</summary>
+/// <param name="Command">Which sub-command to run.</param>
+/// <param name="Analysis">Options shared by all commands.</param>
+/// <param name="Affected">Options of <c>sift affected</c>; defaults for other commands.</param>
+/// <param name="Test">Options of <c>sift test</c>; defaults for other commands.</param>
+internal sealed record CliOptions(CliCommand Command, AnalysisSettings Analysis, AffectedSettings Affected, TestSettings Test)
 {
     /// <summary>Help text printed for <c>--help</c> and after a usage error.</summary>
     public const string Usage = """
-        Usage: sift affected [options]
+        Usage:
+          sift affected [options]              Print the projects and tests a change affects
+          sift test [options] [-- <args>]      Run only the tests a change affects
 
+        Options:
           --base <ref>         Git ref to compare against (default: origin/main)
           --repo <path>        Any path inside the repository (default: current directory)
+          -v, --verbose        Write debug logs to stderr
+          --log-level <level>  trace, debug, information, warning (default), error or none
+
+        sift affected:
           --tests-only         Only list affected test projects
           --format <format>    text (default), json, paths (one .csproj per line),
                                or commands (one dotnet test command per test project)
-          -v, --verbose        Write debug logs to stderr
-          --log-level <level>  trace, debug, information, warning (default), error or none
+
+        sift test:
+          --dry-run            Print the dotnet test commands instead of running them
+          -- <args>            Pass the remaining arguments to every dotnet test, e.g. -- -c Release
+
+        Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed.
         """;
 
-    /// <summary>Parses the arguments that follow the <c>affected</c> command.</summary>
-    /// <param name="args">Arguments after the command name.</param>
+    /// <summary>Parses the whole command line, including the command name.</summary>
+    /// <param name="args">Raw command line arguments.</param>
     /// <param name="currentDirectory">Used as the repository path when <c>--repo</c> is not given.</param>
     /// <param name="options">The parsed options when parsing succeeds.</param>
     /// <param name="error">A message for the user when parsing fails.</param>
@@ -35,70 +71,125 @@ internal sealed record CliOptions(string BaseRef, string RepoPath, bool TestsOnl
         out CliOptions options,
         out string? error)
     {
-        options = new CliOptions("origin/main", currentDirectory, TestsOnly: false, OutputFormat.Text, LogLevel.Warning);
+        options = new CliOptions(
+            CliCommand.Affected,
+            new AnalysisSettings("origin/main", currentDirectory, LogLevel.Warning),
+            new AffectedSettings(TestsOnly: false, OutputFormat.Text),
+            new TestSettings(DryRun: false, []));
         error = null;
 
-        for (var i = 0; i < args.Length; i++)
+        switch (args)
+        {
+            case ["affected", ..]:
+                break;
+
+            case ["test", ..]:
+                options = options with { Command = CliCommand.Test };
+                break;
+
+            case []:
+                error = "Missing command";
+                return false;
+
+            default:
+                error = $"Unknown command: {args[0]}";
+                return false;
+        }
+
+        for (var i = 1; i < args.Length; i++)
         {
             var arg = args[i];
 
-            if (arg is "--tests-only")
+            if (arg == "--")
             {
-                options = options with { TestsOnly = true };
-                continue;
+                if (options.Command != CliCommand.Test)
+                {
+                    error = "'--' is only valid for sift test";
+                    return false;
+                }
+
+                options = options with { Test = options.Test with { DotnetTestArguments = [.. args[(i + 1)..]] } };
+                return true;
             }
 
-            if (arg is "-v" or "--verbose")
+            if (!TryParseOption(args, ref i, ref options, out error))
             {
-                options = options with { LogLevel = LogLevel.Debug };
-                continue;
-            }
-
-            if (arg is not ("--base" or "--repo" or "--format" or "--log-level"))
-            {
-                error = $"Unknown option: {arg}";
                 return false;
-            }
-
-            if (i + 1 >= args.Length)
-            {
-                error = $"{arg} needs a value";
-                return false;
-            }
-
-            var value = args[++i];
-            switch (arg)
-            {
-                case "--base":
-                    options = options with { BaseRef = value };
-                    break;
-
-                case "--repo":
-                    options = options with { RepoPath = value };
-                    break;
-
-                case "--format":
-                    if (!Enum.TryParse<OutputFormat>(value, ignoreCase: true, out var format))
-                    {
-                        error = $"Unknown format: {value}";
-                        return false;
-                    }
-
-                    options = options with { Format = format };
-                    break;
-
-                case "--log-level":
-                    if (!Enum.TryParse<LogLevel>(value, ignoreCase: true, out var level))
-                    {
-                        error = $"Unknown log level: {value}";
-                        return false;
-                    }
-
-                    options = options with { LogLevel = level };
-                    break;
             }
         }
 
         return true;
+    }
+
+    /// <summary>Parses the option at <paramref name="i"/>, advancing past its value when it has one.</summary>
+    /// <param name="args">Raw command line arguments.</param>
+    /// <param name="i">Index of the option; moved to its value when the option takes one.</param>
+    /// <param name="options">Options so far; updated in place.</param>
+    /// <param name="error">A message for the user when the option is invalid.</param>
+    private static bool TryParseOption(ReadOnlySpan<string> args, ref int i, ref CliOptions options, out string? error)
+    {
+        error = null;
+        var arg = args[i];
+
+        switch (arg)
+        {
+            case "-v" or "--verbose":
+                options = options with { Analysis = options.Analysis with { LogLevel = LogLevel.Debug } };
+                return true;
+
+            case "--tests-only" when options.Command == CliCommand.Affected:
+                options = options with { Affected = options.Affected with { TestsOnly = true } };
+                return true;
+
+            case "--dry-run" when options.Command == CliCommand.Test:
+                options = options with { Test = options.Test with { DryRun = true } };
+                return true;
+
+            case "--base" or "--repo" or "--log-level":
+            case "--format" when options.Command == CliCommand.Affected:
+                break;
+
+            default:
+                error = $"Unknown option for sift {options.Command.ToString().ToLowerInvariant()}: {arg}";
+                return false;
+        }
+
+        if (i + 1 >= args.Length)
+        {
+            error = $"{arg} needs a value";
+            return false;
+        }
+
+        var value = args[++i];
+        switch (arg)
+        {
+            case "--base":
+                options = options with { Analysis = options.Analysis with { BaseRef = value } };
+                return true;
+
+            case "--repo":
+                options = options with { Analysis = options.Analysis with { RepoPath = value } };
+                return true;
+
+            case "--format":
+                if (!Enum.TryParse<OutputFormat>(value, ignoreCase: true, out var format))
+                {
+                    error = $"Unknown format: {value}";
+                    return false;
+                }
+
+                options = options with { Affected = options.Affected with { Format = format } };
+                return true;
+
+            default:
+                if (!Enum.TryParse<LogLevel>(value, ignoreCase: true, out var level))
+                {
+                    error = $"Unknown log level: {value}";
+                    return false;
+                }
+
+                options = options with { Analysis = options.Analysis with { LogLevel = level } };
+                return true;
+        }
     }
 }

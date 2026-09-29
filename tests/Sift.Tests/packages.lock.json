@@ -117,6 +117,12 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "sift.cli": {
+        "type": "Project",
+        "dependencies": {
+          "Sift.Core": "[1.0.0, )"
+        }
+      },
       "sift.core": {
         "type": "Project",
         "dependencies": {

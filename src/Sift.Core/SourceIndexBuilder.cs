@@ -238,9 +238,12 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         members.Add(new IndexedMember(
             owner.Path, owner.IsTestProject, program, "<Main>$", [], MayBeCalledImplicitly: true, IsPrivate: false,
             IsStatic: false, references.ToFrozenSet()));
+        // The runtime, not reflection, starts the entry point. A test that runs it in-process has to
+        // name Program (WebApplicationFactory<Program>); one that starts the app as a separate process
+        // is invisible to name tracing for every change, not just this one.
         types.Add(new IndexedType(
             program, program, owner.Path, owner.IsTestProject, IsConcreteClass: false, HasTestMethods: false, [],
-            CanContainTests: false, MayBeFoundByReflection: true));
+            CanContainTests: false, MayBeFoundByReflection: false));
     }
 
     /// <summary>

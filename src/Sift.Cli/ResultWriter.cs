@@ -11,7 +11,7 @@ namespace Sift.Cli;
 internal sealed record RunStats(int ChangedFileCount, int ProjectCount);
 
 /// <summary>Everything <see cref="ResultWriter"/> needs to print one analysis.</summary>
-/// <param name="Options">Command line options, for the format and the tests-only filter.</param>
+/// <param name="Options">Command line options, for the base ref, the format and the tests-only filter.</param>
 /// <param name="RepoRoot">Repository root; printed paths are relative to it.</param>
 /// <param name="Stats">Counts for the summary line.</param>
 /// <param name="Result">Project-level result.</param>
@@ -31,7 +31,7 @@ internal static class ResultWriter
     /// <param name="stdout">Destination, normally <see cref="Console.Out"/>.</param>
     public static void Write(ResultReport report, TextWriter stdout)
     {
-        switch (report.Options.Format)
+        switch (report.Options.Affected.Format)
         {
             case OutputFormat.Paths:
                 WritePaths(report, stdout);
@@ -59,7 +59,7 @@ internal static class ResultWriter
     /// <param name="stdout">Destination.</param>
     private static void WritePaths(ResultReport report, TextWriter stdout)
     {
-        if (report.Options.TestsOnly)
+        if (report.Options.Affected.TestsOnly)
         {
             foreach (var test in report.Tests)
             {
@@ -83,20 +83,9 @@ internal static class ResultWriter
     /// <param name="stdout">Destination.</param>
     private static void WriteCommands(ResultReport report, TextWriter stdout)
     {
-        foreach (var test in report.Tests)
+        foreach (var invocation in TestInvocationBuilder.Build(report.Tests, report.RepoRoot, []))
         {
-            if (test.Mode == TestRunMode.Skipped)
-            {
-                continue;
-            }
-
-            var command = $"dotnet test {ShellQuote(Relative(report.RepoRoot, test.Project.Path))}";
-            if (test.Mode == TestRunMode.Filtered)
-            {
-                command += $" --filter {ShellQuote(TestFilter.ForClasses(test.TestClasses))}";
-            }
-
-            stdout.WriteLine(command);
+            stdout.WriteLine(CommandLine(invocation));
         }
     }
 
@@ -105,11 +94,11 @@ internal static class ResultWriter
     /// <param name="stdout">Destination.</param>
     private static void WriteText(ResultReport report, TextWriter stdout)
     {
-        var options = report.Options;
-        var selected = options.TestsOnly ? [.. report.Result.Tests] : report.Result.Affected;
+        var testsOnly = report.Options.Affected.TestsOnly;
+        var selected = testsOnly ? [.. report.Result.Tests] : report.Result.Affected;
 
-        stdout.WriteLine($"{report.Stats.ChangedFileCount} changed file(s) vs {options.BaseRef}, {report.Stats.ProjectCount} project(s) in repo.");
-        stdout.WriteLine($"{selected.Count} affected{(options.TestsOnly ? " test" : "")} project(s):");
+        stdout.WriteLine($"{report.Stats.ChangedFileCount} changed file(s) vs {report.Options.Analysis.BaseRef}, {report.Stats.ProjectCount} project(s) in repo.");
+        stdout.WriteLine($"{selected.Count} affected{(testsOnly ? " test" : "")} project(s):");
 
         foreach (var affected in selected)
         {
@@ -133,8 +122,76 @@ internal static class ResultWriter
         }
 
         stdout.WriteLine();
+        WriteTestDecisions(report.RepoRoot, report.Tests, stdout);
+    }
+
+    /// <summary>
+    /// The plan <c>sift test</c> prints before running: one line per affected test project with
+    /// its decision and reason, followed by the selected classes.
+    /// </summary>
+    /// <param name="analysis">Finished analysis.</param>
+    /// <param name="stdout">Destination.</param>
+    public static void WritePlan(AnalysisResult analysis, TextWriter stdout)
+    {
+        stdout.WriteLine($"sift: {analysis.ChangedFiles.Count} changed file(s), {analysis.Tests.Count} affected test project(s).");
+        if (analysis.Tests.Count == 0)
+        {
+            return;
+        }
+
+        WriteTestDecisions(analysis.RepoRoot, analysis.Tests, stdout);
+        stdout.WriteLine();
+    }
+
+    /// <summary>
+    /// Summary after <c>sift test</c>: outcome and duration per project, then the totals, so the
+    /// result is readable below long test output.
+    /// </summary>
+    /// <param name="repoRoot">Repository root; printed paths are relative to it.</param>
+    /// <param name="selections">All decisions, including skipped projects.</param>
+    /// <param name="results">Results of the invocations that ran.</param>
+    /// <param name="stdout">Destination.</param>
+    public static void WriteRunSummary(
+        string repoRoot,
+        IReadOnlyList<TestProjectSelection> selections,
+        IReadOnlyList<TestRunResult> results,
+        TextWriter stdout)
+    {
+        stdout.WriteLine();
+        stdout.WriteLine("sift summary:");
+
+        var failed = 0;
+        foreach (var result in results)
+        {
+            var passed = result.ExitCode == 0;
+            failed += passed ? 0 : 1;
+            var scope = result switch
+            {
+                { RanUnfiltered: true } => "all tests, filter matched nothing",
+                { Invocation.Selection.Mode: TestRunMode.Filtered } => $"{result.Invocation.Selection.TestClasses.Count} class(es)",
+                _ => "all tests",
+            };
+            stdout.WriteLine(
+                $"  {(passed ? "passed" : "FAILED")}  {Relative(repoRoot, result.Invocation.Selection.Project.Path)}  ({scope}, {result.Elapsed.TotalSeconds:0.0} s)");
+        }
+
+        var skipped = selections.Count(static s => s.Mode == TestRunMode.Skipped);
+        stdout.WriteLine($"{results.Count} project(s) run, {failed} failed, {skipped} skipped.");
+    }
+
+    /// <summary>The invocation as a POSIX shell command line.</summary>
+    /// <param name="invocation">What would be run.</param>
+    public static string CommandLine(TestInvocation invocation) =>
+        "dotnet " + string.Join(' ', invocation.Arguments.Select(static a => IsShellSafe(a) ? a : ShellQuote(a)));
+
+    /// <summary>One line per test project with its decision and reason, followed by the selected classes.</summary>
+    /// <param name="repoRoot">Repository root; printed paths are relative to it.</param>
+    /// <param name="tests">Decisions to print.</param>
+    /// <param name="stdout">Destination.</param>
+    private static void WriteTestDecisions(string repoRoot, IReadOnlyList<TestProjectSelection> tests, TextWriter stdout)
+    {
         stdout.WriteLine("Tests to run:");
-        foreach (var test in report.Tests)
+        foreach (var test in tests)
         {
             var label = test.Mode switch
             {
@@ -143,7 +200,7 @@ internal static class ResultWriter
                 _ => "skip    ",
             };
 
-            stdout.WriteLine($"  {label} {Relative(report.RepoRoot, test.Project.Path)}  ({test.Reason})");
+            stdout.WriteLine($"  {label} {Relative(repoRoot, test.Project.Path)}  ({test.Reason})");
             foreach (var testClass in test.TestClasses)
             {
                 stdout.WriteLine($"             {testClass}");
@@ -159,7 +216,7 @@ internal static class ResultWriter
     /// <param name="stdout">Destination.</param>
     private static void WriteJson(ResultReport report, TextWriter stdout)
     {
-        var selected = report.Options.TestsOnly ? [.. report.Result.Tests] : report.Result.Affected;
+        var selected = report.Options.Affected.TestsOnly ? [.. report.Result.Tests] : report.Result.Affected;
 
         using var buffer = new MemoryStream();
         using (var json = new Utf8JsonWriter(buffer, new JsonWriterOptions
@@ -170,7 +227,7 @@ internal static class ResultWriter
                }))
         {
             json.WriteStartObject();
-            json.WriteString("base"u8, report.Options.BaseRef);
+            json.WriteString("base"u8, report.Options.Analysis.BaseRef);
             json.WriteNumber("changedFiles"u8, report.Stats.ChangedFileCount);
 
             json.WriteStartArray("projects"u8);
@@ -250,6 +307,15 @@ internal static class ResultWriter
 
         json.WriteEndArray();
     }
+
+    /// <summary>True when <paramref name="value"/> needs no quoting in a POSIX shell.</summary>
+    /// <param name="value">Argument to check.</param>
+    private static bool IsShellSafe(string value) =>
+        value.Length > 0 && value.AsSpan().IndexOfAnyExcept(ShellSafeCharacters) < 0;
+
+    /// <summary>Characters that never need quoting in a POSIX shell.</summary>
+    private static readonly System.Buffers.SearchValues<char> ShellSafeCharacters =
+        System.Buffers.SearchValues.Create("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:,+@%");
 
     /// <summary>Wraps <paramref name="value"/> in single quotes for POSIX shells, escaping embedded quotes.</summary>
     /// <param name="value">Argument to quote.</param>

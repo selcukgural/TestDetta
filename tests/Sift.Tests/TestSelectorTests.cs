@@ -268,6 +268,17 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Unnamed_top_level_program_does_not_force_a_full_run()
+    {
+        // Tests reference the app project and exercise Slug directly; the entry point merely uses it.
+        _repo.Write("src/Shop/Program.cs", """System.Console.WriteLine(Shop.Slug.Make("X"));""");
+        _repo.Commit("add entry point");
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(["Shop.Tests.SlugTests"], Select().TestClasses);
+    }
+
+    [Fact]
     public void Filter_escapes_operators_and_ends_each_class_with_a_dot()
     {
         Assert.Equal(
