@@ -111,7 +111,8 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                     Directory.Delete(results, recursive: true);
                 }
 
-                List<string> arguments = [.. baseArguments, .. ReportArguments(project, results)];
+                var reportName = $"sift-{id:000}-{label}.trx";
+                List<string> arguments = [.. baseArguments, .. ReportArguments(project, results, reportName)];
                 var logPath = Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log");
                 using (var log = File.CreateText(logPath))
                 {
@@ -120,6 +121,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 }
 
                 Cleanup();
+                CollectReport(reportName, results);
                 outcome = TrxReport.Read(results);
                 crashed = File.ReadLines(logPath).Any(static l =>
                     l.Contains("Test host process crashed", StringComparison.Ordinal) || l.Contains("Test Run Aborted", StringComparison.Ordinal));
@@ -150,8 +152,14 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// report option, which xUnit v3 names differently.
     /// </summary>
     /// <param name="project">Test project.</param>
-    /// <param name="results">Results directory.</param>
-    private List<string> ReportArguments(ProjectNode project, string results)
+    /// <param name="results">Results directory (VSTest only).</param>
+    /// <param name="reportName">Report file name (testing platform only).</param>
+    /// <remarks>
+    /// Under the testing platform no results directory is passed: repositories may already set one
+    /// in their build, and a second <c>--results-directory</c> makes the command line invalid. The
+    /// report gets a unique name instead and <see cref="CollectReport"/> finds it.
+    /// </remarks>
+    private List<string> ReportArguments(ProjectNode project, string results, string reportName)
     {
         if (context.Mode == DotnetTestMode.VSTest)
         {
@@ -159,7 +167,31 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         }
 
         var isXunitV3 = Outputs.TryGetValue(project.Path, out var output) && File.Exists(Path.Combine(output, "xunit.v3.core.dll"));
-        return [isXunitV3 ? "--report-xunit-trx" : "--report-trx", "--results-directory", results];
+        return isXunitV3
+            ? ["--report-xunit-trx", "--report-xunit-trx-filename", reportName]
+            : ["--report-trx", "--report-trx-filename", reportName];
+    }
+
+    /// <summary>
+    /// Moves a testing-platform report named <paramref name="reportName"/> from wherever the run wrote
+    /// it (the repository's own results directory, <c>TestResults</c> next to the output) into
+    /// <paramref name="results"/>.
+    /// </summary>
+    /// <param name="reportName">Unique report file name.</param>
+    /// <param name="results">Directory the report is read from.</param>
+    private void CollectReport(string reportName, string results)
+    {
+        if (context.Mode == DotnetTestMode.VSTest)
+        {
+            return;
+        }
+
+        var found = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        foreach (var file in Directory.EnumerateFiles(context.RepoRoot, reportName, found))
+        {
+            Directory.CreateDirectory(results);
+            File.Move(file, Path.Combine(results, Path.GetFileName(file)), overwrite: true);
+        }
     }
 
     /// <summary>Runs the cleanup command, if any, and waits for it.</summary>

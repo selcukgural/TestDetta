@@ -135,7 +135,8 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
                 continue;
             }
 
-            if (packages is not null && !packages.Overlaps(project.PackageReferences))
+            // A project with unresolved inputs may reference the package from a file Sift could not find.
+            if (packages is not null && !project.HasUnresolvedInputs && !packages.Overlaps(project.PackageReferences))
             {
                 continue;
             }

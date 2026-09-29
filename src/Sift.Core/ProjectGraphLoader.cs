@@ -148,15 +148,19 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             isTest = true;
         }
 
-        var inputs = new BuildInputs(projectDir);
+        // In MSBuild's order: Directory.Build.props, the project, Directory.Build.targets, so that a
+        // property the project sets is known when the targets file imports a path built from it.
+        var inputs = new BuildInputs(projectDir, Path.GetFileNameWithoutExtension(projectPath));
         var visited = new HashSet<string>(Paths.Comparer);
-        Walk(projectPath, inputs, visited, doc);
-        foreach (var name in ImplicitImports)
+        if (FindAbove(projectDir, ImplicitImports[0], root) is { } props)
         {
-            if (FindAbove(projectDir, name, root) is { } implicitImport)
-            {
-                Walk(implicitImport, inputs, visited, document: null);
-            }
+            Walk(props, inputs, visited, document: null);
+        }
+
+        Walk(projectPath, inputs, visited, doc);
+        if (FindAbove(projectDir, ImplicitImports[1], root) is { } targets)
+        {
+            Walk(targets, inputs, visited, document: null);
         }
 
         LogParsed(projectPath, isTest, references.Count);
@@ -175,10 +179,20 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
     /// <summary>What <see cref="Walk"/> collects for one project.</summary>
     /// <param name="projectDirectory">Normalized directory of the project; items inside it need no tracking.</param>
-    private sealed class BuildInputs(string projectDirectory)
+    /// <param name="projectName">Project file name without extension, for <c>$(MSBuildProjectName)</c>.</param>
+    private sealed class BuildInputs(string projectDirectory, string projectName)
     {
         /// <summary>Normalized directory of the project.</summary>
         public string ProjectDirectory { get; } = projectDirectory;
+
+        /// <summary>Project file name without extension.</summary>
+        public string ProjectName { get; } = projectName;
+
+        /// <summary>
+        /// Literal property values seen so far, by property name. Conditions are not evaluated, so a
+        /// property may have several candidate values; a path built from it resolves to each.
+        /// </summary>
+        public Dictionary<string, HashSet<string>> Properties { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Imported MSBuild files, existing or not (an optional import may be added later).</summary>
         public List<string> Imports { get; } = [];
@@ -226,6 +240,12 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         foreach (var element in document.Descendants())
         {
             var name = element.Name.LocalName;
+            if (element.Parent?.Name.LocalName == "PropertyGroup" && !element.HasElements)
+            {
+                RecordProperty(inputs, name, element.Value.Trim());
+                continue;
+            }
+
             if (name == "Import" && element.Attribute("Sdk") is null && element.Attribute("Project")?.Value is { Length: > 0 } project)
             {
                 // Imports are relative to the importing file.
@@ -271,6 +291,75 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
     }
 
     /// <summary>
+    /// Records a property value that needs no evaluation: literal text, or text built only from
+    /// properties already known. Values with item or metadata references are skipped.
+    /// </summary>
+    /// <param name="inputs">Collected inputs; updated in place.</param>
+    /// <param name="name">Property name.</param>
+    /// <param name="value">Property value as written.</param>
+    private static void RecordProperty(BuildInputs inputs, string name, string value)
+    {
+        if (value.Length == 0 || value.Contains("@(", StringComparison.Ordinal) || value.Contains("%(", StringComparison.Ordinal)
+            || value.Contains("$([", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        foreach (var expanded in ExpandProperties(value, inputs))
+        {
+            if (!inputs.Properties.TryGetValue(name, out var values))
+            {
+                values = new HashSet<string>(StringComparer.Ordinal);
+                inputs.Properties[name] = values;
+            }
+
+            values.Add(expanded);
+        }
+    }
+
+    /// <summary>
+    /// Replaces every <c>$(Name)</c> with each known value of the property; nothing when a property
+    /// is unknown. At most 16 combinations are produced, which is plenty for path properties.
+    /// </summary>
+    /// <param name="value">Text with property references.</param>
+    /// <param name="inputs">Known properties.</param>
+    private static List<string> ExpandProperties(string value, BuildInputs inputs)
+    {
+        List<string> results = [value];
+        while (results.Count > 0 && PropertyReference().Match(results[0]) is { Success: true } reference)
+        {
+            var property = reference.Groups[1].Value;
+            var values = property.Equals("MSBuildProjectName", StringComparison.OrdinalIgnoreCase)
+                ? new HashSet<string>(StringComparer.Ordinal) { inputs.ProjectName }
+                : inputs.Properties.GetValueOrDefault(property);
+            if (values is null || values.Count == 0)
+            {
+                return [];
+            }
+
+            var next = new List<string>();
+            foreach (var partial in results)
+            {
+                foreach (var candidate in values)
+                {
+                    if (next.Count < 16)
+                    {
+                        next.Add(partial.Replace(reference.Value, candidate, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+            }
+
+            results = next;
+        }
+
+        return results;
+    }
+
+    /// <summary>Matches a plain property reference such as <c>$(ProjectType)</c>.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"\$\((\w+)\)")]
+    private static partial System.Text.RegularExpressions.Regex PropertyReference();
+
+    /// <summary>
     /// Resolves an import or item path: backslashes become slashes, <c>$(MSBuildThisFileDirectory)</c>
     /// and <c>$(MSBuildProjectDirectory)</c> are substituted, <c>GetPathOfFileAbove</c> is searched,
     /// and relative paths are taken from <paramref name="baseDirectory"/>. Anything with other
@@ -307,14 +396,25 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             path = path.Replace(above.Value, found, StringComparison.Ordinal);
         }
 
-        if (path.Contains("$(", StringComparison.Ordinal) || path.Contains("@(", StringComparison.Ordinal)
-            || path.Contains("%(", StringComparison.Ordinal))
+        if (path.Contains("@(", StringComparison.Ordinal) || path.Contains("%(", StringComparison.Ordinal)
+            || path.Contains("$([", StringComparison.Ordinal))
         {
             inputs.Unresolved = true;
             yield break;
         }
 
-        yield return Paths.Normalize(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path));
+        // Properties the project or its imports set literally, such as $(ProjectType).
+        var expanded = path.Contains("$(", StringComparison.Ordinal) ? ExpandProperties(path, inputs) : [path];
+        if (expanded.Count == 0)
+        {
+            inputs.Unresolved = true;
+            yield break;
+        }
+
+        foreach (var candidate in expanded)
+        {
+            yield return Paths.Normalize(Path.IsPathRooted(candidate) ? candidate : Path.Combine(baseDirectory, candidate));
+        }
     }
 
     /// <summary>
