@@ -49,8 +49,29 @@ public sealed class CoverageRecorderTests : IDisposable
             public class MultiplyTests { [Fact] public async Task Multiplies() => Assert.Equal(6, await new Calculator().MultiplyAsync(2, 3)); }
 
             // The fixture's constructor runs before the class is created; its hits belong to the fixture.
-            public class WarmCalculator { public WarmCalculator() => new Calculator().Unused(); }
-            public class FixtureTests(WarmCalculator warm) : IClassFixture<WarmCalculator> { [Fact] public void HasFixture() => Assert.NotNull(warm); }
+            // Its background worker keeps the fixture's execution context, but works for the running test.
+            public class WarmCalculator
+            {
+                private readonly System.Collections.Concurrent.BlockingCollection<(int, int, TaskCompletionSource<int>)> _work = new();
+
+                public WarmCalculator()
+                {
+                    new Calculator().Unused();
+                    new Thread(() => { foreach (var (a, b, done) in _work.GetConsumingEnumerable()) { done.SetResult(new Calculator().Add(a, b)); } }) { IsBackground = true }.Start();
+                }
+
+                public int AddInBackground(int a, int b)
+                {
+                    var done = new TaskCompletionSource<int>();
+                    _work.Add((a, b, done));
+                    return done.Task.GetAwaiter().GetResult();
+                }
+            }
+
+            public class FixtureTests(WarmCalculator warm) : IClassFixture<WarmCalculator>
+            {
+                [Fact] public void Adds_through_the_fixture_worker() => Assert.Equal(5, warm.AddInBackground(2, 3));
+            }
 
             // Like a test server handling a request: the work runs without the test's execution context.
             public class DetachedTests
@@ -110,7 +131,10 @@ public sealed class CoverageRecorderTests : IDisposable
 
         // Work on a detached thread still counts for the class that was running, and only for it.
         Assert.Contains(new CoveredMethod("Calc.Calculator", "Add"), Ran(map, "Calc.Tests.DetachedTests"));
-        Assert.DoesNotContain(new CoveredMethod("Calc.Calculator", "Add"), Ran(map, "Calc.Tests.FixtureTests"));
+
+        // The fixture's worker thread runs Add for FixtureTests: the class gets it, the fixture setup does not.
+        Assert.Contains(new CoveredMethod("Calc.Calculator", "Add"), Ran(map, "Calc.Tests.FixtureTests"));
+        Assert.DoesNotContain(new CoveredMethod("Calc.Calculator", "Add"), map.Fixtures["Calc.Tests.WarmCalculator"].Select(id => map.Methods[id]));
 
         // A plain run after recording must not find any instrumentation left behind.
         var library = Path.Combine(_repo.Root, "tests/Calc.Tests/bin/Debug/net10.0/Calc.dll");

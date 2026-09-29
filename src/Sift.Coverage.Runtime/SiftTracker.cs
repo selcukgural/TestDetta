@@ -45,7 +45,7 @@ public static class SiftTracker
     private static readonly AsyncLocal<Bucket?> Current = new();
 
     /// <summary>Hits before any test class or fixture was entered: discovery, theory data, module initializers.</summary>
-    private static readonly Bucket Startup = new("startup", new ulong[Words]);
+    private static readonly Bucket Startup = new("startup", new ulong[Words], IsFixture: false);
 
     /// <summary>Bucket entered last on any thread, for code that runs outside every test flow.</summary>
     private static Bucket? _lastEntered;
@@ -54,7 +54,7 @@ public static class SiftTracker
     /// <param name="id">Method id assigned by the instrumenter.</param>
     public static void Hit(int id)
     {
-        var bits = (Current.Value ?? Volatile.Read(ref _lastEntered) ?? Startup).Bits;
+        var bits = BucketForHit().Bits;
         var word = id >> 6;
         if ((uint)word >= (uint)bits.Length)
         {
@@ -73,6 +73,23 @@ public static class SiftTracker
     }
 
     /// <summary>
+    /// The bucket a hit goes to: the current flow's, or the one entered last for code outside every
+    /// flow. A fixture's flow lives on in the background work it starts (a queue processor, a hosted
+    /// service); once a test class has been entered, that work serves the class, not the setup.
+    /// </summary>
+    private static Bucket BucketForHit()
+    {
+        var lastEntered = Volatile.Read(ref _lastEntered);
+        var current = Current.Value;
+        if (current is { IsFixture: true } && lastEntered is { IsFixture: false })
+        {
+            return lastEntered;
+        }
+
+        return current ?? lastEntered ?? Startup;
+    }
+
+    /// <summary>
     /// Makes the class of <paramref name="instance"/> the current bucket. Called at the start of
     /// constructors, test methods and lifecycle methods of test classes; the runtime type is used so
     /// inherited tests count for the derived class that runs them.
@@ -82,7 +99,7 @@ public static class SiftTracker
 
     /// <summary>Makes <paramref name="testClass"/> the current bucket.</summary>
     /// <param name="testClass">Runtime class name, nested classes joined with '+'.</param>
-    public static void EnterTestClass(string testClass) => Enter(Classes, testClass);
+    public static void EnterTestClass(string testClass) => Enter(Classes, testClass, isFixture: false);
 
     /// <summary>
     /// Makes the fixture <paramref name="instance"/> the current bucket. Called at the start of fixture
@@ -90,7 +107,7 @@ public static class SiftTracker
     /// runtime type names the concrete fixture.
     /// </summary>
     /// <param name="instance">The fixture instance (<c>this</c>).</param>
-    public static void EnterFixtureInstance(object instance) => Enter(Fixtures, RuntimeName(instance.GetType()));
+    public static void EnterFixtureInstance(object instance) => Enter(Fixtures, RuntimeName(instance.GetType()), isFixture: true);
 
     /// <summary>Writes the collected data to the file named by <see cref="OutputVariable"/>.</summary>
     public static void WriteResults()
@@ -116,12 +133,14 @@ public static class SiftTracker
     /// <summary>A named bit set of method ids.</summary>
     /// <param name="Name">Test class or fixture name.</param>
     /// <param name="Bits">Hit methods.</param>
-    private sealed record Bucket(string Name, ulong[] Bits);
+    /// <param name="IsFixture">True for a fixture bucket.</param>
+    private sealed record Bucket(string Name, ulong[] Bits, bool IsFixture);
 
     /// <summary>Makes the bucket <paramref name="name"/> of <paramref name="buckets"/> current, for this flow and globally.</summary>
     /// <param name="buckets">Class or fixture buckets.</param>
     /// <param name="name">Bucket name.</param>
-    private static void Enter(Dictionary<string, Bucket> buckets, string name)
+    /// <param name="isFixture">True when <paramref name="buckets"/> holds fixtures.</param>
+    private static void Enter(Dictionary<string, Bucket> buckets, string name, bool isFixture)
     {
         if (Current.Value is { } current && ReferenceEquals(current, Volatile.Read(ref _lastEntered))
             && string.Equals(current.Name, name, StringComparison.Ordinal))
@@ -134,7 +153,7 @@ public static class SiftTracker
         {
             if (!buckets.TryGetValue(name, out bucket!))
             {
-                bucket = new Bucket(name, new ulong[Words]);
+                bucket = new Bucket(name, new ulong[Words], isFixture);
                 buckets[name] = bucket;
             }
         }
