@@ -34,8 +34,12 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             workspace.Git.Checkout(commit.Sha);
             workspace.Executor.Setup();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
-            var testProjects = TestProjects(graph);
-            Build(testProjects);
+            var testProjects = Build(TestProjects(graph));
+            if (testProjects.Count == 0)
+            {
+                throw new InvalidOperationException("No test project could be built.");
+            }
+
             workspace.Executor.Outputs = OutputDirectories(testProjects);
 
             PlaceMaps(commit.Parent);
@@ -91,9 +95,10 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
                         new RecordRequest(workspace.RepoRoot, graph, project, new RecordOptions("Debug", settings.Framework, settings.Parallelism)), log);
                     CoverageMapStore.Write(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".json"), map);
                 }
-                catch (NoTestsRecordedException ex)
+                catch (InvalidOperationException ex)
                 {
-                    // A project named like a test project that runs no test gets no map, as with sift record.
+                    // No tests (a project named like a test project) or no build (a platform the machine
+                    // lacks): the project gets no map, and its merges are decided by name.
                     LogNotRecorded(project.Path, ex.Message);
                 }
                 finally
@@ -163,12 +168,16 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         return targets;
     }
 
-    /// <summary>Builds the test projects once, so every later run can use <c>--no-build</c>.</summary>
+    /// <summary>
+    /// Builds the test projects once, so every later run can use <c>--no-build</c>. A project that does
+    /// not build here (it needs another platform, say) is left out of the evaluation of this merge.
+    /// </summary>
     /// <param name="testProjects">Projects to build.</param>
-    /// <exception cref="InvalidOperationException">A build failed.</exception>
-    private void Build(List<ProjectNode> testProjects)
+    /// <returns>The projects that built.</returns>
+    private List<ProjectNode> Build(List<ProjectNode> testProjects)
     {
         var dotnet = new DotnetProcess(_logger);
+        var built = new List<ProjectNode>(testProjects.Count);
         foreach (var project in testProjects)
         {
             List<string> arguments = ["build", project.Path, "-c", "Debug"];
@@ -184,17 +193,21 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
                 exitCode = dotnet.Run(arguments, workspace.RepoRoot, new Dictionary<string, string>(), log);
             }
 
-            if (exitCode != 0)
+            if (exitCode == 0)
             {
-                // The first errors say more than the exit code; the full log stays next to the reports.
-                var errors = File.ReadLines(logPath)
-                    .Where(static l => l.Contains("error", StringComparison.OrdinalIgnoreCase))
-                    .Distinct(StringComparer.Ordinal)
-                    .Take(3);
-                throw new InvalidOperationException(
-                    $"Building {Path.GetFileName(project.Path)} failed with exit code {exitCode}: {string.Join(" / ", errors)}");
+                built.Add(project);
+                continue;
             }
+
+            // The first errors say more than the exit code; the full log stays next to the reports.
+            var errors = File.ReadLines(logPath)
+                .Where(static l => l.Contains(": error ", StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .Take(2);
+            LogBuildFailed(project.Path, string.Join(" / ", errors));
         }
+
+        return built;
     }
 
     /// <summary>Copies the cached maps of <paramref name="sha"/> to where Sift looks for them.</summary>
@@ -429,6 +442,9 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         misses.Sort(StringComparer.Ordinal);
         return misses;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} does not build here and is left out: {Errors}")]
+    private partial void LogBuildFailed(string project, string errors);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Project} does not target {Framework}; left out")]
     private partial void LogSkippedFramework(string project, string framework);
