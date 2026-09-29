@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Sift.Core;
 
 namespace Sift.Tests;
@@ -67,12 +68,46 @@ public sealed class ImpactAnalyzerTests : IDisposable
         Assert.Equal(["Plugin"], result.Affected.Select(a => Name(a.Project)));
     }
 
-    private ImpactResult Analyze(params string[] changed) =>
-        ImpactAnalyzer.Analyze(ProjectGraph.Load(_root), _root, changed);
+    [Fact]
+    public void Reference_outside_the_repository_is_ignored()
+    {
+        Project("src/Lonely/Lonely.csproj", refs: ["../../../elsewhere/Missing.csproj"]);
+
+        var result = Analyze("src/Lonely/L.cs");
+
+        Assert.Equal(["Lonely"], result.Affected.Select(a => Name(a.Project)));
+    }
+
+    [Fact]
+    public void Project_with_IsTestProject_property_counts_as_test()
+    {
+        File.WriteAllText(Path.Combine(_root, "src/Other/Other.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup>
+            </Project>
+            """);
+
+        Assert.Contains("Other", TestNames(Analyze("src/Other/Thing.cs")));
+    }
+
+    [Fact]
+    public void Project_named_like_a_test_project_counts_as_test_without_markers()
+    {
+        // Mirrors repositories that add Microsoft.NET.Test.Sdk from Directory.Build.props.
+        Project("tests/Bare.Tests/Bare.Tests.csproj", refs: ["../../src/Other/Other.csproj"]);
+
+        Assert.Contains("Bare.Tests", TestNames(Analyze("src/Other/Thing.cs")));
+    }
+
+    private ImpactResult Analyze(params string[] changed)
+    {
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_root);
+        return new ImpactAnalyzer(NullLogger<ImpactAnalyzer>.Instance).Analyze(graph, _root, changed);
+    }
 
     private static string Name(ProjectNode p) => Path.GetFileNameWithoutExtension(p.Path);
 
-    private static string[] TestNames(ImpactResult r) => r.Tests.Select(a => Name(a.Project)).Order().ToArray();
+    private static string[] TestNames(ImpactResult r) => [.. r.Tests.Select(a => Name(a.Project)).Order()];
 
     private static ImpactReason Reason(ImpactResult r, string name) =>
         r.Affected.Single(a => Name(a.Project) == name).Reason;
