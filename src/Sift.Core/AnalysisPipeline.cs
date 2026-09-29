@@ -7,13 +7,17 @@ namespace Sift.Core;
 /// <param name="ChangedFiles">Changed paths relative to <paramref name="RepoRoot"/>.</param>
 /// <param name="Graph">Projects of the repository.</param>
 /// <param name="Impact">Affected projects.</param>
-/// <param name="Tests">What to run per affected test project.</param>
+/// <param name="Plan">What to run per affected test project, and the estimated saving.</param>
 public sealed record AnalysisResult(
     string RepoRoot,
     IReadOnlyList<string> ChangedFiles,
     ProjectGraph Graph,
     ImpactResult Impact,
-    IReadOnlyList<TestProjectSelection> Tests);
+    TestPlan Plan)
+{
+    /// <summary>What to run per affected test project.</summary>
+    public IReadOnlyList<TestProjectSelection> Tests => Plan.Projects;
+}
 
 /// <summary>
 /// Runs the whole analysis for a repository: git diff, code-level comparison, project graph,
@@ -51,7 +55,49 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory)
         var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>())
             .Select(new TestSelectionRequest(graph, root, changed, impact, maps));
 
-        return new AnalysisResult(root, changed, graph, impact, tests);
+        return new AnalysisResult(root, changed, graph, impact, Plan(graph, tests, maps));
+    }
+
+    /// <summary>
+    /// Adds up the estimate over every test project with timings. An unaffected test project runs no
+    /// test at all, so all of its recorded time counts as saved.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="tests">Decisions for the affected test projects.</param>
+    /// <param name="maps">Usable coverage maps by test project.</param>
+    private static TestPlan Plan(ProjectGraph graph, IReadOnlyList<TestProjectSelection> tests, Dictionary<string, CoverageMap> maps)
+    {
+        double full = 0, selected = 0;
+        var withTimings = 0;
+        var withoutTimings = 0;
+
+        foreach (var project in graph.Projects)
+        {
+            if (!project.IsTestProject)
+            {
+                continue;
+            }
+
+            var decision = tests.FirstOrDefault(t => Paths.Comparer.Equals(t.Project.Path, project.Path));
+            if (decision?.Estimate is { } estimate)
+            {
+                full += estimate.FullSeconds;
+                selected += estimate.SelectedSeconds;
+                withTimings++;
+                continue;
+            }
+
+            if (decision is null && maps.GetValueOrDefault(project.Path)?.Timings is { } timings)
+            {
+                full += timings.StartupSeconds + timings.ClassSeconds.Values.Sum() + timings.FixtureSeconds.Values.Sum();
+                withTimings++;
+                continue;
+            }
+
+            withoutTimings++;
+        }
+
+        return new TestPlan(tests, withTimings == 0 ? null : new TimeEstimate(full, selected), withoutTimings);
     }
 
     /// <summary>

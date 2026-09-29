@@ -36,7 +36,13 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         var byName = Trace(request, index, projectLevel, coverage: null);
         var withCoverage = coverage.HasAnyMap ? Trace(request, index, projectLevel, coverage) : byName;
 
-        return Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage));
+        var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage));
+        for (var i = 0; i < decisions.Count; i++)
+        {
+            decisions[i] = decisions[i] with { Estimate = coverage.Estimate(decisions[i]) };
+        }
+
+        return decisions;
     }
 
     /// <summary>Result of one spread: the propagation and the projects that must run completely.</summary>

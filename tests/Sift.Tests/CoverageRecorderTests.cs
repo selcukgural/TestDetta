@@ -136,6 +136,13 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.Contains(new CoveredMethod("Calc.Calculator", "Add"), Ran(map, "Calc.Tests.FixtureTests"));
         Assert.DoesNotContain(new CoveredMethod("Calc.Calculator", "Add"), map.Fixtures["Calc.Tests.WarmCalculator"].Select(id => map.Methods[id]));
 
+        // Every class and fixture has a recorded time.
+        Assert.Equal(map.Classes.Keys.Order(), map.Timings!.ClassSeconds.Keys.Order());
+        Assert.All(map.Timings.ClassSeconds.Values, seconds => Assert.True(seconds >= 0));
+        Assert.True(map.Timings.ClassSeconds.Values.Sum() > 0);
+        Assert.True(map.Timings.FixtureSeconds["Calc.Tests.WarmCalculator"] > 0);
+        Assert.True(map.Timings.StartupSeconds > 0);
+
         // A plain run after recording must not find any instrumentation left behind.
         var library = Path.Combine(_repo.Root, "tests/Calc.Tests/bin/Debug/net10.0/Calc.dll");
         Assert.DoesNotContain("Sift.Coverage.Runtime", System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(library)));

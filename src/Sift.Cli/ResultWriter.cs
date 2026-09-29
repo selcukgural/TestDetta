@@ -15,13 +15,17 @@ internal sealed record RunStats(int ChangedFileCount, int ProjectCount);
 /// <param name="RepoRoot">Repository root; printed paths are relative to it.</param>
 /// <param name="Stats">Counts for the summary line.</param>
 /// <param name="Result">Project-level result.</param>
-/// <param name="Tests">Test-level decision for every affected test project.</param>
+/// <param name="Plan">Test-level decision for every affected test project, and the time estimate.</param>
 internal sealed record ResultReport(
     CliOptions Options,
     string RepoRoot,
     RunStats Stats,
     ImpactResult Result,
-    IReadOnlyList<TestProjectSelection> Tests);
+    TestPlan Plan)
+{
+    /// <summary>Test-level decision for every affected test project.</summary>
+    public IReadOnlyList<TestProjectSelection> Tests => Plan.Projects;
+}
 
 /// <summary>Prints an analysis result on stdout in the format chosen on the command line.</summary>
 internal static class ResultWriter
@@ -124,6 +128,10 @@ internal static class ResultWriter
 
         stdout.WriteLine();
         WriteTestDecisions(report.RepoRoot, report.Tests, stdout);
+        if (Durations.Summarize(report.Plan) is { } total)
+        {
+            stdout.WriteLine(total);
+        }
     }
 
     /// <summary>
@@ -141,6 +149,11 @@ internal static class ResultWriter
         }
 
         WriteTestDecisions(analysis.RepoRoot, analysis.Tests, stdout);
+        if (Durations.Summarize(analysis.Plan) is { } total)
+        {
+            stdout.WriteLine(total);
+        }
+
         stdout.WriteLine();
     }
 
@@ -152,11 +165,13 @@ internal static class ResultWriter
     /// <param name="selections">All decisions, including skipped projects.</param>
     /// <param name="results">Results of the invocations that ran.</param>
     /// <param name="stdout">Destination.</param>
+    /// <param name="plan">Test plan, for the time estimate; null leaves it out.</param>
     public static void WriteRunSummary(
         string repoRoot,
         IReadOnlyList<TestProjectSelection> selections,
         IReadOnlyList<TestRunResult> results,
-        TextWriter stdout)
+        TextWriter stdout,
+        TestPlan? plan = null)
     {
         stdout.WriteLine();
         stdout.WriteLine("sift summary:");
@@ -178,6 +193,10 @@ internal static class ResultWriter
 
         var skipped = selections.Count(static s => s.Mode == TestRunMode.Skipped);
         stdout.WriteLine($"{results.Count} project(s) run, {failed} failed, {skipped} skipped.");
+        if (plan is not null && Durations.Summarize(plan) is { } total)
+        {
+            stdout.WriteLine(total);
+        }
     }
 
     /// <summary>The invocation as a POSIX shell command line.</summary>
@@ -201,7 +220,8 @@ internal static class ResultWriter
                 _ => "skip    ",
             };
 
-            stdout.WriteLine($"  {label} {Relative(repoRoot, test.Project.Path)}  ({test.Reason})");
+            var estimate = test.Estimate is { } e ? $", {Durations.Describe(e)}" : string.Empty;
+            stdout.WriteLine($"  {label} {Relative(repoRoot, test.Project.Path)}  ({test.Reason}{estimate})");
             foreach (var testClass in test.TestClasses)
             {
                 stdout.WriteLine($"             {testClass}");
@@ -254,9 +274,16 @@ internal static class ResultWriter
                 {
                     json.WriteString("filter"u8, TestFilter.ForClasses(test.TestClasses));
                 }
+
+                WriteEstimate(json, test.Estimate);
                 json.WriteEndObject();
             }
             json.WriteEndArray();
+
+            json.WriteStartObject("estimate"u8);
+            WriteEstimateFields(json, report.Plan.Estimate);
+            json.WriteNumber("projectsWithoutTimings"u8, report.Plan.ProjectsWithoutTimings);
+            json.WriteEndObject();
 
             WriteStringArray(json, "unmappedFiles"u8, report.Result.UnmappedFiles);
             WriteStringArray(json, "cosmeticFiles"u8, report.Result.CosmeticFiles);
@@ -266,6 +293,39 @@ internal static class ResultWriter
         }
 
         stdout.WriteLine(Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
+    }
+
+    /// <summary>Writes an <c>estimate</c> object, or nothing without timings.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="estimate">Estimate, or null.</param>
+    private static void WriteEstimate(Utf8JsonWriter json, TimeEstimate? estimate)
+    {
+        if (estimate is null)
+        {
+            return;
+        }
+
+        json.WriteStartObject("estimate"u8);
+        WriteEstimateFields(json, estimate);
+        json.WriteEndObject();
+    }
+
+    /// <summary>Writes the recorded full, selected and saved seconds; nulls without timings.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="estimate">Estimate, or null.</param>
+    private static void WriteEstimateFields(Utf8JsonWriter json, TimeEstimate? estimate)
+    {
+        if (estimate is null)
+        {
+            json.WriteNull("fullSeconds"u8);
+            json.WriteNull("selectedSeconds"u8);
+            json.WriteNull("savedSeconds"u8);
+            return;
+        }
+
+        json.WriteNumber("fullSeconds"u8, Math.Round(estimate.FullSeconds, 1));
+        json.WriteNumber("selectedSeconds"u8, Math.Round(estimate.SelectedSeconds, 1));
+        json.WriteNumber("savedSeconds"u8, Math.Round(estimate.SavedSeconds, 1));
     }
 
     /// <summary>Writes the <c>codeChanges</c> array: changed symbols per C# file.</summary>

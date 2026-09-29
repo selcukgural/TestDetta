@@ -43,6 +43,16 @@ public static class CoverageMapStore
         WriteBuckets(json, "classes", map.Classes);
         WriteBuckets(json, "fixtures", map.Fixtures);
         WriteIds(json, "ambient", map.Ambient);
+
+        if (map.Timings is { } timings)
+        {
+            json.WriteStartObject("timings"u8);
+            WriteSeconds(json, "classes", timings.ClassSeconds);
+            WriteSeconds(json, "fixtures", timings.FixtureSeconds);
+            json.WriteNumber("startup"u8, Math.Round(timings.StartupSeconds, 4));
+            json.WriteEndObject();
+        }
+
         json.WriteEndObject();
     }
 
@@ -81,10 +91,20 @@ public static class CoverageMapStore
                 ? ReadBuckets(fixtureElement)
                 : new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
 
+            CoverageTimings? timings = null;
+            if (root.TryGetProperty("timings", out var timingElement))
+            {
+                timings = new CoverageTimings(
+                    ReadSeconds(timingElement.GetProperty("classes")),
+                    ReadSeconds(timingElement.GetProperty("fixtures")),
+                    timingElement.TryGetProperty("startup", out var startup) ? startup.GetDouble() : 0);
+            }
+
             return new CoverageMap(
                 header,
                 methods,
-                new CoverageHits(ReadBuckets(root.GetProperty("classes")), fixtures, ReadIds(root.GetProperty("ambient"))));
+                new CoverageHits(ReadBuckets(root.GetProperty("classes")), fixtures, ReadIds(root.GetProperty("ambient"))),
+                timings);
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
         {
@@ -118,6 +138,34 @@ public static class CoverageMapStore
         }
 
         return buckets;
+    }
+
+    /// <summary>Writes an object of name to seconds, sorted by name.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="name">Property name.</param>
+    /// <param name="seconds">Name to seconds.</param>
+    private static void WriteSeconds(Utf8JsonWriter json, string name, IReadOnlyDictionary<string, double> seconds)
+    {
+        json.WriteStartObject(name);
+        foreach (var (key, value) in seconds.OrderBy(static c => c.Key, StringComparer.Ordinal))
+        {
+            json.WriteNumber(key, Math.Round(value, 4));
+        }
+
+        json.WriteEndObject();
+    }
+
+    /// <summary>Reads an object of name to seconds.</summary>
+    /// <param name="element">JSON object.</param>
+    private static Dictionary<string, double> ReadSeconds(JsonElement element)
+    {
+        var seconds = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            seconds[property.Name] = property.Value.GetDouble();
+        }
+
+        return seconds;
     }
 
     /// <summary>Writes an array of method ids under <paramref name="name"/>.</summary>

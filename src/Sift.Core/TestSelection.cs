@@ -21,11 +21,37 @@ public enum TestRunMode
 /// names (<c>App.Tests.OrderTests</c>, nested classes with '+'). Empty otherwise.
 /// </param>
 /// <param name="Reason">Human readable explanation of the decision.</param>
+/// <param name="Estimate">Recorded test time of the whole project and of what was selected; null without timings.</param>
 public sealed record TestProjectSelection(
     ProjectNode Project,
     TestRunMode Mode,
     IReadOnlyList<string> TestClasses,
-    string Reason);
+    string Reason,
+    TimeEstimate? Estimate = null);
+
+/// <summary>
+/// Test time according to the timings of a coverage map. The numbers come from a recording, which
+/// runs one test at a time with instrumentation, so they exceed a normal run; the ratio is what matters.
+/// </summary>
+/// <param name="FullSeconds">Time of every test.</param>
+/// <param name="SelectedSeconds">Time of the selected tests, including the fixtures they use.</param>
+public sealed record TimeEstimate(double FullSeconds, double SelectedSeconds)
+{
+    /// <summary>Recorded seconds not spent because tests were not selected.</summary>
+    public double SavedSeconds => Math.Max(0, FullSeconds - SelectedSeconds);
+
+    /// <summary>Share of the recorded time saved, from 0 to 1; 0 when nothing was recorded.</summary>
+    public double SavedFraction => FullSeconds <= 0 ? 0 : SavedSeconds / FullSeconds;
+}
+
+/// <summary>What to run, and what it saves compared with running every test.</summary>
+/// <param name="Projects">Decision per affected test project, ordered by path.</param>
+/// <param name="Estimate">
+/// Totals over every test project with timings, affected or not: an unaffected project saves all
+/// of its time. Null when no test project has timings.
+/// </param>
+/// <param name="ProjectsWithoutTimings">Test projects left out of <paramref name="Estimate"/> for lack of a usable map.</param>
+public sealed record TestPlan(IReadOnlyList<TestProjectSelection> Projects, TimeEstimate? Estimate, int ProjectsWithoutTimings);
 
 /// <summary>Input of <see cref="TestSelector.Select"/>.</summary>
 /// <param name="Graph">Projects of the repository.</param>

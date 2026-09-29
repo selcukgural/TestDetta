@@ -27,6 +27,22 @@ public sealed record CoverageHits(
     IReadOnlyDictionary<string, IReadOnlyList<int>> Fixtures,
     IReadOnlyList<int> Ambient);
 
+/// <summary>
+/// Time spent in each test class and fixture while recording. Recording runs one test at a time,
+/// instrumented, so the absolute numbers are higher than a normal run; the proportions are what
+/// estimates rely on.
+/// </summary>
+/// <param name="ClassSeconds">Test class (runtime name) to seconds.</param>
+/// <param name="FixtureSeconds">Fixture name to seconds spent setting it up.</param>
+/// <param name="StartupSeconds">
+/// Seconds a test process spent before its first test class or fixture (host start-up, discovery),
+/// averaged over the recording's processes; every run that runs any test pays it.
+/// </param>
+public sealed record CoverageTimings(
+    IReadOnlyDictionary<string, double> ClassSeconds,
+    IReadOnlyDictionary<string, double> FixtureSeconds,
+    double StartupSeconds = 0);
+
 /// <summary>Which methods each test class and fixture of one test project ran, recorded by <c>sift record</c>.</summary>
 /// <param name="Header">Where and when it was recorded.</param>
 /// <param name="Methods">
@@ -34,7 +50,12 @@ public sealed record CoverageHits(
 /// that nothing ran is known to be untested.
 /// </param>
 /// <param name="Hits">Methods run per test class and fixture.</param>
-public sealed record CoverageMap(CoverageMapHeader Header, IReadOnlyList<CoveredMethod> Methods, CoverageHits Hits)
+/// <param name="Timings">Time per test class and fixture; null for maps recorded before timings existed.</param>
+public sealed record CoverageMap(
+    CoverageMapHeader Header,
+    IReadOnlyList<CoveredMethod> Methods,
+    CoverageHits Hits,
+    CoverageTimings? Timings = null)
 {
     /// <summary>Test project path relative to the repository root.</summary>
     public string TestProject => Header.TestProject;

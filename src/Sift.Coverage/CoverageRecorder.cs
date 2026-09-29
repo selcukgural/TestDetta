@@ -249,7 +249,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     private const int TestingPlatformZeroTests = 8;
 
     /// <summary>Results of a test host that ran no test.</summary>
-    private const string EmptyResults = "{\"classes\":{},\"fixtures\":{},\"ambient\":[]}";
+    private const string EmptyResults = "{\"classes\":{},\"fixtures\":{},\"ambient\":[],\"classSeconds\":{},\"fixtureSeconds\":{}}";
 
     /// <summary>
     /// Asks MSBuild for the test assembly path. A multi-targeted project has no single path, so
@@ -354,6 +354,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var merged = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var mergedFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var ambientIds = new SortedSet<int>();
+        var classSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
+        var fixtureSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
+        var startupSeconds = new List<double>();
 
         foreach (var file in resultsFiles)
         {
@@ -364,6 +367,16 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             foreach (var id in root.GetProperty("ambient").EnumerateArray())
             {
                 ambientIds.Add(id.GetInt32());
+            }
+
+            // A fixture set up in several shards cost its time in each, so times add up.
+            AddSeconds(root, "classSeconds", classSeconds);
+            AddSeconds(root, "fixtureSeconds", fixtureSeconds);
+
+            // Only processes that ran a test report a start-up; an empty catch-all has none.
+            if (root.TryGetProperty("startupSeconds", out var startup) && startup.GetDouble() > 0)
+            {
+                startupSeconds.Add(startup.GetDouble());
             }
         }
 
@@ -378,7 +391,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             Path.GetRelativePath(request.RepoRoot, request.TestProject.Path).Replace('\\', '/'),
             commit,
             DateTimeOffset.UtcNow);
-        return new CoverageMap(header, methods, new CoverageHits(classes, fixtures, ambient));
+        return new CoverageMap(
+            header,
+            methods,
+            new CoverageHits(classes, fixtures, ambient),
+            new CoverageTimings(classSeconds, fixtureSeconds, startupSeconds.Count == 0 ? 0 : startupSeconds.Average()));
     }
 
     /// <summary>
@@ -401,6 +418,23 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             {
                 ids.Add(id.GetInt32());
             }
+        }
+    }
+
+    /// <summary>Adds the seconds under <paramref name="property"/> of a shard's results to <paramref name="seconds"/>.</summary>
+    /// <param name="root">Shard results.</param>
+    /// <param name="property">Name of the object holding the seconds.</param>
+    /// <param name="seconds">Merged seconds; updated in place.</param>
+    private static void AddSeconds(JsonElement root, string property, Dictionary<string, double> seconds)
+    {
+        if (!root.TryGetProperty(property, out var element))
+        {
+            return;
+        }
+
+        foreach (var entry in element.EnumerateObject())
+        {
+            seconds[entry.Name] = seconds.GetValueOrDefault(entry.Name) + entry.Value.GetDouble();
         }
     }
 

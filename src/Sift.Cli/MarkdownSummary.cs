@@ -38,6 +38,10 @@ internal static class MarkdownSummary
         }
 
         writer.WriteLine($"- **{run}** of {tests.Count} affected test project(s) ran, **{skipped}** skipped.");
+        if (Durations.Summarize(analysis.Plan) is { } total)
+        {
+            writer.WriteLine($"- {total}");
+        }
         if (input.Results is { } results)
         {
             var failed = results.Count(static r => r.ExitCode != 0);
@@ -74,7 +78,8 @@ internal static class MarkdownSummary
             _ => "none",
         };
 
-        writer.WriteLine($"- {Code(path)}: {outcome}, {scope}");
+        var estimate = test.Estimate is { } e ? $", recorded time {Durations.Describe(e)}" : string.Empty;
+        writer.WriteLine($"- {Code(path)}: {outcome}, {scope}{estimate}");
         writer.WriteLine($"  - why: {Code(test.Reason)}");
 
         if (test.TestClasses.Count == 0)

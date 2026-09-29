@@ -64,7 +64,7 @@ internal static partial class CliApp
         }
 
         var stats = new RunStats(analysis.ChangedFiles.Count, analysis.Graph.Projects.Count);
-        ResultWriter.Write(new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Tests), stdout);
+        ResultWriter.Write(new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Plan), stdout);
         return Success;
     }
 
@@ -99,7 +99,7 @@ internal static partial class CliApp
 
         stdout.Flush();
         var results = new TestRunner(loggerFactory.CreateLogger<TestRunner>()).RunAll(invocations, analysis.RepoRoot, stdout);
-        ResultWriter.WriteRunSummary(analysis.RepoRoot, analysis.Tests, results, stdout);
+        ResultWriter.WriteRunSummary(analysis.RepoRoot, analysis.Tests, results, stdout, analysis.Plan);
         AppendSummary(options, analysis, results);
         return results.Any(static r => r.ExitCode != 0) ? TestsFailed : Success;
     }

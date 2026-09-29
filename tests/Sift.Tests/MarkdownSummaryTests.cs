@@ -22,7 +22,7 @@ public sealed class MarkdownSummaryTests
         const string hostile = "[x](https://evil.example) <img src=x> @org/team `";
         var project = new ProjectNode($"/repo/tests/{hostile}/T.csproj", "/repo/tests", true, []);
         var selection = new TestProjectSelection(project, TestRunMode.Filtered, [hostile], hostile);
-        var analysis = new AnalysisResult("/repo", ["f.cs"], null!, null!, [selection]);
+        var analysis = new AnalysisResult("/repo", ["f.cs"], null!, null!, new TestPlan([selection], null, 0));
 
         var writer = new StringWriter();
         MarkdownSummary.Write(new SummaryInput(analysis, "origin/main", null), writer);
@@ -34,6 +34,26 @@ public sealed class MarkdownSummaryTests
         Assert.DoesNotContain("[x]", outside);
         Assert.DoesNotContain("<img", outside);
         Assert.DoesNotContain("@org", outside);
+    }
+
+    [Theory]
+    [InlineData(12.34, "12.3 s")]
+    [InlineData(250, "4 m 10 s")]
+    [InlineData(3900, "1 h 5 m")]
+    public void Durations_read_naturally(double seconds, string expected)
+    {
+        Assert.Equal(expected, Durations.Format(seconds));
+    }
+
+    [Fact]
+    public void Plan_summary_names_projects_left_out_of_the_estimate()
+    {
+        var plan = new TestPlan([], new TimeEstimate(250, 12.34), ProjectsWithoutTimings: 1);
+
+        Assert.Equal(
+            "Recorded test time: 12.3 s of 4 m 10 s (95% saved); 1 test project(s) without timings are not counted.",
+            Durations.Summarize(plan));
+        Assert.Null(Durations.Summarize(new TestPlan([], null, 2)));
     }
 
     [Fact]

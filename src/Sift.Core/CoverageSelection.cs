@@ -78,6 +78,55 @@ internal sealed class CoverageSelection
         return names;
     }
 
+    /// <summary>
+    /// Recorded time of <paramref name="selection"/>'s project and of what it selected: the selected
+    /// classes plus the setup of every fixture one of them uses. Null without a map with timings.
+    /// </summary>
+    /// <param name="selection">Decision for an affected test project.</param>
+    public TimeEstimate? Estimate(TestProjectSelection selection)
+    {
+        var project = selection.Project.Path;
+        if (!_maps.TryGetValue(project, out var map) || map.Map.Timings is not { } timings)
+        {
+            return null;
+        }
+
+        // Start-up is paid by any run that runs a test, so it only disappears when the project is skipped.
+        var full = timings.StartupSeconds + timings.ClassSeconds.Values.Sum() + timings.FixtureSeconds.Values.Sum();
+        var selected = selection.Mode switch
+        {
+            TestRunMode.All => full,
+            TestRunMode.Skipped => 0,
+            _ => timings.StartupSeconds + SelectedSeconds(timings, project, selection.TestClasses),
+        };
+
+        return new TimeEstimate(full, selected);
+    }
+
+    /// <summary>Seconds of the given classes and of the fixtures they use.</summary>
+    /// <param name="timings">Recorded timings.</param>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="classes">Selected test classes (runtime names).</param>
+    private double SelectedSeconds(CoverageTimings timings, string project, IReadOnlyList<string> classes)
+    {
+        var selected = new HashSet<string>(classes, StringComparer.Ordinal);
+        var seconds = 0d;
+        foreach (var testClass in selected)
+        {
+            seconds += timings.ClassSeconds.GetValueOrDefault(testClass);
+        }
+
+        foreach (var (fixture, fixtureSeconds) in timings.FixtureSeconds)
+        {
+            if (ClassesUsing(_index, project, fixture).Exists(selected.Contains))
+            {
+                seconds += fixtureSeconds;
+            }
+        }
+
+        return seconds;
+    }
+
     /// <summary>True when at least one affected test project has a coverage map in use.</summary>
     public bool HasAnyMap => _maps.Count > 0;
 

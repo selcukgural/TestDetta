@@ -369,6 +369,22 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Estimate_adds_up_the_selected_classes_and_their_fixtures()
+    {
+        _timings = new CoverageTimings(
+            new Dictionary<string, double> { ["Shop.Tests.TaxTests"] = 2, ["Shop.Tests.OrderServiceTests"] = 3, ["Shop.Tests.SlugTests"] = 5 },
+            new Dictionary<string, double>());
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var plan = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Plan;
+
+        Assert.Equal(new TimeEstimate(10, 2), plan.Projects.Single().Estimate);
+        Assert.Equal(new TimeEstimate(10, 2), plan.Estimate);
+        Assert.Equal(0.8, plan.Estimate!.SavedFraction, 3);
+    }
+
+    [Fact]
     public void Member_no_test_ran_skips_the_project()
     {
         WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
@@ -418,7 +434,10 @@ public sealed class TestSelectorTests : IDisposable
             new CoverageHits(
                 new Dictionary<string, IReadOnlyList<int>> { ["A.Tests.BTests"] = [0, 1] },
                 new Dictionary<string, IReadOnlyList<int>> { ["A.Tests.Host`1"] = [1] },
-                [1]));
+                [1]),
+            new CoverageTimings(
+                new Dictionary<string, double> { ["A.Tests.BTests"] = 1.5 },
+                new Dictionary<string, double> { ["A.Tests.Host`1"] = 0.25 }));
         var path = Path.Combine(_repo.Root, "map.json");
 
         CoverageMapStore.Write(path, map);
@@ -428,13 +447,19 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(map.Classes["A.Tests.BTests"], read.Classes["A.Tests.BTests"]);
         Assert.Equal(map.Ambient, read.Ambient);
         Assert.Equal(map.Fixtures["A.Tests.Host`1"], read.Fixtures["A.Tests.Host`1"]);
+        Assert.Equal(1.5, read.Timings!.ClassSeconds["A.Tests.BTests"]);
+        Assert.Equal(0.25, read.Timings.FixtureSeconds["A.Tests.Host`1"]);
         Assert.Equal(map.Commit, read.Commit);
     }
 
     private CoverageMap Map(string commit, List<CoveredMethod> methods, Dictionary<string, IReadOnlyList<int>> byClass) =>
         new(new CoverageMapHeader("tests/Shop.Tests/Shop.Tests.csproj", commit, DateTimeOffset.UtcNow),
             methods,
-            new CoverageHits(byClass, _fixtures, []));
+            new CoverageHits(byClass, _fixtures, []),
+            _timings);
+
+    /// <summary>Timings the next <see cref="WriteMap"/> includes, or null for none.</summary>
+    private CoverageTimings? _timings;
 
     /// <summary>Fixture hits the next <see cref="WriteMap"/> includes.</summary>
     private readonly Dictionary<string, IReadOnlyList<int>> _fixtures = [];

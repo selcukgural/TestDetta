@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace Sift.Coverage.Runtime;
@@ -45,10 +46,19 @@ public static class SiftTracker
     private static readonly AsyncLocal<Bucket?> Current = new();
 
     /// <summary>Hits before any test class or fixture was entered: discovery, theory data, module initializers.</summary>
-    private static readonly Bucket Startup = new("startup", new ulong[Words], IsFixture: false);
+    private static readonly Bucket Startup = new("startup", new ulong[Words], isFixture: false);
 
     /// <summary>Bucket entered last on any thread, for code that runs outside every test flow.</summary>
     private static Bucket? _lastEntered;
+
+    /// <summary><see cref="Stopwatch"/> timestamp of the last switch between buckets.</summary>
+    private static long _lastSwitch;
+
+    /// <summary>
+    /// Seconds from process start until the first test class or fixture was entered: host start-up,
+    /// discovery and module initialization, paid once by every test run whatever it selects.
+    /// </summary>
+    private static double _startupSeconds;
 
     /// <summary>
     /// Writes the results when the process ends. Under Microsoft.Testing.Platform the tests run in
@@ -126,21 +136,49 @@ public static class SiftTracker
 
         lock (Gate)
         {
+            // Close the time of the bucket still current; a later call (process exit after the
+            // collector's session end) then only adds what ran in between.
+            var now = Stopwatch.GetTimestamp();
+            if (_lastEntered is { } current)
+            {
+                current.ElapsedTicks += now - _lastSwitch;
+                _lastSwitch = now;
+            }
+
             using var stream = File.Create(path);
             using var json = new Utf8JsonWriter(stream);
             json.WriteStartObject();
             WriteBuckets(json, "classes", Classes);
             WriteBuckets(json, "fixtures", Fixtures);
             WriteIds(json, "ambient", Startup.Bits);
+            WriteSeconds(json, "classSeconds", Classes);
+            WriteSeconds(json, "fixtureSeconds", Fixtures);
+            json.WriteNumber("startupSeconds", _startupSeconds);
             json.WriteEndObject();
         }
     }
 
-    /// <summary>A named bit set of method ids.</summary>
-    /// <param name="Name">Test class or fixture name.</param>
-    /// <param name="Bits">Hit methods.</param>
-    /// <param name="IsFixture">True for a fixture bucket.</param>
-    private sealed record Bucket(string Name, ulong[] Bits, bool IsFixture);
+    /// <summary>A named bit set of method ids, and the time spent in the bucket.</summary>
+    /// <param name="name">Test class or fixture name.</param>
+    /// <param name="bits">Hit methods.</param>
+    /// <param name="isFixture">True for a fixture bucket.</param>
+    private sealed class Bucket(string name, ulong[] bits, bool isFixture)
+    {
+        /// <summary>Test class or fixture name.</summary>
+        public string Name { get; } = name;
+
+        /// <summary>Hit methods.</summary>
+        public ulong[] Bits { get; } = bits;
+
+        /// <summary>True for a fixture bucket.</summary>
+        public bool IsFixture { get; } = isFixture;
+
+        /// <summary>
+        /// <see cref="Stopwatch"/> ticks during which this was the bucket entered last. Because
+        /// recording runs one test at a time, that is the time its tests (or its setup) took.
+        /// </summary>
+        public long ElapsedTicks { get; set; }
+    }
 
     /// <summary>Makes the bucket <paramref name="name"/> of <paramref name="buckets"/> current, for this flow and globally.</summary>
     /// <param name="buckets">Class or fixture buckets.</param>
@@ -162,10 +200,24 @@ public static class SiftTracker
                 bucket = new Bucket(name, new ulong[Words], isFixture);
                 buckets[name] = bucket;
             }
+
+            // The time since the last switch belongs to the bucket that was current until now.
+            var now = Stopwatch.GetTimestamp();
+            if (_lastEntered is { } previous && !ReferenceEquals(previous, bucket))
+            {
+                previous.ElapsedTicks += now - _lastSwitch;
+                _lastSwitch = now;
+            }
+            else if (_lastEntered is null)
+            {
+                _lastSwitch = now;
+                _startupSeconds = SecondsSinceProcessStart();
+            }
+
+            Volatile.Write(ref _lastEntered, bucket);
         }
 
         Current.Value = bucket;
-        Volatile.Write(ref _lastEntered, bucket);
     }
 
     /// <summary>Name of a type as test platforms print it: nested types with '+', generic definitions without arguments.</summary>
@@ -202,6 +254,36 @@ public static class SiftTracker
         foreach (var bucket in buckets.Values)
         {
             WriteIds(json, bucket.Name, bucket.Bits);
+        }
+
+        json.WriteEndObject();
+    }
+
+    /// <summary>Seconds since this process started; 0 when the platform does not report a start time.</summary>
+    private static double SecondsSinceProcessStart()
+    {
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            return Math.Max(0, (DateTime.Now - process.StartTime).TotalSeconds);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Writes the time spent in each bucket, in seconds.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="name">Property name.</param>
+    /// <param name="buckets">Buckets to write.</param>
+    private static void WriteSeconds(Utf8JsonWriter json, string name, Dictionary<string, Bucket> buckets)
+    {
+        json.WriteStartObject(name);
+        foreach (var bucket in buckets.Values)
+        {
+            // Unrounded: a fast class takes well under a millisecond, and rounding would make it free.
+            json.WriteNumber(bucket.Name, (double)bucket.ElapsedTicks / Stopwatch.Frequency);
         }
 
         json.WriteEndObject();
