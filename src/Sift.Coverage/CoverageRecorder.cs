@@ -75,7 +75,13 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var runs = new Task<(int ExitCode, string ResultsFile)>[shards.Count];
             for (var i = 0; i < shards.Count; i++)
             {
-                var shard = new ShardRun(dotnet, testArguments, shards[i], i, shards.Count);
+                // The catch-all shard usually matches nothing; under the testing platform that is exit
+                // code 8, reported as an error unless the platform is told to accept it.
+                var isCatchAll = shards.Count > 1 && i == shards.Count - 1;
+                var arguments = isCatchAll && mode == DotnetTestMode.TestingPlatform
+                    ? [.. testArguments, "--ignore-exit-code", TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture)]
+                    : testArguments;
+                var shard = new ShardRun(dotnet, arguments, shards[i], i, shards.Count);
                 runs[i] = Task.Run(() => RunShard(shard, request, instrumentation, work, synchronizedOutput));
             }
 

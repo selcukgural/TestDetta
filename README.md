@@ -109,8 +109,9 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
 
 - Both `dotnet test` runners are supported. The runner is read from `global.json`
   (`"test": { "runner": "Microsoft.Testing.Platform" }`, required for xUnit v3 on the .NET 10 SDK).
-  Recording is verified with xUnit v2 under VSTest and xUnit v3 under Microsoft.Testing.Platform;
-  MSTest and NUnit are expected to work through run settings but have not been verified yet.
+  Recording and selection are tested end to end with xUnit v2 (VSTest), xUnit v3
+  (Microsoft.Testing.Platform), and MSTest and NUnit under both runners, including projects that
+  turn on their framework's own parallelization.
 - Code that runs once per process (caches, lazy singletons, EF model building) is credited to the
   first test class that triggers it. Keep running the full suite on the default branch; recording does that.
 - Project files are read as XML, not evaluated: conditions, imports and linked source files outside
