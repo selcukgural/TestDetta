@@ -279,6 +279,122 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Coverage_map_narrows_a_member_change_to_the_classes_that_ran_it()
+    {
+        // By name, OrderServiceTests also reaches Tax (through Checkout and Total); the map says it never ran it.
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.OrderServiceTests", [("Shop.OrderService", "Checkout")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        Assert.Equal(["Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Field_change_is_traced_to_its_readers_and_then_taken_from_coverage()
+    {
+        // Rates.Vat is a field, which coverage cannot see; its reader Tax is known to the map.
+        _repo.Write("src/Shop/Rates.cs", """
+            namespace Shop;
+            public static class Rates { public static readonly decimal Vat = 0.2m; }
+            """);
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * Rates.Vat");
+        _repo.Commit("extract rate");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.OrderServiceTests", [("Shop.OrderService", "Checkout")]));
+        _repo.Replace("src/Shop/Rates.cs", "0.2m", "0.25m");
+
+        Assert.Equal(["Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Member_no_test_ran_skips_the_project()
+    {
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(TestRunMode.Skipped, Select().Mode);
+    }
+
+    [Fact]
+    public void Additions_are_traced_by_name_even_with_a_map()
+    {
+        // The map knows nothing about Slug, and Twice is new: both are left to name tracing.
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Slug.cs", "public static string Make", "public static string Twice(string s) => s + s;\n    public static string Make");
+        _repo.Replace("tests/Shop.Tests/SlugTests.cs", "Slug.Make(\"A\")", "Slug.Twice(Slug.Make(\"A\"))");
+
+        Assert.Equal(["Shop.Tests.SlugTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Map_recorded_at_another_commit_is_ignored()
+    {
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Write("README.md", "moved on");
+        _repo.Commit("later");
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        // The name-based answer includes OrderServiceTests, which the stale map would have left out.
+        Assert.Contains("Shop.Tests.OrderServiceTests", Select().TestClasses);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_stays_conservative_with_a_map()
+    {
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/PingHandler.cs", "\"pong\"", "\"PONG\"");
+
+        Assert.Equal(TestRunMode.All, Select().Mode);
+    }
+
+    [Fact]
+    public void Coverage_map_round_trips_through_the_store()
+    {
+        var map = new CoverageMap(
+            "tests/A.Tests/A.Tests.csproj", "abc123", DateTimeOffset.Parse("2026-09-29T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            [new CoveredMethod("A.B", "Run"), new CoveredMethod("A.B`1", ".ctor")],
+            new Dictionary<string, IReadOnlyList<int>> { ["A.Tests.BTests"] = [0, 1] },
+            [1]);
+        var path = Path.Combine(_repo.Root, "map.json");
+
+        CoverageMapStore.Write(path, map);
+        var read = CoverageMapStore.Read(path)!;
+
+        Assert.Equal(map.Methods, read.Methods);
+        Assert.Equal(map.Classes["A.Tests.BTests"], read.Classes["A.Tests.BTests"]);
+        Assert.Equal(map.Ambient, read.Ambient);
+        Assert.Equal(map.Commit, read.Commit);
+    }
+
+    /// <summary>Writes a coverage map for Shop.Tests recorded at the current HEAD (the merge base in these tests).</summary>
+    private void WriteMap(params (string TestClass, (string Type, string Member)[] Methods)[] classes)
+    {
+        var methods = new List<CoveredMethod>
+        {
+            // Every production member is known to the map, run or not.
+            new("Shop.PriceCalculator", ".ctor"), new("Shop.PriceCalculator", "Total"), new("Shop.PriceCalculator", "Tax"),
+            new("Shop.OrderService", ".ctor"), new("Shop.OrderService", "Checkout"),
+            new("Shop.Slug", "Make"), new("Shop.PingHandler", "Handle"),
+        };
+
+        var byClass = new Dictionary<string, IReadOnlyList<int>>();
+        foreach (var (testClass, ran) in classes)
+        {
+            byClass[testClass] = [.. ran.Select(m => methods.IndexOf(new CoveredMethod(m.Type, m.Member)))];
+        }
+
+        var head = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
+        var path = CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Shop.Tests/Shop.Tests.csproj"));
+        CoverageMapStore.Write(path, new CoverageMap("tests/Shop.Tests/Shop.Tests.csproj", head, DateTimeOffset.UtcNow, methods, byClass, []));
+        File.WriteAllText(Path.Combine(_repo.Root, ".gitignore"), ".sift/\n");
+        _repo.Commit("ignore maps");
+
+        // The map must describe the new HEAD, which is what 'main' points to.
+        var newHead = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
+        CoverageMapStore.Write(path, new CoverageMap("tests/Shop.Tests/Shop.Tests.csproj", newHead, DateTimeOffset.UtcNow, methods, byClass, []));
+    }
+
+    [Fact]
     public void Filter_escapes_operators_and_ends_each_class_with_a_dot()
     {
         Assert.Equal(

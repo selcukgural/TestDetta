@@ -21,7 +21,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             return [];
         }
 
-        var fallbacks = FindProjectLevelChanges(request);
+        var projectLevel = FindProjectLevelChanges(request);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)
         {
@@ -29,7 +29,44 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         }
 
         var index = new SourceIndexBuilder(logger).Build(request.Graph, request.RepoRoot, affectedProjects);
-        var propagation = new ImpactPropagation(index, logger);
+        var coverage = new CoverageSelection(request, affectedTests, index);
+
+        // Test projects without a coverage map are decided by name alone; those with one use a second
+        // spread that stops wherever the maps know which tests run the reached code.
+        var byName = Trace(request, index, projectLevel, coverage: null);
+        var withCoverage = coverage.HasAnyMap ? Trace(request, index, projectLevel, coverage) : byName;
+
+        return Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage));
+    }
+
+    /// <summary>Result of one spread: the propagation and the projects that must run completely.</summary>
+    /// <param name="Propagation">Finished propagation.</param>
+    /// <param name="Fallbacks">Projects whose whole downstream must run, with the reason.</param>
+    private sealed record TraceResult(ImpactPropagation Propagation, Dictionary<string, string> Fallbacks);
+
+    /// <summary>
+    /// Seeds the detected changes and spreads them by name. With <paramref name="coverage"/>, a change or
+    /// reached member that the maps can answer is taken from coverage and not spread further.
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="index">Indexed source code.</param>
+    /// <param name="projectLevel">Project-level fallbacks from non-C# and build changes.</param>
+    /// <param name="coverage">Coverage maps to stop at, or null for a pure name spread.</param>
+    private TraceResult Trace(
+        TestSelectionRequest request,
+        SourceIndex index,
+        Dictionary<string, string> projectLevel,
+        CoverageSelection? coverage)
+    {
+        var fallbacks = new Dictionary<string, string>(projectLevel, Paths.Comparer);
+        var propagation = new ImpactPropagation(
+            index,
+            logger,
+            coverage is null
+                ? null
+                : member => coverage.TryResolve(
+                    new SymbolChange(member.TypeName, member.MemberName, SymbolChangeKind.Modified),
+                    request.Graph[member.ProjectPath]));
         var root = Paths.Normalize(request.RepoRoot);
 
         foreach (var change in request.Impact.CodeChanges)
@@ -42,14 +79,19 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
             foreach (var symbol in change.Symbols)
             {
+                if (coverage?.TryResolve(symbol, owner) == true)
+                {
+                    LogResolvedByCoverage(symbol.TypeName, symbol.MemberName ?? "(type)");
+                    continue;
+                }
+
                 propagation.Seed(symbol, owner.Path);
             }
         }
 
         propagation.Run();
         AddUnreferencedTypes(request.Graph, index, propagation, fallbacks);
-
-        return Decide(request.Graph, affectedTests, index, propagation, fallbacks);
+        return new TraceResult(propagation, fallbacks);
     }
 
     /// <summary>
@@ -157,30 +199,28 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         }
     }
 
-    /// <summary>Turns fallbacks and affected types into one decision per test project.</summary>
-    /// <param name="graph">Projects of the repository.</param>
-    /// <param name="affectedTests">Test projects affected at project level.</param>
-    /// <param name="index">Indexed source code.</param>
-    /// <param name="propagation">Finished propagation.</param>
-    /// <param name="fallbacks">Projects whose whole downstream must run, with reasons.</param>
-    private List<TestProjectSelection> Decide(
-        ProjectGraph graph,
-        List<AffectedProject> affectedTests,
-        SourceIndex index,
-        ImpactPropagation propagation,
-        Dictionary<string, string> fallbacks)
-    {
-        // Each test project downstream of a fallback runs completely; remember the first reason.
-        var runAll = new Dictionary<string, string>(Paths.Comparer);
-        foreach (var (project, reason) in fallbacks)
-        {
-            foreach (var dependent in graph.WithDependents([project]))
-            {
-                var projectName = Path.GetFileName(project);
-                runAll.TryAdd(dependent, dependent == project ? reason : $"depends on {projectName}: {reason}");
-            }
-        }
+    /// <summary>Everything <see cref="Decide"/> combines.</summary>
+    /// <param name="Graph">Projects of the repository.</param>
+    /// <param name="AffectedTests">Test projects affected at project level.</param>
+    /// <param name="Index">Indexed source code.</param>
+    /// <param name="ByName">Spread used for test projects without a coverage map.</param>
+    /// <param name="WithCoverage">Spread used for test projects with a coverage map.</param>
+    /// <param name="Coverage">Classes selected from coverage maps.</param>
+    private sealed record Decision(
+        ProjectGraph Graph,
+        List<AffectedProject> AffectedTests,
+        SourceIndex Index,
+        TraceResult ByName,
+        TraceResult WithCoverage,
+        CoverageSelection Coverage);
 
+    /// <summary>Turns fallbacks, name propagation and coverage into one decision per test project.</summary>
+    /// <param name="decision">Inputs of the decision.</param>
+    private List<TestProjectSelection> Decide(Decision decision)
+    {
+        var (graph, affectedTests, index, byName, withCoverage, coverage) = decision;
+        var runAllByName = RunAll(graph, byName.Fallbacks);
+        var runAllWithCoverage = RunAll(graph, withCoverage.Fallbacks);
         var classesByProject = new Dictionary<string, List<string>>(Paths.Comparer);
         var candidatesByProject = new Dictionary<string, int>(Paths.Comparer);
         foreach (var type in index.Types)
@@ -191,7 +231,8 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             }
 
             candidatesByProject[type.ProjectPath] = candidatesByProject.GetValueOrDefault(type.ProjectPath) + 1;
-            if (!propagation.AffectedTypes.Contains(type.TypeName))
+            var trace = coverage.HasMap(type.ProjectPath) ? withCoverage : byName;
+            if (!trace.Propagation.AffectedTypes.Contains(type.TypeName) && !coverage.Selects(type))
             {
                 continue;
             }
@@ -209,6 +250,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         foreach (var test in affectedTests)
         {
             var project = test.Project;
+            var runAll = coverage.HasMap(project.Path) ? runAllWithCoverage : runAllByName;
             if (runAll.TryGetValue(project.Path, out var reason))
             {
                 result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], reason)));
@@ -217,7 +259,10 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
             if (!classesByProject.TryGetValue(project.Path, out var classes))
             {
-                result.Add(Log(new TestProjectSelection(project, TestRunMode.Skipped, [], "no test class references the changed code")));
+                var skipReason = coverage.HasMap(project.Path)
+                    ? "no test class runs or references the changed code"
+                    : "no test class references the changed code";
+                result.Add(Log(new TestProjectSelection(project, TestRunMode.Skipped, [], skipReason)));
                 continue;
             }
 
@@ -228,14 +273,33 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             }
 
             classes.Sort(StringComparer.Ordinal);
+            var source = coverage.HasMap(project.Path) ? "run or reference" : "reference";
             result.Add(Log(new TestProjectSelection(
                 project,
                 TestRunMode.Filtered,
                 classes,
-                $"{classes.Count} of {candidatesByProject[project.Path]} test class(es) reference the changed code")));
+                $"{classes.Count} of {candidatesByProject[project.Path]} test class(es) {source} the changed code")));
         }
 
         return result;
+    }
+
+    /// <summary>Every project downstream of a fallback, with the first reason that reaches it.</summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="fallbacks">Projects that cannot be narrowed, with reasons.</param>
+    private static Dictionary<string, string> RunAll(ProjectGraph graph, Dictionary<string, string> fallbacks)
+    {
+        var runAll = new Dictionary<string, string>(Paths.Comparer);
+        foreach (var (project, reason) in fallbacks)
+        {
+            var projectName = Path.GetFileName(project);
+            foreach (var dependent in graph.WithDependents([project]))
+            {
+                runAll.TryAdd(dependent, dependent == project ? reason : $"depends on {projectName}: {reason}");
+            }
+        }
+
+        return runAll;
     }
 
     /// <summary>Records the first reason a project needs to run completely.</summary>
@@ -261,6 +325,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{TypeName} is named by nothing and has no base list or attributes; treated as unused")]
     private partial void LogDeadType(string typeName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: test classes taken from coverage")]
+    private partial void LogResolvedByCoverage(string typeName, string memberName);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Project} cannot be narrowed below project level: {Reason}")]
     private partial void LogFallback(string project, string reason);

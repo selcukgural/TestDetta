@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <!-- IL rewriting is far from a small job; Cecil is the standard tool for it. -->
+    <PackageReference Include="Mono.Cecil" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sift.Core\Sift.Core.csproj" />
+    <ProjectReference Include="..\Sift.Coverage.Runtime\Sift.Coverage.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sift.Tests" />
+  </ItemGroup>
+
+</Project>

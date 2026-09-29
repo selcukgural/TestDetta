@@ -1,0 +1,148 @@
+namespace Sift.Core;
+
+/// <summary>
+/// Answers "which test classes ran this changed symbol?" from coverage maps, for the changes a map
+/// can answer reliably. Everything else is left to name propagation.
+/// </summary>
+internal sealed class CoverageSelection
+{
+    private readonly ProjectGraph _graph;
+    private readonly SourceIndex _index;
+
+    /// <summary>Coverage index per test project that has a usable map.</summary>
+    private readonly Dictionary<string, CoverageIndex> _maps = new(Paths.Comparer);
+
+    /// <summary>Affected test projects, by path.</summary>
+    private readonly HashSet<string> _affectedTests = new(Paths.Comparer);
+
+    /// <summary>Test classes selected from coverage, per test project.</summary>
+    private readonly Dictionary<string, HashSet<string>> _selected = new(Paths.Comparer);
+
+    /// <summary>Prepares the maps of the affected test projects.</summary>
+    /// <param name="request">Selection input, including the maps.</param>
+    /// <param name="affectedTests">Test projects affected at project level.</param>
+    /// <param name="index">Indexed source code, for the reflection check.</param>
+    public CoverageSelection(TestSelectionRequest request, List<AffectedProject> affectedTests, SourceIndex index)
+    {
+        _graph = request.Graph;
+        _index = index;
+        foreach (var test in affectedTests)
+        {
+            _affectedTests.Add(test.Project.Path);
+            if (request.CoverageMaps.TryGetValue(test.Project.Path, out var map))
+            {
+                _maps[test.Project.Path] = new CoverageIndex(map);
+            }
+        }
+    }
+
+    /// <summary>True when at least one affected test project has a coverage map in use.</summary>
+    public bool HasAnyMap => _maps.Count > 0;
+
+    /// <summary>True when <paramref name="testProject"/> has a coverage map in use.</summary>
+    /// <param name="testProject">Normalized test project path.</param>
+    public bool HasMap(string testProject) => _maps.ContainsKey(testProject);
+
+    /// <summary>True when coverage selected <paramref name="type"/>, a test class.</summary>
+    /// <param name="type">Indexed test class.</param>
+    public bool Selects(IndexedType type) =>
+        _selected.TryGetValue(type.ProjectPath, out var classes) && classes.Contains(type.RuntimeTypeName);
+
+    /// <summary>
+    /// Selects the test classes that ran <paramref name="change"/> in every affected test project with
+    /// a map downstream of <paramref name="owner"/>. Returns false, selecting nothing, when no such
+    /// project exists or one of their maps cannot answer; the caller then traces the change by name.
+    /// Projects without a map are decided by a separate name-only spread.
+    /// </summary>
+    /// <param name="change">A changed type or member.</param>
+    /// <param name="owner">Project that owns the changed file.</param>
+    public bool TryResolve(SymbolChange change, ProjectNode owner)
+    {
+        if (_maps.Count == 0 || !IsAnswerable(change))
+        {
+            return false;
+        }
+
+        var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
+        foreach (var project in _graph.WithDependents([owner.Path]))
+        {
+            if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var map))
+            {
+                continue;
+            }
+
+            if (Lookup(map, change) is not { } classes)
+            {
+                return false;
+            }
+
+            answers.Add((project, classes));
+        }
+
+        if (answers.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var (project, classes) in answers)
+        {
+            if (!_selected.TryGetValue(project, out var selected))
+            {
+                selected = new HashSet<string>(StringComparer.Ordinal);
+                _selected[project] = selected;
+            }
+
+            selected.UnionWith(classes);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Changes coverage cannot describe: additions (no test ran them yet), static constructors
+    /// (they run once per process, for whichever test comes first), and types a framework may
+    /// discover through reflection, whose effect often comes from a cached result.
+    /// </summary>
+    /// <param name="change">A changed type or member.</param>
+    private bool IsAnswerable(SymbolChange change)
+    {
+        if (change.Kind == SymbolChangeKind.Added || change.MemberName?.StartsWith(".cctor", StringComparison.Ordinal) == true)
+        {
+            return false;
+        }
+
+        var type = _index.FindType(change.TypeName);
+        return type is null
+               || !type.MayBeFoundByReflection
+               || _index.IsReferencedOutside(DeclarationWalker.SimpleTypeName(change.TypeName), change.TypeName);
+    }
+
+    /// <summary>
+    /// Test classes that ran the changed member (all overloads share a name in the map), or any
+    /// member of a changed type. Null when the map does not know the member: fields and constants
+    /// (constants are inlined at compile time), abstract members, members of other assemblies.
+    /// </summary>
+    /// <param name="map">Coverage of one test project.</param>
+    /// <param name="change">A changed type or member.</param>
+    private static IReadOnlySet<string>? Lookup(CoverageIndex map, SymbolChange change)
+    {
+        if (change.MemberName is null)
+        {
+            return map.ClassesRunningType(change.TypeName);
+        }
+
+        if (change.MemberName.StartsWith(".ctor", StringComparison.Ordinal))
+        {
+            return map.ClassesRunning(change.TypeName, ".ctor");
+        }
+
+        var names = DeclarationWalker.ReferenceNames(change.MemberName);
+        if (names.Count != 1)
+        {
+            // Operators, indexers and finalizers have no source name to match; field lists are not methods.
+            return null;
+        }
+
+        return map.ClassesRunning(change.TypeName, names[0]);
+    }
+}

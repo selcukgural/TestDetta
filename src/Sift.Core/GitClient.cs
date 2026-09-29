@@ -33,6 +33,11 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
         return [.. files];
     }
 
+    /// <summary>Full hash of the commit HEAD points to.</summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <exception cref="InvalidOperationException">git failed, for example in a repository without commits.</exception>
+    public string Head(string repoRoot) => Run(repoRoot, "rev-parse", "HEAD").Single();
+
     /// <summary>Returns the commit where HEAD's history branched off <paramref name="baseRef"/>.</summary>
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="baseRef">Branch, tag or commit to compare against.</param>

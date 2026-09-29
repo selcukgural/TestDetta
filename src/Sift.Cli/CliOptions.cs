@@ -10,6 +10,9 @@ internal enum CliCommand
 
     /// <summary><c>sift test</c>: run the tests a change affects.</summary>
     Test,
+
+    /// <summary><c>sift record</c>: run all tests with coverage and store which code each test class runs.</summary>
+    Record,
 }
 
 /// <summary>Options every command shares: what to compare and how much to log.</summary>
@@ -26,20 +29,33 @@ internal sealed record AffectedSettings(bool TestsOnly, OutputFormat Format);
 /// <summary>Options of <c>sift test</c>.</summary>
 /// <param name="DryRun">Print the <c>dotnet test</c> commands instead of running them.</param>
 /// <param name="DotnetTestArguments">Arguments after <c>--</c>, passed to every <c>dotnet test</c> as given.</param>
-internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTestArguments);
+/// <param name="SummaryFile">File to append a Markdown summary to (for example <c>$GITHUB_STEP_SUMMARY</c>), or null.</param>
+internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTestArguments, string? SummaryFile);
+
+/// <summary>Options of <c>sift record</c>.</summary>
+/// <param name="Configuration">Build configuration used for building and running the tests.</param>
+/// <param name="Projects">Only record these test projects (.csproj paths); empty records every test project.</param>
+internal sealed record RecordSettings(string Configuration, IReadOnlyList<string> Projects);
 
 /// <summary>Parsed command line.</summary>
 /// <param name="Command">Which sub-command to run.</param>
 /// <param name="Analysis">Options shared by all commands.</param>
 /// <param name="Affected">Options of <c>sift affected</c>; defaults for other commands.</param>
 /// <param name="Test">Options of <c>sift test</c>; defaults for other commands.</param>
-internal sealed record CliOptions(CliCommand Command, AnalysisSettings Analysis, AffectedSettings Affected, TestSettings Test)
+/// <param name="Record">Options of <c>sift record</c>; defaults for other commands.</param>
+internal sealed record CliOptions(
+    CliCommand Command,
+    AnalysisSettings Analysis,
+    AffectedSettings Affected,
+    TestSettings Test,
+    RecordSettings Record)
 {
     /// <summary>Help text printed for <c>--help</c> and after a usage error.</summary>
     public const string Usage = """
         Usage:
           sift affected [options]              Print the projects and tests a change affects
           sift test [options] [-- <args>]      Run only the tests a change affects
+          sift record [options]                Run all tests with coverage and store the map in .sift/coverage
 
         Options:
           --base <ref>         Git ref to compare against (default: origin/main)
@@ -54,7 +70,12 @@ internal sealed record CliOptions(CliCommand Command, AnalysisSettings Analysis,
 
         sift test:
           --dry-run            Print the dotnet test commands instead of running them
+          --summary-file <path>  Append a Markdown summary, e.g. to $GITHUB_STEP_SUMMARY
           -- <args>            Pass the remaining arguments to every dotnet test, e.g. -- -c Release
+
+        sift record:
+          -c, --configuration <name>  Build configuration (default: Debug)
+          --project <path>     Record only this test project; repeat for several
 
         Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed.
         """;
@@ -75,7 +96,8 @@ internal sealed record CliOptions(CliCommand Command, AnalysisSettings Analysis,
             CliCommand.Affected,
             new AnalysisSettings("origin/main", currentDirectory, LogLevel.Warning),
             new AffectedSettings(TestsOnly: false, OutputFormat.Text),
-            new TestSettings(DryRun: false, []));
+            new TestSettings(DryRun: false, [], SummaryFile: null),
+            new RecordSettings("Debug", []));
         error = null;
 
         switch (args)
@@ -85,6 +107,10 @@ internal sealed record CliOptions(CliCommand Command, AnalysisSettings Analysis,
 
             case ["test", ..]:
                 options = options with { Command = CliCommand.Test };
+                break;
+
+            case ["record", ..]:
+                options = options with { Command = CliCommand.Record };
                 break;
 
             case []:
@@ -147,6 +173,8 @@ internal sealed record CliOptions(CliCommand Command, AnalysisSettings Analysis,
 
             case "--base" or "--repo" or "--log-level":
             case "--format" when options.Command == CliCommand.Affected:
+            case "-c" or "--configuration" or "--project" when options.Command == CliCommand.Record:
+            case "--summary-file" when options.Command == CliCommand.Test:
                 break;
 
             default:
@@ -169,6 +197,18 @@ internal sealed record CliOptions(CliCommand Command, AnalysisSettings Analysis,
 
             case "--repo":
                 options = options with { Analysis = options.Analysis with { RepoPath = value } };
+                return true;
+
+            case "-c" or "--configuration":
+                options = options with { Record = options.Record with { Configuration = value } };
+                return true;
+
+            case "--project":
+                options = options with { Record = options.Record with { Projects = [.. options.Record.Projects, value] } };
+                return true;
+
+            case "--summary-file":
+                options = options with { Test = options.Test with { SummaryFile = value } };
                 return true;
 
             case "--format":

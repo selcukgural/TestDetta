@@ -20,8 +20,11 @@ public sealed record AnalysisResult(
 /// project impact and test selection. Front ends (the CLI, CI integrations) only format the result.
 /// </summary>
 /// <param name="loggerFactory">Creates the loggers of every step.</param>
-public sealed class AnalysisPipeline(ILoggerFactory loggerFactory)
+public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory)
 {
+    /// <summary>Logger for decisions of the pipeline itself, such as ignoring a stale coverage map.</summary>
+    private readonly ILogger _logger = loggerFactory.CreateLogger<AnalysisPipeline>();
+
     /// <summary>Analyzes the changes of the repository containing <paramref name="repoPath"/> against <paramref name="baseRef"/>.</summary>
     /// <param name="repoPath">Any path inside the repository.</param>
     /// <param name="baseRef">Branch, tag or commit to compare against.</param>
@@ -31,7 +34,10 @@ public sealed class AnalysisPipeline(ILoggerFactory loggerFactory)
     {
         var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
         var root = git.TopLevel(repoPath);
-        var changed = git.ChangedFiles(root, baseRef);
+        // Sift's own data (coverage maps) is never part of the code under test.
+        var changed = git.ChangedFiles(root, baseRef)
+            .Where(static f => !f.StartsWith(".sift/", StringComparison.Ordinal))
+            .ToList();
         var mergeBase = git.MergeBase(root, baseRef);
 
         var detector = new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>());
@@ -41,9 +47,44 @@ public sealed class AnalysisPipeline(ILoggerFactory loggerFactory)
         var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>()).Load(root);
         var impact = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>())
             .Analyze(graph, root, changed, codeChanges);
+        var maps = LoadCoverageMaps(root, graph, mergeBase);
         var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>())
-            .Select(new TestSelectionRequest(graph, root, changed, impact));
+            .Select(new TestSelectionRequest(graph, root, changed, impact, maps));
 
         return new AnalysisResult(root, changed, graph, impact, tests);
     }
+
+    /// <summary>
+    /// Coverage maps of the repository's test projects that were recorded exactly at
+    /// <paramref name="baseCommit"/>. A map from another commit is ignored: code changed since then
+    /// may have created calls the map does not know.
+    /// </summary>
+    /// <param name="root">Repository root.</param>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="baseCommit">Merge base the changes are compared with.</param>
+    private Dictionary<string, CoverageMap> LoadCoverageMaps(string root, ProjectGraph graph, string baseCommit)
+    {
+        var maps = new Dictionary<string, CoverageMap>(Paths.Comparer);
+        foreach (var project in graph.Projects)
+        {
+            if (!project.IsTestProject || CoverageMapStore.Read(CoverageMapStore.PathFor(root, project.Path)) is not { } map)
+            {
+                continue;
+            }
+
+            if (!string.Equals(map.Commit, baseCommit, StringComparison.OrdinalIgnoreCase))
+            {
+                LogStaleMap(project.Path, map.Commit, baseCommit);
+                continue;
+            }
+
+            maps[project.Path] = map;
+        }
+
+        return maps;
+    }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Ignoring the coverage map of {Project}: recorded at {MapCommit}, but the base is {BaseCommit}. Run 'sift record' on the base commit")]
+    private partial void LogStaleMap(string project, string mapCommit, string baseCommit);
 }

@@ -32,8 +32,13 @@ public sealed record TestProjectSelection(
 /// <param name="RepoRoot">Repository root directory.</param>
 /// <param name="ChangedFiles">Changed paths relative to <paramref name="RepoRoot"/>.</param>
 /// <param name="Impact">Project-level result of <see cref="ImpactAnalyzer"/> for the same changes.</param>
+/// <param name="CoverageMaps">
+/// Coverage maps recorded at the comparison base, keyed by normalized test project path. Test
+/// projects without a map are selected by name only.
+/// </param>
 public sealed record TestSelectionRequest(
     ProjectGraph Graph,
     string RepoRoot,
     IReadOnlyList<string> ChangedFiles,
-    ImpactResult Impact);
+    ImpactResult Impact,
+    IReadOnlyDictionary<string, CoverageMap> CoverageMaps);

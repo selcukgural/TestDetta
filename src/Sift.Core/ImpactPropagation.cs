@@ -9,7 +9,11 @@ namespace Sift.Core;
 /// </summary>
 /// <param name="index">Source code to spread through.</param>
 /// <param name="logger">Receives one debug line per affected member with the name that reached it.</param>
-internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logger)
+/// <param name="resolveByCoverage">
+/// Asked for every reached member; when it returns true, recorded coverage already knows which
+/// tests run the member, so the spread stops there instead of continuing by name. Null disables it.
+/// </param>
+internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logger, Func<IndexedMember, bool>? resolveByCoverage = null)
 {
     /// <summary>Members reached so far.</summary>
     private readonly HashSet<IndexedMember> _affected = new(ReferenceEqualityComparer.Instance);
@@ -107,6 +111,12 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         LogAffected(member.TypeName, member.MemberName ?? "(type)", because);
         AffectedTypes.Add(member.TypeName);
 
+        if (resolveByCoverage?.Invoke(member) == true)
+        {
+            LogStoppedByCoverage(member.TypeName, member.MemberName ?? "(type)");
+            return;
+        }
+
         var referencedByName = false;
         var scope = member switch
         {
@@ -166,6 +176,9 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     private static bool IsInScope(string typeName, string scope) =>
         typeName.StartsWith(scope, StringComparison.Ordinal)
         && (typeName.Length == scope.Length || typeName[scope.Length] == '.');
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: coverage knows its tests, not spreading further")]
+    private partial void LogStoppedByCoverage(string typeName, string memberName);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName} is affected because {Because}")]
     private partial void LogAffected(string typeName, string memberName, string because);

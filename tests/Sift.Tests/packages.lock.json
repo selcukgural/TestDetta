@@ -58,11 +58,6 @@
         "resolved": "10.0.12",
         "contentHash": "9/qymSh7hVDMGTGwrLz8MRp5zRyXy9adGDOs4HwRdnLil3oZGYuWeZjbmHgCQ9BL1qBroVfgUK3U/nb61617Cw=="
       },
-      "Microsoft.TestPlatform.ObjectModel": {
-        "type": "Transitive",
-        "resolved": "17.14.1",
-        "contentHash": "xTP1W6Mi6SWmuxd3a+jj9G9UoC850WGwZUps1Wah9r1ZxgXhdJfj1QqDLJkFjHDCvN42qDL2Ps5KjQYWUU0zcQ=="
-      },
       "Microsoft.TestPlatform.TestHost": {
         "type": "Transitive",
         "resolved": "17.14.1",
@@ -120,7 +115,8 @@
       "sift.cli": {
         "type": "Project",
         "dependencies": {
-          "Sift.Core": "[1.0.0, )"
+          "Sift.Core": "[1.0.0, )",
+          "Sift.Coverage": "[1.0.0, )"
         }
       },
       "sift.core": {
@@ -129,6 +125,18 @@
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )"
         }
+      },
+      "sift.coverage": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
+          "Mono.Cecil": "[0.11.6, )",
+          "Sift.Core": "[1.0.0, )",
+          "Sift.Coverage.Runtime": "[1.0.0, )"
+        }
+      },
+      "sift.coverage.runtime": {
+        "type": "Project"
       },
       "Microsoft.CodeAnalysis.CSharp": {
         "type": "CentralTransitive",
@@ -148,6 +156,18 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12"
         }
+      },
+      "Microsoft.TestPlatform.ObjectModel": {
+        "type": "CentralTransitive",
+        "requested": "[17.14.1, )",
+        "resolved": "17.14.1",
+        "contentHash": "xTP1W6Mi6SWmuxd3a+jj9G9UoC850WGwZUps1Wah9r1ZxgXhdJfj1QqDLJkFjHDCvN42qDL2Ps5KjQYWUU0zcQ=="
+      },
+      "Mono.Cecil": {
+        "type": "CentralTransitive",
+        "requested": "[0.11.6, )",
+        "resolved": "0.11.6",
+        "contentHash": "f33RkDtZO8VlGXCtmQIviOtxgnUdym9xx/b1p9h91CRGOsJFxCFOFK1FDbVt1OCf1aWwYejUFa2MOQyFWTFjbA=="
       }
     }
   }

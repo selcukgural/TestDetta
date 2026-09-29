@@ -8,4 +8,11 @@ namespace Sift.Core;
 /// or its file name ends with <c>Test</c> or <c>Tests</c>.
 /// </param>
 /// <param name="References">Normalized absolute paths of the projects named in <c>ProjectReference</c> items.</param>
-public sealed record ProjectNode(string Path, string Directory, bool IsTestProject, IReadOnlyList<string> References);
+public sealed record ProjectNode(string Path, string Directory, bool IsTestProject, IReadOnlyList<string> References)
+{
+    /// <summary>
+    /// Name of the compiled assembly without extension: the <c>AssemblyName</c> property when the
+    /// project sets it, otherwise the project file name.
+    /// </summary>
+    public string AssemblyName { get; init; } = System.IO.Path.GetFileNameWithoutExtension(Path);
+}

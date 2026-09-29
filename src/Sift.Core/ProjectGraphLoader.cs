@@ -83,6 +83,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         var projectDir = Paths.Normalize(Path.GetDirectoryName(projectPath)!);
         var references = new List<string>();
         var isTest = false;
+        string? assemblyName = null;
 
         // Elements are matched by local name so legacy projects with the MSBuild XML namespace also work.
         foreach (var element in doc.Descendants())
@@ -95,6 +96,11 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     {
                         references.Add(reference);
                     }
+                    break;
+
+                case "AssemblyName" when element.Value.Trim() is { Length: > 0 } name && !name.Contains('$'):
+                    // A value built from properties ($(...)) cannot be known without evaluating MSBuild.
+                    assemblyName = name;
                     break;
 
                 case "IsTestProject" when bool.TryParse(element.Value.Trim(), out var value) && value:
@@ -118,7 +124,8 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         }
 
         LogParsed(projectPath, isTest, references.Count);
-        return new ProjectNode(projectPath, projectDir, isTest, references);
+        var node = new ProjectNode(projectPath, projectDir, isTest, references);
+        return assemblyName is null ? node : node with { AssemblyName = assemblyName };
     }
 
     /// <summary>True when the file name ends with <c>Test</c> or <c>Tests</c>, as in <c>App.Tests.csproj</c>.</summary>
