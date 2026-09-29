@@ -105,7 +105,7 @@ public sealed class CoverageRecorderTests : IDisposable
         try
         {
             (map, passed) = new CoverageRecorder(NullLoggerFactory.Instance)
-                .Record(new RecordRequest(_repo.Root, graph, testProject, "Debug"), output);
+                .Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions()), output);
         }
         catch (InvalidOperationException ex)
         {
@@ -155,8 +155,8 @@ public sealed class CoverageRecorderTests : IDisposable
         var testProject = graph.Projects.Single(p => p.IsTestProject);
         var recorder = new CoverageRecorder(NullLoggerFactory.Instance);
 
-        var (sequential, _) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, "Debug"), TextWriter.Null);
-        var (parallel, passed) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, "Debug", Parallelism: 3), TextWriter.Null);
+        var (sequential, _) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions()), TextWriter.Null);
+        var (parallel, passed) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: 3)), TextWriter.Null);
 
         Assert.True(passed);
         Assert.Equal(sequential.Classes.Keys.Order(), parallel.Classes.Keys.Order());

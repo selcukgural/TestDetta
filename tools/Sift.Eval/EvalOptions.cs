@@ -3,14 +3,22 @@ using Microsoft.Extensions.Logging;
 
 namespace Sift.Eval;
 
-/// <summary>Parsed command line of <c>sift-eval</c>.</summary>
-/// <param name="Repository">Path or URL of the repository to evaluate; it is cloned, never changed.</param>
+/// <summary>What to evaluate.</summary>
+/// <param name="Repository">Path or URL of the repository; it is cloned, never changed.</param>
 /// <param name="Branch">Branch whose first-parent history holds the merges to evaluate.</param>
 /// <param name="Merges">How many of the latest merges (or commits) to evaluate.</param>
+internal sealed record EvalTarget(string Repository, string Branch, int Merges);
+
+/// <summary>Parsed command line of <c>sift-eval</c>.</summary>
+/// <param name="Target">What to evaluate.</param>
 /// <param name="Run">Settings of every test run.</param>
 /// <param name="Output">Directory for the work clone, coverage maps and reports.</param>
-internal sealed record EvalOptions(string Repository, string Branch, int Merges, RunSettings Run, string Output)
+/// <param name="LogLevel">Minimum level of the log on stderr.</param>
+internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Output, LogLevel LogLevel)
 {
+    /// <summary>Repository to evaluate.</summary>
+    public string Repository => Target.Repository;
+
     /// <summary>Help text.</summary>
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
@@ -25,6 +33,7 @@ internal sealed record EvalOptions(string Repository, string Branch, int Merges,
           --parallel <n>         Test processes per project when recording (default: 1)
           --mutants <n>          Changed members to mutate per merge (default: 3, 0 turns it off)
           --project <csproj>     Only use this test project (path in the repository); repeat for several
+          -f, --framework <tfm>  Build, record and test only this target framework, e.g. net10.0
           --cleanup <command>    Shell command run after every test run, e.g. to remove test containers
           --out <dir>            Work and report directory (default: a new directory under the temp folder)
           -v, --verbose          Debug logs on stderr
@@ -39,7 +48,8 @@ internal sealed record EvalOptions(string Repository, string Branch, int Merges,
         string? repository = null;
         var branch = "main";
         var merges = 8;
-        var run = new RunSettings(Parallelism: 1, Mutants: 3, Projects: [], Cleanup: null, LogLevel.Warning);
+        var run = new RunSettings(Parallelism: 1, Mutants: 3, Projects: [], Cleanup: null, Framework: null);
+        var logLevel = LogLevel.Information;
         var output = Path.Combine(Path.GetTempPath(), "sift-eval-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
         options = null!;
         error = null;
@@ -49,7 +59,7 @@ internal sealed record EvalOptions(string Repository, string Branch, int Merges,
             var arg = args[i];
             if (arg is "-v" or "--verbose")
             {
-                run = run with { LogLevel = LogLevel.Debug };
+                logLevel = LogLevel.Debug;
                 continue;
             }
 
@@ -76,6 +86,10 @@ internal sealed record EvalOptions(string Repository, string Branch, int Merges,
 
                 case "--cleanup":
                     run = run with { Cleanup = value };
+                    break;
+
+                case "-f" or "--framework":
+                    run = run with { Framework = value };
                     break;
 
                 case "--project":
@@ -110,7 +124,7 @@ internal sealed record EvalOptions(string Repository, string Branch, int Merges,
             return false;
         }
 
-        options = new EvalOptions(repository, branch, merges, run, output);
+        options = new EvalOptions(new EvalTarget(repository, branch, merges), run, output, logLevel);
         return true;
     }
 }
@@ -120,5 +134,5 @@ internal sealed record EvalOptions(string Repository, string Branch, int Merges,
 /// <param name="Mutants">Changed members to mutate per merge.</param>
 /// <param name="Projects">Test projects to use (paths in the repository); empty means all.</param>
 /// <param name="Cleanup">Shell command run after every test run, or null.</param>
-/// <param name="LogLevel">Minimum level of the debug log.</param>
-internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<string> Projects, string? Cleanup, LogLevel LogLevel);
+/// <param name="Framework">Target framework to build, record and test, or null for the projects' defaults.</param>
+internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<string> Projects, string? Cleanup, string? Framework);

@@ -87,6 +87,11 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 Directory.Delete(results, recursive: true);
             }
             arguments.Add("--no-build");
+            if (context.Settings.Framework is { } framework)
+            {
+                arguments.AddRange(["-f", framework]);
+            }
+
             arguments.AddRange(ReportArguments(project, results));
 
             using (var log = File.CreateText(Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log")))

@@ -31,7 +31,7 @@ public sealed class FrameworkMatrixTests : IDisposable
         try
         {
             (map, passed) = new CoverageRecorder(NullLoggerFactory.Instance)
-                .Record(new RecordRequest(_repo.Root, graph, testProject, "Debug", Parallelism: 2), output);
+                .Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: 2)), output);
         }
         catch (InvalidOperationException ex)
         {

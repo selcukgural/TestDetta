@@ -83,7 +83,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             {
                 using var log = File.CreateText(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".record.log"));
                 var (map, _) = recorder.Record(
-                    new RecordRequest(workspace.RepoRoot, graph, project, "Debug", settings.Parallelism), log);
+                    new RecordRequest(workspace.RepoRoot, graph, project, new RecordOptions("Debug", settings.Framework, settings.Parallelism)), log);
                 workspace.Executor.Cleanup();
                 CoverageMapStore.Write(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".json"), map);
             }
@@ -128,7 +128,13 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         var dotnet = new DotnetProcess(_logger);
         foreach (var project in testProjects)
         {
-            var exitCode = dotnet.Run(["build", project.Path, "-c", "Debug"], workspace.RepoRoot, new Dictionary<string, string>(), TextWriter.Null);
+            List<string> arguments = ["build", project.Path, "-c", "Debug"];
+            if (settings.Framework is { } framework)
+            {
+                arguments.AddRange(["-f", framework]);
+            }
+
+            var exitCode = dotnet.Run(arguments, workspace.RepoRoot, new Dictionary<string, string>(), TextWriter.Null);
             if (exitCode != 0)
             {
                 throw new InvalidOperationException($"Building {project.Path} failed with exit code {exitCode}.");

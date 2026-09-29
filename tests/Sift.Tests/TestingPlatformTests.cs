@@ -119,7 +119,7 @@ public sealed class TestingPlatformRecorderTests : IDisposable
             bool passed;
             try
             {
-                (map, passed) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, "Debug", parallelism), output);
+                (map, passed) = recorder.Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: parallelism)), output);
             }
             catch (InvalidOperationException ex)
             {

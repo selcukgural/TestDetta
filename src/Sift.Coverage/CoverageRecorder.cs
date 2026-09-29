@@ -10,18 +10,28 @@ namespace Sift.Coverage;
 /// <param name="RepoRoot">Repository root directory.</param>
 /// <param name="Graph">Projects of the repository.</param>
 /// <param name="TestProject">Test project to run.</param>
+/// <param name="Options">How to build and run the tests.</param>
+public sealed record RecordRequest(string RepoRoot, ProjectGraph Graph, ProjectNode TestProject, RecordOptions Options)
+{
+    /// <summary>Build configuration.</summary>
+    public string Configuration => Options.Configuration;
+
+    /// <summary>Test host processes to spread the test classes over.</summary>
+    public int Parallelism => Options.Parallelism;
+}
+
+/// <summary>How <see cref="CoverageRecorder"/> builds and runs a test project.</summary>
 /// <param name="Configuration">Build configuration, such as <c>Debug</c>.</param>
+/// <param name="Framework">
+/// Target framework to record, such as <c>net10.0</c>; null takes the project's only framework, or
+/// the first one of a multi-targeted project.
+/// </param>
 /// <param name="Parallelism">
 /// Number of test host processes to spread the test classes over. Each process still runs its
 /// tests one at a time, which is what keeps attribution exact; the suite must tolerate several
 /// processes at once (no fixed ports or shared local databases).
 /// </param>
-public sealed record RecordRequest(
-    string RepoRoot,
-    ProjectGraph Graph,
-    ProjectNode TestProject,
-    string Configuration,
-    int Parallelism = 1);
+public sealed record RecordOptions(string Configuration = "Debug", string? Framework = null, int Parallelism = 1);
 
 /// <summary>
 /// Builds a test project, instruments the repository's assemblies in its output, runs the tests
@@ -44,7 +54,13 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var project = request.TestProject.Path;
         var root = request.RepoRoot;
 
-        var buildExit = dotnet.Run(["build", project, "-c", request.Configuration], root, new Dictionary<string, string>(), output);
+        List<string> build = ["build", project, "-c", request.Configuration];
+        if (request.Options.Framework is { } targetFramework)
+        {
+            build.AddRange(["-f", targetFramework]);
+        }
+
+        var buildExit = dotnet.Run(build, root, new Dictionary<string, string>(), output);
         if (buildExit != 0)
         {
             throw new InvalidOperationException($"Building {project} failed with exit code {buildExit}.");
@@ -259,6 +275,16 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="request">What to record.</param>
     private static (string TargetPath, string? Framework) FindTargetPath(DotnetProcess dotnet, RecordRequest request)
     {
+        if (request.Options.Framework is { } requested)
+        {
+            List<string> exact =
+            [
+                "msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={requested}",
+                "-getProperty:TargetPath",
+            ];
+            return (dotnet.Capture(exact, request.RepoRoot).Trim(), requested);
+        }
+
         List<string> query =
         [
             "msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}",

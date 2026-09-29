@@ -24,8 +24,7 @@ internal static partial class EvalApp
         }
 
         Directory.CreateDirectory(options.Output);
-        var level = options.Run.LogLevel == LogLevel.Debug ? LogLevel.Debug : LogLevel.Information;
-        using var loggerFactory = new StderrLoggerFactory(Console.Error, level);
+        using var loggerFactory = new StderrLoggerFactory(Console.Error, options.LogLevel);
         var logger = loggerFactory.CreateLogger(typeof(EvalApp).FullName!);
 
         // An existing clone is reused, so an interrupted evaluation can continue with its cached maps.
@@ -49,7 +48,7 @@ internal static partial class EvalApp
         var evaluator = new MergeEvaluator(workspace, options.Run);
 
         var results = new List<MergeResult>();
-        foreach (var commit in git.History(options.Branch, options.Merges))
+        foreach (var commit in git.History(options.Target.Branch, options.Target.Merges))
         {
             LogEvaluating(logger, commit.Sha[..7], commit.Subject);
             results.Add(evaluator.Evaluate(commit));

@@ -36,7 +36,8 @@ internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTes
 /// <param name="Configuration">Build configuration used for building and running the tests.</param>
 /// <param name="Projects">Only record these test projects (.csproj paths); empty records every test project.</param>
 /// <param name="Parallelism">Test host processes per test project; each still runs its tests one at a time.</param>
-internal sealed record RecordSettings(string Configuration, IReadOnlyList<string> Projects, int Parallelism);
+/// <param name="Framework">Target framework to record for multi-targeted projects, or null for the first one.</param>
+internal sealed record RecordSettings(string Configuration, IReadOnlyList<string> Projects, int Parallelism, string? Framework = null);
 
 /// <summary>Parsed command line.</summary>
 /// <param name="Command">Which sub-command to run.</param>
@@ -77,6 +78,7 @@ internal sealed record CliOptions(
         sift record:
           -c, --configuration <name>  Build configuration (default: Debug)
           --project <path>     Record only this test project (relative to the repository root); repeat for several
+          -f, --framework <tfm>  Target framework to record, e.g. net10.0 (default: the first one)
           --parallel <n>       Spread each project's test classes over n processes (default: 1).
                                The suite must tolerate several test processes at once.
 
@@ -176,7 +178,7 @@ internal sealed record CliOptions(
 
             case "--base" or "--repo" or "--log-level":
             case "--format" when options.Command == CliCommand.Affected:
-            case "-c" or "--configuration" or "--project" or "--parallel" when options.Command == CliCommand.Record:
+            case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
             case "--summary-file" when options.Command == CliCommand.Test:
                 break;
 
@@ -204,6 +206,10 @@ internal sealed record CliOptions(
 
             case "-c" or "--configuration":
                 options = options with { Record = options.Record with { Configuration = value } };
+                return true;
+
+            case "-f" or "--framework":
+                options = options with { Record = options.Record with { Framework = value } };
                 return true;
 
             case "--project":
