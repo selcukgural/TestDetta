@@ -33,6 +33,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     private static readonly FrozenSet<string> LifecycleMethods =
         FrozenSet.Create(StringComparer.Ordinal, "Dispose", "DisposeAsync", "InitializeAsync");
 
+    /// <summary>
+    /// The newest version directory of every shared framework (Microsoft.NETCore.App,
+    /// Microsoft.AspNetCore.App, ...) of the dotnet installation Sift runs on.
+    /// </summary>
+    private static readonly Lazy<List<string>> SharedFrameworkDirectories = new(FindSharedFrameworkDirectories);
+
     /// <summary>Instruments <paramref name="assemblies"/>, numbering methods across all of them.</summary>
     /// <param name="assemblies">Paths of the assemblies to rewrite.</param>
     /// <param name="testAssemblies">The subset of <paramref name="assemblies"/> that contain tests.</param>
@@ -46,17 +52,55 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var backups = new Dictionary<string, string>(StringComparer.Ordinal);
         Directory.CreateDirectory(backupDirectory);
 
-        foreach (var assembly in assemblies)
+        var result = new InstrumentationResult(methods, backups);
+        try
         {
-            BackUp(assembly, backupDirectory, backups);
-            BackUp(Path.ChangeExtension(assembly, ".pdb"), backupDirectory, backups);
+            foreach (var assembly in assemblies)
+            {
+                BackUp(assembly, backupDirectory, backups);
+                BackUp(Path.ChangeExtension(assembly, ".pdb"), backupDirectory, backups);
 
-            var before = methods.Count;
-            InstrumentOne(assembly, testAssemblies.Contains(assembly), methods);
-            LogInstrumented(assembly, methods.Count - before);
+                var before = methods.Count;
+                InstrumentOne(assembly, testAssemblies.Contains(assembly), methods);
+                LogInstrumented(assembly, methods.Count - before);
+            }
+        }
+        catch
+        {
+            // Never leave a half-instrumented output behind: the caller only restores what it got back.
+            Restore(result);
+            throw;
         }
 
-        return new InstrumentationResult(methods, backups);
+        return result;
+    }
+
+    /// <summary>Lists the shared framework directories next to the runtime Sift itself runs on.</summary>
+    private static List<string> FindSharedFrameworkDirectories()
+    {
+        // .../dotnet/shared/Microsoft.NETCore.App/10.0.x/System.Private.CoreLib.dll -> .../dotnet/shared
+        var runtimeDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
+        var shared = runtimeDirectory is null ? null : Directory.GetParent(runtimeDirectory)?.Parent;
+        if (shared is null || !shared.Exists)
+        {
+            return [];
+        }
+
+        var result = new List<string>();
+        foreach (var framework in shared.EnumerateDirectories())
+        {
+            var newest = framework.EnumerateDirectories()
+                .Select(static d => (Directory: d.FullName, Version: Version.TryParse(d.Name.Split('-')[0], out var v) ? v : null))
+                .Where(static d => d.Version is not null)
+                .MaxBy(static d => d.Version);
+
+            if (newest.Directory is not null)
+            {
+                result.Add(newest.Directory);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>Copies every backed-up file back over its instrumented version.</summary>
@@ -96,6 +140,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
         using var resolver = new DefaultAssemblyResolver();
         resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
+
+        // Framework assemblies (System.Threading.RateLimiting, Microsoft.AspNetCore.*) live in the
+        // shared framework, not in the test output, and Cecil resolves some of them while writing.
+        foreach (var directory in SharedFrameworkDirectories.Value)
+        {
+            resolver.AddSearchDirectory(directory);
+        }
 
         // InMemory so the file is not locked while it is written back to the same path.
         using var module = ModuleDefinition.ReadModule(path, new ReaderParameters
