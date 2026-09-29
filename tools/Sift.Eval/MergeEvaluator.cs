@@ -118,7 +118,10 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         return maps;
     }
 
-    /// <summary>The test projects to evaluate: all, or those named with <c>--project</c>.</summary>
+    /// <summary>
+    /// The test projects to evaluate: all, or those named with <c>--project</c>; with
+    /// <c>--framework</c>, only those that target it.
+    /// </summary>
     /// <param name="graph">Projects of the checked-out commit.</param>
     private List<ProjectNode> TestProjects(ProjectGraph graph)
     {
@@ -130,8 +133,34 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         [
             .. graph.Projects
                 .Where(p => p.IsTestProject && (wanted.Count == 0 || wanted.Contains(p.Path)))
+                .Where(TargetsFramework)
                 .OrderBy(static p => p.Path, StringComparer.Ordinal),
         ];
+    }
+
+    /// <summary>True when no framework was requested, or the project targets the requested one.</summary>
+    /// <param name="project">Test project.</param>
+    private bool TargetsFramework(ProjectNode project)
+    {
+        if (settings.Framework is not { } framework)
+        {
+            return true;
+        }
+
+        var dotnet = new DotnetProcess(_logger);
+        List<string> query = ["msbuild", project.Path, "-getProperty:TargetFramework", "-getProperty:TargetFrameworks"];
+        using var properties = System.Text.Json.JsonDocument.Parse(dotnet.Capture(query, workspace.RepoRoot));
+        var values = properties.RootElement.GetProperty("Properties");
+        var frameworks = $"{values.GetProperty("TargetFramework").GetString()};{values.GetProperty("TargetFrameworks").GetString()}"
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var targets = frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase);
+        if (!targets)
+        {
+            LogSkippedFramework(project.Path, framework);
+        }
+
+        return targets;
     }
 
     /// <summary>Builds the test projects once, so every later run can use <c>--no-build</c>.</summary>
@@ -400,6 +429,9 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         misses.Sort(StringComparer.Ordinal);
         return misses;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Project} does not target {Framework}; left out")]
+    private partial void LogSkippedFramework(string project, string framework);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} not recorded: {Reason}")]
     private partial void LogNotRecorded(string project, string reason);
