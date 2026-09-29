@@ -1,0 +1,136 @@
+name: Sift
+description: Run only the .NET tests a change affects on pull requests, and record coverage maps on the default branch.
+branding:
+  icon: filter
+  color: blue
+
+inputs:
+  mode:
+    description: "'test' on pull requests (run affected tests), 'record' on the default branch (record coverage maps)."
+    required: true
+  base:
+    description: Branch to compare with in test mode. Defaults to the pull request's base branch.
+    required: false
+    default: ''
+  configuration:
+    description: Build configuration for building and running the tests.
+    required: false
+    default: Debug
+  projects:
+    description: Record mode only. Test projects to record, one .csproj path per line. Empty records every test project.
+    required: false
+    default: ''
+  dotnet-test-args:
+    description: Test mode only. Extra arguments for every dotnet test, separated by spaces.
+    required: false
+    default: ''
+  working-directory:
+    description: Any directory inside the repository to analyze.
+    required: false
+    default: '.'
+  setup-dotnet:
+    description: Install the .NET 10 SDK that Sift itself runs on. Set to 'false' if the job already has it.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Check git history
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          echo "::error::Sift compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0."
+          exit 1
+        fi
+
+    - name: Set up .NET for Sift
+      if: inputs.setup-dotnet == 'true'
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Build Sift
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        SIFT_OUT: ${{ runner.temp }}/sift
+      run: dotnet build src/Sift.Cli/Sift.Cli.csproj -c Release -o "$SIFT_OUT" --nologo -v quiet
+
+    - name: Find comparison base
+      if: inputs.mode == 'test'
+      id: base
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        PR_BASE: ${{ github.base_ref }}
+      run: |
+        base="${INPUT_BASE:-$PR_BASE}"
+        if [ -z "$base" ]; then
+          echo "::error::No base branch. Outside pull requests, set the 'base' input."
+          exit 1
+        fi
+        # The name ends up in git arguments and in step outputs: allow plain branch names only.
+        if [[ ! "$base" =~ ^[A-Za-z0-9._/][A-Za-z0-9._/-]*$ ]]; then
+          echo "::error::Unsupported base branch name."
+          exit 1
+        fi
+        git fetch --no-tags --quiet origin "+refs/heads/$base:refs/remotes/origin/$base"
+        echo "ref=origin/$base" >> "$GITHUB_OUTPUT"
+        echo "merge-base=$(git merge-base "origin/$base" HEAD)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore coverage map
+      if: inputs.mode == 'test'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ inputs.working-directory }}/.sift/coverage
+        key: sift-coverage-${{ steps.base.outputs.merge-base }}
+
+    - name: Run affected tests
+      if: inputs.mode == 'test'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SIFT: ${{ runner.temp }}/sift/Sift.Cli.dll
+        BASE_REF: ${{ steps.base.outputs.ref }}
+        CONFIGURATION: ${{ inputs.configuration }}
+        EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
+      run: |
+        read -r -a extra <<< "$EXTRA_ARGS"
+        dotnet "$SIFT" test --base "$BASE_REF" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+
+    - name: Record coverage map
+      if: inputs.mode == 'record'
+      id: record
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SIFT: ${{ runner.temp }}/sift/Sift.Cli.dll
+        CONFIGURATION: ${{ inputs.configuration }}
+        PROJECTS: ${{ inputs.projects }}
+      run: |
+        args=()
+        while IFS= read -r project; do
+          if [ -n "$project" ]; then args+=(--project "$project"); fi
+        done <<< "$PROJECTS"
+        status=0
+        dotnet "$SIFT" record -c "$CONFIGURATION" "${args[@]}" || status=$?
+        echo "status=$status" >> "$GITHUB_OUTPUT"
+        # 3 means some tests failed; the map is still valid, so it is saved before the job fails.
+        if [ "$status" != 0 ] && [ "$status" != 3 ]; then exit "$status"; fi
+
+    - name: Save coverage map
+      if: inputs.mode == 'record'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ inputs.working-directory }}/.sift/coverage
+        key: sift-coverage-${{ github.sha }}
+
+    - name: Fail on test failures while recording
+      if: inputs.mode == 'record' && steps.record.outputs.status == '3'
+      shell: bash
+      run: |
+        echo "::error::Tests failed while recording coverage."
+        exit 1
