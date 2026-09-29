@@ -35,6 +35,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
             var testProjects = TestProjects(graph);
             Build(testProjects);
+            workspace.Executor.Outputs = OutputDirectories(testProjects);
 
             PlaceMaps(commit.Parent);
             var analysis = new AnalysisPipeline(workspace.LoggerFactory).Run(workspace.RepoRoot, commit.Parent);
@@ -134,10 +135,22 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
                 arguments.AddRange(["-f", framework]);
             }
 
-            var exitCode = dotnet.Run(arguments, workspace.RepoRoot, new Dictionary<string, string>(), TextWriter.Null);
+            var logPath = Path.Combine(workspace.Executor.LogDirectory, $"build-{Path.GetFileNameWithoutExtension(project.Path)}.log");
+            int exitCode;
+            using (var log = File.CreateText(logPath))
+            {
+                exitCode = dotnet.Run(arguments, workspace.RepoRoot, new Dictionary<string, string>(), log);
+            }
+
             if (exitCode != 0)
             {
-                throw new InvalidOperationException($"Building {project.Path} failed with exit code {exitCode}.");
+                // The first errors say more than the exit code; the full log stays next to the reports.
+                var errors = File.ReadLines(logPath)
+                    .Where(static l => l.Contains("error", StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.Ordinal)
+                    .Take(3);
+                throw new InvalidOperationException(
+                    $"Building {Path.GetFileName(project.Path)} failed with exit code {exitCode}: {string.Join(" / ", errors)}");
             }
         }
     }
@@ -178,7 +191,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
     {
         var results = new List<MutantResult>();
         var index = 0;
-        var assemblies = RepositoryAssemblies(analysis.Graph, testProjects);
+        var assemblies = RepositoryAssemblies(analysis.Graph, workspace.Executor.Outputs.Values);
         foreach (var target in MutationTargets(analysis).Take(settings.Mutants))
         {
             index++;
@@ -190,6 +203,13 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             }
 
             var run = workspace.Executor.RunAll(testProjects, $"mutant-{index}");
+            if (run.Aborted > 0)
+            {
+                // A crash hides which classes failed; a missing class would prove nothing either way.
+                results.Add(new MutantResult(target, mutation.MutatedMethods, [], [], Inconclusive: true));
+                continue;
+            }
+
             var killed = new List<string>();
             var missed = new List<string>();
             foreach (var (project, failed) in run.FailedByProject)
@@ -251,26 +271,51 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
     /// wherever its method exists, whichever project Sift thinks the source belongs to.
     /// </summary>
     /// <param name="graph">Projects of the repository.</param>
-    /// <param name="testProjects">Evaluated test projects.</param>
-    private static List<string> RepositoryAssemblies(ProjectGraph graph, List<ProjectNode> testProjects)
+    /// <param name="outputs">Output directories of the evaluated test projects.</param>
+    private static List<string> RepositoryAssemblies(ProjectGraph graph, IEnumerable<string> outputs)
     {
         var names = graph.Projects.Select(static p => p.AssemblyName + ".dll").ToHashSet(StringComparer.OrdinalIgnoreCase);
         var copies = new List<string>();
-        foreach (var project in testProjects)
+        foreach (var output in outputs)
         {
-            var bin = Path.Combine(project.Directory, "bin", "Debug");
-            if (!Directory.Exists(bin))
+            if (!Directory.Exists(output))
             {
                 continue;
             }
 
             copies.AddRange(Directory
-                .EnumerateFiles(bin, "*.dll", SearchOption.AllDirectories)
-                .Where(f => names.Contains(Path.GetFileName(f)))
-                .Where(static f => !f.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.Ordinal)));
+                .EnumerateFiles(output, "*.dll", SearchOption.TopDirectoryOnly)
+                .Where(f => names.Contains(Path.GetFileName(f))));
         }
 
         return copies;
+    }
+
+    /// <summary>
+    /// The output directory of each test project, asked from MSBuild for the evaluated framework:
+    /// projects may use the artifacts layout or a custom output path instead of <c>bin/Debug</c>.
+    /// </summary>
+    /// <param name="testProjects">Evaluated test projects.</param>
+    private Dictionary<string, string> OutputDirectories(List<ProjectNode> testProjects)
+    {
+        var dotnet = new DotnetProcess(_logger);
+        var outputs = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var project in testProjects)
+        {
+            List<string> query = ["msbuild", project.Path, "-p:Configuration=Debug", "-getProperty:TargetPath"];
+            if (settings.Framework is { } framework)
+            {
+                query.Add($"-p:TargetFramework={framework}");
+            }
+
+            var targetPath = dotnet.Capture(query, workspace.RepoRoot).Trim();
+            if (targetPath.Length > 0)
+            {
+                outputs[project.Path] = Path.GetDirectoryName(targetPath)!;
+            }
+        }
+
+        return outputs;
     }
 
     /// <summary>True when Sift's selection runs <paramref name="testClass"/> of <paramref name="project"/>.</summary>

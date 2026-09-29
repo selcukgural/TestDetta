@@ -19,11 +19,13 @@ internal sealed record RunComparison(TestRunOutcome Full, TestRunOutcome Selecte
 /// <param name="MutatedMethods">Compiled methods that threw; 0 when the member was not found in any test output.</param>
 /// <param name="KilledClasses">Test classes that failed with the mutant but not without it.</param>
 /// <param name="MissedClasses">Of those, the classes Sift did not select: a missed test.</param>
+/// <param name="Inconclusive">True when the mutant's run crashed, so neither list can be trusted.</param>
 internal sealed record MutantResult(
     CoveredMethod Target,
     int MutatedMethods,
     IReadOnlyList<string> KilledClasses,
-    IReadOnlyList<string> MissedClasses);
+    IReadOnlyList<string> MissedClasses,
+    bool Inconclusive = false);
 
 /// <summary>Checks that Sift's selection did not leave out tests that could see the change.</summary>
 /// <param name="CoverageMisses">

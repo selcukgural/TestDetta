@@ -32,6 +32,9 @@ internal static class EvalReport
         var killed = mutants.Count(static m => m.KilledClasses.Count > 0);
         var missedMutants = mutants.Count(static m => m.MissedClasses.Count > 0);
         var coverageMisses = evaluated.Sum(static r => r.Safety!.CoverageMisses.Count);
+        var aborted = evaluated.Count(static r => r.Runs!.Full.Aborted + r.Runs.Selected.Aborted > 0);
+        var inconclusive = mutants.Count(static m => m.Inconclusive);
+        var notApplied = mutants.Count(static m => m.MutatedMethods == 0);
 
         text.AppendLine(CultureInfo.InvariantCulture, $"# Sift evaluation: {repository}");
         text.AppendLine();
@@ -43,6 +46,11 @@ internal static class EvalReport
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Mutants: {mutants.Count} injected, {killed} caught by the full suite, **{missedMutants} missed by Sift**");
         text.AppendLine(CultureInfo.InvariantCulture, $"- Coverage check: **{coverageMisses} missed test class(es)**");
+        if (aborted + inconclusive + notApplied > 0)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"- Caveats: {aborted} merge(s) with a crashed test host (marked ⚠), {inconclusive} mutant run(s) crashed, {notApplied} mutant(s) not found in any test output");
+        }
         text.AppendLine();
         text.AppendLine("| Merge | Files | Full | Sift | Saved | Estimate | Mutants (caught/missed) | Decision |");
         text.AppendLine("|---|---|---|---|---|---|---|---|");
@@ -59,8 +67,9 @@ internal static class EvalReport
             var runs = result.Runs;
             var safety = result.Safety!;
             var estimate = result.Plan?.Estimate is { } e ? $"{Math.Floor(e.SavedFraction * 100)}%" : "–";
+            var warning = runs.Full.Aborted + runs.Selected.Aborted > 0 ? " ⚠" : string.Empty;
             text.AppendLine(CultureInfo.InvariantCulture,
-                $"| {sha} | {result.Merge.ChangedFiles} | {runs.Full.Total} / {Durations.Format(runs.Full.Seconds)} | " +
+                $"| {sha}{warning} | {result.Merge.ChangedFiles} | {runs.Full.Total} / {Durations.Format(runs.Full.Seconds)} | " +
                 $"{runs.Selected.Total} / {Durations.Format(runs.Selected.Seconds)} | {Percent(runs.Full.Seconds, runs.Selected.Seconds)} | {estimate} | " +
                 $"{safety.Mutants.Count(static m => m.KilledClasses.Count > 0)}/{safety.Mutants.Count(static m => m.MissedClasses.Count > 0)} | {Cell(Decisions(result.Plan!))} |");
         }
@@ -131,6 +140,7 @@ internal static class EvalReport
                         json.WriteStartObject();
                         json.WriteString("target", $"{mutant.Target.TypeName}.{mutant.Target.MemberName}");
                         json.WriteNumber("mutatedMethods", mutant.MutatedMethods);
+                        json.WriteBoolean("inconclusive", mutant.Inconclusive);
                         WriteStrings(json, "killed", mutant.KilledClasses);
                         WriteStrings(json, "missed", mutant.MissedClasses);
                         json.WriteEndObject();
@@ -158,6 +168,7 @@ internal static class EvalReport
         json.WriteNumber("seconds", Math.Round(run.Seconds, 1));
         json.WriteNumber("tests", run.Total);
         json.WriteNumber("missingReports", run.MissingReports);
+        json.WriteNumber("aborted", run.Aborted);
         json.WriteEndObject();
     }
 

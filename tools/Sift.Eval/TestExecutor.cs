@@ -10,11 +10,13 @@ namespace Sift.Eval;
 /// <param name="Total">Tests that ran, according to the TRX reports.</param>
 /// <param name="FailedByProject">Failed test classes per normalized test project path.</param>
 /// <param name="MissingReports">Runs that produced no TRX report (for example NUnit under Microsoft.Testing.Platform).</param>
+/// <param name="Aborted">Runs whose test host crashed twice; their results are incomplete.</param>
 internal sealed record TestRunOutcome(
     double Seconds,
     int Total,
     IReadOnlyDictionary<string, IReadOnlySet<string>> FailedByProject,
-    int MissingReports);
+    int MissingReports,
+    int Aborted);
 
 /// <summary>What <see cref="TestExecutor"/> runs in.</summary>
 /// <param name="RepoRoot">Clone directory.</param>
@@ -33,6 +35,15 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 {
     /// <summary>Counter for unique results directories and log files.</summary>
     private int _runs;
+
+    /// <summary>Directory for console logs of builds and runs.</summary>
+    public string LogDirectory => context.LogDirectory;
+
+    /// <summary>
+    /// Output directory per normalized test project path of the commit being evaluated, from MSBuild
+    /// (projects may use the artifacts layout rather than <c>bin/Debug</c>).
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Outputs { get; set; } = new Dictionary<string, string>();
 
     /// <summary>Runs every test of <paramref name="projects"/>, one project after another.</summary>
     /// <param name="projects">Test projects.</param>
@@ -72,37 +83,56 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         var stopwatch = Stopwatch.StartNew();
         var total = 0;
         var missing = 0;
+        var aborted = 0;
         var failed = new Dictionary<string, IReadOnlySet<string>>(Paths.Comparer);
         var dotnet = new DotnetProcess(logger);
 
-        foreach (var (project, arguments) in runs)
+        foreach (var (project, baseArguments) in runs)
         {
-            var id = Interlocked.Increment(ref _runs);
-            var results = Path.Combine(context.LogDirectory, "trx", $"{id:000}-{label}");
-
-            // A rerun in the same output directory reuses run numbers; an old report would add its
-            // tests and failures to this run.
-            if (Directory.Exists(results))
-            {
-                Directory.Delete(results, recursive: true);
-            }
-            arguments.Add("--no-build");
+            baseArguments.Add("--no-build");
             if (context.Settings.Framework is { } framework)
             {
-                arguments.AddRange(["-f", framework]);
+                baseArguments.AddRange(["-f", framework]);
             }
 
-            arguments.AddRange(ReportArguments(project, results));
-
-            using (var log = File.CreateText(Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log")))
+            // A crashed test host leaves the run incomplete; some suites crash now and then, so the
+            // run is repeated once before it is reported as aborted.
+            TrxOutcome? outcome = null;
+            var crashed = false;
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                var exitCode = dotnet.Run(arguments, context.RepoRoot, new Dictionary<string, string>(), log);
-                LogRun(label, project.Path, exitCode);
+                var id = Interlocked.Increment(ref _runs);
+                var results = Path.Combine(context.LogDirectory, "trx", $"{id:000}-{label}");
+
+                // A rerun in the same output directory reuses run numbers; an old report would add its
+                // tests and failures to this run.
+                if (Directory.Exists(results))
+                {
+                    Directory.Delete(results, recursive: true);
+                }
+
+                List<string> arguments = [.. baseArguments, .. ReportArguments(project, results)];
+                var logPath = Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log");
+                using (var log = File.CreateText(logPath))
+                {
+                    var exitCode = dotnet.Run(arguments, context.RepoRoot, new Dictionary<string, string>(), log);
+                    LogRun(label, project.Path, exitCode);
+                }
+
+                Cleanup();
+                outcome = TrxReport.Read(results);
+                crashed = File.ReadLines(logPath).Any(static l =>
+                    l.Contains("Test host process crashed", StringComparison.Ordinal) || l.Contains("Test Run Aborted", StringComparison.Ordinal));
+                if (!crashed)
+                {
+                    break;
+                }
+
+                LogCrashed(label, project.Path, attempt + 1);
             }
 
-            Cleanup();
-
-            if (TrxReport.Read(results) is not { } outcome)
+            aborted += crashed ? 1 : 0;
+            if (outcome is null)
             {
                 missing++;
                 continue;
@@ -112,7 +142,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             failed[project.Path] = outcome.FailedClasses;
         }
 
-        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, missing);
+        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, missing, aborted);
     }
 
     /// <summary>
@@ -128,8 +158,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             return ["--logger", "trx", "--results-directory", results];
         }
 
-        var bin = Path.Combine(project.Directory, "bin");
-        var isXunitV3 = Directory.Exists(bin) && Directory.EnumerateFiles(bin, "xunit.v3.core.dll", SearchOption.AllDirectories).Any();
+        var isXunitV3 = Outputs.TryGetValue(project.Path, out var output) && File.Exists(Path.Combine(output, "xunit.v3.core.dll"));
         return [isXunitV3 ? "--report-xunit-trx" : "--report-trx", "--results-directory", results];
     }
 
@@ -152,6 +181,9 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Label}: {Project} exited with {ExitCode}")]
     private partial void LogRun(string label, string project, int exitCode);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Label}: the test host of {Project} crashed (attempt {Attempt})")]
+    private partial void LogCrashed(string label, string project, int attempt);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Cleanup exited with {ExitCode}")]
     private partial void LogCleanup(int exitCode);
