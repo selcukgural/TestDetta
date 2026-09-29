@@ -52,9 +52,6 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
             }
         }
 
-        // Deepest directory first, so a nested project owns its files instead of its parent.
-        var byDepth = graph.Projects.OrderByDescending(static p => p.Directory.Length).ToArray();
-
         foreach (var relative in changedFiles)
         {
             if (cosmetic.Contains(relative))
@@ -71,7 +68,7 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
                 continue;
             }
 
-            var owner = Array.Find(byDepth, p => Paths.IsUnder(file, p.Directory));
+            var owner = graph.FindOwner(file);
             if (owner is null)
             {
                 LogUnmapped(relative);

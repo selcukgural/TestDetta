@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sift.Core;
 
@@ -6,19 +5,8 @@ namespace Sift.Tests;
 
 public sealed class GitClientTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "sift-git-" + Guid.NewGuid().ToString("N"));
+    private readonly GitRepoFixture _repo = new();
     private readonly GitClient _git = new(NullLogger<GitClient>.Instance);
-
-    public GitClientTests()
-    {
-        Directory.CreateDirectory(_root);
-        Git("init", "-q", "-b", "main");
-        Git("config", "user.email", "test@example.com");
-        Git("config", "user.name", "Test");
-        Git("config", "commit.gpgsign", "false");
-        // The machine-wide config may convert line endings, which would change the committed bytes.
-        Git("config", "core.autocrlf", "false");
-    }
 
     [Fact]
     public void ReadFiles_returns_exact_bytes_and_skips_missing_paths()
@@ -30,7 +18,7 @@ public sealed class GitClientTests : IDisposable
         Git("add", "-A");
         Git("commit", "-qm", "base");
 
-        var files = _git.ReadFiles(_root, "HEAD", ["src/Ağaç.cs", "src/Missing.cs", "src/Empty.cs"]);
+        var files = _git.ReadFiles(_repo.Root, "HEAD", ["src/Ağaç.cs", "src/Missing.cs", "src/Empty.cs"]);
 
         Assert.Equal(withBom, files["src/Ağaç.cs"]);
         Assert.Empty(files["src/Empty.cs"]);
@@ -49,31 +37,15 @@ public sealed class GitClientTests : IDisposable
 
         var reader = new CodeChangeReader(_git, new CodeChangeDetector(NullLogger<CodeChangeDetector>.Instance),
             NullLogger<CodeChangeReader>.Instance);
-        var changes = reader.Read(_root, _git.MergeBase(_root, "main"), _git.ChangedFiles(_root, "main"));
+        var changes = reader.Read(_repo.Root, _git.MergeBase(_repo.Root, "main"), _git.ChangedFiles(_repo.Root, "main"));
 
         Assert.True(changes.Single(c => c.Path == "A.cs").IsCosmetic);
         Assert.Equal([new SymbolChange("B", "M()", SymbolChangeKind.Modified)], changes.Single(c => c.Path == "B.cs").Symbols);
     }
 
-    private void Write(string relative, byte[] content)
-    {
-        var path = Path.Combine(_root, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, content);
-    }
+    private void Write(string relative, byte[] content) => _repo.WriteBytes(relative, content);
 
-    private void Git(params string[] args)
-    {
-        var psi = new ProcessStartInfo("git") { WorkingDirectory = _root, RedirectStandardError = true, RedirectStandardOutput = true };
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
+    private void Git(params string[] args) => _repo.Git(args);
 
-        using var process = Process.Start(psi)!;
-        process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)}: {process.StandardError.ReadToEnd()}");
-    }
-
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public void Dispose() => _repo.Dispose();
 }

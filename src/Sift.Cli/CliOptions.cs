@@ -17,7 +17,8 @@ internal sealed record CliOptions(string BaseRef, string RepoPath, bool TestsOnl
           --base <ref>         Git ref to compare against (default: origin/main)
           --repo <path>        Any path inside the repository (default: current directory)
           --tests-only         Only list affected test projects
-          --format <format>    text (default), json, or paths (one .csproj per line)
+          --format <format>    text (default), json, paths (one .csproj per line),
+                               or commands (one dotnet test command per test project)
           -v, --verbose        Write debug logs to stderr
           --log-level <level>  trace, debug, information, warning (default), error or none
         """;

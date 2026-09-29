@@ -1,21 +1,27 @@
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Sift.Core;
 
 namespace Sift.Cli;
 
+/// <summary>Counts shown in the summary line.</summary>
+/// <param name="ChangedFileCount">Number of changed files git reported.</param>
+/// <param name="ProjectCount">Number of projects in the repository.</param>
+internal sealed record RunStats(int ChangedFileCount, int ProjectCount);
+
 /// <summary>Everything <see cref="ResultWriter"/> needs to print one analysis.</summary>
 /// <param name="Options">Command line options, for the format and the tests-only filter.</param>
 /// <param name="RepoRoot">Repository root; printed paths are relative to it.</param>
-/// <param name="ChangedFileCount">Number of changed files git reported.</param>
-/// <param name="ProjectCount">Number of projects in the repository.</param>
-/// <param name="Result">The analysis result.</param>
+/// <param name="Stats">Counts for the summary line.</param>
+/// <param name="Result">Project-level result.</param>
+/// <param name="Tests">Test-level decision for every affected test project.</param>
 internal sealed record ResultReport(
     CliOptions Options,
     string RepoRoot,
-    int ChangedFileCount,
-    int ProjectCount,
-    ImpactResult Result);
+    RunStats Stats,
+    ImpactResult Result,
+    IReadOnlyList<TestProjectSelection> Tests);
 
 /// <summary>Prints an analysis result on stdout in the format chosen on the command line.</summary>
 internal static class ResultWriter
@@ -25,46 +31,84 @@ internal static class ResultWriter
     /// <param name="stdout">Destination, normally <see cref="Console.Out"/>.</param>
     public static void Write(ResultReport report, TextWriter stdout)
     {
-        var selected = report.Options.TestsOnly
-            ? [.. report.Result.Tests]
-            : report.Result.Affected;
-
         switch (report.Options.Format)
         {
             case OutputFormat.Paths:
-                WritePaths(report, selected, stdout);
+                WritePaths(report, stdout);
+                break;
+
+            case OutputFormat.Commands:
+                WriteCommands(report, stdout);
                 break;
 
             case OutputFormat.Json:
-                WriteJson(report, selected, stdout);
+                WriteJson(report, stdout);
                 break;
 
             default:
-                WriteText(report, selected, stdout);
+                WriteText(report, stdout);
                 break;
         }
     }
 
-    /// <summary>One relative .csproj path per line.</summary>
+    /// <summary>
+    /// One relative .csproj path per line. With <c>--tests-only</c>, test projects that can be
+    /// skipped are left out.
+    /// </summary>
     /// <param name="report">What to print.</param>
-    /// <param name="selected">Projects to list.</param>
     /// <param name="stdout">Destination.</param>
-    private static void WritePaths(ResultReport report, IReadOnlyList<AffectedProject> selected, TextWriter stdout)
+    private static void WritePaths(ResultReport report, TextWriter stdout)
     {
-        foreach (var affected in selected)
+        if (report.Options.TestsOnly)
+        {
+            foreach (var test in report.Tests)
+            {
+                if (test.Mode != TestRunMode.Skipped)
+                {
+                    stdout.WriteLine(Relative(report.RepoRoot, test.Project.Path));
+                }
+            }
+
+            return;
+        }
+
+        foreach (var affected in report.Result.Affected)
         {
             stdout.WriteLine(Relative(report.RepoRoot, affected.Project.Path));
         }
     }
 
-    /// <summary>Human readable summary with one line per project and its reason.</summary>
+    /// <summary>One <c>dotnet test</c> command per test project to run, ready for <c>sh</c>.</summary>
     /// <param name="report">What to print.</param>
-    /// <param name="selected">Projects to list.</param>
     /// <param name="stdout">Destination.</param>
-    private static void WriteText(ResultReport report, IReadOnlyList<AffectedProject> selected, TextWriter stdout)
+    private static void WriteCommands(ResultReport report, TextWriter stdout)
+    {
+        foreach (var test in report.Tests)
+        {
+            if (test.Mode == TestRunMode.Skipped)
+            {
+                continue;
+            }
+
+            var command = $"dotnet test {ShellQuote(Relative(report.RepoRoot, test.Project.Path))}";
+            if (test.Mode == TestRunMode.Filtered)
+            {
+                command += $" --filter {ShellQuote(TestFilter.ForClasses(test.TestClasses))}";
+            }
+
+            stdout.WriteLine(command);
+        }
+    }
+
+    /// <summary>Human readable summary: affected projects with reasons, then what to run per test project.</summary>
+    /// <param name="report">What to print.</param>
+    /// <param name="stdout">Destination.</param>
+    private static void WriteText(ResultReport report, TextWriter stdout)
     {
         var options = report.Options;
-        stdout.WriteLine($"{report.ChangedFileCount} changed file(s) vs {options.BaseRef}, {report.ProjectCount} project(s) in repo.");
+        var selected = options.TestsOnly ? [.. report.Result.Tests] : report.Result.Affected;
+
+        stdout.WriteLine($"{report.Stats.ChangedFileCount} changed file(s) vs {options.BaseRef}, {report.Stats.ProjectCount} project(s) in repo.");
         stdout.WriteLine($"{selected.Count} affected{(options.TestsOnly ? " test" : "")} project(s):");
 
         foreach (var affected in selected)
@@ -82,6 +126,29 @@ internal static class ResultWriter
         {
             stdout.WriteLine($"{report.Result.UnmappedFiles.Count} changed file(s) outside any project (ignored).");
         }
+
+        if (report.Tests.Count == 0)
+        {
+            return;
+        }
+
+        stdout.WriteLine();
+        stdout.WriteLine("Tests to run:");
+        foreach (var test in report.Tests)
+        {
+            var label = test.Mode switch
+            {
+                TestRunMode.All => "all     ",
+                TestRunMode.Filtered => "filtered",
+                _ => "skip    ",
+            };
+
+            stdout.WriteLine($"  {label} {Relative(report.RepoRoot, test.Project.Path)}  ({test.Reason})");
+            foreach (var testClass in test.TestClasses)
+            {
+                stdout.WriteLine($"             {testClass}");
+            }
+        }
     }
 
     /// <summary>
@@ -89,10 +156,11 @@ internal static class ResultWriter
     /// no intermediate objects for the shape.
     /// </summary>
     /// <param name="report">What to print.</param>
-    /// <param name="selected">Projects to list.</param>
     /// <param name="stdout">Destination.</param>
-    private static void WriteJson(ResultReport report, IReadOnlyList<AffectedProject> selected, TextWriter stdout)
+    private static void WriteJson(ResultReport report, TextWriter stdout)
     {
+        var selected = report.Options.TestsOnly ? [.. report.Result.Tests] : report.Result.Affected;
+
         using var buffer = new MemoryStream();
         using (var json = new Utf8JsonWriter(buffer, new JsonWriterOptions
                {
@@ -103,7 +171,7 @@ internal static class ResultWriter
         {
             json.WriteStartObject();
             json.WriteString("base"u8, report.Options.BaseRef);
-            json.WriteNumber("changedFiles"u8, report.ChangedFileCount);
+            json.WriteNumber("changedFiles"u8, report.Stats.ChangedFileCount);
 
             json.WriteStartArray("projects"u8);
             foreach (var affected in selected)
@@ -116,33 +184,56 @@ internal static class ResultWriter
             }
             json.WriteEndArray();
 
-            WriteStringArray(json, "unmappedFiles"u8, report.Result.UnmappedFiles);
-            WriteStringArray(json, "cosmeticFiles"u8, report.Result.CosmeticFiles);
-
-            json.WriteStartArray("codeChanges"u8);
-            foreach (var change in report.Result.CodeChanges)
+            json.WriteStartArray("tests"u8);
+            foreach (var test in report.Tests)
             {
                 json.WriteStartObject();
-                json.WriteString("path"u8, change.Path);
-                json.WriteBoolean("affectsWholeProject"u8, change.AffectsWholeProject);
-                json.WriteStartArray("symbols"u8);
-                foreach (var symbol in change.Symbols)
+                json.WriteString("project"u8, Relative(report.RepoRoot, test.Project.Path));
+                json.WriteString("mode"u8, test.Mode.ToString());
+                json.WriteString("reason"u8, test.Reason);
+                WriteStringArray(json, "classes"u8, test.TestClasses);
+                if (test.Mode == TestRunMode.Filtered)
                 {
-                    json.WriteStartObject();
-                    json.WriteString("type"u8, symbol.TypeName);
-                    json.WriteString("member"u8, symbol.MemberName);
-                    json.WriteString("kind"u8, symbol.Kind.ToString());
-                    json.WriteEndObject();
+                    json.WriteString("filter"u8, TestFilter.ForClasses(test.TestClasses));
                 }
-                json.WriteEndArray();
                 json.WriteEndObject();
             }
             json.WriteEndArray();
 
+            WriteStringArray(json, "unmappedFiles"u8, report.Result.UnmappedFiles);
+            WriteStringArray(json, "cosmeticFiles"u8, report.Result.CosmeticFiles);
+            WriteCodeChanges(json, report.Result.CodeChanges);
+
             json.WriteEndObject();
         }
 
-        stdout.WriteLine(System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
+        stdout.WriteLine(Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
+    }
+
+    /// <summary>Writes the <c>codeChanges</c> array: changed symbols per C# file.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="changes">Non-cosmetic code changes.</param>
+    private static void WriteCodeChanges(Utf8JsonWriter json, IReadOnlyList<CodeChange> changes)
+    {
+        json.WriteStartArray("codeChanges"u8);
+        foreach (var change in changes)
+        {
+            json.WriteStartObject();
+            json.WriteString("path"u8, change.Path);
+            json.WriteBoolean("affectsWholeProject"u8, change.AffectsWholeProject);
+            json.WriteStartArray("symbols"u8);
+            foreach (var symbol in change.Symbols)
+            {
+                json.WriteStartObject();
+                json.WriteString("type"u8, symbol.TypeName);
+                json.WriteString("member"u8, symbol.MemberName);
+                json.WriteString("kind"u8, symbol.Kind.ToString());
+                json.WriteEndObject();
+            }
+            json.WriteEndArray();
+            json.WriteEndObject();
+        }
+        json.WriteEndArray();
     }
 
     /// <summary>Writes a JSON array of strings under <paramref name="name"/>.</summary>
@@ -159,6 +250,10 @@ internal static class ResultWriter
 
         json.WriteEndArray();
     }
+
+    /// <summary>Wraps <paramref name="value"/> in single quotes for POSIX shells, escaping embedded quotes.</summary>
+    /// <param name="value">Argument to quote.</param>
+    private static string ShellQuote(string value) => $"'{value.Replace("'", @"'\''", StringComparison.Ordinal)}'";
 
     /// <summary>Path of <paramref name="path"/> relative to <paramref name="root"/>, with '/' separators.</summary>
     /// <param name="root">Repository root.</param>

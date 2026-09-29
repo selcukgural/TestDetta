@@ -14,27 +14,16 @@ namespace Sift.Core;
 /// <param name="logger">Receives one debug line per changed symbol.</param>
 public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logger)
 {
-    /// <summary>
-    /// Preview language version so that any syntax the SDK accepts parses; doc comments are read as
-    /// plain comments because they never influence behaviour.
-    /// </summary>
-    private static readonly CSharpParseOptions ParseOptions = CSharpParseOptions.Default
-        .WithLanguageVersion(LanguageVersion.Preview)
-        .WithDocumentationMode(DocumentationMode.None);
-
-    /// <summary>Name used for the type the compiler generates for top-level statements.</summary>
-    private const string TopLevelProgramType = "Program";
-
     /// <summary>Compares the two versions of <paramref name="path"/>.</summary>
     /// <param name="path">File path relative to the repository root; only used in the result and logs.</param>
     /// <param name="oldText">Content at the base revision, or null when the file was added.</param>
     /// <param name="newText">Content in the working tree, or null when the file was deleted.</param>
     public CodeChange Detect(string path, SourceText? oldText, SourceText? newText)
     {
-        var oldRoot = Parse(oldText);
-        var newRoot = Parse(newText);
+        var oldRoot = DeclarationWalker.Parse(oldText);
+        var newRoot = DeclarationWalker.Parse(newText);
 
-        if (SignificantEquals(oldRoot, newRoot, DescendAll))
+        if (SignificantEquals(oldRoot, newRoot, DeclarationWalker.DescendAll))
         {
             LogCosmetic(path);
             return new CodeChange(path, IsCosmetic: true, AffectsWholeProject: false, []);
@@ -42,8 +31,8 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
 
         var affectsWholeProject = !SignificantEquals(ProjectWideNodes(oldRoot), ProjectWideNodes(newRoot));
         var symbols = new List<SymbolChange>();
-        var oldDeclarations = Collect(oldRoot);
-        var newDeclarations = Collect(newRoot);
+        var oldDeclarations = DeclarationWalker.Collect(oldRoot);
+        var newDeclarations = DeclarationWalker.Collect(newRoot);
 
         // Types first: a type that only exists on one side is reported once, without its members.
         var wholeTypeChanges = new HashSet<string>(StringComparer.Ordinal);
@@ -150,16 +139,11 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
             oldRoot.Members.Any(static m => m is GlobalStatementSyntax) ||
             newRoot.Members.Any(static m => m is GlobalStatementSyntax);
 
-        if (hasTopLevelStatements && alreadyModified.Add(TopLevelProgramType))
+        if (hasTopLevelStatements && alreadyModified.Add(DeclarationWalker.TopLevelProgramType))
         {
-            symbols.Add(new SymbolChange(TopLevelProgramType, null, SymbolChangeKind.Modified));
+            symbols.Add(new SymbolChange(DeclarationWalker.TopLevelProgramType, null, SymbolChangeKind.Modified));
         }
     }
-
-    /// <summary>Parses <paramref name="text"/>; a missing file parses as an empty compilation unit.</summary>
-    /// <param name="text">File content, or null.</param>
-    private static CompilationUnitSyntax Parse(SourceText? text) =>
-        (CompilationUnitSyntax)CSharpSyntaxTree.ParseText(text ?? SourceText.From(string.Empty), ParseOptions).GetRoot();
 
     /// <summary>The <c>global using</c> directives and assembly/module attributes, which apply project-wide.</summary>
     /// <param name="root">Compilation unit.</param>
@@ -178,150 +162,6 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
             yield return attributes;
         }
     }
-
-    /// <summary>A type or member declaration and how to compare it.</summary>
-    /// <param name="TypeName">Qualified name of the type, or of the containing type for a member.</param>
-    /// <param name="MemberName">Member signature, or null for the type declaration itself.</param>
-    /// <param name="Node">The declaration node.</param>
-    /// <param name="Descend">
-    /// Which child nodes the comparison looks into, given the node and the declaration being
-    /// compared. For a type this skips its members, which are compared on their own; for a member it
-    /// is everything.
-    /// </param>
-    private sealed record Declaration(
-        string TypeName,
-        string? MemberName,
-        SyntaxNode Node,
-        Func<SyntaxNode, SyntaxNode, bool> Descend);
-
-    /// <summary>Collects every type, delegate and member declaration of a file, keyed by identity.</summary>
-    /// <param name="root">Compilation unit.</param>
-    private static Dictionary<string, Declaration> Collect(CompilationUnitSyntax root)
-    {
-        var result = new Dictionary<string, Declaration>(StringComparer.Ordinal);
-        Visit(root, containingType: null, currentNamespace: string.Empty, result);
-        return result;
-    }
-
-    /// <summary>Recursively collects declarations below <paramref name="container"/>.</summary>
-    /// <param name="container">Compilation unit, namespace or type.</param>
-    /// <param name="containingType">Qualified name of the enclosing type, or null outside types.</param>
-    /// <param name="currentNamespace">Enclosing namespace, empty for the global namespace.</param>
-    /// <param name="result">Collected declarations; updated in place.</param>
-    private static void Visit(
-        SyntaxNode container,
-        string? containingType,
-        string currentNamespace,
-        Dictionary<string, Declaration> result)
-    {
-        foreach (var child in container.ChildNodes())
-        {
-            switch (child)
-            {
-                case BaseNamespaceDeclarationSyntax ns:
-                    Visit(ns, containingType: null, Qualify(currentNamespace, ns.Name.ToString()), result);
-                    break;
-
-                case BaseTypeDeclarationSyntax type:
-                    var typeName = Qualify(containingType ?? currentNamespace, TypeIdentity(type));
-                    Add(result, typeName, new Declaration(typeName, null, type, DescendTypeShell));
-                    Visit(type, typeName, currentNamespace, result);
-                    break;
-
-                case DelegateDeclarationSyntax @delegate:
-                    var delegateName = Qualify(
-                        containingType ?? currentNamespace,
-                        @delegate.Identifier.ValueText + Arity(@delegate.TypeParameterList));
-                    Add(result, delegateName, new Declaration(delegateName, null, @delegate, DescendAll));
-                    break;
-
-                case MemberDeclarationSyntax member when containingType is not null:
-                    var memberName = MemberIdentity(member);
-                    Add(result, $"{containingType}::{memberName}", new Declaration(containingType, memberName, member, DescendAll));
-                    break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Adds <paramref name="declaration"/> under <paramref name="key"/>, numbering duplicates such as
-    /// two parts of a partial type in the same file. Both versions number in source order, so the
-    /// same duplicate gets the same key on both sides.
-    /// </summary>
-    /// <param name="result">Collected declarations.</param>
-    /// <param name="key">Identity of the declaration.</param>
-    /// <param name="declaration">The declaration to add.</param>
-    private static void Add(Dictionary<string, Declaration> result, string key, Declaration declaration)
-    {
-        var unique = key;
-        for (var n = 2; !result.TryAdd(unique, declaration); n++)
-        {
-            unique = $"{key}#{n}";
-        }
-    }
-
-    /// <summary>Type name with generic arity, such as <c>Box`1</c>.</summary>
-    /// <param name="type">Type declaration.</param>
-    private static string TypeIdentity(BaseTypeDeclarationSyntax type) =>
-        type.Identifier.ValueText + (type is TypeDeclarationSyntax t ? Arity(t.TypeParameterList) : string.Empty);
-
-    /// <summary>Signature that tells overloads apart: name, generic arity and parameter types.</summary>
-    /// <param name="member">Member declaration inside a type.</param>
-    private static string MemberIdentity(MemberDeclarationSyntax member) => member switch
-    {
-        MethodDeclarationSyntax m =>
-            $"{Explicit(m.ExplicitInterfaceSpecifier)}{m.Identifier.ValueText}{Arity(m.TypeParameterList)}({Parameters(m.ParameterList)})",
-        ConstructorDeclarationSyntax c =>
-            $"{(c.Modifiers.Any(SyntaxKind.StaticKeyword) ? ".cctor" : ".ctor")}({Parameters(c.ParameterList)})",
-        DestructorDeclarationSyntax => "Finalize()",
-        PropertyDeclarationSyntax p => Explicit(p.ExplicitInterfaceSpecifier) + p.Identifier.ValueText,
-        IndexerDeclarationSyntax i => $"{Explicit(i.ExplicitInterfaceSpecifier)}this[{Parameters(i.ParameterList)}]",
-        EventDeclarationSyntax e => Explicit(e.ExplicitInterfaceSpecifier) + e.Identifier.ValueText,
-        BaseFieldDeclarationSyntax f => string.Join(',', f.Declaration.Variables.Select(static v => v.Identifier.ValueText)),
-        OperatorDeclarationSyntax o => $"operator {o.OperatorToken.Text}({Parameters(o.ParameterList)})",
-        ConversionOperatorDeclarationSyntax c =>
-            $"operator {c.ImplicitOrExplicitKeyword.Text} {Compact(c.Type)}({Parameters(c.ParameterList)})",
-        EnumMemberDeclarationSyntax e => e.Identifier.ValueText,
-        _ => member.Kind().ToString(),
-    };
-
-    /// <summary><c>`n</c> for a generic declaration, empty otherwise.</summary>
-    /// <param name="parameters">Type parameter list, or null.</param>
-    private static string Arity(TypeParameterListSyntax? parameters) =>
-        parameters is { Parameters.Count: > 0 } ? $"`{parameters.Parameters.Count}" : string.Empty;
-
-    /// <summary>Interface prefix of an explicit implementation, such as <c>IDisposable.</c>.</summary>
-    /// <param name="specifier">Explicit interface specifier, or null.</param>
-    private static string Explicit(ExplicitInterfaceSpecifierSyntax? specifier) =>
-        specifier is null ? string.Empty : Compact(specifier.Name) + ".";
-
-    /// <summary>Comma-separated parameter types including <c>ref</c>/<c>out</c>/<c>in</c>/<c>params</c>.</summary>
-    /// <param name="list">Parameter list.</param>
-    private static string Parameters(BaseParameterListSyntax list) =>
-        string.Join(',', list.Parameters.Select(static p =>
-            p.Modifiers.Count == 0 ? Compact(p.Type) : $"{p.Modifiers.ToString()} {Compact(p.Type)}"));
-
-    /// <summary>Source text of <paramref name="node"/> without any whitespace, so formatting does not change identities.</summary>
-    /// <param name="node">Type syntax or name, or null.</param>
-    private static string Compact(SyntaxNode? node) =>
-        node is null ? string.Empty : string.Concat(node.DescendantTokens().Select(static t => t.Text));
-
-    /// <summary>Joins a namespace or type with a nested name.</summary>
-    /// <param name="prefix">Enclosing namespace or type; empty for the global namespace.</param>
-    /// <param name="name">Nested name.</param>
-    private static string Qualify(string prefix, string name) => prefix.Length == 0 ? name : $"{prefix}.{name}";
-
-    /// <summary>Compares everything below a node.</summary>
-    /// <param name="node">Candidate node.</param>
-    /// <param name="root">Node being compared.</param>
-    private static bool DescendAll(SyntaxNode node, SyntaxNode root) => true;
-
-    /// <summary>Compares a type's own declaration but not its members, which are compared on their own.</summary>
-    /// <param name="node">Candidate node.</param>
-    /// <param name="type">The type being compared.</param>
-    /// <remarks>Takes the type as an argument so one delegate works for the old and the new tree.</remarks>
-    private static bool DescendTypeShell(SyntaxNode node, SyntaxNode type) =>
-        node == type || node.Parent != type || node is not MemberDeclarationSyntax;
 
     /// <summary>
     /// Compares what lies outside every type and delegate: usings, namespace lines and top-level statements.
@@ -342,8 +182,8 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
     /// <param name="left">First sequence.</param>
     /// <param name="right">Second sequence.</param>
     private static bool SignificantEquals(IEnumerable<SyntaxNode> left, IEnumerable<SyntaxNode> right) =>
-        left.SelectMany(static n => SignificantText(n, DescendAll))
-            .SequenceEqual(right.SelectMany(static n => SignificantText(n, DescendAll)), StringComparer.Ordinal);
+        left.SelectMany(static n => SignificantText(n, DeclarationWalker.DescendAll))
+            .SequenceEqual(right.SelectMany(static n => SignificantText(n, DeclarationWalker.DescendAll)), StringComparer.Ordinal);
 
     /// <summary>
     /// Token texts of <paramref name="node"/> interleaved with its preprocessor directives and

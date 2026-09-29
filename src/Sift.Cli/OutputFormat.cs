@@ -11,4 +11,7 @@ internal enum OutputFormat
 
     /// <summary>One .csproj path per line, relative to the repository root, for piping into <c>dotnet test</c>.</summary>
     Paths,
+
+    /// <summary>One shell-quoted <c>dotnet test</c> command per test project that needs to run.</summary>
+    Commands,
 }

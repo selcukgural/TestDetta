@@ -45,20 +45,9 @@ internal static partial class CliApp
 
         try
         {
-            var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
-            var root = git.TopLevel(options.RepoPath);
-            var changed = git.ChangedFiles(root, options.BaseRef);
-            var mergeBase = git.MergeBase(root, options.BaseRef);
-            var codeChanges = new CodeChangeReader(
-                    git,
-                    new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()),
-                    loggerFactory.CreateLogger<CodeChangeReader>())
-                .Read(root, mergeBase, changed);
-            var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>()).Load(root);
-            var result = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>())
-                .Analyze(graph, root, changed, codeChanges);
-
-            ResultWriter.Write(new ResultReport(options, root, changed.Count, graph.Projects.Count, result), stdout);
+            var analysis = new AnalysisPipeline(loggerFactory).Run(options.RepoPath, options.BaseRef);
+            var stats = new RunStats(analysis.ChangedFiles.Count, analysis.Graph.Projects.Count);
+            ResultWriter.Write(new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Tests), stdout);
             return Success;
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException
