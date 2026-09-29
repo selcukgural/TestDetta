@@ -49,8 +49,9 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory)
             .Read(root, mergeBase, changed);
 
         var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>()).Load(root);
+        var packageChanges = PackageChanges(git, root, mergeBase, changed);
         var impact = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>())
-            .Analyze(graph, root, changed, codeChanges);
+            .Analyze(graph, root, changed, codeChanges, packageChanges);
         var maps = LoadCoverageMaps(root, graph, mergeBase);
         var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>())
             .Select(new TestSelectionRequest(graph, root, changed, impact, maps));
@@ -98,6 +99,35 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory)
         }
 
         return new TestPlan(tests, withTimings == 0 ? null : new TimeEstimate(full, selected), withoutTimings);
+    }
+
+    /// <summary>Compares the base and working-tree versions of every changed central package versions file.</summary>
+    /// <param name="git">Reads the base versions.</param>
+    /// <param name="root">Repository root.</param>
+    /// <param name="baseCommit">Merge base.</param>
+    /// <param name="changed">Changed files.</param>
+    private static List<PackageVersionChange> PackageChanges(GitClient git, string root, string baseCommit, IReadOnlyList<string> changed)
+    {
+        var files = changed
+            .Where(static f => string.Equals(Path.GetFileName(f), PackageVersionChange.FileName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (files.Count == 0)
+        {
+            return [];
+        }
+
+        var old = git.ReadFiles(root, baseCommit, files);
+        var changes = new List<PackageVersionChange>(files.Count);
+        foreach (var file in files)
+        {
+            var current = Path.Combine(root, file);
+            changes.Add(PackageVersionChange.Compare(
+                file,
+                old.TryGetValue(file, out var bytes) ? System.Text.Encoding.UTF8.GetString(bytes) : null,
+                File.Exists(current) ? File.ReadAllText(current) : null));
+        }
+
+        return changes;
     }
 
     /// <summary>

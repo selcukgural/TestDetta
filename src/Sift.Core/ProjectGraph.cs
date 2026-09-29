@@ -101,7 +101,8 @@ public sealed class ProjectGraph
             }
         }
 
-        if (owners.Count == 0 && BuildOrSourceExtensions.Contains(Path.GetExtension(file)))
+        // Directory-wide files are matched by name elsewhere; they are not what an unresolved import hides.
+        if (owners.Count == 0 && BuildOrSourceExtensions.Contains(Path.GetExtension(file)) && !BuildFiles.IsDirectoryWide(file))
         {
             foreach (var project in _unresolved)
             {

@@ -167,6 +167,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             Imports = inputs.Imports,
             ExternalItems = inputs.ExternalItems,
             HasUnresolvedInputs = inputs.Unresolved,
+            PackageReferences = inputs.Packages,
         };
 
         return assemblyName is null ? node : node with { AssemblyName = assemblyName };
@@ -187,6 +188,9 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
         /// <summary>True when an import or item path could not be resolved.</summary>
         public bool Unresolved { get; set; }
+
+        /// <summary>Packages named by <c>PackageReference</c> items.</summary>
+        public HashSet<string> Packages { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -238,6 +242,12 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     }
                 }
 
+                continue;
+            }
+
+            if (name == "PackageReference" && (element.Attribute("Include") ?? element.Attribute("Update"))?.Value is { Length: > 0 } package)
+            {
+                inputs.Packages.Add(package);
                 continue;
             }
 

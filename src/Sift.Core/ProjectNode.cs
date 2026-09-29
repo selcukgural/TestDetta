@@ -52,4 +52,11 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     /// claims are then assumed to affect this project.
     /// </summary>
     public bool HasUnresolvedInputs { get; init; }
+
+    /// <summary>
+    /// Packages the project references with <c>PackageReference</c>, in its own file, the files it
+    /// imports or the <c>Directory.Build.*</c> files above it. Used to tell which projects a central
+    /// package version change reaches.
+    /// </summary>
+    public IReadOnlySet<string> PackageReferences { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }

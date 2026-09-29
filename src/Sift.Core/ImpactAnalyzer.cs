@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using Microsoft.Extensions.Logging;
 
 namespace Sift.Core;
@@ -10,15 +9,6 @@ namespace Sift.Core;
 /// <param name="logger">Receives one debug line per changed file and per propagated dependency.</param>
 public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
 {
-    /// <summary>
-    /// Files that MSBuild or the SDK pick up implicitly for every project beneath their directory,
-    /// so a change affects all of those projects.
-    /// </summary>
-    private static readonly FrozenSet<string> DirectoryWideFiles = FrozenSet.Create(
-        StringComparer.OrdinalIgnoreCase,
-        "Directory.Build.props", "Directory.Build.targets", "Directory.Build.rsp",
-        "Directory.Packages.props", "Directory.Solution.props", "Directory.Solution.targets",
-        "global.json", "NuGet.config", ".editorconfig");
 
     /// <summary>Returns the projects affected by <paramref name="changedFiles"/>.</summary>
     /// <param name="graph">Projects of the repository.</param>
@@ -28,11 +18,16 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
     /// Code-level changes of the C# files among <paramref name="changedFiles"/>. Files reported as
     /// cosmetic are skipped; C# files without an entry are treated as changed.
     /// </param>
+    /// <param name="packageChanges">
+    /// Changes of central package version files. A file whose change is narrowed to packages affects
+    /// only the projects below it that reference one of them; any other change of it affects all.
+    /// </param>
     public ImpactResult Analyze(
         ProjectGraph graph,
         string repoRoot,
         IEnumerable<string> changedFiles,
-        IReadOnlyList<CodeChange> codeChanges)
+        IReadOnlyList<CodeChange> codeChanges,
+        IReadOnlyList<PackageVersionChange>? packageChanges = null)
     {
         var root = Paths.Normalize(repoRoot);
         var reasons = new Dictionary<string, ImpactReason>(Paths.Comparer);
@@ -62,9 +57,10 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
 
             var file = Paths.Normalize(Path.Combine(root, relative));
 
-            if (DirectoryWideFiles.Contains(Path.GetFileName(file)))
+            if (BuildFiles.IsDirectoryWide(file))
             {
-                MarkBuildConfiguration(graph, file, reasons);
+                var packages = packageChanges?.FirstOrDefault(c => c.Path == relative)?.Packages;
+                MarkBuildConfiguration(graph, file, reasons, packages);
                 continue;
             }
 
@@ -119,7 +115,15 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="file">Normalized path of the changed build-wide file.</param>
     /// <param name="reasons">Selected projects so far; updated in place.</param>
-    private void MarkBuildConfiguration(ProjectGraph graph, string file, Dictionary<string, ImpactReason> reasons)
+    /// <param name="packages">
+    /// For a central package versions file whose change is only package versions, the changed
+    /// packages; only projects referencing one of them are marked. Null marks every project below.
+    /// </param>
+    private void MarkBuildConfiguration(
+        ProjectGraph graph,
+        string file,
+        Dictionary<string, ImpactReason> reasons,
+        IReadOnlySet<string>? packages)
     {
         var dir = Paths.Normalize(Path.GetDirectoryName(file)!);
         var count = 0;
@@ -127,6 +131,11 @@ public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
         foreach (var project in graph.Projects)
         {
             if (!Paths.IsUnder(project.Directory, dir))
+            {
+                continue;
+            }
+
+            if (packages is not null && !packages.Overlaps(project.PackageReferences))
             {
                 continue;
             }
