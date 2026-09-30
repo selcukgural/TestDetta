@@ -79,16 +79,30 @@ internal sealed class SourceIndex
     private readonly Dictionary<string, List<IndexedMember>> _membersByType;
     private readonly Dictionary<string, IndexedType> _types;
 
+    /// <summary>
+    /// Types by name alone, for questions about the source type rather than one project's copy of
+    /// it: when projects share the file, <see cref="IndexedType.MayBeFoundByReflection"/> is true if
+    /// any copy says so.
+    /// </summary>
+    private readonly Dictionary<string, IndexedType> _typesByName = new(StringComparer.Ordinal);
+
     /// <summary>Union of the references of all members of a type, including its declaration and every partial part.</summary>
     private readonly Dictionary<string, HashSet<string>> _typeReferences;
 
     /// <summary>Builds the lookup tables from already collected members and types.</summary>
     /// <param name="members">All indexed members.</param>
-    /// <param name="types">All indexed types, one entry per type even when it is partial.</param>
+    /// <param name="types">All indexed types, one entry per type and project even when it is partial.</param>
     public SourceIndex(IReadOnlyList<IndexedMember> members, Dictionary<string, IndexedType> types)
     {
         Members = members;
         _types = types;
+        foreach (var type in types.Values)
+        {
+            _typesByName[type.TypeName] = _typesByName.TryGetValue(type.TypeName, out var existing)
+                ? existing with { MayBeFoundByReflection = existing.MayBeFoundByReflection || type.MayBeFoundByReflection }
+                : type;
+        }
+
         _referencesTo = new Dictionary<string, List<IndexedMember>>(StringComparer.Ordinal);
         _membersByType = new Dictionary<string, List<IndexedMember>>(StringComparer.Ordinal);
         _typeReferences = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
@@ -131,7 +145,7 @@ internal sealed class SourceIndex
 
     /// <summary>The type called <paramref name="typeName"/>, or null when no indexed file declares it.</summary>
     /// <param name="typeName">Qualified type name.</param>
-    public IndexedType? FindType(string typeName) => _types.GetValueOrDefault(typeName);
+    public IndexedType? FindType(string typeName) => _typesByName.GetValueOrDefault(typeName);
 
     /// <summary>The member with signature <paramref name="memberName"/> in <paramref name="typeName"/>, or null.</summary>
     /// <param name="typeName">Qualified type name.</param>

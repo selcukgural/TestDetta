@@ -68,7 +68,10 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
             members.AddRange(index.Members);
             foreach (var type in index.Types)
             {
-                types[type.TypeName] = types.TryGetValue(type.TypeName, out var existing)
+                // Per project: a source file linked into several test projects (a shared .projitems)
+                // declares its test classes once in each, and each project runs them.
+                var key = TypeKey(type);
+                types[key] = types.TryGetValue(key, out var existing)
                     ? existing with
                     {
                         IsRunnableClass = existing.IsRunnableClass && type.IsRunnableClass,
@@ -85,6 +88,10 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         LogIndexed(files.Count, projects.Count, members.Count, stopwatch.ElapsedMilliseconds);
         return new SourceIndex(members, types);
     }
+
+    /// <summary>Key of a type in the index: the same source type compiled by two projects is two entries.</summary>
+    /// <param name="type">Indexed type.</param>
+    private static string TypeKey(IndexedType type) => type.ProjectPath + "|" + type.TypeName;
 
     /// <summary>
     /// Sets <see cref="IndexedType.CanContainTests"/> for concrete classes that declare test methods
@@ -116,7 +123,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         {
             if (type.InTestProject && type.IsRunnableClass && DeclaresOrInheritsTests(type, bySimpleName, depth: 0))
             {
-                types[type.TypeName] = type with { CanContainTests = true };
+                types[TypeKey(type)] = type with { CanContainTests = true };
             }
         }
     }
