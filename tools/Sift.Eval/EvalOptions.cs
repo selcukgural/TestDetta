@@ -24,6 +24,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     /// <summary>Help text.</summary>
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
+               sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [-v]
+               sift-eval --summarize <dir> --corpus <file>
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
         merge's first parent, lets Sift select tests for the merge, runs the selection and the full
@@ -43,6 +45,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --cleanup <command>    Shell command run after every test run, e.g. to remove test containers
           --out <dir>            Work and report directory (default: a new directory under the temp folder)
           -v, --verbose          Debug logs on stderr
+
+        With --corpus, every repository of the corpus file is evaluated with its own settings into
+        <out>/<name>, and <out>/summary.md adds them up. --summarize only rebuilds the summary.
         """;
 
     /// <summary>Parses the command line.</summary>

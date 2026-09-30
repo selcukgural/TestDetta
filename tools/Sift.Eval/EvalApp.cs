@@ -17,12 +17,31 @@ internal static partial class EvalApp
             return 0;
         }
 
+        if (BatchOptions.IsBatch(args))
+        {
+            if (!BatchOptions.TryParse(args, out var batch, out var batchError))
+            {
+                Console.Error.WriteLine($"{batchError}\n\n{EvalOptions.Usage}");
+                return 2;
+            }
+
+            return BatchRunner.Run(batch);
+        }
+
         if (!EvalOptions.TryParse(args, out var options, out var error))
         {
             Console.Error.WriteLine($"{error}\n\n{EvalOptions.Usage}");
             return 2;
         }
 
+        return RunOne(options, Console.Out);
+    }
+
+    /// <summary>Evaluates one repository; returns 0 when nothing was missed, 3 when a test class was.</summary>
+    /// <param name="options">What to evaluate and where to write.</param>
+    /// <param name="output">Receives the Markdown summaries.</param>
+    public static int RunOne(EvalOptions options, TextWriter output)
+    {
         Directory.CreateDirectory(options.Output);
         using var loggerFactory = new StderrLoggerFactory(Console.Error, options.LogLevel);
         var logger = loggerFactory.CreateLogger(typeof(EvalApp).FullName!);
@@ -60,8 +79,8 @@ internal static partial class EvalApp
                 EvalReport.Write(options.Output, options.Repository, results);
             }
 
-            Console.Out.Write(EvalReport.Markdown(options.Repository, results));
-            Console.Out.WriteLine($"\nReports: {Path.Combine(options.Output, "results.md")}");
+            output.Write(EvalReport.Markdown(options.Repository, results));
+            output.WriteLine($"\nReports: {Path.Combine(options.Output, "results.md")}");
             passed = results.All(static r => r.Safety?.Passed ?? true);
         }
 
@@ -75,8 +94,8 @@ internal static partial class EvalApp
                 progress => SyntheticReport.Write(options.Output, options.Repository, progress));
             SyntheticReport.Write(options.Output, options.Repository, run);
 
-            Console.Out.Write(SyntheticReport.Markdown(options.Repository, run).Split("\n## Mutants", 2)[0]);
-            Console.Out.WriteLine($"\nReports: {Path.Combine(options.Output, "synthetic.md")}");
+            output.Write(SyntheticReport.Markdown(options.Repository, run).Split("\n## Mutants", 2)[0]);
+            output.WriteLine($"\nReports: {Path.Combine(options.Output, "synthetic.md")}");
             passed &= run.Error is null && run.Mutants.All(static m => m.MissedClasses.Count == 0);
         }
 

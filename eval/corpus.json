@@ -1,0 +1,57 @@
+// Repositories sift-eval measures Sift on: sift-eval --corpus eval/corpus.json --out <dir>.
+// Tags say what a repository exercises; the summary reports results per tag. Keep each entry's
+// settings next to it: what it needs to build and test on a plain macOS/Linux machine.
+{
+  "defaults": {
+    "branch": "main",
+    "framework": "net10.0",
+    "parallel": 4,
+    "synthetic": 100,
+    "merges": 0
+  },
+  "repositories": [
+    {
+      "name": "roslynator",
+      "url": "https://github.com/dotnet/roslynator.git",
+      "tags": ["analyzers", "large", "xunit"],
+      "notes": "48 projects, AssemblyName built from a property prefix"
+    },
+    {
+      "name": "polly",
+      "url": "https://github.com/App-vNext/Polly.git",
+      "tags": ["mtp", "xunit-v3", "async", "packages"],
+      "notes": "test packages come from eng/$(ProjectType).targets; runs Microsoft code coverage in every test run"
+    },
+    {
+      "name": "nodatime",
+      "url": "https://github.com/nodatime/nodatime.git",
+      "tags": ["nunit", "conditional-compilation", "large-suite"],
+      "notes": "about 26,000 tests, heavy use of #if"
+    },
+    {
+      "name": "mapperly",
+      "url": "https://github.com/riok/mapperly.git",
+      "tags": ["source-generator", "xunit-v3", "snapshots"],
+      "notes": "the generator runs in most tests; Verify snapshots"
+    },
+    {
+      "name": "spectre",
+      "url": "https://github.com/spectreconsole/spectre.console.git",
+      "tags": ["xunit", "snapshots", "polyfill"]
+    },
+    {
+      "name": "communitytoolkit",
+      "url": "https://github.com/CommunityToolkit/dotnet.git",
+      "tags": ["mstest", "source-generator", "analyzers", "conditional-compilation", "multi-target"],
+      "notes": "whole analyzer files inside #if ROSLYN_*; AssemblyName from a property function"
+    },
+    {
+      "name": "argu",
+      "url": "https://github.com/fsprojects/Argu.git",
+      "tags": ["fsharp"],
+      "synthetic": 0,
+      "merges": 6,
+      "notes": "F# is not analysed; history only"
+    }
+  ]
+}

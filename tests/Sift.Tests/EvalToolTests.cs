@@ -134,6 +134,34 @@ public sealed class EvalToolTests : IDisposable
         Assert.Empty(Strings(mutants["Calc.Formatter.Format"], "missed"));
     }
 
+    [Fact]
+    public void Corpus_run_evaluates_each_repository_and_sums_up()
+    {
+        Directory.CreateDirectory(_output);
+        var corpus = Path.Combine(_output, "corpus.json");
+        File.WriteAllText(corpus, $$"""
+            { "repositories": [ { "name": "calc", "url": {{JsonSerializer.Serialize(_repo.Root)}}, "synthetic": 10, "tags": ["reflection"] } ] }
+            """);
+
+        var stdout = Console.Out;
+        int exitCode;
+        try
+        {
+            Console.SetOut(TextWriter.Null);
+            exitCode = EvalApp.Run(["--corpus", corpus, "--out", Path.Combine(_output, "runs")]);
+        }
+        finally
+        {
+            Console.SetOut(stdout);
+        }
+
+        var summary = File.ReadAllText(Path.Combine(_output, "runs", "summary.md"));
+        Assert.Equal(3, exitCode);
+        Assert.True(File.Exists(Path.Combine(_output, "runs", "calc", "synthetic.json")));
+        Assert.Contains("**Missed: 1 of 4 failing mutants**", summary, StringComparison.Ordinal);
+        Assert.Contains("| calc | reflection | done | 4 | 1 |", summary, StringComparison.Ordinal);
+    }
+
     /// <summary>A string array property of a JSON object.</summary>
     private static string[] Strings(JsonElement element, string property) =>
         [.. element.GetProperty(property).EnumerateArray().Select(static e => e.GetString()!)];
