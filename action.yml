@@ -81,7 +81,14 @@ runs:
           echo "::error::Unsupported base branch name."
           exit 1
         fi
-        git fetch --no-tags --quiet origin "+refs/heads/$base:refs/remotes/origin/$base"
+        # actions/checkout with fetch-depth: 0 already has every branch. Fetch only when the base is
+        # missing: with persist-credentials: false a private repository cannot be fetched again.
+        if ! git rev-parse --verify --quiet "refs/remotes/origin/$base^{commit}" > /dev/null; then
+          if ! git fetch --no-tags --quiet origin "+refs/heads/$base:refs/remotes/origin/$base"; then
+            echo "::error::Could not fetch the base branch. Check out with fetch-depth: 0, or keep the checkout's credentials."
+            exit 1
+          fi
+        fi
         echo "ref=origin/$base" >> "$GITHUB_OUTPUT"
         echo "merge-base=$(git merge-base "origin/$base" HEAD)" >> "$GITHUB_OUTPUT"
 
