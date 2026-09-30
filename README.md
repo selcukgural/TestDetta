@@ -134,6 +134,9 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
   (code active only under a mix like `#if A && !B`) counts as a change to the whole project.
 - `AssemblyName` values that need MSBuild (`$(Prefix)Name`, property functions) are asked from
   MSBuild when recording, one query per such project.
+- Code written by source generators is not in the source tree; `sift record` reads it from the
+  PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the
+  map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.
 - F# and Visual Basic projects are part of the project graph, but their code is not analysed: when
   one is affected, everything that depends on it runs completely.
 

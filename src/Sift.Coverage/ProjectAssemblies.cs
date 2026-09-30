@@ -17,13 +17,22 @@ internal sealed partial class ProjectAssemblies(ILogger logger)
     /// </summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root, the working directory of MSBuild.</param>
-    public HashSet<string> FileNames(ProjectGraph graph, string repoRoot)
+    public HashSet<string> FileNames(ProjectGraph graph, string repoRoot) =>
+        new(Owners(graph, repoRoot).Keys, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The project that compiles each assembly file name. A project whose name needs evaluation is
+    /// listed under both its file name (the default) and the evaluated name.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="repoRoot">Repository root, the working directory of MSBuild.</param>
+    public Dictionary<string, ProjectNode> Owners(ProjectGraph graph, string repoRoot)
     {
         var dotnet = new DotnetProcess(logger);
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, ProjectNode>(StringComparer.OrdinalIgnoreCase);
         foreach (var project in graph.Projects)
         {
-            names.Add(project.AssemblyName + ".dll");
+            names.TryAdd(project.AssemblyName + ".dll", project);
             if (!project.AssemblyNameUnresolved)
             {
                 continue;
@@ -44,7 +53,7 @@ internal sealed partial class ProjectAssemblies(ILogger logger)
             LogEvaluated(project.Path, evaluated);
             if (evaluated.Length > 0)
             {
-                names.Add(evaluated + ".dll");
+                names.TryAdd(evaluated + ".dll", project);
             }
         }
 

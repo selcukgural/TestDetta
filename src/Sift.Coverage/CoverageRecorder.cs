@@ -48,7 +48,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// Assembly file names of the last graph recorded for: every test project of a repository needs
     /// the same set, and evaluating names may start MSBuild.
     /// </summary>
-    private (ProjectGraph Graph, HashSet<string> FileNames)? _assemblyNames;
+    private (ProjectGraph Graph, Dictionary<string, ProjectNode> Owners)? _assemblyNames;
 
     /// <summary>Records the coverage map of one test project.</summary>
     /// <param name="request">What to record.</param>
@@ -78,7 +78,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         var (targetPath, framework) = FindTargetPath(dotnet, request);
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
-        var assemblies = AssembliesToInstrument(AssemblyFileNames(request), outputDirectory);
+        var assemblies = AssembliesToInstrument(new HashSet<string>(AssemblyOwners(request).Keys, StringComparer.OrdinalIgnoreCase), outputDirectory);
+        var generated = ReadGenerated(request, targetPath, assemblies);
         LogAssemblies(assemblies.Count, outputDirectory);
 
         var work = Path.Combine(Path.GetTempPath(), "sift-record-" + Guid.NewGuid().ToString("N"));
@@ -131,7 +132,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 resultsFiles.AddRange(run.Result.ResultsFiles);
             }
 
-            var map = BuildMap(request, instrumentation.Methods, resultsFiles) with { FailedClasses = FailedClasses(runs) };
+            var map = BuildMap(request, instrumentation.Methods, resultsFiles) with { FailedClasses = FailedClasses(runs), Generated = generated };
             LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
             return (map, runs.All(static r => r.Result.ExitCode == 0));
         }
@@ -366,18 +367,48 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return (dotnet.Capture(query, request.RepoRoot).Trim(), framework);
     }
 
-    /// <summary>Assembly file names of the request's repository, cached per graph.</summary>
+    /// <summary>The project behind each assembly file name of the request's repository, cached per graph.</summary>
     /// <param name="request">What is being recorded.</param>
-    private HashSet<string> AssemblyFileNames(RecordRequest request)
+    private Dictionary<string, ProjectNode> AssemblyOwners(RecordRequest request)
     {
         if (_assemblyNames is { } cached && ReferenceEquals(cached.Graph, request.Graph))
         {
-            return cached.FileNames;
+            return cached.Owners;
         }
 
-        var names = new ProjectAssemblies(_logger).FileNames(request.Graph, request.RepoRoot);
-        _assemblyNames = (request.Graph, names);
-        return names;
+        var owners = new ProjectAssemblies(_logger).Owners(request.Graph, request.RepoRoot);
+        _assemblyNames = (request.Graph, owners);
+        return owners;
+    }
+
+    /// <summary>
+    /// Code source generators wrote into the test assembly and the repository's assemblies, read from
+    /// their PDBs before instrumentation rewrites them.
+    /// </summary>
+    /// <param name="request">What is being recorded.</param>
+    /// <param name="targetPath">Test assembly.</param>
+    /// <param name="assemblies">Repository assemblies in the test output.</param>
+    private List<GeneratedType> ReadGenerated(RecordRequest request, string targetPath, List<string> assemblies)
+    {
+        var owners = AssemblyOwners(request);
+        var generated = new List<GeneratedType>();
+        foreach (var assembly in assemblies.Append(targetPath).Distinct(StringComparer.Ordinal))
+        {
+            var owner = string.Equals(assembly, targetPath, StringComparison.Ordinal)
+                ? request.TestProject
+                : owners.GetValueOrDefault(Path.GetFileName(assembly));
+            var sources = owner is null ? [] : GeneratedSources.Read(assembly);
+            if (sources.Count == 0)
+            {
+                continue;
+            }
+
+            var project = Path.GetRelativePath(request.RepoRoot, owner!.Path).Replace('\\', '/');
+            generated.AddRange(GeneratedCode.Collect(project, sources));
+        }
+
+        LogGenerated(request.TestProject.Path, generated.Count);
+        return generated;
     }
 
     /// <summary>The repository's own assemblies found in the test output, except Sift's runtime.</summary>
@@ -619,6 +650,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{Project}: {Count} test class(es) failed while recording (-1: unknown, the map will not be used)")]
     private partial void LogFailedClasses(string project, int count);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Project}: {Count} generated type(s) read from PDBs")]
+    private partial void LogGenerated(string project, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Instrumenting {Count} assembly(ies) in {Directory}")]
     private partial void LogAssemblies(int count, string directory);

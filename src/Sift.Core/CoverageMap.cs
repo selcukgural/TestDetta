@@ -94,4 +94,10 @@ public sealed record CoverageMap(
     /// several processes it shows up once per process. Null for maps recorded before this was kept.
     /// </summary>
     public IReadOnlyList<int>? SharedInProcess { get; init; }
+
+    /// <summary>
+    /// Code source generators wrote into the recorded assemblies, read from their PDBs. It is not in
+    /// the source tree, so the source index adds it from here for name tracing.
+    /// </summary>
+    public IReadOnlyList<GeneratedType> Generated { get; init; } = [];
 }

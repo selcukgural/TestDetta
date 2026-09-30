@@ -41,7 +41,11 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <param name="graph">Projects of the repository, used to find which project owns a file.</param>
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="projects">Normalized .csproj paths whose files are indexed.</param>
-    public SourceIndex Build(ProjectGraph graph, string repoRoot, IReadOnlySet<string> projects)
+    /// <param name="generated">
+    /// Code source generators wrote, from coverage maps; each type becomes one member of its project
+    /// that mentions the generated names, so name tracing reaches generated callers.
+    /// </param>
+    public SourceIndex Build(ProjectGraph graph, string repoRoot, IReadOnlySet<string> projects, IEnumerable<GeneratedType>? generated = null)
     {
         var stopwatch = Stopwatch.StartNew();
         var files = new List<(string Path, ProjectNode Owner)>();
@@ -84,9 +88,52 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         }
 
         MarkTestClasses(types);
+        AddGenerated(graph, repoRoot, projects, generated ?? [], members);
 
         LogIndexed(files.Count, projects.Count, members.Count, stopwatch.ElapsedMilliseconds);
         return new SourceIndex(members, types);
+    }
+
+    /// <summary>Name of the member that stands for a type's generated code.</summary>
+    public const string GeneratedMember = "<generated>";
+
+    /// <summary>
+    /// Adds one member per generated type of an indexed project. It may run without being named
+    /// (generated registrations run from attributes and module initializers), so a change reaching
+    /// it spreads to its type.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="repoRoot">Repository root.</param>
+    /// <param name="projects">Indexed projects.</param>
+    /// <param name="generated">Generated types from coverage maps; the same type may come from several maps.</param>
+    /// <param name="members">Indexed members; updated in place.</param>
+    private static void AddGenerated(
+        ProjectGraph graph,
+        string repoRoot,
+        IReadOnlySet<string> projects,
+        IEnumerable<GeneratedType> generated,
+        List<IndexedMember> members)
+    {
+        var seen = new HashSet<(string, string)>();
+        foreach (var type in generated)
+        {
+            var project = Paths.Normalize(Path.Combine(repoRoot, type.Project));
+            if (!projects.Contains(project) || !seen.Add((project, type.TypeName)) || graph.Find(project) is not { } owner)
+            {
+                continue;
+            }
+
+            members.Add(new IndexedMember(
+                project,
+                owner.IsTestProject,
+                type.TypeName,
+                GeneratedMember,
+                [],
+                MayBeCalledImplicitly: true,
+                IsPrivate: false,
+                IsStatic: false,
+                type.References.ToFrozenSet(StringComparer.Ordinal)));
+        }
     }
 
     /// <summary>Key of a type in the index: the same source type compiled by two projects is two entries.</summary>
@@ -339,6 +386,16 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         return member is not MethodDeclarationSyntax method
                || method.ParameterList.Parameters is not [{ Modifiers: var modifiers }, ..]
                || !modifiers.Any(SyntaxKind.ThisKeyword);
+    }
+
+    /// <summary>Every simple name below <paramref name="node"/>, as <see cref="AddReferences"/> collects them.</summary>
+    /// <param name="node">Node to scan.</param>
+    /// <param name="descend">Which child nodes to scan.</param>
+    internal static HashSet<string> References(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend)
+    {
+        var references = new HashSet<string>(StringComparer.Ordinal);
+        AddReferences(node, descend, references);
+        return references;
     }
 
     /// <summary>

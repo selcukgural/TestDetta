@@ -50,6 +50,24 @@ public static class CoverageMapStore
             WriteIds(json, "sharedInProcess", shared);
         }
 
+        json.WriteStartArray("generated"u8);
+        foreach (var type in map.Generated)
+        {
+            json.WriteStartArray();
+            json.WriteStringValue(type.Project);
+            json.WriteStringValue(type.TypeName);
+            json.WriteStartArray();
+            foreach (var name in type.References)
+            {
+                json.WriteStringValue(name);
+            }
+
+            json.WriteEndArray();
+            json.WriteEndArray();
+        }
+
+        json.WriteEndArray();
+
         if (map.FailedClasses is { } failed)
         {
             json.WriteStartArray("failedClasses"u8);
@@ -147,12 +165,29 @@ public static class CoverageMapStore
                 FailedClasses = failed,
                 Initialization = root.TryGetProperty("initialization", out var initialization) ? ReadIds(initialization) : [],
                 SharedInProcess = root.TryGetProperty("sharedInProcess", out var shared) ? ReadIds(shared) : null,
+                Generated = root.TryGetProperty("generated", out var generated) ? ReadGenerated(generated) : [],
             };
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
         {
             throw new InvalidDataException($"{path} is not a valid coverage map: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>Reads <c>[project, type, [names]]</c> entries.</summary>
+    /// <param name="element">The "generated" array.</param>
+    private static List<GeneratedType> ReadGenerated(JsonElement element)
+    {
+        var types = new List<GeneratedType>();
+        foreach (var entry in element.EnumerateArray())
+        {
+            types.Add(new GeneratedType(
+                entry[0].GetString()!,
+                entry[1].GetString()!,
+                [.. entry[2].EnumerateArray().Select(static n => n.GetString()!)]));
+        }
+
+        return types;
     }
 
     /// <summary>Writes an object of named id arrays, sorted by name so the file is stable.</summary>

@@ -66,6 +66,10 @@ public sealed class ProjectGraph
     /// <exception cref="KeyNotFoundException">The path is not a project of this graph.</exception>
     public ProjectNode this[string path] => _nodes[path];
 
+    /// <summary>The project at <paramref name="path"/>, or null when the repository has none there.</summary>
+    /// <param name="path">Normalized absolute project file path.</param>
+    public ProjectNode? Find(string path) => _nodes.GetValueOrDefault(path);
+
     /// <summary>
     /// The project whose directory contains <paramref name="file"/>. When projects are nested, the
     /// innermost one wins. Null when the file is outside every project directory.

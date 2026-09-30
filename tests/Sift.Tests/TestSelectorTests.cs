@@ -356,6 +356,25 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Generated_code_in_a_test_project_is_traced_by_name()
+    {
+        // A source generator wrote a part of SlugTests that reads Rates.Vat; the source tree has no
+        // trace of it, only the map, which read it from the test assembly's PDB.
+        _generated = [new GeneratedType("tests/Shop.Tests/Shop.Tests.csproj", "Shop.Tests.SlugTests", ["Rates", "Vat"])];
+        _repo.Write("src/Shop/Rates.cs", "namespace Shop; public static class Rates { public const decimal Vat = 0.2m; }");
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * Rates.Vat");
+        _repo.Commit("extract rate");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]));
+
+        // A constant is inlined, so coverage cannot answer and the change is traced by name.
+        _repo.Replace("src/Shop/Rates.cs", "0.2m", "0.25m");
+
+        var selection = Select();
+        Assert.True(selection.TestClasses.Contains("Shop.Tests.SlugTests"), $"{selection.Mode} {selection.Reason}: {string.Join(", ", selection.TestClasses)}");
+    }
+
+    [Fact]
     public void Map_whose_failures_are_unknown_is_not_used()
     {
         // By name, OrderServiceTests reaches Tax too; the map would have narrowed it away.
@@ -529,7 +548,10 @@ public sealed class TestSelectorTests : IDisposable
                 [1]),
             new CoverageTimings(
                 new Dictionary<string, double> { ["A.Tests.BTests"] = 1.5 },
-                new Dictionary<string, double> { ["A.Tests.Host`1"] = 0.25 }));
+                new Dictionary<string, double> { ["A.Tests.Host`1"] = 0.25 }))
+        {
+            Generated = [new GeneratedType("tests/A.Tests/A.Tests.csproj", "A.Tests.BTests", ["Register", "Run"])],
+        };
         var path = Path.Combine(_repo.Root, "map.json");
 
         CoverageMapStore.Write(path, map);
@@ -542,6 +564,9 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(1.5, read.Timings!.ClassSeconds["A.Tests.BTests"]);
         Assert.Equal(0.25, read.Timings.FixtureSeconds["A.Tests.Host`1"]);
         Assert.Equal(map.Commit, read.Commit);
+        var generated = Assert.Single(read.Generated);
+        Assert.Equal(("tests/A.Tests/A.Tests.csproj", "A.Tests.BTests"), (generated.Project, generated.TypeName));
+        Assert.Equal(["Register", "Run"], generated.References);
     }
 
     private CoverageMap Map(string commit, List<CoveredMethod> methods, Dictionary<string, IReadOnlyList<int>> byClass) =>
@@ -551,7 +576,11 @@ public sealed class TestSelectorTests : IDisposable
             _timings)
         {
             FailedClasses = _failed,
+            Generated = _generated,
         };
+
+    /// <summary>Generated code the next <see cref="WriteMap"/> includes.</summary>
+    private List<GeneratedType> _generated = [];
 
     /// <summary>Classes the next <see cref="WriteMap"/> says failed while recording; null for "unknown".</summary>
     private IReadOnlySet<string>? _failed = new HashSet<string>();
