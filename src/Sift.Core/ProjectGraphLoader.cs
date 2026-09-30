@@ -108,7 +108,6 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         var projectDir = Paths.Normalize(Path.GetDirectoryName(projectPath)!);
         var references = new List<string>();
         var isTest = false;
-        string? assemblyName = null;
 
         // Elements are matched by local name so legacy projects with the MSBuild XML namespace also work.
         foreach (var element in doc.Descendants())
@@ -121,11 +120,6 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     {
                         references.Add(reference);
                     }
-                    break;
-
-                case "AssemblyName" when element.Value.Trim() is { Length: > 0 } name && !name.Contains('$'):
-                    // A value built from properties ($(...)) cannot be known without evaluating MSBuild.
-                    assemblyName = name;
                     break;
 
                 case "IsTestProject" when bool.TryParse(element.Value.Trim(), out var value) && value:
@@ -174,7 +168,33 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             PackageReferences = inputs.Packages,
         };
 
-        return assemblyName is null ? node : node with { AssemblyName = assemblyName };
+        return AssemblyNameOf(inputs) switch
+        {
+            null => node,
+            { } name when name.Length == 0 => node with { AssemblyNameUnresolved = true },
+            { } name => node with { AssemblyName = name },
+        };
+    }
+
+    /// <summary>
+    /// The <c>AssemblyName</c> set by the project or its imports: null when none sets it, empty when
+    /// the value cannot be known without evaluating MSBuild (a property function, an unknown property,
+    /// or several candidate values under conditions that are not evaluated here).
+    /// </summary>
+    /// <param name="inputs">Collected inputs of the project.</param>
+    private static string? AssemblyNameOf(BuildInputs inputs)
+    {
+        if (inputs.AssemblyNameUnresolved)
+        {
+            return string.Empty;
+        }
+
+        if (!inputs.Properties.TryGetValue("AssemblyName", out var values))
+        {
+            return null;
+        }
+
+        return values.Count == 1 ? values.First() : string.Empty;
     }
 
     /// <summary>What <see cref="Walk"/> collects for one project.</summary>
@@ -202,6 +222,9 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
         /// <summary>True when an import or item path could not be resolved.</summary>
         public bool Unresolved { get; set; }
+
+        /// <summary>True when an <c>AssemblyName</c> property was set to a value that could not be expanded.</summary>
+        public bool AssemblyNameUnresolved { get; set; }
 
         /// <summary>Packages named by <c>PackageReference</c> items.</summary>
         public HashSet<string> Packages { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -242,7 +265,11 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             var name = element.Name.LocalName;
             if (element.Parent?.Name.LocalName == "PropertyGroup" && !element.HasElements)
             {
-                RecordProperty(inputs, name, element.Value.Trim());
+                if (!RecordProperty(inputs, name, element.Value.Trim()) && name.Equals("AssemblyName", StringComparison.OrdinalIgnoreCase))
+                {
+                    inputs.AssemblyNameUnresolved = true;
+                }
+
                 continue;
             }
 
@@ -297,15 +324,22 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
     /// <param name="inputs">Collected inputs; updated in place.</param>
     /// <param name="name">Property name.</param>
     /// <param name="value">Property value as written.</param>
-    private static void RecordProperty(BuildInputs inputs, string name, string value)
+    /// <returns>False when the value was skipped because it needs evaluation.</returns>
+    private static bool RecordProperty(BuildInputs inputs, string name, string value)
     {
         if (value.Length == 0 || value.Contains("@(", StringComparison.Ordinal) || value.Contains("%(", StringComparison.Ordinal)
             || value.Contains("$([", StringComparison.Ordinal))
         {
-            return;
+            return false;
         }
 
-        foreach (var expanded in ExpandProperties(value, inputs))
+        var expanded = ExpandProperties(value, inputs);
+        if (expanded.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var candidate in expanded)
         {
             if (!inputs.Properties.TryGetValue(name, out var values))
             {
@@ -313,8 +347,10 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 inputs.Properties[name] = values;
             }
 
-            values.Add(expanded);
+            values.Add(candidate);
         }
+
+        return true;
     }
 
     /// <summary>
@@ -352,7 +388,9 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             results = next;
         }
 
-        return results;
+        // A reference left over is a property function such as $(Name.Substring(0, 3)), which only
+        // MSBuild can evaluate.
+        return results.Count > 0 && results[0].Contains("$(", StringComparison.Ordinal) ? [] : results;
     }
 
     /// <summary>Matches a plain property reference such as <c>$(ProjectType)</c>.</summary>

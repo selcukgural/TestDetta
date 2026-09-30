@@ -246,7 +246,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
     {
         var results = new List<MutantResult>();
         var index = 0;
-        var assemblies = RepositoryAssemblies(analysis.Graph, workspace.Executor.Outputs.Values);
+        var assemblies = RepositoryAssemblies(new ProjectAssemblies(_logger).FileNames(analysis.Graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
         foreach (var target in MutationTargets(analysis).Take(settings.Mutants))
         {
             index++;
@@ -325,11 +325,10 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
     /// Every assembly built from the repository found in the test outputs. The mutant is injected
     /// wherever its method exists, whichever project Sift thinks the source belongs to.
     /// </summary>
-    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="names">Assembly file names of the repository's projects.</param>
     /// <param name="outputs">Output directories of the evaluated test projects.</param>
-    private static List<string> RepositoryAssemblies(ProjectGraph graph, IEnumerable<string> outputs)
+    private static List<string> RepositoryAssemblies(HashSet<string> names, IEnumerable<string> outputs)
     {
-        var names = graph.Projects.Select(static p => p.AssemblyName + ".dll").ToHashSet(StringComparer.OrdinalIgnoreCase);
         var copies = new List<string>();
         foreach (var output in outputs)
         {

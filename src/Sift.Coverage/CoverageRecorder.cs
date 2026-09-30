@@ -43,6 +43,12 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 {
     private readonly ILogger _logger = loggerFactory.CreateLogger<CoverageRecorder>();
 
+    /// <summary>
+    /// Assembly file names of the last graph recorded for: every test project of a repository needs
+    /// the same set, and evaluating names may start MSBuild.
+    /// </summary>
+    private (ProjectGraph Graph, HashSet<string> FileNames)? _assemblyNames;
+
     /// <summary>Records the coverage map of one test project.</summary>
     /// <param name="request">What to record.</param>
     /// <param name="output">Receives build and test output.</param>
@@ -71,7 +77,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         var (targetPath, framework) = FindTargetPath(dotnet, request);
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
-        var assemblies = AssembliesToInstrument(request.Graph, outputDirectory);
+        var assemblies = AssembliesToInstrument(AssemblyFileNames(request), outputDirectory);
         LogAssemblies(assemblies.Count, outputDirectory);
 
         var work = Path.Combine(Path.GetTempPath(), "sift-record-" + Guid.NewGuid().ToString("N"));
@@ -308,21 +314,35 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return (dotnet.Capture(query, request.RepoRoot).Trim(), framework);
     }
 
-    /// <summary>The repository's own assemblies found in the test output, except Sift's runtime.</summary>
-    /// <param name="graph">Projects of the repository.</param>
-    /// <param name="outputDirectory">Test project output directory.</param>
-    private static List<string> AssembliesToInstrument(ProjectGraph graph, string outputDirectory)
+    /// <summary>Assembly file names of the request's repository, cached per graph.</summary>
+    /// <param name="request">What is being recorded.</param>
+    private HashSet<string> AssemblyFileNames(RecordRequest request)
     {
-        var runtimeName = typeof(SiftTracker).Assembly.GetName().Name;
-        var assemblies = new List<string>();
-        foreach (var project in graph.Projects)
+        if (_assemblyNames is { } cached && ReferenceEquals(cached.Graph, request.Graph))
         {
-            if (project.AssemblyName == runtimeName)
+            return cached.FileNames;
+        }
+
+        var names = new ProjectAssemblies(_logger).FileNames(request.Graph, request.RepoRoot);
+        _assemblyNames = (request.Graph, names);
+        return names;
+    }
+
+    /// <summary>The repository's own assemblies found in the test output, except Sift's runtime.</summary>
+    /// <param name="fileNames">Assembly file names of the repository's projects.</param>
+    /// <param name="outputDirectory">Test project output directory.</param>
+    private static List<string> AssembliesToInstrument(HashSet<string> fileNames, string outputDirectory)
+    {
+        var runtimeFile = typeof(SiftTracker).Assembly.GetName().Name + ".dll";
+        var assemblies = new List<string>();
+        foreach (var fileName in fileNames)
+        {
+            if (string.Equals(fileName, runtimeFile, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var path = Path.Combine(outputDirectory, project.AssemblyName + ".dll");
+            var path = Path.Combine(outputDirectory, fileName);
             if (File.Exists(path))
             {
                 assemblies.Add(path);

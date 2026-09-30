@@ -25,9 +25,17 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
 {
     /// <summary>
     /// Name of the compiled assembly without extension: the <c>AssemblyName</c> property when the
-    /// project sets it, otherwise the project file name.
+    /// project or one of its imports sets it to a value known without evaluation, otherwise the
+    /// project file name.
     /// </summary>
     public string AssemblyName { get; init; } = System.IO.Path.GetFileNameWithoutExtension(Path);
+
+    /// <summary>
+    /// True when the project or one of its imports sets <c>AssemblyName</c> to something only MSBuild
+    /// can evaluate, such as <c>$(MSBuildProjectName.Substring(0, 12))</c>. <see cref="AssemblyName"/>
+    /// is then the file name, which may be wrong; ask MSBuild before relying on it.
+    /// </summary>
+    public bool AssemblyNameUnresolved { get; init; }
 
     /// <summary>Language of the project.</summary>
     public ProjectLanguage Language { get; init; } = ProjectLanguage.CSharp;
