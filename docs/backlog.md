@@ -20,11 +20,24 @@ first: every finding there is fixed before anything below.
 2. **Precision round**: safety fixes made selection broader (NodaTime 16% → 34%); measure where
    the extra classes come from and narrow without losing safety (override names scoped to their
    hierarchy, run-once rules, name spreading through common member names like `Initialize`).
-3. **Hung mutants**: find which test class hung (VSTest blame-hang, testing-platform hang dump)
+3. **Value reporting: show exactly what Sift saved, and why it was safe.** Not "you saved five
+   minutes" but the breakdown behind it, in formats people and tools use:
+   - Per run: every test project and class that ran or was skipped, the reason for each decision
+     (the changed member, the coverage map and commit it came from, or the fallback rule), and
+     time per project measured against the recorded full-suite time.
+   - Measured, not only estimated: main runs the full suite when recording, so the real duration of
+     what was skipped is known; report both and the error of the estimate.
+   - Over time: per day, week and month; per repository, team and test project; trends of saved
+     time, CI minutes and their cost (runner price per minute), and of selection size.
+   - Evidence of safety: failures found on main that a PR's selection skipped (should be none), how
+     often a fallback ran everything and why, so the numbers can be trusted.
+   - Formats: GitHub job summary and PR comment (Markdown), JSON and CSV export, an HTML dashboard,
+     a badge, a weekly digest (Slack/e-mail), and an API for the hosted tier.
+4. **Hung mutants**: find which test class hung (VSTest blame-hang, testing-platform hang dump)
    so hangs count as data instead of inconclusive (Polly: 15 of 100).
-4. **`sift record --no-build`**: reuse the pipeline's build output instead of building again; the
+5. **`sift record --no-build`**: reuse the pipeline's build output instead of building again; the
    GitHub Action records after the build step. Needs the same configuration and PDBs.
-5. **Method-level selection, measured first**: record buckets per test method as an option and
+6. **Method-level selection, measured first**: record buckets per test method as an option and
    compute how much a method-level filter would save over class-level before building it.
 
 ## Later
