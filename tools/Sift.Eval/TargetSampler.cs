@@ -52,7 +52,10 @@ internal static class TargetSampler
         var otherPool = new List<SyntheticTarget>();
         foreach (var (member, edits) in candidates.OrderBy(static c => c.Key.TypeName, StringComparer.Ordinal).ThenBy(static c => c.Key.MemberName, StringComparer.Ordinal))
         {
-            if (edits is null)
+            // No edits: every declaration in source is bodiless (a [LoggerMessage] or other generated
+            // partial method). Its code comes from a generator, so the mutant would change code whose
+            // source Sift was never shown, and the "miss" would be the evaluation's own.
+            if (edits is null || edits.Count == 0)
             {
                 continue;
             }
