@@ -133,17 +133,32 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     }
 
     /// <summary>
-    /// Runs the tests once more with the mutant still in place and keeps only the missed classes that
-    /// fail again. A timing-sensitive test can fail once on a busy machine; counting it as a miss would
-    /// blame Sift for noise. A class that passes the second time is dropped from the killed ones too.
+    /// Runs the missed classes again, alone, with the mutant still in place, and keeps only those that
+    /// fail again. A class can fail in the full run without depending on the change: a timing-sensitive
+    /// test on a busy machine, or a class that runs after a failing one which left shared state behind
+    /// (a global option it never restored). Sift selected the class that really fails in that case, so
+    /// counting the others as misses would blame Sift for the suite's order dependence. A class that
+    /// passes alone is dropped from the killed ones too.
     /// </summary>
     /// <param name="missed">Missed classes of the first run (<c>Project: Class</c>).</param>
     /// <param name="reached">Test projects the mutant can reach.</param>
     /// <param name="index">Number of the mutant, for log files.</param>
-    /// <param name="killed">Killed classes of the first run; flaky ones are removed in place.</param>
+    /// <param name="killed">Killed classes of the first run; unconfirmed ones are removed in place.</param>
     private List<string> Confirm(List<string> missed, List<ProjectNode> reached, int index, List<string> killed)
     {
-        var again = workspace.Executor.RunAll(reached, $"synthetic-{index}-confirm");
+        var selections = new List<TestProjectSelection>();
+        foreach (var project in reached)
+        {
+            var prefix = Path.GetFileNameWithoutExtension(project.Path) + ": ";
+            var classes = missed.Where(m => m.StartsWith(prefix, StringComparison.Ordinal)).Select(m => m[prefix.Length..]).ToList();
+            if (classes.Count > 0)
+            {
+                selections.Add(new TestProjectSelection(project, TestRunMode.Filtered, classes, "confirming a miss"));
+            }
+        }
+
+        var invocations = TestInvocationBuilder.Build(selections, workspace.RepoRoot, [], DotnetTestModeDetector.Detect(workspace.RepoRoot));
+        var again = workspace.Executor.RunSelected(invocations, $"synthetic-{index}-confirm");
         var failedAgain = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (project, failed) in again.FailedByProject)
         {
@@ -154,10 +169,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         var confirmed = missed.FindAll(failedAgain.Contains);
-        foreach (var flaky in missed.Where(m => !failedAgain.Contains(m)))
+        foreach (var unconfirmed in missed.Where(m => !failedAgain.Contains(m)))
         {
-            LogFlaky(index, flaky);
-            killed.Remove(flaky);
+            LogUnconfirmed(index, unconfirmed);
+            killed.Remove(unconfirmed);
         }
 
         return confirmed;
@@ -250,8 +265,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         Message = "Mutant {Index} {TypeName}.{MemberName}: {Killed} class(es) failed, {Missed} not selected, {Share:P0} of classes selected")]
     private partial void LogMutant(int index, string typeName, string memberName, int killed, int missed, double share);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: {TestClass} failed once but passed when run again; not counted")]
-    private partial void LogFlaky(int index, string testClass);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: {TestClass} failed in the full run but passed alone; not counted")]
+    private partial void LogUnconfirmed(int index, string testClass);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName}.{MemberName} is in no test output; not run")]
     private partial void LogNotFound(string typeName, string memberName);
