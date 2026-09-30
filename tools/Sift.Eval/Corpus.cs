@@ -45,6 +45,9 @@ internal sealed record CorpusEntry
     /// <summary>Test projects to use (paths in the repository); empty for all.</summary>
     public IReadOnlyList<string>? Projects { get; init; }
 
+    /// <summary>Test projects to leave out (paths in the repository), such as ones that need a database server.</summary>
+    public IReadOnlyList<string>? Exclude { get; init; }
+
     /// <summary>
     /// What the repository exercises, such as <c>reflection</c>, <c>pinvoke</c>, <c>source-generator</c>
     /// or <c>large</c>; the summary reports results per tag.

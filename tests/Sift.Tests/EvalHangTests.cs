@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
+using Sift.Core;
+using Sift.Coverage;
 using Sift.Eval;
 
 namespace Sift.Tests;
@@ -73,6 +76,37 @@ public sealed class EvalHangTests : IDisposable
         var mutant = Assert.Single(run.GetProperty("mutants").EnumerateArray());
         Assert.Equal("Signals.Waiter.Signal", mutant.GetProperty("target").GetString());
         Assert.True(mutant.GetProperty("inconclusive").GetBoolean());
+    }
+
+    [Fact]
+    public void Recording_that_hangs_is_killed_and_reported()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.sift/\n");
+        _repo.Write("tests/Waits.Tests/Waits.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+              </ItemGroup>
+            </Project>
+            """);
+        // Stands for a test waiting on a database server that is not there.
+        _repo.Write("tests/Waits.Tests/Tests.cs", """
+            using Xunit;
+            namespace Waits.Tests;
+            public class WaitTests { [Fact] public void Waits() => Thread.Sleep(Timeout.Infinite); }
+            """);
+        _repo.Commit("base");
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var project = graph.Projects.Single(p => p.IsTestProject);
+
+        Assert.Throws<RecordingTimedOutException>(() =>
+            new CoverageRecorder(NullLoggerFactory.Instance).Record(
+                new RecordRequest(_repo.Root, graph, project, new RecordOptions(Timeout: TimeSpan.FromSeconds(10))),
+                TextWriter.Null));
     }
 
     public void Dispose()

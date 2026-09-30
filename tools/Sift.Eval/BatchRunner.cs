@@ -163,7 +163,10 @@ internal static partial class BatchRunner
             entry.Mutants ?? 2,
             entry.Projects ?? [],
             new RepoCommands(entry.Setup, entry.Cleanup),
-            entry.Framework);
+            entry.Framework)
+        {
+            Excluded = entry.Exclude ?? [],
+        };
         // Without a branch, the repository's default branch, whatever it is called.
         var target = new EvalTarget(entry.Url, entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
         var evalOptions = new EvalOptions(target, run, directory, options.LogLevel);

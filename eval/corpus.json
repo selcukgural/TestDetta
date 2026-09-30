@@ -90,7 +90,8 @@
         "static-state",
         "multi-target"
       ],
-      "notes": "expression-compiled maps, assembly scanning in DI.Tests; UnitTests also net471"
+      "exclude": ["src/IntegrationTests/AutoMapper.IntegrationTests.csproj"],
+      "notes": "expression-compiled maps, assembly scanning in DI.Tests; UnitTests also net471; IntegrationTests need SQL Server"
     },
     {
       "name": "autofixture",

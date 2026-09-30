@@ -40,6 +40,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --parallel <n>         Test processes per project when recording (default: 1)
           --mutants <n>          Changed members to mutate per merge (default: 3, 0 turns it off)
           --project <csproj>     Only use this test project (path in the repository); repeat for several
+          --exclude <csproj>     Leave this test project out, e.g. one that needs a database; repeat for several
           -f, --framework <tfm>  Build, record and test only this target framework, e.g. net10.0
           --setup <command>      Shell command run after every checkout, e.g. dotnet tool restore
           --cleanup <command>    Shell command run after every test run, e.g. to remove test containers
@@ -113,6 +114,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { Projects = [.. run.Projects, value] };
                     break;
 
+                case "--exclude":
+                    run = run with { Excluded = [.. run.Excluded, value] };
+                    break;
+
                 case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg == "--parallel"))
                     {
@@ -161,7 +166,11 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
 /// <param name="Projects">Test projects to use (paths in the repository); empty means all.</param>
 /// <param name="Commands">Repository-specific shell commands around checkouts and test runs.</param>
 /// <param name="Framework">Target framework to build, record and test, or null for the projects' defaults.</param>
-internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<string> Projects, RepoCommands Commands, string? Framework);
+internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<string> Projects, RepoCommands Commands, string? Framework)
+{
+    /// <summary>Test projects (paths in the repository) to leave out, such as ones that need a database server.</summary>
+    public IReadOnlyList<string> Excluded { get; init; } = [];
+}
 
 /// <summary>Shell commands a repository needs besides dotnet.</summary>
 /// <param name="Setup">Run after every checkout, before building: restoring local tools, for example. Null for none.</param>

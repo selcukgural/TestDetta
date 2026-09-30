@@ -14,6 +14,15 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 {
     private readonly ILogger _logger = workspace.LoggerFactory.CreateLogger<EvalSteps>();
 
+    /// <summary>Longest a recording test process may run; a hang (a missing database, say) repeats.</summary>
+    internal static TimeSpan RecordTimeout { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>File in a commit's map cache listing the test projects whose recording hung.</summary>
+    private const string HungFile = "hung.txt";
+
+    /// <summary>Test projects whose recording hung; they are left out of the rest of the evaluation.</summary>
+    private readonly HashSet<string> _hung = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Records coverage maps at <paramref name="sha"/> unless the cache has them. The maps of a merge
     /// are the base maps of the next one, so walking the history records each commit once.
@@ -38,13 +47,19 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
                 try
                 {
                     var (map, _) = recorder.Record(
-                        new RecordRequest(workspace.RepoRoot, graph, project, new RecordOptions("Debug", settings.Framework, settings.Parallelism)), log);
+                        new RecordRequest(workspace.RepoRoot, graph, project, new RecordOptions("Debug", settings.Framework, settings.Parallelism, RecordTimeout)), log);
                     CoverageMapStore.Write(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".json"), map);
                 }
                 catch (InvalidOperationException ex)
                 {
                     // No tests (a project named like a test project) or no build (a platform the machine
-                    // lacks): the project gets no map, and its merges are decided by name.
+                    // lacks): the project gets no map, and its merges are decided by name. A hang would
+                    // repeat in every later run, so that project is left out altogether.
+                    if (ex is RecordingTimedOutException)
+                    {
+                        _hung.Add(project.Path);
+                    }
+
                     LogNotRecorded(project.Path, ex.Message);
                 }
                 finally
@@ -53,8 +68,17 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
                 }
             }
 
+            File.WriteAllLines(Path.Combine(temporary, HungFile), _hung.Select(p => Path.GetRelativePath(workspace.RepoRoot, p)));
             Directory.Move(temporary, directory);
             LogRecorded(sha);
+        }
+
+        // Cached maps say nothing about projects that hung while recording; the list next to them does.
+        var hung = Path.Combine(directory, HungFile);
+        if (File.Exists(hung))
+        {
+            _hung.UnionWith(File.ReadAllLines(hung).Where(static l => l.Length > 0)
+                .Select(l => Path.GetFullPath(Path.Combine(workspace.RepoRoot, l)).Replace('\\', '/')));
         }
 
         var maps = new Dictionary<string, CoverageMap>(StringComparer.Ordinal);
@@ -79,11 +103,15 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         var wanted = settings.Projects
             .Select(p => Path.GetFullPath(Path.Combine(workspace.RepoRoot, p)).Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);
+        var excluded = settings.Excluded
+            .Select(p => Path.GetFullPath(Path.Combine(workspace.RepoRoot, p)).Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
+        excluded.UnionWith(_hung);
 
         return
         [
             .. graph.Projects
-                .Where(p => p.IsTestProject && (wanted.Count == 0 || wanted.Contains(p.Path)))
+                .Where(p => p.IsTestProject && (wanted.Count == 0 || wanted.Contains(p.Path)) && !excluded.Contains(p.Path))
                 .Where(TargetsFramework)
                 .OrderBy(static p => p.Path, StringComparer.Ordinal),
         ];

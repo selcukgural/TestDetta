@@ -169,12 +169,15 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, missing, aborted);
     }
 
-    /// <summary>Time limit of a run of <paramref name="project"/>; none before the project ran once.</summary>
+    /// <summary>Time limit of a run of <paramref name="project"/>; a generous fixed one before the project ran once.</summary>
     /// <param name="project">Normalized test project path.</param>
     private TimeSpan? Timeout(string project) =>
         _longest.TryGetValue(project, out var seconds)
             ? TimeSpan.FromSeconds(Math.Max(MinimumTimeout.TotalSeconds, seconds * 5))
-            : null;
+            : FirstRunTimeout;
+
+    /// <summary>Limit of a project's first run, before its usual duration is known.</summary>
+    private static readonly TimeSpan FirstRunTimeout = TimeSpan.FromMinutes(30);
 
     /// <summary>Runs the cleanup command, if any, and waits for it.</summary>
     public void Cleanup() => RunShell(context.Settings.Commands.Cleanup, "cleanup");

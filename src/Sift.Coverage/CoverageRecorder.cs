@@ -31,7 +31,8 @@ public sealed record RecordRequest(string RepoRoot, ProjectGraph Graph, ProjectN
 /// tests one at a time, which is what keeps attribution exact; the suite must tolerate several
 /// processes at once (no fixed ports or shared local databases).
 /// </param>
-public sealed record RecordOptions(string Configuration = "Debug", string? Framework = null, int Parallelism = 1);
+/// <param name="Timeout">Longest a test process may run before it is killed; null waits forever.</param>
+public sealed record RecordOptions(string Configuration = "Debug", string? Framework = null, int Parallelism = 1, TimeSpan? Timeout = null);
 
 /// <summary>
 /// Builds a test project, instruments the repository's assemblies in its output, runs the tests
@@ -112,6 +113,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
 
             Task.WaitAll(runs);
+            if (runs.Any(static r => r.Result.ExitCode == DotnetProcess.TimedOut))
+            {
+                throw new RecordingTimedOutException(
+                    $"A test process of {Path.GetFileName(project)} did not finish within {request.Options.Timeout?.TotalMinutes:0} min and was killed.");
+            }
 
             var resultsFiles = new List<string>(runs.Length);
             foreach (var run in runs)
@@ -293,7 +299,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         };
 
         var writer = shard.Count == 1 ? output : new PrefixWriter(output, $"[shard {shard.Index + 1}/{shard.Count}] ");
-        var exitCode = shard.Dotnet.Run(arguments, request.RepoRoot, environment, writer);
+        var exitCode = shard.Dotnet.Run(arguments, request.RepoRoot, environment, writer, request.Options.Timeout);
 
         // The catch-all shard legitimately matches no test when the source index knew every class,
         // and then the test host never starts the collector.
