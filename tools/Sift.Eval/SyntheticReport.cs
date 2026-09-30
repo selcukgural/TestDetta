@@ -52,6 +52,16 @@ internal static class SyntheticReport
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Selected on average: {Average(mutants):P0} of {run.TestClasses} recorded test classes; {Average(killing):P0} for failing mutants");
         text.AppendLine(CultureInfo.InvariantCulture, $"- Full suite: {run.BaselineSeconds:0.0} s");
+        if (mutants.Select(static m => m.Target.Kind).Distinct().Count() > 1)
+        {
+            foreach (var group in mutants.GroupBy(static m => m.Target.Kind).OrderBy(static g => g.Key))
+            {
+                var groupKilling = group.Count(static m => m.Killing);
+                var groupMissed = group.Count(static m => m.Killing && m.MissedClasses.Count > 0);
+                text.AppendLine(CultureInfo.InvariantCulture,
+                    $"- {MutantKinds.Name(group.Key)}: {group.Count()} mutant(s), {groupKilling} failing, {groupMissed} missed");
+            }
+        }
         text.AppendLine();
 
         if (missed.Count > 0)
@@ -69,13 +79,13 @@ internal static class SyntheticReport
 
         text.AppendLine("## Mutants");
         text.AppendLine();
-        text.AppendLine("| # | Member | Covered | Seen | Failed classes | Missed | Selected |");
-        text.AppendLine("|---|---|---|---|---|---|---|");
+        text.AppendLine("| # | Member | Kind | Covered | Seen | Failed classes | Missed | Selected |");
+        text.AppendLine("|---|---|---|---|---|---|---|---|");
         foreach (var (mutant, index) in mutants.Take(MaxRows).Select(static (m, i) => (m, i + 1)))
         {
             var failed = mutant.Inconclusive ? "crashed or hung" : mutant.MutatedMethods == 0 ? "not in output" : mutant.KilledClasses.Count.ToString(CultureInfo.InvariantCulture);
             text.AppendLine(CultureInfo.InvariantCulture,
-                $"| {index} | {Code(Member(mutant))} | {YesNo(mutant.Target.Covered)} | {YesNo(mutant.Detected)} | {failed} | {mutant.MissedClasses.Count} | {mutant.SelectedShare:P0} |");
+                $"| {index} | {Code(Member(mutant))} | {MutantKinds.Name(mutant.Target.Kind)} | {YesNo(mutant.Target.Covered)} | {YesNo(mutant.Detected)} | {failed} | {mutant.MissedClasses.Count} | {mutant.SelectedShare:P0} |");
         }
 
         if (mutants.Count > MaxRows)
@@ -106,6 +116,7 @@ internal static class SyntheticReport
             {
                 json.WriteStartObject();
                 json.WriteString("target", Member(mutant));
+                json.WriteString("kind", MutantKinds.Name(mutant.Target.Kind));
                 json.WriteBoolean("covered", mutant.Target.Covered);
                 json.WriteBoolean("detected", mutant.Detected);
                 json.WriteNumber("mutatedMethods", mutant.MutatedMethods);

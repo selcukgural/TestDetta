@@ -89,7 +89,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
         var share = SelectedShare(analysis, context.Maps);
 
-        using var mutation = MutationInjector.Inject(context.Assemblies, target.Member, Path.Combine(workspace.MapCache, "..", "mutant-backup"));
+        using var mutation = MutationInjector.Inject(context.Assemblies, target.Member, Path.Combine(workspace.MapCache, "..", "mutant-backup"), target.Kind);
         if (mutation.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);
@@ -195,7 +195,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 var edited = new System.Text.StringBuilder(text);
                 foreach (var edit in group.OrderByDescending(static e => e.Position))
                 {
-                    edited.Insert(edit.Position, edit.Text);
+                    edited.Remove(edit.Position, edit.Replaces).Insert(edit.Position, edit.Text);
                 }
 
                 File.WriteAllText(group.Key, edited.ToString());

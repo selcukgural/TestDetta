@@ -36,6 +36,9 @@ internal sealed record CorpusEntry
     /// <summary>Seed of the synthetic sample.</summary>
     public int? Seed { get; init; }
 
+    /// <summary>Mutant kinds of the synthetic sample, as <c>--mutant-kinds</c> takes them.</summary>
+    public string? MutantKinds { get; init; }
+
     /// <summary>Shell command after every checkout, such as <c>dotnet tool restore</c>.</summary>
     public string? Setup { get; init; }
 
@@ -136,6 +139,7 @@ internal sealed record Corpus
             Mutants = entry.Mutants ?? d.Mutants,
             Synthetic = entry.Synthetic ?? d.Synthetic,
             Seed = entry.Seed ?? d.Seed,
+            MutantKinds = entry.MutantKinds ?? d.MutantKinds,
             Setup = entry.Setup ?? d.Setup,
             Cleanup = entry.Cleanup ?? d.Cleanup,
         };
@@ -165,6 +169,9 @@ internal sealed record Corpus
         /// <summary>See <see cref="CorpusEntry.Seed"/>.</summary>
         public int? Seed { get; init; }
 
+        /// <summary>See <see cref="CorpusEntry.MutantKinds"/>.</summary>
+        public string? MutantKinds { get; init; }
+
         /// <summary>See <see cref="CorpusEntry.Setup"/>.</summary>
         public string? Setup { get; init; }
 
@@ -183,6 +190,7 @@ internal sealed record Corpus
             Mutants = Mutants,
             Synthetic = Synthetic,
             Seed = Seed,
+            MutantKinds = MutantKinds,
             Setup = Setup,
             Cleanup = Cleanup,
         };

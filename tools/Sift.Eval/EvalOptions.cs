@@ -37,6 +37,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --synthetic <n>        Also change <n> sampled members at the branch head, one at a time, and
                                  check each selection against a mutant of that member
           --seed <n>             Seed for sampling the synthetic changes (default: 1)
+          --mutant-kinds <list>  throw, return-default, flip-branch, field-value, or all (default: throw)
           --parallel <n>         Test processes per project when recording (default: 1)
           --mutants <n>          Changed members to mutate per merge (default: 3, 0 turns it off)
           --project <csproj>     Only use this test project (path in the repository); repeat for several
@@ -118,6 +119,15 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { Excluded = [.. run.Excluded, value] };
                     break;
 
+                case "--mutant-kinds":
+                    if (!Eval.MutantKinds.TryParse(value, out var kinds, out error))
+                    {
+                        return false;
+                    }
+
+                    run = run with { MutantKinds = kinds };
+                    break;
+
                 case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg == "--parallel"))
                     {
@@ -170,6 +180,9 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
 {
     /// <summary>Test projects (paths in the repository) to leave out, such as ones that need a database server.</summary>
     public IReadOnlyList<string> Excluded { get; init; } = [];
+
+    /// <summary>Kinds of synthetic mutants; throwing at the start of a member unless told otherwise.</summary>
+    public IReadOnlySet<MutantKind> MutantKinds { get; init; } = new HashSet<MutantKind> { MutantKind.Throw };
 }
 
 /// <summary>Shell commands a repository needs besides dotnet.</summary>

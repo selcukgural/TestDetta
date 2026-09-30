@@ -10,7 +10,11 @@ namespace Sift.Eval;
 /// <param name="Path">Normalized absolute file path.</param>
 /// <param name="Position">Character offset the text is inserted at.</param>
 /// <param name="Text">Inserted text.</param>
-internal sealed record SourceEdit(string Path, int Position, string Text);
+internal sealed record SourceEdit(string Path, int Position, string Text)
+{
+    /// <summary>Characters at <see cref="Position"/> that <see cref="Text"/> replaces; 0 inserts.</summary>
+    public int Replaces { get; init; }
+}
 
 /// <summary>
 /// A member picked for a synthetic change: every declaration with its name in its type is edited in
@@ -19,7 +23,11 @@ internal sealed record SourceEdit(string Path, int Position, string Text);
 /// <param name="Member">Type and member name as coverage maps and the mutant injector spell them.</param>
 /// <param name="Edits">Source edits that change each declaration without changing what it does.</param>
 /// <param name="Covered">True when a coverage map at the base commit says some test ran it.</param>
-internal sealed record SyntheticTarget(CoveredMethod Member, IReadOnlyList<SourceEdit> Edits, bool Covered);
+internal sealed record SyntheticTarget(CoveredMethod Member, IReadOnlyList<SourceEdit> Edits, bool Covered)
+{
+    /// <summary>How the mutant breaks the member.</summary>
+    public MutantKind Kind { get; init; } = MutantKind.Throw;
+}
 
 /// <summary>How many targets to pick, and how.</summary>
 /// <param name="Count">Targets to pick.</param>
@@ -29,7 +37,14 @@ internal sealed record SyntheticTarget(CoveredMethod Member, IReadOnlyList<Sourc
 /// runs go where a mutant can prove something; the rest keep Sift's blind spots (code that coverage
 /// never saw, such as code reached only by reflection at start-up) in the sample.
 /// </param>
-internal sealed record SampleRequest(int Count, int Seed, double CoveredShare = 0.8);
+internal sealed record SampleRequest(int Count, int Seed, double CoveredShare = 0.8)
+{
+    /// <summary>
+    /// Mutant kinds to use. Methods get one of the method kinds at random; fields with a constant
+    /// initial value join the sample only when <see cref="MutantKind.FieldValue"/> is on.
+    /// </summary>
+    public IReadOnlySet<MutantKind> Kinds { get; init; } = new HashSet<MutantKind> { MutantKind.Throw };
+}
 
 /// <summary>
 /// Picks methods, constructors, properties and events of library code that a test project depends
@@ -46,11 +61,12 @@ internal static class TargetSampler
     /// <param name="request">How many and how.</param>
     public static List<SyntheticTarget> Sample(ProjectGraph graph, string repoRoot, IReadOnlySet<CoveredMethod> covered, SampleRequest request)
     {
-        var candidates = Candidates(graph, repoRoot);
+        var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue));
         var random = new Random(request.Seed);
+        MutantKind[] methodKinds = [.. request.Kinds.Where(static k => k != MutantKind.FieldValue).Order()];
         var coveredPool = new List<SyntheticTarget>();
         var otherPool = new List<SyntheticTarget>();
-        foreach (var (member, edits) in candidates.OrderBy(static c => c.Key.TypeName, StringComparer.Ordinal).ThenBy(static c => c.Key.MemberName, StringComparer.Ordinal))
+        foreach (var ((member, isField), edits) in candidates.OrderBy(static c => c.Key.Member.TypeName, StringComparer.Ordinal).ThenBy(static c => c.Key.Member.MemberName, StringComparer.Ordinal))
         {
             // No edits: every declaration in source is bodiless (a [LoggerMessage] or other generated
             // partial method). Its code comes from a generator, so the mutant would change code whose
@@ -60,7 +76,16 @@ internal static class TargetSampler
                 continue;
             }
 
-            var target = new SyntheticTarget(member, edits, covered.Contains(member));
+            if (!isField && methodKinds.Length == 0)
+            {
+                continue;
+            }
+
+            // A field is covered when the constructor that sets it ran.
+            var kind = isField ? MutantKind.FieldValue : methodKinds[random.Next(methodKinds.Length)];
+            var isCovered = covered.Contains(isField ? new CoveredMethod(member.TypeName, ".cctor") : member)
+                            || (isField && covered.Contains(new CoveredMethod(member.TypeName, ".ctor")));
+            var target = new SyntheticTarget(member, edits, isCovered) { Kind = kind };
             (target.Covered ? coveredPool : otherPool).Add(target);
         }
 
@@ -79,9 +104,10 @@ internal static class TargetSampler
     /// </summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root.</param>
-    private static Dictionary<CoveredMethod, List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot)
+    /// <param name="withFields">True to add fields with a constant initial value.</param>
+    private static Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot, bool withFields)
     {
-        var candidates = new Dictionary<CoveredMethod, List<SourceEdit>?>();
+        var candidates = new Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?>();
         var testProjects = graph.Projects.Where(static p => p.IsTestProject).Select(static p => p.Path).ToHashSet(StringComparer.Ordinal);
         var tested = new Dictionary<string, bool>(StringComparer.Ordinal);
         foreach (var file in SourceIndexBuilder.EnumerateSourceFiles(Paths.Normalize(repoRoot)))
@@ -94,11 +120,18 @@ internal static class TargetSampler
             var root = DeclarationWalker.Parse(SourceText.From(File.ReadAllText(file)));
             foreach (var declaration in DeclarationWalker.Collect(root).Values)
             {
-                if (MemberKey(declaration) is not { } key)
+                if (withFields && FieldEdit(file, declaration) is { } field)
+                {
+                    candidates[(field.Member, true)] = [field.Edit];
+                    continue;
+                }
+
+                if (MemberKey(declaration) is not { } member)
                 {
                     continue;
                 }
 
+                var key = (member, false);
                 var edits = Edits(file, declaration.Node);
                 candidates.TryGetValue(key, out var existing);
                 if (candidates.ContainsKey(key) && existing is null)
@@ -129,6 +162,29 @@ internal static class TargetSampler
         }
 
         return tested;
+    }
+
+    /// <summary>
+    /// A <c>static readonly</c> or instance field declared alone with a literal initial value
+    /// (number, string, <c>true</c>/<c>false</c>), and an edit that wraps the literal in parentheses.
+    /// Constants are left out: their value is copied into every use at compile time.
+    /// </summary>
+    /// <param name="file">Normalized file path.</param>
+    /// <param name="declaration">A declaration of the file.</param>
+    private static (CoveredMethod Member, SourceEdit Edit)? FieldEdit(string file, Declaration declaration)
+    {
+        if (declaration.Node is not FieldDeclarationSyntax field
+            || field.Modifiers.Any(SyntaxKind.ConstKeyword)
+            || field.Declaration.Variables is not [{ Initializer.Value: LiteralExpressionSyntax literal } variable]
+            || !literal.IsKind(SyntaxKind.NumericLiteralExpression) && !literal.IsKind(SyntaxKind.StringLiteralExpression)
+               && !literal.IsKind(SyntaxKind.TrueLiteralExpression) && !literal.IsKind(SyntaxKind.FalseLiteralExpression))
+        {
+            return null;
+        }
+
+        // Both parentheses in one edit that rewrites the literal whole keeps the offsets simple.
+        return (new CoveredMethod(declaration.TypeName, variable.Identifier.ValueText),
+            new SourceEdit(file, literal.SpanStart, "(" + literal.ToString() + ")") { Replaces = literal.Span.Length });
     }
 
     /// <summary>

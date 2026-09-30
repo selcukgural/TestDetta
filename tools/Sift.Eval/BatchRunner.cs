@@ -167,6 +167,15 @@ internal static partial class BatchRunner
         {
             Excluded = entry.Exclude ?? [],
         };
+        if (entry.MutantKinds is { } kindList)
+        {
+            if (!MutantKinds.TryParse(kindList, out var kinds, out var kindError))
+            {
+                throw new InvalidDataException($"{entry.Name}: {kindError}");
+            }
+
+            run = run with { MutantKinds = kinds };
+        }
         // Without a branch, the repository's default branch, whatever it is called.
         var target = new EvalTarget(entry.Url, entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
         var evalOptions = new EvalOptions(target, run, directory, options.LogLevel);

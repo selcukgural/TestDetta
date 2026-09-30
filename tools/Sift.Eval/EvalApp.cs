@@ -90,7 +90,7 @@ internal static partial class EvalApp
             LogSynthetic(logger, options.Target.Synthetic, head[..7]);
             var run = new SyntheticEvaluator(workspace, options.Run).Evaluate(
                 head,
-                new SampleRequest(options.Target.Synthetic, options.Target.Seed),
+                new SampleRequest(options.Target.Synthetic, options.Target.Seed) { Kinds = options.Run.MutantKinds },
                 progress => SyntheticReport.Write(options.Output, options.Repository, progress));
             SyntheticReport.Write(options.Output, options.Repository, run);
 
