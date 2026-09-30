@@ -152,6 +152,73 @@ public sealed class CodeChangeDetectorTests
         Assert.Equal([new SymbolChange("Program", null, SymbolChangeKind.Modified)], change.Symbols);
     }
 
+    [Fact]
+    public void Change_in_a_file_wrapped_in_a_conditional_reports_the_member()
+    {
+        // Parsed without symbols the whole file is disabled text; the project defines ROSLYN_4_12.
+        const string before = """
+            #if ROSLYN_4_12
+            namespace App;
+            public class Analyzer
+            {
+                public int Run() => 1;
+            #if ROSLYN_5 && NET
+                public int Newer() => 1;
+            #endif
+            }
+            #endif
+            """;
+
+        var change = Detect(before, before.Replace("Run() => 1", "Run() => 2"));
+
+        Assert.False(change.AffectsWholeProject);
+        Assert.Equal([new SymbolChange("App.Analyzer", "Run()", SymbolChangeKind.Modified)], change.Symbols);
+        Assert.Equal(
+            [new SymbolChange("App.Analyzer", "Newer()", SymbolChangeKind.Modified)],
+            Detect(before, before.Replace("Newer() => 1", "Newer() => 2")).Symbols);
+    }
+
+    [Fact]
+    public void Change_in_the_other_branch_of_a_conditional_reports_the_member()
+    {
+        const string before = """
+            namespace App;
+            public class Clock
+            {
+            #if NET
+                public int Now() => 1;
+            #else
+                public int Now() => 2;
+            #endif
+            }
+            """;
+
+        // A disabled branch is trivia of the next token, which may be the type's closing brace, so the
+        // type can be reported too: more tests, never fewer.
+        Assert.Contains(
+            new SymbolChange("App.Clock", "Now()", SymbolChangeKind.Modified),
+            Detect(before, before.Replace("=> 1", "=> 3")).Symbols);
+        Assert.Contains(
+            new SymbolChange("App.Clock", "Now()", SymbolChangeKind.Modified),
+            Detect(before, before.Replace("=> 2", "=> 3")).Symbols);
+    }
+
+    [Fact]
+    public void Change_only_active_under_a_mix_of_symbols_affects_the_whole_project()
+    {
+        const string before = """
+            #if A && !B
+            namespace App;
+            public class Hidden { public int Run() => 1; }
+            #endif
+            """;
+
+        var change = Detect(before, before.Replace("=> 1", "=> 2"));
+
+        Assert.False(change.IsCosmetic);
+        Assert.True(change.AffectsWholeProject);
+    }
+
     private CodeChange Detect(string? before, string? after) =>
         _detector.Detect("File.cs", before is null ? null : SourceText.From(before), after is null ? null : SourceText.From(after));
 }

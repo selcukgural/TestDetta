@@ -94,6 +94,27 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Test_class_inside_a_conditional_is_found_by_name()
+    {
+        _repo.Write("tests/Shop.Tests/ModernTaxTests.cs", """
+            #if NET8_0_OR_GREATER
+            namespace Shop.Tests;
+            public class ModernTaxTests
+            {
+                [Fact] public void Taxes() => Assert.Equal(2m, new PriceCalculator().Tax(10m));
+            }
+            #endif
+            """);
+        _repo.Commit("conditional tests");
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.Filtered, selection.Mode);
+        Assert.Contains("Shop.Tests.ModernTaxTests", selection.TestClasses);
+    }
+
+    [Fact]
     public void Change_used_by_several_paths_selects_each_test_class()
     {
         _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");

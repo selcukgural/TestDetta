@@ -177,11 +177,27 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
             text = SourceText.From(stream);
         }
 
-        var root = DeclarationWalker.Parse(text);
         var members = new List<IndexedMember>();
         var types = new List<IndexedType>();
-        var usingStatic = UsingStaticTargets(root);
 
+        // Conditional code is indexed as if its symbols were both undefined and defined; types seen in
+        // both are merged like partial types, and a member seen twice only widens its references.
+        foreach (var root in DeclarationWalker.ParseVariants(text))
+        {
+            IndexRoot(root, owner, members, types);
+        }
+
+        return new FileIndex(path, owner.Path, members, types);
+    }
+
+    /// <summary>Indexes the declarations and top-level statements of one parse of a file.</summary>
+    /// <param name="root">Compilation unit.</param>
+    /// <param name="owner">Project that compiles the file.</param>
+    /// <param name="members">Members of the file; updated in place.</param>
+    /// <param name="types">Types of the file; updated in place.</param>
+    private static void IndexRoot(CompilationUnitSyntax root, ProjectNode owner, List<IndexedMember> members, List<IndexedType> types)
+    {
+        var usingStatic = UsingStaticTargets(root);
         foreach (var declaration in DeclarationWalker.Collect(root).Values)
         {
             if (declaration.MemberName is null)
@@ -211,7 +227,6 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         }
 
         AddTopLevelStatements(root, owner, members, types);
-        return new FileIndex(path, owner.Path, members, types);
     }
 
     /// <summary>Indexes top-level statements as the generated <c>Program</c> type's entry point.</summary>

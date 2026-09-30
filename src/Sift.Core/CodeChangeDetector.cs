@@ -29,6 +29,51 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
             return new CodeChange(path, IsCosmetic: true, AffectsWholeProject: false, []);
         }
 
+        var (affectsWholeProject, symbols) = Compare(oldRoot, newRoot);
+
+        // Code disabled without symbols, such as a file wrapped in #if NET8_0_OR_GREATER, only shows
+        // its declarations when the symbols are defined. Both views are merged.
+        var conditionalSymbols = DeclarationWalker.ConditionalSymbols(oldRoot, newRoot);
+        if (conditionalSymbols.Count > 0)
+        {
+            var (definedAffects, definedSymbols) = Compare(
+                DeclarationWalker.Parse(oldText, conditionalSymbols),
+                DeclarationWalker.Parse(newText, conditionalSymbols));
+            affectsWholeProject |= definedAffects;
+            foreach (var symbol in definedSymbols)
+            {
+                if (!symbols.Contains(symbol))
+                {
+                    symbols.Add(symbol);
+                }
+            }
+        }
+
+        // Something that compiles differently changed, but no declaration explains it: code active
+        // only under a mix of symbols, for example. The whole project counts as changed.
+        if (symbols.Count == 0 && !affectsWholeProject)
+        {
+            LogUnattributed(path);
+            affectsWholeProject = true;
+        }
+
+        foreach (var symbol in symbols)
+        {
+            LogSymbol(path, symbol.Kind, symbol.TypeName, symbol.MemberName ?? "(type)");
+        }
+
+        LogDetected(path, symbols.Count, affectsWholeProject);
+        return new CodeChange(path, IsCosmetic: false, affectsWholeProject, symbols);
+    }
+
+    /// <summary>
+    /// Changed symbols between two parses of a file made with the same preprocessor symbols, and
+    /// whether project-wide declarations (global usings, assembly attributes) changed.
+    /// </summary>
+    /// <param name="oldRoot">Old compilation unit.</param>
+    /// <param name="newRoot">New compilation unit.</param>
+    private static (bool AffectsWholeProject, List<SymbolChange> Symbols) Compare(CompilationUnitSyntax oldRoot, CompilationUnitSyntax newRoot)
+    {
         var affectsWholeProject = !SignificantEquals(ProjectWideNodes(oldRoot), ProjectWideNodes(newRoot));
         var symbols = new List<SymbolChange>();
         var oldDeclarations = DeclarationWalker.Collect(oldRoot);
@@ -88,13 +133,7 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
             AddFileLevelChanges(oldRoot, newRoot, newDeclarations, wholeTypeChanges, symbols);
         }
 
-        foreach (var symbol in symbols)
-        {
-            LogSymbol(path, symbol.Kind, symbol.TypeName, symbol.MemberName ?? "(type)");
-        }
-
-        LogDetected(path, symbols.Count, affectsWholeProject);
-        return new CodeChange(path, IsCosmetic: false, affectsWholeProject, symbols);
+        return (affectsWholeProject, symbols);
     }
 
     /// <summary>
@@ -229,6 +268,10 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Path}: {Kind} {TypeName} {MemberName}")]
     private partial void LogSymbol(string path, SymbolChangeKind kind, string typeName, string memberName);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "{Path}: the change is in no declaration Sift can see (conditional code?); the whole project counts as changed")]
+    private partial void LogUnattributed(string path);
 
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{Path}: {Count} changed symbol(s), affects whole project: {AffectsWholeProject}")]

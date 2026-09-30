@@ -120,6 +120,12 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
   `GetPathOfFileAbove`) are followed; conditions are not evaluated. When an import or item uses any
   other property, changed build or source files that no project claims are assumed to affect that
   project. Test projects are also recognised by a `*.Tests`/`*.Test` name.
+- Preprocessor symbols (`DefineConstants`, target framework symbols) are not evaluated. C# files
+  are read twice, with no symbols and with every symbol their `#if`s name, so code inside
+  `#if NET8_0_OR_GREATER` or a whole file inside `#if` is seen. A change Sift still cannot place
+  (code active only under a mix like `#if A && !B`) counts as a change to the whole project.
+- `AssemblyName` values that need MSBuild (`$(Prefix)Name`, property functions) are asked from
+  MSBuild when recording, one query per such project.
 - F# and Visual Basic projects are part of the project graph, but their code is not analysed: when
   one is affected, everything that depends on it runs completely.
 

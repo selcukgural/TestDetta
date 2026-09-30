@@ -44,10 +44,63 @@ internal static class DeclarationWalker
         .WithLanguageVersion(LanguageVersion.Preview)
         .WithDocumentationMode(DocumentationMode.None);
 
-    /// <summary>Parses <paramref name="text"/>; a missing file parses as an empty compilation unit.</summary>
+    /// <summary>
+    /// Parses <paramref name="text"/> with no preprocessor symbols defined; a missing file parses as
+    /// an empty compilation unit.
+    /// </summary>
     /// <param name="text">File content, or null.</param>
-    public static CompilationUnitSyntax Parse(SourceText? text) =>
-        (CompilationUnitSyntax)CSharpSyntaxTree.ParseText(text ?? SourceText.From(string.Empty), ParseOptions).GetRoot();
+    public static CompilationUnitSyntax Parse(SourceText? text) => Parse(text, []);
+
+    /// <summary>Parses <paramref name="text"/> with the given preprocessor symbols defined.</summary>
+    /// <param name="text">File content, or null.</param>
+    /// <param name="symbols">Symbols to define, such as <c>NET8_0_OR_GREATER</c>.</param>
+    public static CompilationUnitSyntax Parse(SourceText? text, IReadOnlyCollection<string> symbols) =>
+        (CompilationUnitSyntax)CSharpSyntaxTree.ParseText(
+            text ?? SourceText.From(string.Empty),
+            symbols.Count == 0 ? ParseOptions : ParseOptions.WithPreprocessorSymbols(symbols)).GetRoot();
+
+    /// <summary>
+    /// Every symbol named in an <c>#if</c> or <c>#elif</c> condition of the given trees, sorted.
+    /// Which symbols a project defines (target framework, <c>DefineConstants</c>) is not known
+    /// without MSBuild, so callers parse once with none and once with all of these: code that is
+    /// disabled without symbols, such as a whole file inside <c>#if NET8_0_OR_GREATER</c>, is then
+    /// seen too. Code only active under a mix (<c>#if A &amp;&amp; !B</c>) is still hidden in both.
+    /// </summary>
+    /// <param name="roots">Parsed trees, typically the old and the new version of a file.</param>
+    public static List<string> ConditionalSymbols(params ReadOnlySpan<CompilationUnitSyntax> roots)
+    {
+        var symbols = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var root in roots)
+        {
+            if (!root.ContainsDirectives)
+            {
+                continue;
+            }
+
+            // #if and #elif; nested ones inside a disabled branch are directives too.
+            foreach (var directive in root.DescendantNodes(descendIntoTrivia: true).OfType<ConditionalDirectiveTriviaSyntax>())
+            {
+                foreach (var name in directive.Condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+                {
+                    symbols.Add(name.Identifier.ValueText);
+                }
+            }
+        }
+
+        return [.. symbols];
+    }
+
+    /// <summary>
+    /// The file parsed with no symbols and, when it has conditional directives, again with all
+    /// symbols of <see cref="ConditionalSymbols"/> defined. See there for why both are needed.
+    /// </summary>
+    /// <param name="text">File content, or null.</param>
+    public static List<CompilationUnitSyntax> ParseVariants(SourceText? text)
+    {
+        var root = Parse(text);
+        var symbols = ConditionalSymbols(root);
+        return symbols.Count == 0 ? [root] : [root, Parse(text, symbols)];
+    }
 
     /// <summary>Collects every type, delegate and member declaration of a file, keyed by identity.</summary>
     /// <param name="root">Compilation unit.</param>
