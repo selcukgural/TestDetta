@@ -220,9 +220,10 @@ internal sealed class CoverageSelection
     }
 
     /// <summary>
-    /// True for a constructor or static member that exactly one test class or fixture ran. Such code
-    /// often runs once per test process and caches its result (a static catalogue, a singleton), so
-    /// the map credits only the first class that triggered it; the change is traced by name instead.
+    /// True for code that may run once per test process and cache its result, which the map credits
+    /// only to the first class that triggered it; the change is then traced by name instead. That is
+    /// any member that ran inside a static constructor, and a constructor or static member that ran
+    /// in only one test class or fixture per recording process (a lazy catalogue, a singleton).
     /// </summary>
     /// <param name="map">Coverage of one test project.</param>
     /// <param name="change">A changed member.</param>
@@ -240,9 +241,15 @@ internal sealed class CoverageSelection
             return false;
         }
 
+        if (map.RanInTypeInitializer(change.TypeName, name))
+        {
+            return true;
+        }
+
         var isStatic = _index.FindMember(change.TypeName, change.MemberName) is { IsStatic: true };
         // Nothing ran it at all means no test runs it; run-once code is still recorded for its first user.
-        return (isConstructor || isStatic) && map.BucketsRunning(change.TypeName, name) == 1;
+        return (isConstructor || isStatic)
+               && (map.BucketsRunning(change.TypeName, name) == 1 || map.RanInOneBucketPerProcess(change.TypeName, name));
     }
 
     /// <summary>

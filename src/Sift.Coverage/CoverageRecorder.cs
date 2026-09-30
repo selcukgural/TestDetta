@@ -452,6 +452,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var classSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var fixtureSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var startupSeconds = new List<double>();
+        var typeInitializers = new SortedSet<int>();
+        var sharedInProcess = new SortedSet<int>();
 
         foreach (var file in resultsFiles)
         {
@@ -459,6 +461,14 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var root = document.RootElement;
             MergeBuckets(root.GetProperty("classes"), merged);
             MergeBuckets(root.GetProperty("fixtures"), mergedFixtures);
+            AddShared(root, sharedInProcess);
+            if (root.TryGetProperty("typeInitializers", out var initializers))
+            {
+                foreach (var id in initializers.EnumerateArray())
+                {
+                    typeInitializers.Add(id.GetInt32());
+                }
+            }
             foreach (var id in root.GetProperty("ambient").EnumerateArray())
             {
                 ambientIds.Add(id.GetInt32());
@@ -490,7 +500,36 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             header,
             methods,
             new CoverageHits(classes, fixtures, ambient),
-            new CoverageTimings(classSeconds, fixtureSeconds, startupSeconds.Count == 0 ? 0 : startupSeconds.Average()));
+            new CoverageTimings(classSeconds, fixtureSeconds, startupSeconds.Count == 0 ? 0 : startupSeconds.Average()))
+        {
+            TypeInitializers = [.. typeInitializers],
+            SharedInProcess = [.. sharedInProcess],
+        };
+    }
+
+    /// <summary>
+    /// Adds the methods that one process's results show in two or more test classes or fixtures.
+    /// Counting per process matters: code that runs once and is cached shows up in one bucket of
+    /// every process, which across several processes looks like shared code.
+    /// </summary>
+    /// <param name="root">One process's results.</param>
+    /// <param name="shared">Methods shared by buckets of one process; updated in place.</param>
+    private static void AddShared(JsonElement root, SortedSet<int> shared)
+    {
+        var seen = new HashSet<int>();
+        foreach (var name in (ReadOnlySpan<string>)["classes", "fixtures"])
+        {
+            foreach (var bucket in root.GetProperty(name).EnumerateObject())
+            {
+                foreach (var id in bucket.Value.EnumerateArray())
+                {
+                    if (!seen.Add(id.GetInt32()))
+                    {
+                        shared.Add(id.GetInt32());
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>

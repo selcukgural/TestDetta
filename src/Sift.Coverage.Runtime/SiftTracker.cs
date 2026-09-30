@@ -48,6 +48,20 @@ public static class SiftTracker
     /// <summary>Hits before any test class or fixture was entered: discovery, theory data, module initializers.</summary>
     private static readonly Bucket Startup = new("startup", new ulong[Words], isFixture: false);
 
+    /// <summary>
+    /// Methods that ran inside a type initializer (static constructor). Such code usually runs once
+    /// per process and caches its result in a static field, so the map credits it to whichever test
+    /// class came first although every user of the type depends on it.
+    /// </summary>
+    private static readonly ulong[] TypeInitializerBits = new ulong[Words];
+
+    /// <summary>
+    /// How many type initializers are running on this thread: a static constructor may trigger
+    /// another. Only type initializers of instrumented assemblies are counted.
+    /// </summary>
+    [ThreadStatic]
+    private static int _typeInitializerDepth;
+
     /// <summary>Bucket entered last on any thread, for code that runs outside every test flow.</summary>
     private static Bucket? _lastEntered;
 
@@ -70,14 +84,26 @@ public static class SiftTracker
     /// <param name="id">Method id assigned by the instrumenter.</param>
     public static void Hit(int id)
     {
-        var bits = BucketForHit().Bits;
         var word = id >> 6;
+        var bit = 1UL << (id & 63);
+        if (_typeInitializerDepth != 0)
+        {
+            Mark(TypeInitializerBits, word, bit);
+        }
+
+        Mark(BucketForHit().Bits, word, bit);
+    }
+
+    /// <summary>Sets one bit of a bit set, cheaply when it is already set.</summary>
+    /// <param name="bits">Bit set.</param>
+    /// <param name="word">Index of the 64-bit word.</param>
+    /// <param name="bit">Mask of the bit in the word.</param>
+    private static void Mark(ulong[] bits, int word, ulong bit)
+    {
         if ((uint)word >= (uint)bits.Length)
         {
             return;
         }
-
-        var bit = 1UL << (id & 63);
 
         // A plain read first: once a method is marked, repeated calls cost no atomic operation.
         if ((Volatile.Read(ref bits[word]) & bit) != 0)
@@ -86,6 +112,22 @@ public static class SiftTracker
         }
 
         Interlocked.Or(ref bits[word], bit);
+    }
+
+    /// <summary>Called by instrumented code at the start of a static constructor.</summary>
+    public static void EnterTypeInitializer() => _typeInitializerDepth++;
+
+    /// <summary>
+    /// Called by instrumented code before a static constructor returns. A static constructor that
+    /// throws never gets here, so later code on its thread counts as type initializer code too: more
+    /// members treated as run-once, never fewer.
+    /// </summary>
+    public static void ExitTypeInitializer()
+    {
+        if (_typeInitializerDepth > 0)
+        {
+            _typeInitializerDepth--;
+        }
     }
 
     /// <summary>
@@ -175,6 +217,7 @@ public static class SiftTracker
                 WriteBuckets(json, "classes", Classes);
                 WriteBuckets(json, "fixtures", Fixtures);
                 WriteIds(json, "ambient", Startup.Bits);
+                WriteIds(json, "typeInitializers", TypeInitializerBits);
                 WriteSeconds(json, "classSeconds", Classes);
                 WriteSeconds(json, "fixtureSeconds", Fixtures);
                 json.WriteNumber("startupSeconds", _startupSeconds);

@@ -18,6 +18,12 @@ internal sealed class CoverageIndex
     /// <summary>Number of buckets (test classes and fixtures, before fixtures are expanded) that ran each member.</summary>
     private readonly Dictionary<CoveredMethod, int> _bucketCount = [];
 
+    /// <summary>Members with an overload that ran inside a static constructor.</summary>
+    private readonly HashSet<CoveredMethod> _typeInitializers = [];
+
+    /// <summary>Members that some process ran in two or more buckets; null when the map does not say.</summary>
+    private readonly HashSet<CoveredMethod>? _sharedInProcess;
+
     /// <summary>Builds the lookups; members that no test ran are still known, with no classes.</summary>
     /// <param name="map">Recorded map.</param>
     /// <param name="classesUsingFixture">
@@ -75,6 +81,35 @@ internal sealed class CoverageIndex
         {
             _ambient.Add(map.Methods[id]);
         }
+
+        foreach (var id in map.TypeInitializers)
+        {
+            _typeInitializers.Add(map.Methods[id]);
+        }
+
+        if (map.SharedInProcess is { } shared)
+        {
+            _sharedInProcess = [.. shared.Select(id => map.Methods[id])];
+        }
+    }
+
+    /// <summary>True when an overload of the member ran inside a static constructor.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name, <c>.ctor</c> for constructors.</param>
+    public bool RanInTypeInitializer(string typeName, string member) =>
+        _typeInitializers.Contains(new CoveredMethod(typeName, member));
+
+    /// <summary>
+    /// True when some bucket ran the member but no recording process ran it in two buckets: with
+    /// one process that is a single test class; with several, one per process, the pattern of code
+    /// that runs once and is cached. False when the map does not record this.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name, <c>.ctor</c> for constructors.</param>
+    public bool RanInOneBucketPerProcess(string typeName, string member)
+    {
+        var method = new CoveredMethod(typeName, member);
+        return _sharedInProcess is not null && _bucketCount.GetValueOrDefault(method) > 0 && !_sharedInProcess.Contains(method);
     }
 
     /// <summary>The map this index reads.</summary>

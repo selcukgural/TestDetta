@@ -44,6 +44,12 @@ public static class CoverageMapStore
         WriteBuckets(json, "fixtures", map.Fixtures);
         WriteIds(json, "ambient", map.Ambient);
 
+        WriteIds(json, "typeInitializers", map.TypeInitializers);
+        if (map.SharedInProcess is { } shared)
+        {
+            WriteIds(json, "sharedInProcess", shared);
+        }
+
         if (map.FailedClasses is { } failed)
         {
             json.WriteStartArray("failedClasses"u8);
@@ -139,6 +145,8 @@ public static class CoverageMapStore
                 timings)
             {
                 FailedClasses = failed,
+                TypeInitializers = root.TryGetProperty("typeInitializers", out var typeInitializers) ? ReadIds(typeInitializers) : [],
+                SharedInProcess = root.TryGetProperty("sharedInProcess", out var shared) ? ReadIds(shared) : null,
             };
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)

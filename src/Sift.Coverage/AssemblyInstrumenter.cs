@@ -160,7 +160,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Hit))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestInstance))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestClass))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterFixtureInstance))!));
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterFixtureInstance))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTypeInitializer))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTypeInitializer))!));
         var fixtures = containsTests ? FixtureTypes(module) : [];
 
         foreach (var type in module.GetTypes())
@@ -199,11 +201,15 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="EnterTestInstance"><see cref="SiftTracker.EnterTestInstance"/>.</param>
     /// <param name="EnterTestClass"><see cref="SiftTracker.EnterTestClass"/>.</param>
     /// <param name="EnterFixtureInstance"><see cref="SiftTracker.EnterFixtureInstance"/>.</param>
+    /// <param name="EnterTypeInitializer"><see cref="SiftTracker.EnterTypeInitializer"/>.</param>
+    /// <param name="ExitTypeInitializer"><see cref="SiftTracker.ExitTypeInitializer"/>.</param>
     private sealed record Probes(
         MethodReference Hit,
         MethodReference EnterTestInstance,
         MethodReference EnterTestClass,
-        MethodReference EnterFixtureInstance);
+        MethodReference EnterFixtureInstance,
+        MethodReference EnterTypeInitializer,
+        MethodReference ExitTypeInitializer);
 
     /// <summary>Which bucket marker, if any, a method starts with.</summary>
     private enum Marker
@@ -258,10 +264,62 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 break;
         }
 
+        var isTypeInitializer = method.IsConstructor && method.IsStatic;
+        if (isTypeInitializer)
+        {
+            il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTypeInitializer));
+        }
+
         il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, id));
         il.InsertBefore(first, il.Create(OpCodes.Call, probes.Hit));
 
+        if (isTypeInitializer)
+        {
+            InsertBeforeReturns(body, il, probes.ExitTypeInitializer);
+        }
+
         body.OptimizeMacros();
+    }
+
+    /// <summary>
+    /// Inserts a call before every <c>ret</c> of <paramref name="body"/>. Branches, switch tables and
+    /// exception handler boundaries that pointed at a <c>ret</c> are moved to the call, so no path
+    /// returns without it.
+    /// </summary>
+    /// <param name="body">Method body with short branches already expanded.</param>
+    /// <param name="il">Processor of the body.</param>
+    /// <param name="target">Method to call; takes and returns nothing.</param>
+    private static void InsertBeforeReturns(MethodBody body, ILProcessor il, MethodReference target)
+    {
+        var returns = body.Instructions.Where(static i => i.OpCode == OpCodes.Ret).ToList();
+        foreach (var ret in returns)
+        {
+            var call = il.Create(OpCodes.Call, target);
+            il.InsertBefore(ret, call);
+
+            foreach (var instruction in body.Instructions)
+            {
+                if (instruction.Operand == ret)
+                {
+                    instruction.Operand = call;
+                }
+                else if (instruction.Operand is Instruction[] targets)
+                {
+                    for (var i = 0; i < targets.Length; i++)
+                    {
+                        targets[i] = targets[i] == ret ? call : targets[i];
+                    }
+                }
+            }
+
+            foreach (var handler in body.ExceptionHandlers)
+            {
+                handler.TryEnd = handler.TryEnd == ret ? call : handler.TryEnd;
+                handler.HandlerStart = handler.HandlerStart == ret ? call : handler.HandlerStart;
+                handler.HandlerEnd = handler.HandlerEnd == ret ? call : handler.HandlerEnd;
+                handler.FilterStart = handler.FilterStart == ret ? call : handler.FilterStart;
+            }
+        }
     }
 
     /// <summary>

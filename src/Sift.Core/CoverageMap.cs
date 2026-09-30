@@ -79,4 +79,18 @@ public sealed record CoverageMap(
     /// which (no TRX report): then no class of the map can be trusted.
     /// </summary>
     public IReadOnlySet<string>? FailedClasses { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Methods (indexes into <see cref="Methods"/>) that ran inside a static constructor. Such code
+    /// runs once per process and caches its result, so only the first test class to touch the type
+    /// is credited with it; every user of the type depends on it.
+    /// </summary>
+    public IReadOnlyList<int> TypeInitializers { get; init; } = [];
+
+    /// <summary>
+    /// Methods that some recording process ran in two or more test classes or fixtures. A method
+    /// that ran in a single bucket of every process may be run-once code (a lazy cache): with
+    /// several processes it shows up once per process. Null for maps recorded before this was kept.
+    /// </summary>
+    public IReadOnlyList<int>? SharedInProcess { get; init; }
 }
