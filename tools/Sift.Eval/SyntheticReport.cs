@@ -51,6 +51,12 @@ internal static class SyntheticReport
             $"- Changes Sift did not see: {undetected.Count} ({undetected.Count(static m => m.Killing)} of them failed a test)");
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Selected on average: {Average(mutants):P0} of {run.TestClasses} recorded test classes; {Average(killing):P0} for failing mutants");
+        if (OverSelection(killing, run.TestClasses) is { } ratio)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"- Precision: on failing mutants Sift ran {ratio:0.0} test classes per class that failed (median; 1.0 would be exact)");
+        }
+
         text.AppendLine(CultureInfo.InvariantCulture, $"- Full suite: {run.BaselineSeconds:0.0} s");
         if (mutants.Select(static m => m.Target.Kind).Distinct().Count() > 1)
         {
@@ -147,6 +153,28 @@ internal static class SyntheticReport
         }
 
         json.WriteEndArray();
+    }
+
+    /// <summary>
+    /// Median of selected classes per failing class over the failing mutants: how many classes Sift
+    /// ran for each one that really depended on the change. Failing classes are a lower bound of the
+    /// dependent ones (a test may run code without checking it), so this overstates the waste a little.
+    /// Null without failing mutants or recorded classes.
+    /// </summary>
+    /// <param name="killing">Mutants that failed at least one class.</param>
+    /// <param name="testClasses">Recorded test classes the selected share is taken of.</param>
+    private static double? OverSelection(List<SyntheticMutant> killing, int testClasses)
+    {
+        if (killing.Count == 0 || testClasses == 0)
+        {
+            return null;
+        }
+
+        var ratios = killing
+            .Select(m => Math.Max(m.SelectedShare * testClasses, m.KilledClasses.Count) / m.KilledClasses.Count)
+            .Order()
+            .ToList();
+        return ratios.Count % 2 == 1 ? ratios[ratios.Count / 2] : (ratios[(ratios.Count / 2) - 1] + ratios[ratios.Count / 2]) / 2;
     }
 
     /// <summary>Mean selected share, 0 for no mutants.</summary>
