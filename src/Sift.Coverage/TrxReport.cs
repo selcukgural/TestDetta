@@ -5,7 +5,8 @@ namespace Sift.Coverage;
 /// <summary>What a TRX report says about one test run.</summary>
 /// <param name="Total">Number of tests that ran.</param>
 /// <param name="FailedClasses">Test classes (runtime names) with at least one failed test.</param>
-internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses);
+/// <param name="ExecutedClasses">Test classes (runtime names) with at least one test that ran, passed or failed.</param>
+internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses, IReadOnlySet<string> ExecutedClasses);
 
 /// <summary>Reads the parts of a Visual Studio TRX test report Sift needs: how many tests ran and which classes failed.</summary>
 internal static class TrxReport
@@ -28,6 +29,7 @@ internal static class TrxReport
 
         var total = 0;
         var failed = new HashSet<string>(StringComparer.Ordinal);
+        var executed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var file in files)
         {
             var document = XDocument.Load(file);
@@ -46,16 +48,26 @@ internal static class TrxReport
             foreach (var result in document.Descendants(ns + "UnitTestResult"))
             {
                 total++;
-                if (result.Attribute("outcome")?.Value == "Failed"
-                    && result.Attribute("testId")?.Value is { } testId
-                    && classById.TryGetValue(testId, out var testClass))
+                var outcome = result.Attribute("outcome")?.Value;
+                if (result.Attribute("testId")?.Value is not { } testId || !classById.TryGetValue(testId, out var testClass))
+                {
+                    continue;
+                }
+
+                // A skipped test never enters its class, so it proves nothing about the map.
+                if (outcome is not ("NotExecuted" or "Inconclusive" or "Pending"))
+                {
+                    executed.Add(testClass);
+                }
+
+                if (outcome == "Failed")
                 {
                     failed.Add(testClass);
                 }
             }
         }
 
-        return new TrxOutcome(total, failed);
+        return new TrxOutcome(total, failed, executed);
     }
 
     /// <summary>

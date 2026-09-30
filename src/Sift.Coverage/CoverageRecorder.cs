@@ -93,7 +93,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         {
             // Under Microsoft.Testing.Platform the tests run in the test project's own executable,
             // where no VSTest collector loads the runtime; it goes into the output instead.
-            deployment = mode == DotnetTestMode.TestingPlatform ? new RuntimeDeployment(targetPath) : null;
+            // xUnit v3 runs its tests in the test project's own executable under VSTest too, where the
+            // collector is not loaded either.
+            var isXunitV3 = File.Exists(Path.Combine(Path.GetDirectoryName(targetPath)!, "xunit.v3.core.dll"));
+            deployment = mode == DotnetTestMode.TestingPlatform || isXunitV3 ? new RuntimeDeployment(targetPath) : null;
             var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework), work);
             LogMode(project, mode);
 
@@ -132,7 +135,14 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 resultsFiles.AddRange(run.Result.ResultsFiles);
             }
 
-            var map = BuildMap(request, instrumentation.Methods, resultsFiles) with { FailedClasses = FailedClasses(runs), Generated = generated };
+            var reports = runs.Select(static r => r.Result.Report).ToList();
+            if (reports.All(static r => r is { Total: 0 }))
+            {
+                throw new NoTestsRecordedException($"No test ran in {Path.GetFileName(project)}, so it has no coverage map.");
+            }
+
+            var map = BuildMap(request, instrumentation.Methods, resultsFiles);
+            map = map with { FailedClasses = Untrusted(runs, map), Generated = generated };
             LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
             return (map, runs.All(static r => r.Result.ExitCode == 0));
         }
@@ -253,18 +263,29 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     private sealed record ShardResult(int ExitCode, IReadOnlyList<string> ResultsFiles, TrxOutcome? Report);
 
     /// <summary>
-    /// Test classes that failed in any shard; null when a shard failed without a report to say
-    /// which classes. A shard that exited cleanly had no failures, report or not.
+    /// Test classes whose coverage cannot be trusted: those that failed in any shard, and those the
+    /// reports say ran but the map has no trace of (their test process could not load the tracker,
+    /// say). Null when a shard failed without a report to say which classes. A shard that exited
+    /// cleanly had no failures, report or not.
     /// </summary>
     /// <param name="runs">Finished shards.</param>
-    private static HashSet<string>? FailedClasses(Task<ShardResult>[] runs)
+    /// <param name="map">The map built from the shards' results.</param>
+    private HashSet<string>? Untrusted(Task<ShardResult>[] runs, CoverageMap map)
     {
-        var failed = new HashSet<string>(StringComparer.Ordinal);
+        var untrusted = new HashSet<string>(StringComparer.Ordinal);
         foreach (var run in runs)
         {
             if (run.Result.Report is { } report)
             {
-                failed.UnionWith(report.FailedClasses);
+                untrusted.UnionWith(report.FailedClasses);
+                foreach (var testClass in report.ExecutedClasses)
+                {
+                    if (!map.Classes.ContainsKey(testClass) && untrusted.Add(testClass))
+                    {
+                        LogUnrecordedClass(testClass);
+                    }
+                }
+
                 continue;
             }
 
@@ -274,7 +295,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
         }
 
-        return failed;
+        return untrusted;
     }
 
     /// <summary>Runs one shard with its own results file and report, prefixing its output lines with the shard number.</summary>
@@ -650,6 +671,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{Project}: {Count} test class(es) failed while recording (-1: unknown, the map will not be used)")]
     private partial void LogFailedClasses(string project, int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{TestClass} ran but left no coverage; it will always be selected")]
+    private partial void LogUnrecordedClass(string testClass);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Project}: {Count} generated type(s) read from PDBs")]
     private partial void LogGenerated(string project, int count);

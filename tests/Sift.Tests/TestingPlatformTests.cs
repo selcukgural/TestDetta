@@ -70,11 +70,12 @@ public sealed class TestingPlatformRecorderTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
 
-    public TestingPlatformRecorderTests()
+    /// <summary>Writes the solution; xUnit v3 runs its tests in the test executable under both runners.</summary>
+    private void WriteSolution(bool testingPlatform)
     {
-        _repo.Write("global.json", """
-            { "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }
-            """);
+        _repo.Write("global.json", testingPlatform
+            ? """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }"""
+            : """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write("src/Calc/Calc.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
@@ -84,11 +85,14 @@ public sealed class TestingPlatformRecorderTests : IDisposable
             namespace Calc;
             public class Calculator { public int Add(int a, int b) => a + b; public int Mul(int a, int b) => a * b; public int Warm() => 0; }
             """);
-        _repo.Write("tests/Calc.Tests/Calc.Tests.csproj", """
+        _repo.Write("tests/Calc.Tests/Calc.Tests.csproj", $$"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><OutputType>Exe</OutputType></PropertyGroup>
               <ItemGroup>
-                <PackageReference Include="xunit.v3" Version="4.0.1" />
+                {{(testingPlatform
+                    ? "<PackageReference Include=\"xunit.v3\" Version=\"4.0.1\" />"
+                    // Before 3.0, xUnit v3 did not bring the testing platform along, so VSTest runs it (AutoFixture does this).
+                    : "<PackageReference Include=\"xunit.v3\" Version=\"1.0.1\" /><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.14.1\" /><PackageReference Include=\"xunit.runner.visualstudio\" Version=\"3.0.1\" />")}}
                 <ProjectReference Include="../../src/Calc/Calc.csproj" />
               </ItemGroup>
             </Project>
@@ -105,9 +109,12 @@ public sealed class TestingPlatformRecorderTests : IDisposable
         _repo.Commit("base");
     }
 
-    [Fact]
-    public void Records_an_xunit_v3_project_in_one_and_in_several_processes()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Records_an_xunit_v3_project_in_one_and_in_several_processes(bool testingPlatform)
     {
+        WriteSolution(testingPlatform);
         var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
         var testProject = graph.Projects.Single(p => p.IsTestProject);
         var recorder = new CoverageRecorder(NullLoggerFactory.Instance);
@@ -144,6 +151,7 @@ public sealed class TestingPlatformRecorderTests : IDisposable
     [Fact]
     public void Project_named_like_a_test_project_without_tests_is_reported_as_not_recorded()
     {
+        WriteSolution(testingPlatform: true);
         // Like an AOT smoke-test app: named *Test, but an ordinary executable with no tests.
         _repo.Write("tests/Calc.AotTest/Calc.AotTest.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
