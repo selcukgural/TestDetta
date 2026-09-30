@@ -452,7 +452,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var classSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var fixtureSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var startupSeconds = new List<double>();
-        var typeInitializers = new SortedSet<int>();
+        var initialization = new SortedSet<int>();
         var sharedInProcess = new SortedSet<int>();
 
         foreach (var file in resultsFiles)
@@ -462,11 +462,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             MergeBuckets(root.GetProperty("classes"), merged);
             MergeBuckets(root.GetProperty("fixtures"), mergedFixtures);
             AddShared(root, sharedInProcess);
-            if (root.TryGetProperty("typeInitializers", out var initializers))
+            if (root.TryGetProperty("initialization", out var initializing))
             {
-                foreach (var id in initializers.EnumerateArray())
+                foreach (var id in initializing.EnumerateArray())
                 {
-                    typeInitializers.Add(id.GetInt32());
+                    initialization.Add(id.GetInt32());
                 }
             }
             foreach (var id in root.GetProperty("ambient").EnumerateArray())
@@ -502,7 +502,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             new CoverageHits(classes, fixtures, ambient),
             new CoverageTimings(classSeconds, fixtureSeconds, startupSeconds.Count == 0 ? 0 : startupSeconds.Average()))
         {
-            TypeInitializers = [.. typeInitializers],
+            Initialization = [.. initialization],
             SharedInProcess = [.. sharedInProcess],
         };
     }

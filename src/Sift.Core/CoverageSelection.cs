@@ -222,7 +222,7 @@ internal sealed class CoverageSelection
     /// <summary>
     /// True for code that may run once per test process and cache its result, which the map credits
     /// only to the first class that triggered it; the change is then traced by name instead. That is
-    /// any member that ran inside a static constructor, and a constructor or static member that ran
+    /// any member that ran inside a static constructor or a cache fill, and a constructor or static member that ran
     /// in only one test class or fixture per recording process (a lazy catalogue, a singleton).
     /// </summary>
     /// <param name="map">Coverage of one test project.</param>
@@ -241,7 +241,7 @@ internal sealed class CoverageSelection
             return false;
         }
 
-        if (map.RanInTypeInitializer(change.TypeName, name))
+        if (map.RanDuringInitialization(change.TypeName, name))
         {
             return true;
         }

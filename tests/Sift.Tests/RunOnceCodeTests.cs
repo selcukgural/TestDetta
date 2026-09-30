@@ -33,6 +33,20 @@ public sealed class RunOnceCodeTests : IDisposable
                 private static int[] Build() => [1, 2];
             }
 
+            // Filled by cache factories; the instance method they call is only covered by the cache rule.
+            public sealed class Maker { public int Make(string key) => key.Length; }
+            public static class PatternCache
+            {
+                private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> Cache = new();
+                public static int Get(string key) => Cache.GetOrAdd(key, static k => new Maker().Make(k));
+            }
+            public sealed class Computer { public int Compute() => 3; }
+            public static class LazyValue
+            {
+                private static readonly Lazy<int> Value = new(static () => new Computer().Compute());
+                public static int Get() => Value.Value;
+            }
+
             // Filled on first use, once per process.
             public static class LazyCatalog
             {
@@ -55,9 +69,9 @@ public sealed class RunOnceCodeTests : IDisposable
         _repo.Write("tests/Cache.Tests/Tests.cs", """
             using Xunit;
             namespace Cache.Tests;
-            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); } }
-            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); } }
-            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); } }
+            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); } }
+            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); } }
+            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); } }
             """);
         _repo.Commit("base");
     }
@@ -73,8 +87,10 @@ public sealed class RunOnceCodeTests : IDisposable
             .Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: 2)), TextWriter.Null);
 
         Assert.True(passed);
-        Assert.Contains(new CoveredMethod("Cache.Catalog", "Build"), map.TypeInitializers.Select(id => map.Methods[id]));
+        Assert.Contains(new CoveredMethod("Cache.Catalog", "Build"), map.Initialization.Select(id => map.Methods[id]));
         Assert.DoesNotContain(new CoveredMethod("Cache.LazyCatalog", "Load"), map.SharedInProcess!.Select(id => map.Methods[id]));
+        Assert.Contains(new CoveredMethod("Cache.Maker", "Make"), map.Initialization.Select(id => map.Methods[id]));
+        Assert.Contains(new CoveredMethod("Cache.Computer", "Compute"), map.Initialization.Select(id => map.Methods[id]));
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         string[] all = ["Cache.Tests.AlphaTests", "Cache.Tests.BetaTests", "Cache.Tests.GammaTests"];
@@ -84,8 +100,22 @@ public sealed class RunOnceCodeTests : IDisposable
 
         _repo.Replace("src/Cache/Catalog.cs", "=> [2, 1];", "=> [1, 2];");
         _repo.Replace("src/Cache/Catalog.cs", "Load() => [1];", "Load() => [1 + 0];");
-        var lazy = Select();
-        Assert.True(lazy.Mode == TestRunMode.All || all.All(lazy.TestClasses.Contains), string.Join(", ", lazy.TestClasses));
+        AssertSelectsAll(all);
+
+        _repo.Replace("src/Cache/Catalog.cs", "Load() => [1 + 0];", "Load() => [1];");
+        _repo.Replace("src/Cache/Catalog.cs", "=> key.Length;", "=> key.Length + 0;");
+        AssertSelectsAll(all);
+
+        _repo.Replace("src/Cache/Catalog.cs", "=> key.Length + 0;", "=> key.Length;");
+        _repo.Replace("src/Cache/Catalog.cs", "Compute() => 3;", "Compute() => 1 + 2;");
+        AssertSelectsAll(all);
+    }
+
+    /// <summary>Asserts that the current change runs every one of <paramref name="classes"/>.</summary>
+    private void AssertSelectsAll(string[] classes)
+    {
+        var selection = Select();
+        Assert.True(selection.Mode == TestRunMode.All || classes.All(selection.TestClasses.Contains), string.Join(", ", selection.TestClasses));
     }
 
     private TestProjectSelection Select() =>

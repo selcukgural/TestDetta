@@ -49,11 +49,12 @@ public static class SiftTracker
     private static readonly Bucket Startup = new("startup", new ulong[Words], isFixture: false);
 
     /// <summary>
-    /// Methods that ran inside a type initializer (static constructor). Such code usually runs once
-    /// per process and caches its result in a static field, so the map credits it to whichever test
-    /// class came first although every user of the type depends on it.
+    /// Methods that ran while a value was being initialized for later reuse: inside a static
+    /// constructor, or inside a call that fills a cache (<c>ConcurrentDictionary.GetOrAdd</c>,
+    /// <c>Lazy&lt;T&gt;.Value</c>, ...). Such code usually runs once per process, so the map credits
+    /// it to whichever test class came first although every user of the value depends on it.
     /// </summary>
-    private static readonly ulong[] TypeInitializerBits = new ulong[Words];
+    private static readonly ulong[] InitializationBits = new ulong[Words];
 
     /// <summary>
     /// How many type initializers are running on this thread: a static constructor may trigger
@@ -61,6 +62,10 @@ public static class SiftTracker
     /// </summary>
     [ThreadStatic]
     private static int _typeInitializerDepth;
+
+    /// <summary>How many cache-filling calls are running on this thread.</summary>
+    [ThreadStatic]
+    private static int _cacheDepth;
 
     /// <summary>Bucket entered last on any thread, for code that runs outside every test flow.</summary>
     private static Bucket? _lastEntered;
@@ -86,9 +91,9 @@ public static class SiftTracker
     {
         var word = id >> 6;
         var bit = 1UL << (id & 63);
-        if (_typeInitializerDepth != 0)
+        if (_typeInitializerDepth != 0 || _cacheDepth != 0)
         {
-            Mark(TypeInitializerBits, word, bit);
+            Mark(InitializationBits, word, bit);
         }
 
         Mark(BucketForHit().Bits, word, bit);
@@ -112,6 +117,25 @@ public static class SiftTracker
         }
 
         Interlocked.Or(ref bits[word], bit);
+    }
+
+    /// <summary>
+    /// Called by instrumented code right before a call that may fill a cache, such as
+    /// <c>ConcurrentDictionary.GetOrAdd</c> with a factory. When the value is cached already the
+    /// factory does not run and nothing is marked.
+    /// </summary>
+    public static void EnterCache() => _cacheDepth++;
+
+    /// <summary>
+    /// Called by instrumented code right after such a call. A call that throws never gets here; the
+    /// depth then stays up until the next test class or fixture is entered on the thread.
+    /// </summary>
+    public static void ExitCache()
+    {
+        if (_cacheDepth > 0)
+        {
+            _cacheDepth--;
+        }
     }
 
     /// <summary>Called by instrumented code at the start of a static constructor.</summary>
@@ -217,7 +241,7 @@ public static class SiftTracker
                 WriteBuckets(json, "classes", Classes);
                 WriteBuckets(json, "fixtures", Fixtures);
                 WriteIds(json, "ambient", Startup.Bits);
-                WriteIds(json, "typeInitializers", TypeInitializerBits);
+                WriteIds(json, "initialization", InitializationBits);
                 WriteSeconds(json, "classSeconds", Classes);
                 WriteSeconds(json, "fixtureSeconds", Fixtures);
                 json.WriteNumber("startupSeconds", _startupSeconds);
@@ -256,6 +280,10 @@ public static class SiftTracker
     /// <param name="isFixture">True when <paramref name="buckets"/> holds fixtures.</param>
     private static void Enter(Dictionary<string, Bucket> buckets, string name, bool isFixture)
     {
+        // A cache fill or static constructor that threw left its depth up; a new test starts clean.
+        _cacheDepth = 0;
+        _typeInitializerDepth = 0;
+
         if (Current.Value is { } current && ReferenceEquals(current, Volatile.Read(ref _lastEntered))
             && string.Equals(current.Name, name, StringComparison.Ordinal))
         {

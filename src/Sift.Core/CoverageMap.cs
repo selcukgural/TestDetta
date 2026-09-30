@@ -81,11 +81,12 @@ public sealed record CoverageMap(
     public IReadOnlySet<string>? FailedClasses { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
-    /// Methods (indexes into <see cref="Methods"/>) that ran inside a static constructor. Such code
-    /// runs once per process and caches its result, so only the first test class to touch the type
-    /// is credited with it; every user of the type depends on it.
+    /// Methods (indexes into <see cref="Methods"/>) that ran while a value was initialized for reuse:
+    /// inside a static constructor or a cache-filling call such as <c>ConcurrentDictionary.GetOrAdd</c>.
+    /// Such code runs once per process, so only the first test class to need the value is credited
+    /// with it; every user of the value depends on it.
     /// </summary>
-    public IReadOnlyList<int> TypeInitializers { get; init; } = [];
+    public IReadOnlyList<int> Initialization { get; init; } = [];
 
     /// <summary>
     /// Methods that some recording process ran in two or more test classes or fixtures. A method

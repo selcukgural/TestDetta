@@ -18,8 +18,8 @@ internal sealed class CoverageIndex
     /// <summary>Number of buckets (test classes and fixtures, before fixtures are expanded) that ran each member.</summary>
     private readonly Dictionary<CoveredMethod, int> _bucketCount = [];
 
-    /// <summary>Members with an overload that ran inside a static constructor.</summary>
-    private readonly HashSet<CoveredMethod> _typeInitializers = [];
+    /// <summary>Members with an overload that ran inside a static constructor or a cache fill.</summary>
+    private readonly HashSet<CoveredMethod> _initialization = [];
 
     /// <summary>Members that some process ran in two or more buckets; null when the map does not say.</summary>
     private readonly HashSet<CoveredMethod>? _sharedInProcess;
@@ -82,9 +82,9 @@ internal sealed class CoverageIndex
             _ambient.Add(map.Methods[id]);
         }
 
-        foreach (var id in map.TypeInitializers)
+        foreach (var id in map.Initialization)
         {
-            _typeInitializers.Add(map.Methods[id]);
+            _initialization.Add(map.Methods[id]);
         }
 
         if (map.SharedInProcess is { } shared)
@@ -93,11 +93,11 @@ internal sealed class CoverageIndex
         }
     }
 
-    /// <summary>True when an overload of the member ran inside a static constructor.</summary>
+    /// <summary>True when an overload of the member ran inside a static constructor or a cache fill.</summary>
     /// <param name="typeName">Qualified type name.</param>
     /// <param name="member">Simple member name, <c>.ctor</c> for constructors.</param>
-    public bool RanInTypeInitializer(string typeName, string member) =>
-        _typeInitializers.Contains(new CoveredMethod(typeName, member));
+    public bool RanDuringInitialization(string typeName, string member) =>
+        _initialization.Contains(new CoveredMethod(typeName, member));
 
     /// <summary>
     /// True when some bucket ran the member but no recording process ran it in two buckets: with

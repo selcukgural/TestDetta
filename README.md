@@ -117,9 +117,11 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
   which (NUnit under Microsoft.Testing.Platform without `Microsoft.Testing.Extensions.TrxReport`),
   the map is not used and selection falls back to names.
 - Code that runs once per process (caches, lazy singletons, EF model building) is credited to the
-  first test class that triggers it. Changes to code that ran inside a static constructor, and to
-  constructors and static members that only one test class per recording process ran, are traced
-  by name instead; a cache filled some other way (`Lazy<T>` on an instance, say) can still hide users. Keep running the full suite on the default branch; recording does that.
+  first test class that triggers it. Changes to code that ran inside a static constructor or a
+  cache-filling call (`ConcurrentDictionary.GetOrAdd`, `Lazy<T>.Value`, `LazyInitializer`,
+  `ConditionalWeakTable`, `IMemoryCache.GetOrCreate`), and to constructors and static members that
+  only one test class per recording process ran, are traced by name instead. A cache written by
+  hand (a `Dictionary` checked with `TryGetValue`) can still hide its users. Keep running the full suite on the default branch; recording does that.
 - Project files are read as XML, not evaluated. Imports (`<Import>`, `.projitems`, the imports of
   `Directory.Build.*`), linked items outside the project directory (`<Compile Include="../Shared/*.cs">`)
   and the common path properties (`$(MSBuildThisFileDirectory)`, `$(MSBuildProjectDirectory)`,

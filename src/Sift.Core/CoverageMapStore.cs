@@ -44,7 +44,7 @@ public static class CoverageMapStore
         WriteBuckets(json, "fixtures", map.Fixtures);
         WriteIds(json, "ambient", map.Ambient);
 
-        WriteIds(json, "typeInitializers", map.TypeInitializers);
+        WriteIds(json, "initialization", map.Initialization);
         if (map.SharedInProcess is { } shared)
         {
             WriteIds(json, "sharedInProcess", shared);
@@ -145,7 +145,7 @@ public static class CoverageMapStore
                 timings)
             {
                 FailedClasses = failed,
-                TypeInitializers = root.TryGetProperty("typeInitializers", out var typeInitializers) ? ReadIds(typeInitializers) : [],
+                Initialization = root.TryGetProperty("initialization", out var initialization) ? ReadIds(initialization) : [],
                 SharedInProcess = root.TryGetProperty("sharedInProcess", out var shared) ? ReadIds(shared) : null,
             };
         }

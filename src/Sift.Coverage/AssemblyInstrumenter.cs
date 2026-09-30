@@ -162,7 +162,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestClass))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterFixtureInstance))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTypeInitializer))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTypeInitializer))!));
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTypeInitializer))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterCache))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCache))!));
         var fixtures = containsTests ? FixtureTypes(module) : [];
 
         foreach (var type in module.GetTypes())
@@ -203,13 +205,17 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="EnterFixtureInstance"><see cref="SiftTracker.EnterFixtureInstance"/>.</param>
     /// <param name="EnterTypeInitializer"><see cref="SiftTracker.EnterTypeInitializer"/>.</param>
     /// <param name="ExitTypeInitializer"><see cref="SiftTracker.ExitTypeInitializer"/>.</param>
+    /// <param name="EnterCache"><see cref="SiftTracker.EnterCache"/>.</param>
+    /// <param name="ExitCache"><see cref="SiftTracker.ExitCache"/>.</param>
     private sealed record Probes(
         MethodReference Hit,
         MethodReference EnterTestInstance,
         MethodReference EnterTestClass,
         MethodReference EnterFixtureInstance,
         MethodReference EnterTypeInitializer,
-        MethodReference ExitTypeInitializer);
+        MethodReference ExitTypeInitializer,
+        MethodReference EnterCache,
+        MethodReference ExitCache);
 
     /// <summary>Which bucket marker, if any, a method starts with.</summary>
     private enum Marker
@@ -278,7 +284,83 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             InsertBeforeReturns(body, il, probes.ExitTypeInitializer);
         }
 
+        MarkCacheFills(body, il, probes);
         body.OptimizeMacros();
+    }
+
+    /// <summary>
+    /// Methods that fill a cache through a factory on a miss and skip it on a hit, by declaring type
+    /// (generic definition) and name. Code a factory runs is credited to the first test class that
+    /// misses, so the tracker is told when such a call runs.
+    /// </summary>
+    private static readonly FrozenSet<string> CacheFills = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "System.Collections.Concurrent.ConcurrentDictionary`2::GetOrAdd",
+        "System.Collections.Concurrent.ConcurrentDictionary`2::AddOrUpdate",
+        "System.Lazy`1::get_Value",
+        "System.Threading.LazyInitializer::EnsureInitialized",
+        "System.Runtime.CompilerServices.ConditionalWeakTable`2::GetValue",
+        "System.Runtime.CompilerServices.ConditionalWeakTable`2::GetOrAdd",
+        "Microsoft.Extensions.Caching.Memory.CacheExtensions::GetOrCreate",
+        "Microsoft.Extensions.Caching.Memory.CacheExtensions::GetOrCreateAsync");
+
+    /// <summary>
+    /// Surrounds every call of <see cref="CacheFills"/> with <see cref="SiftTracker.EnterCache"/> and
+    /// <see cref="SiftTracker.ExitCache"/>. The calls take and leave nothing on the stack, so the call
+    /// in between keeps its arguments and result. Branches and handler boundaries that pointed at the
+    /// call move to the inserted enter. A call after a <c>tail.</c> or <c>constrained.</c> prefix is
+    /// left alone: nothing may come between the prefix and its call, or after a tail call.
+    /// </summary>
+    /// <param name="body">Method body with short branches already expanded.</param>
+    /// <param name="il">Processor of the body.</param>
+    /// <param name="probes">Tracker references.</param>
+    private static void MarkCacheFills(MethodBody body, ILProcessor il, Probes probes)
+    {
+        var calls = body.Instructions
+            .Where(static i => (i.OpCode == OpCodes.Call || i.OpCode == OpCodes.Callvirt)
+                               && i.Operand is MethodReference target
+                               && CacheFills.Contains($"{target.DeclaringType.GetElementType().FullName}::{target.Name}")
+                               && i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
+            .ToList();
+
+        foreach (var call in calls)
+        {
+            var enter = il.Create(OpCodes.Call, probes.EnterCache);
+            il.InsertBefore(call, enter);
+            il.InsertAfter(call, il.Create(OpCodes.Call, probes.ExitCache));
+            Retarget(body, call, enter);
+        }
+    }
+
+    /// <summary>Points branches, switch tables and exception handler boundaries at <paramref name="to"/> instead of <paramref name="from"/>.</summary>
+    /// <param name="body">Method body.</param>
+    /// <param name="from">Instruction that was a target.</param>
+    /// <param name="to">Instruction inserted before it.</param>
+    private static void Retarget(MethodBody body, Instruction from, Instruction to)
+    {
+        foreach (var instruction in body.Instructions)
+        {
+            if (instruction.Operand == from && instruction != to)
+            {
+                instruction.Operand = to;
+            }
+            else if (instruction.Operand is Instruction[] targets)
+            {
+                for (var i = 0; i < targets.Length; i++)
+                {
+                    targets[i] = targets[i] == from ? to : targets[i];
+                }
+            }
+        }
+
+        foreach (var handler in body.ExceptionHandlers)
+        {
+            handler.TryStart = handler.TryStart == from ? to : handler.TryStart;
+            handler.TryEnd = handler.TryEnd == from ? to : handler.TryEnd;
+            handler.HandlerStart = handler.HandlerStart == from ? to : handler.HandlerStart;
+            handler.HandlerEnd = handler.HandlerEnd == from ? to : handler.HandlerEnd;
+            handler.FilterStart = handler.FilterStart == from ? to : handler.FilterStart;
+        }
     }
 
     /// <summary>
@@ -296,29 +378,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         {
             var call = il.Create(OpCodes.Call, target);
             il.InsertBefore(ret, call);
-
-            foreach (var instruction in body.Instructions)
-            {
-                if (instruction.Operand == ret)
-                {
-                    instruction.Operand = call;
-                }
-                else if (instruction.Operand is Instruction[] targets)
-                {
-                    for (var i = 0; i < targets.Length; i++)
-                    {
-                        targets[i] = targets[i] == ret ? call : targets[i];
-                    }
-                }
-            }
-
-            foreach (var handler in body.ExceptionHandlers)
-            {
-                handler.TryEnd = handler.TryEnd == ret ? call : handler.TryEnd;
-                handler.HandlerStart = handler.HandlerStart == ret ? call : handler.HandlerStart;
-                handler.HandlerEnd = handler.HandlerEnd == ret ? call : handler.HandlerEnd;
-                handler.FilterStart = handler.FilterStart == ret ? call : handler.FilterStart;
-            }
+            Retarget(body, ret, call);
         }
     }
 
