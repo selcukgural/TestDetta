@@ -1,13 +1,13 @@
 using System.Xml.Linq;
 
-namespace Sift.Eval;
+namespace Sift.Coverage;
 
 /// <summary>What a TRX report says about one test run.</summary>
 /// <param name="Total">Number of tests that ran.</param>
 /// <param name="FailedClasses">Test classes (runtime names) with at least one failed test.</param>
 internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses);
 
-/// <summary>Reads the parts of a Visual Studio TRX test report the evaluation needs.</summary>
+/// <summary>Reads the parts of a Visual Studio TRX test report Sift needs: how many tests ran and which classes failed.</summary>
 internal static class TrxReport
 {
     /// <summary>Reads every <c>.trx</c> file in <paramref name="directory"/> and combines them.</summary>

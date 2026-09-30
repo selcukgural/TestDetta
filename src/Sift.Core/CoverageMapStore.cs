@@ -44,6 +44,21 @@ public static class CoverageMapStore
         WriteBuckets(json, "fixtures", map.Fixtures);
         WriteIds(json, "ambient", map.Ambient);
 
+        if (map.FailedClasses is { } failed)
+        {
+            json.WriteStartArray("failedClasses"u8);
+            foreach (var name in failed.Order(StringComparer.Ordinal))
+            {
+                json.WriteStringValue(name);
+            }
+
+            json.WriteEndArray();
+        }
+        else
+        {
+            json.WriteNull("failedClasses"u8);
+        }
+
         if (map.Timings is { } timings)
         {
             json.WriteStartObject("timings"u8);
@@ -100,11 +115,31 @@ public static class CoverageMapStore
                     timingElement.TryGetProperty("startup", out var startup) ? startup.GetDouble() : 0);
             }
 
+            // Maps written before failures were recorded have no "failedClasses": nothing is known to have failed.
+            var failed = new HashSet<string>(StringComparer.Ordinal);
+            if (root.TryGetProperty("failedClasses", out var failedElement))
+            {
+                if (failedElement.ValueKind == JsonValueKind.Null)
+                {
+                    failed = null;
+                }
+                else
+                {
+                    foreach (var name in failedElement.EnumerateArray())
+                    {
+                        failed.Add(name.GetString()!);
+                    }
+                }
+            }
+
             return new CoverageMap(
                 header,
                 methods,
                 new CoverageHits(ReadBuckets(root.GetProperty("classes")), fixtures, ReadIds(root.GetProperty("ambient"))),
-                timings);
+                timings)
+            {
+                FailedClasses = failed,
+            };
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
         {

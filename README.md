@@ -112,6 +112,10 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
   Recording and selection are tested end to end with xUnit v2 (VSTest), xUnit v3
   (Microsoft.Testing.Platform), and MSTest and NUnit under both runners, including projects that
   turn on their framework's own parallelization.
+- Test classes that fail while recording are always selected when their project is affected: a
+  failing test stops early, so its coverage is incomplete. When tests fail and no TRX report says
+  which (NUnit under Microsoft.Testing.Platform without `Microsoft.Testing.Extensions.TrxReport`),
+  the map is not used and selection falls back to names.
 - Code that runs once per process (caches, lazy singletons, EF model building) is credited to the
   first test class that triggers it. Keep running the full suite on the default branch; recording does that.
 - Project files are read as XML, not evaluated. Imports (`<Import>`, `.projitems`, the imports of

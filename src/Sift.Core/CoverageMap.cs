@@ -71,4 +71,12 @@ public sealed record CoverageMap(
 
     /// <summary>Methods that ran before any test or fixture.</summary>
     public IReadOnlyList<int> Ambient => Hits.Ambient;
+
+    /// <summary>
+    /// Test classes (runtime names) with a test that failed while recording. A failing test stops
+    /// early, so its class may reach more code than the map shows; selection runs these classes
+    /// whenever their project is affected. Null when tests failed but the recording could not tell
+    /// which (no TRX report): then no class of the map can be trusted.
+    /// </summary>
+    public IReadOnlySet<string>? FailedClasses { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 }

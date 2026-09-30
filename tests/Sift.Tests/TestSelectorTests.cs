@@ -331,6 +331,44 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Class_that_failed_while_recording_is_selected_even_if_the_map_says_it_ran_nothing()
+    {
+        // A failing test stops early; OrderServiceTests may reach Tax once it passes again.
+        _failed = new HashSet<string> { "Shop.Tests.OrderServiceTests" };
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.OrderServiceTests", [("Shop.OrderService", "Checkout")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Map_whose_failures_are_unknown_is_not_used()
+    {
+        // By name, OrderServiceTests reaches Tax too; the map would have narrowed it away.
+        _failed = null;
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.OrderServiceTests", [("Shop.OrderService", "Checkout")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        Assert.Contains("Shop.Tests.OrderServiceTests", Select().TestClasses);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Failed_classes_round_trip_through_the_store(bool known)
+    {
+        var map = Map("abc", [new CoveredMethod("A.B", "Run")], new Dictionary<string, IReadOnlyList<int>> { ["A.Tests.BTests"] = [0] })
+            with { FailedClasses = known ? new HashSet<string> { "A.Tests.BTests" } : null };
+        var path = Path.Combine(_repo.Root, "failed-map.json");
+
+        CoverageMapStore.Write(path, map);
+
+        Assert.Equal(known ? ["A.Tests.BTests"] : null, CoverageMapStore.Read(path)!.FailedClasses?.ToArray());
+    }
+
+    [Fact]
     public void Field_change_is_traced_to_its_readers_and_then_taken_from_coverage()
     {
         // Rates.Vat is a field, which coverage cannot see; its reader Tax is known to the map.
@@ -497,7 +535,13 @@ public sealed class TestSelectorTests : IDisposable
         new(new CoverageMapHeader("tests/Shop.Tests/Shop.Tests.csproj", commit, DateTimeOffset.UtcNow),
             methods,
             new CoverageHits(byClass, _fixtures, []),
-            _timings);
+            _timings)
+        {
+            FailedClasses = _failed,
+        };
+
+    /// <summary>Classes the next <see cref="WriteMap"/> says failed while recording; null for "unknown".</summary>
+    private IReadOnlySet<string>? _failed = new HashSet<string>();
 
     /// <summary>Timings the next <see cref="WriteMap"/> includes, or null for none.</summary>
     private CoverageTimings? _timings;

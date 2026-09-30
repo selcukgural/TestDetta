@@ -38,7 +38,11 @@ public sealed class FrameworkMatrixTests : IDisposable
             throw new InvalidOperationException($"{ex.Message}\n{output}", ex);
         }
 
-        Assert.True(passed, output.ToString());
+        // BrokenTests fails on purpose: the map names it, so selection never trusts its coverage.
+        // NUnit under the testing platform ships no TRX extension, so which class failed is unknown.
+        var failuresKnown = !(framework == "nunit" && testingPlatform);
+        Assert.False(passed, output.ToString());
+        Assert.Equal(failuresKnown ? ["Calc.Tests.BrokenTests"] : null, map.FailedClasses);
         Assert.Equal(["Add"], CalculatorMembers(map, "Calc.Tests.AddTests"));
         Assert.Equal(["Mul"], CalculatorMembers(map, "Calc.Tests.MulTests"));
 
@@ -50,7 +54,8 @@ public sealed class FrameworkMatrixTests : IDisposable
 
         var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();
         Assert.Equal(TestRunMode.Filtered, selection.Mode);
-        Assert.Equal(["Calc.Tests.MulTests"], selection.TestClasses);
+        // Without known failures the map is not used, and names alone select MulTests.
+        Assert.Equal(failuresKnown ? ["Calc.Tests.BrokenTests", "Calc.Tests.MulTests"] : ["Calc.Tests.MulTests"], selection.TestClasses);
     }
 
     /// <summary>Calculator members a test class ran, without constructors.</summary>
@@ -99,6 +104,7 @@ public sealed class FrameworkMatrixTests : IDisposable
                 [TestClass] public class AddTests { [TestMethod] public void Adds() => Assert.AreEqual(3, new Calculator().Add(1, 2)); }
                 [TestClass] public class MulTests { [TestMethod] public void Muls() => Assert.AreEqual(6, new Calculator().Mul(2, 3)); }
                 [TestClass] public class WarmTests { [ClassInitialize] public static void Init(TestContext _) => new Calculator().Warm(); [TestMethod] public void Warm() { } }
+                [TestClass] public class BrokenTests { [TestMethod] public void Fails() => Assert.AreEqual(3, new Calculator().Add(1, 1)); }
                 """);
         }
         else
@@ -122,6 +128,7 @@ public sealed class FrameworkMatrixTests : IDisposable
                 public class AddTests { [Test] public void Adds() => Assert.That(new Calculator().Add(1, 2), Is.EqualTo(3)); }
                 public class MulTests { [Test] public void Muls() => Assert.That(new Calculator().Mul(2, 3), Is.EqualTo(6)); }
                 public class WarmTests { [OneTimeSetUp] public void Init() => new Calculator().Warm(); [Test] public void Warm() { } }
+                public class BrokenTests { [Test] public void Fails() => Assert.That(new Calculator().Add(1, 1), Is.EqualTo(3)); }
                 """);
         }
 

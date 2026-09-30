@@ -23,5 +23,12 @@ public sealed class SiftTrackerTests : IDisposable
         Assert.Equal([path], Directory.GetFiles(_directory));
     }
 
+    [Fact]
+    public void Each_process_writes_its_own_results_file()
+    {
+        // A testing-platform controller and its test host both load the tracker; neither may overwrite the other.
+        Assert.Equal(Path.Combine("work", "coverage-2.4711.json"), SiftTracker.ProcessResultsPath(Path.Combine("work", "coverage-2.json"), 4711));
+    }
+
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 }

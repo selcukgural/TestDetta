@@ -125,7 +125,13 @@ public static class SiftTracker
     /// <param name="instance">The fixture instance (<c>this</c>).</param>
     public static void EnterFixtureInstance(object instance) => Enter(Fixtures, FixtureName(instance.GetType()), isFixture: true);
 
-    /// <summary>Writes the collected data to the file named by <see cref="OutputVariable"/>.</summary>
+    /// <summary>
+    /// Writes the collected data next to the file named by <see cref="OutputVariable"/>, with this
+    /// process's id in the name: <c>coverage-0.json</c> becomes <c>coverage-0.4711.json</c>.
+    /// Microsoft.Testing.Platform may run the tests in a child process under a controller process
+    /// (with the TRX or dump extensions); both load the tracker, and the controller, which ends last,
+    /// would otherwise overwrite the child's results with its own empty ones.
+    /// </summary>
     public static void WriteResults()
     {
         var path = Environment.GetEnvironmentVariable(OutputVariable);
@@ -134,8 +140,14 @@ public static class SiftTracker
             return;
         }
 
-        WriteResults(path);
+        WriteResults(ProcessResultsPath(path, Environment.ProcessId));
     }
+
+    /// <summary>The results file of one process: the process id goes before the extension.</summary>
+    /// <param name="path">Value of <see cref="OutputVariable"/>.</param>
+    /// <param name="processId">Process id.</param>
+    public static string ProcessResultsPath(string path, int processId) =>
+        Path.Combine(Path.GetDirectoryName(path) ?? string.Empty, $"{Path.GetFileNameWithoutExtension(path)}.{processId}{Path.GetExtension(path)}");
 
     /// <summary>Writes the collected data to <paramref name="path"/>, replacing it in one step.</summary>
     /// <param name="path">Results file.</param>

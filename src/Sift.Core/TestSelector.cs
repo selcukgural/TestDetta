@@ -252,7 +252,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
             candidatesByProject[type.ProjectPath] = candidatesByProject.GetValueOrDefault(type.ProjectPath) + 1;
             var trace = coverage.HasMap(type.ProjectPath) ? withCoverage : byName;
-            if (!trace.Propagation.AffectedTypes.Contains(type.TypeName) && !coverage.Selects(type))
+            if (!trace.Propagation.AffectedTypes.Contains(type.TypeName) && !coverage.Selects(type) && !coverage.FailedWhileRecording(type))
             {
                 continue;
             }

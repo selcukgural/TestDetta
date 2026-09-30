@@ -29,7 +29,9 @@ internal sealed class CoverageSelection
         foreach (var test in affectedTests)
         {
             _affectedTests.Add(test.Project.Path);
-            if (request.CoverageMaps.TryGetValue(test.Project.Path, out var map))
+
+            // A map whose recording had failures it cannot name may lack any class's code; unused.
+            if (request.CoverageMaps.TryGetValue(test.Project.Path, out var map) && map.FailedClasses is not null)
             {
                 var project = test.Project.Path;
                 _maps[project] = new CoverageIndex(map, fixture => ClassesUsing(index, project, fixture));
@@ -133,6 +135,15 @@ internal sealed class CoverageSelection
     /// <summary>True when <paramref name="testProject"/> has a coverage map in use.</summary>
     /// <param name="testProject">Normalized test project path.</param>
     public bool HasMap(string testProject) => _maps.ContainsKey(testProject);
+
+    /// <summary>
+    /// True when a test of <paramref name="type"/> failed while its map was recorded. A failing test
+    /// stops early, so the map may lack code the class reaches; the class runs whenever its project is
+    /// affected.
+    /// </summary>
+    /// <param name="type">Indexed test class.</param>
+    public bool FailedWhileRecording(IndexedType type) =>
+        _maps.TryGetValue(type.ProjectPath, out var map) && map.Map.FailedClasses!.Contains(type.RuntimeTypeName);
 
     /// <summary>True when coverage selected <paramref name="type"/>, a test class.</summary>
     /// <param name="type">Indexed test class.</param>

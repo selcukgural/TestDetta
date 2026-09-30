@@ -97,7 +97,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
             var shards = Shards(request);
             var synchronizedOutput = TextWriter.Synchronized(output);
-            var runs = new Task<(int ExitCode, string ResultsFile)>[shards.Count];
+            var runs = new Task<ShardResult>[shards.Count];
             for (var i = 0; i < shards.Count; i++)
             {
                 // The catch-all shard usually matches nothing; under the testing platform that is exit
@@ -107,7 +107,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                     ? [.. testArguments, "--ignore-exit-code", TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture)]
                     : testArguments;
                 var shard = new ShardRun(dotnet, arguments, shards[i], i, shards.Count);
-                runs[i] = Task.Run(() => RunShard(shard, request, instrumentation, work, synchronizedOutput));
+                var context = new ShardContext(request, mode, Path.GetDirectoryName(targetPath)!, instrumentation, work);
+                runs[i] = Task.Run(() => RunShard(shard, context, synchronizedOutput));
             }
 
             Task.WaitAll(runs);
@@ -115,16 +116,17 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var resultsFiles = new List<string>(runs.Length);
             foreach (var run in runs)
             {
-                if (!File.Exists(run.Result.ResultsFile))
+                if (run.Result.ResultsFiles.Count == 0)
                 {
                     throw new NoTestsRecordedException(
                         $"No test ran in {Path.GetFileName(project)} (exit code {run.Result.ExitCode}), so it has no coverage map. Is it a test project?");
                 }
 
-                resultsFiles.Add(run.Result.ResultsFile);
+                resultsFiles.AddRange(run.Result.ResultsFiles);
             }
 
-            var map = BuildMap(request, instrumentation.Methods, resultsFiles);
+            var map = BuildMap(request, instrumentation.Methods, resultsFiles) with { FailedClasses = FailedClasses(runs) };
+            LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
             return (map, runs.All(static r => r.Result.ExitCode == 0));
         }
         finally
@@ -224,21 +226,61 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return filters;
     }
 
-    /// <summary>Runs one shard with its own results file, prefixing its output lines with the shard number.</summary>
-    /// <param name="shard">The shard.</param>
-    /// <param name="request">What is recorded.</param>
-    /// <param name="instrumentation">Instrumentation result, for the method count.</param>
-    /// <param name="work">Work directory.</param>
-    /// <param name="output">Shared, synchronized output.</param>
-    private static (int ExitCode, string ResultsFile) RunShard(
-        ShardRun shard,
-        RecordRequest request,
-        InstrumentationResult instrumentation,
-        string work,
-        TextWriter output)
+    /// <summary>What every shard of a recording shares.</summary>
+    /// <param name="Request">What is recorded.</param>
+    /// <param name="Mode">Runner <c>dotnet test</c> uses.</param>
+    /// <param name="OutputDirectory">Output directory of the test project.</param>
+    /// <param name="Instrumentation">Instrumentation result, for the method count.</param>
+    /// <param name="Work">Work directory.</param>
+    private sealed record ShardContext(
+        RecordRequest Request,
+        DotnetTestMode Mode,
+        string OutputDirectory,
+        InstrumentationResult Instrumentation,
+        string Work);
+
+    /// <summary>What one shard left behind.</summary>
+    /// <param name="ExitCode">Exit code of <c>dotnet test</c>.</param>
+    /// <param name="ResultsFiles">Coverage results written by the tracker, one per process that loaded it.</param>
+    /// <param name="Report">The shard's TRX report, or null when the run could not write one.</param>
+    private sealed record ShardResult(int ExitCode, IReadOnlyList<string> ResultsFiles, TrxOutcome? Report);
+
+    /// <summary>
+    /// Test classes that failed in any shard; null when a shard failed without a report to say
+    /// which classes. A shard that exited cleanly had no failures, report or not.
+    /// </summary>
+    /// <param name="runs">Finished shards.</param>
+    private static HashSet<string>? FailedClasses(Task<ShardResult>[] runs)
     {
+        var failed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var run in runs)
+        {
+            if (run.Result.Report is { } report)
+            {
+                failed.UnionWith(report.FailedClasses);
+                continue;
+            }
+
+            if (run.Result.ExitCode != 0)
+            {
+                return null;
+            }
+        }
+
+        return failed;
+    }
+
+    /// <summary>Runs one shard with its own results file and report, prefixing its output lines with the shard number.</summary>
+    /// <param name="shard">The shard.</param>
+    /// <param name="context">What every shard shares.</param>
+    /// <param name="output">Shared, synchronized output.</param>
+    private static ShardResult RunShard(ShardRun shard, ShardContext context, TextWriter output)
+    {
+        var (request, instrumentation, work) = (context.Request, context.Instrumentation, context.Work);
         var resultsFile = Path.Combine(work, $"coverage-{shard.Index}.json");
-        List<string> arguments = [.. shard.Arguments];
+        var reportDirectory = Path.Combine(work, $"report-{shard.Index}");
+        var reportName = $"sift-record-{Path.GetFileName(work)}-{shard.Index}.trx";
+        List<string> arguments = [.. shard.Arguments, .. TestReports.Arguments(context.Mode, context.OutputDirectory, reportDirectory, reportName)];
         if (shard.Filter is not null)
         {
             arguments.AddRange(["--filter", shard.Filter]);
@@ -256,9 +298,12 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         // The catch-all shard legitimately matches no test when the source index knew every class,
         // and then the test host never starts the collector.
         var isCatchAll = shard.Count > 1 && shard.Index == shard.Count - 1;
-        if (isCatchAll && !File.Exists(resultsFile))
+        var written = Directory.GetFiles(work, $"{Path.GetFileNameWithoutExtension(resultsFile)}.*.json");
+        if (isCatchAll && written.Length == 0)
         {
-            File.WriteAllText(resultsFile, EmptyResults);
+            var empty = SiftTracker.ProcessResultsPath(resultsFile, 0);
+            File.WriteAllText(empty, EmptyResults);
+            written = [empty];
         }
 
         // Microsoft.Testing.Platform exits with 8 when no test ran, which is what an empty catch-all should do.
@@ -267,7 +312,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             exitCode = 0;
         }
 
-        return (exitCode, resultsFile);
+        TestReports.Collect(context.Mode, request.RepoRoot, reportName, reportDirectory);
+        return new ShardResult(exitCode, written, TrxReport.Read(reportDirectory));
     }
 
     /// <summary>Exit code of Microsoft.Testing.Platform when zero tests ran.</summary>
@@ -524,6 +570,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Recording {Project} with the {Mode} runner")]
     private partial void LogMode(string project, DotnetTestMode mode);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "{Project}: {Count} test class(es) failed while recording (-1: unknown, the map will not be used)")]
+    private partial void LogFailedClasses(string project, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Instrumenting {Count} assembly(ies) in {Directory}")]
     private partial void LogAssemblies(int count, string directory);

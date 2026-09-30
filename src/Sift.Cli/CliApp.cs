@@ -172,6 +172,16 @@ internal static partial class CliApp
                 allPassed &= passed;
                 summary.Add($"  {(passed ? "recorded" : "recorded, tests FAILED")}  {map.TestProject}: " +
                             $"{map.Classes.Count} test class(es), {map.Methods.Count} method(s) -> {Path.GetRelativePath(root, path)}");
+                switch (map.FailedClasses)
+                {
+                    case null:
+                        summary.Add("    tests failed and no TRX report says which, so this map will not be used; " +
+                                    "under Microsoft.Testing.Platform add Microsoft.Testing.Extensions.TrxReport to the test project");
+                        break;
+                    case { Count: > 0 } failed:
+                        summary.Add($"    {failed.Count} test class(es) failed while recording; they run whenever the project is affected");
+                        break;
+                }
             }
 
             stdout.WriteLine();
