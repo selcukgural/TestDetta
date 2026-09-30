@@ -12,12 +12,17 @@ internal sealed partial class DotnetProcess(ILogger logger)
     /// <param name="workingDirectory">Directory the process runs in.</param>
     /// <param name="environment">Extra environment variables for the process.</param>
     /// <param name="output">Receives stdout and stderr of the process.</param>
-    /// <returns>The exit code.</returns>
+    /// <param name="timeout">
+    /// Longest the process may run; it is then killed with its children (a test host that hangs,
+    /// say) and <see cref="TimedOut"/> is returned. Null waits forever.
+    /// </param>
+    /// <returns>The exit code, or <see cref="TimedOut"/>.</returns>
     public int Run(
         IReadOnlyList<string> arguments,
         string workingDirectory,
         IReadOnlyDictionary<string, string> environment,
-        TextWriter output)
+        TextWriter output,
+        TimeSpan? timeout = null)
     {
         using var process = Start(arguments, workingDirectory, environment);
         var gate = new Lock();
@@ -25,8 +30,15 @@ internal sealed partial class DotnetProcess(ILogger logger)
         process.ErrorDataReceived += (_, e) => Forward(e.Data);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        process.WaitForExit();
+        if (timeout is { } limit && !process.WaitForExit(limit))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            LogTimedOut(limit.TotalSeconds);
+            return TimedOut;
+        }
 
+        process.WaitForExit();
         LogFinished(process.ExitCode);
         return process.ExitCode;
 
@@ -43,6 +55,9 @@ internal sealed partial class DotnetProcess(ILogger logger)
             }
         }
     }
+
+    /// <summary>What <see cref="Run"/> returns for a process it killed after its timeout; no real exit code is negative on Unix.</summary>
+    public const int TimedOut = -1;
 
     /// <summary>Runs dotnet and returns its stdout.</summary>
     /// <param name="arguments">Arguments for the dotnet executable.</param>
@@ -107,4 +122,7 @@ internal sealed partial class DotnetProcess(ILogger logger)
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "dotnet exited with {ExitCode}")]
     private partial void LogFinished(int exitCode);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet did not finish within {Seconds:0} s and was killed")]
+    private partial void LogTimedOut(double seconds);
 }

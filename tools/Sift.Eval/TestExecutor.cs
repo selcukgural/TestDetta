@@ -10,7 +10,7 @@ namespace Sift.Eval;
 /// <param name="Total">Tests that ran, according to the TRX reports.</param>
 /// <param name="FailedByProject">Failed test classes per normalized test project path.</param>
 /// <param name="MissingReports">Runs that produced no TRX report (for example NUnit under Microsoft.Testing.Platform).</param>
-/// <param name="Aborted">Runs whose test host crashed twice; their results are incomplete.</param>
+/// <param name="Aborted">Runs whose test host crashed twice or hung; their results are incomplete.</param>
 internal sealed record TestRunOutcome(
     double Seconds,
     int Total,
@@ -35,6 +35,16 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 {
     /// <summary>Counter for unique results directories and log files.</summary>
     private int _runs;
+
+    /// <summary>
+    /// Longest run seen per test project, in seconds. A run may take five times as long (at least two
+    /// minutes) before it counts as hung: a mutant can make a test wait forever, for a retry that never
+    /// succeeds or a task that never completes.
+    /// </summary>
+    private readonly Dictionary<string, double> _longest = new(Paths.Comparer);
+
+    /// <summary>Shortest time limit of a run, however fast the project ran before; tests lower it.</summary>
+    internal static TimeSpan MinimumTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>Directory for console logs of builds and runs.</summary>
     public string LogDirectory => context.LogDirectory;
@@ -114,15 +124,26 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 var reportName = $"sift-{id:000}-{label}.trx";
                 List<string> arguments = [.. baseArguments, .. ReportArguments(project, results, reportName)];
                 var logPath = Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log");
+                int exitCode;
+                var started = Stopwatch.GetTimestamp();
                 using (var log = File.CreateText(logPath))
                 {
-                    var exitCode = dotnet.Run(arguments, context.RepoRoot, new Dictionary<string, string>(), log);
+                    exitCode = dotnet.Run(arguments, context.RepoRoot, new Dictionary<string, string>(), log, Timeout(project.Path));
                     LogRun(label, project.Path, exitCode);
                 }
 
                 Cleanup();
                 CollectReport(reportName, results);
                 outcome = TrxReport.Read(results);
+                if (exitCode == DotnetProcess.TimedOut)
+                {
+                    // A hang repeats; a second attempt would only double the wait.
+                    crashed = true;
+                    break;
+                }
+
+                var seconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
+                _longest[project.Path] = Math.Max(_longest.GetValueOrDefault(project.Path), seconds);
                 crashed = File.ReadLines(logPath).Any(static l =>
                     l.Contains("Test host process crashed", StringComparison.Ordinal) || l.Contains("Test Run Aborted", StringComparison.Ordinal));
                 if (!crashed)
@@ -146,6 +167,13 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 
         return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, missing, aborted);
     }
+
+    /// <summary>Time limit of a run of <paramref name="project"/>; none before the project ran once.</summary>
+    /// <param name="project">Normalized test project path.</param>
+    private TimeSpan? Timeout(string project) =>
+        _longest.TryGetValue(project, out var seconds)
+            ? TimeSpan.FromSeconds(Math.Max(MinimumTimeout.TotalSeconds, seconds * 5))
+            : null;
 
     /// <summary>
     /// Arguments that make the run write a TRX report: VSTest's logger, or the testing platform's
