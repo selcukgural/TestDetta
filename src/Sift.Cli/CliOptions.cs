@@ -37,7 +37,11 @@ internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTes
 /// <param name="Projects">Only record these test projects (.csproj paths); empty records every test project.</param>
 /// <param name="Parallelism">Test host processes per test project; each still runs its tests one at a time.</param>
 /// <param name="Framework">Target framework to record for multi-targeted projects, or null for the first one.</param>
-internal sealed record RecordSettings(string Configuration, IReadOnlyList<string> Projects, int Parallelism, string? Framework = null);
+internal sealed record RecordSettings(string Configuration, IReadOnlyList<string> Projects, int Parallelism, string? Framework = null)
+{
+    /// <summary>True to record from the existing build output instead of building.</summary>
+    public bool NoBuild { get; init; }
+}
 
 /// <summary>Parsed command line.</summary>
 /// <param name="Command">Which sub-command to run.</param>
@@ -81,6 +85,7 @@ internal sealed record CliOptions(
           -f, --framework <tfm>  Target framework to record, e.g. net10.0 (default: the first one)
           --parallel <n>       Spread each project's test classes over n processes (default: 1).
                                The suite must tolerate several test processes at once.
+          --no-build           Use the existing build output (built with the same -c) instead of building
 
         Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed.
         """;
@@ -174,6 +179,10 @@ internal sealed record CliOptions(
 
             case "--dry-run" when options.Command == CliCommand.Test:
                 options = options with { Test = options.Test with { DryRun = true } };
+                return true;
+
+            case "--no-build" when options.Command == CliCommand.Record:
+                options = options with { Record = options.Record with { NoBuild = true } };
                 return true;
 
             case "--base" or "--repo" or "--log-level":

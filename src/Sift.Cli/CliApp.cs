@@ -156,7 +156,7 @@ internal static partial class CliApp
                 try
                 {
                     recorded = recorder.Record(
-                        new Sift.Coverage.RecordRequest(root, graph, project, new Sift.Coverage.RecordOptions(options.Record.Configuration, options.Record.Framework, options.Record.Parallelism)), stdout);
+                        new Sift.Coverage.RecordRequest(root, graph, project, new Sift.Coverage.RecordOptions(options.Record.Configuration, options.Record.Framework, options.Record.Parallelism) { NoBuild = options.Record.NoBuild }), stdout);
                 }
                 catch (Sift.Coverage.NoTestsRecordedException ex)
                 {

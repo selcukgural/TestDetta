@@ -29,7 +29,18 @@ public sealed class CliOptionsTests
         Assert.Equal("/repo", options.Analysis.RepoPath);
     }
 
+    [Fact]
+    public void Record_command_reads_no_build()
+    {
+        var ok = CliOptions.TryParse(["record", "--no-build", "-c", "Release"], "/repo", out var options, out _);
+
+        Assert.True(ok);
+        Assert.True(options.Record.NoBuild);
+        Assert.Equal("Release", options.Record.Configuration);
+    }
+
     [Theory]
+    [InlineData("affected", "--no-build")]
     [InlineData("affected", "--dry-run")]
     [InlineData("affected", "--")]
     [InlineData("test", "--format")]

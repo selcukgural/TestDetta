@@ -24,6 +24,10 @@ inputs:
     description: Record mode only. Test host processes per test project; each still runs its tests one at a time. The suite must tolerate several test processes at once.
     required: false
     default: '1'
+  no-build:
+    description: Record mode only. 'true' to record from the build an earlier step made with the same configuration, instead of building again.
+    required: false
+    default: 'false'
   dotnet-test-args:
     description: Test mode only. Extra arguments for every dotnet test, separated by spaces.
     required: false
@@ -122,12 +126,14 @@ runs:
         CONFIGURATION: ${{ inputs.configuration }}
         PROJECTS: ${{ inputs.projects }}
         PARALLEL: ${{ inputs.parallel }}
+        NO_BUILD: ${{ inputs.no-build }}
       run: |
         if [[ ! "$PARALLEL" =~ ^[1-9][0-9]?$ ]]; then
           echo "::error::'parallel' must be a number from 1 to 99."
           exit 1
         fi
         args=(--parallel "$PARALLEL")
+        if [ "$NO_BUILD" = "true" ]; then args+=(--no-build); fi
         while IFS= read -r project; do
           if [ -n "$project" ]; then args+=(--project "$project"); fi
         done <<< "$PROJECTS"

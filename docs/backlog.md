@@ -12,16 +12,15 @@ that report numbers (value reporting) only once the numbers are proven right.
   Spectre.Console, CommunityToolkit, AutoMapper (round 2), and write the consolidated results into
   `docs/evaluation.md`.
 - Track new findings per repository; maturity shows when several repositories in a row find none.
+- Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
+  field-value exist since 1d54474).
 
 ## Next
 
-1. **More mutant kinds** in `sift-eval`: besides "throw at method start", change return values,
-   constants and fields, attribute arguments, and single branches (Stryker.NET's operators are a
-   good reference).
-2. **Precision round**: safety fixes made selection broader (NodaTime 16% → 34%); measure where
+1. **Precision round**: safety fixes made selection broader (NodaTime 16% → 34%); measure where
    the extra classes come from and narrow without losing safety (override names scoped to their
    hierarchy, run-once rules, name spreading through common member names like `Initialize`).
-3. **Value reporting: show exactly what Sift saved, and why it was safe.** Not "you saved five
+2. **Value reporting: show exactly what Sift saved, and why it was safe.** Not "you saved five
    minutes" but the breakdown behind it, in formats people and tools use:
    - Per run: every test project and class that ran or was skipped, the reason for each decision
      (the changed member, the coverage map and commit it came from, or the fallback rule), and
@@ -34,11 +33,9 @@ that report numbers (value reporting) only once the numbers are proven right.
      often a fallback ran everything and why, so the numbers can be trusted.
    - Formats: GitHub job summary and PR comment (Markdown), JSON and CSV export, an HTML dashboard,
      a badge, a weekly digest (Slack/e-mail), and an API for the hosted tier.
-4. **Hung mutants**: find which test class hung (VSTest blame-hang, testing-platform hang dump)
+3. **Hung mutants**: find which test class hung (VSTest blame-hang, testing-platform hang dump)
    so hangs count as data instead of inconclusive (Polly: 15 of 100).
-5. **`sift record --no-build`**: reuse the pipeline's build output instead of building again; the
-   GitHub Action records after the build step. Needs the same configuration and PDBs.
-6. **Method-level selection, measured first**: record buckets per test method as an option and
+4. **Method-level selection, measured first**: record buckets per test method as an option and
    compute how much a method-level filter would save over class-level before building it.
 
 ## Later

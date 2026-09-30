@@ -32,7 +32,14 @@ public sealed record RecordRequest(string RepoRoot, ProjectGraph Graph, ProjectN
 /// processes at once (no fixed ports or shared local databases).
 /// </param>
 /// <param name="Timeout">Longest a test process may run before it is killed; null waits forever.</param>
-public sealed record RecordOptions(string Configuration = "Debug", string? Framework = null, int Parallelism = 1, TimeSpan? Timeout = null);
+public sealed record RecordOptions(string Configuration = "Debug", string? Framework = null, int Parallelism = 1, TimeSpan? Timeout = null)
+{
+    /// <summary>
+    /// True to use the existing build output instead of building, when a pipeline built with the
+    /// same configuration just before. The output must have its PDBs for generated code to be read.
+    /// </summary>
+    public bool NoBuild { get; init; }
+}
 
 /// <summary>
 /// Builds a test project, instruments the repository's assemblies in its output, runs the tests
@@ -68,15 +75,23 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             build.AddRange(["-f", targetFramework]);
         }
 
-        var errors = new ErrorCollectingWriter(output);
-        var buildExit = dotnet.Run(build, root, new Dictionary<string, string>(), errors);
-        if (buildExit != 0)
+        if (!request.Options.NoBuild)
         {
-            var reason = errors.Errors.Count == 0 ? string.Empty : ": " + string.Join(" / ", errors.Errors);
-            throw new InvalidOperationException($"Building {Path.GetFileName(project)} failed with exit code {buildExit}{reason}");
+            var errors = new ErrorCollectingWriter(output);
+            var buildExit = dotnet.Run(build, root, new Dictionary<string, string>(), errors);
+            if (buildExit != 0)
+            {
+                var reason = errors.Errors.Count == 0 ? string.Empty : ": " + string.Join(" / ", errors.Errors);
+                throw new InvalidOperationException($"Building {Path.GetFileName(project)} failed with exit code {buildExit}{reason}");
+            }
         }
 
         var (targetPath, framework) = FindTargetPath(dotnet, request);
+        if (request.Options.NoBuild && !File.Exists(targetPath))
+        {
+            throw new InvalidOperationException(
+                $"{Path.GetFileName(project)} has no build output at {targetPath}; build it with -c {request.Configuration} first, or drop --no-build.");
+        }
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
         var assemblies = AssembliesToInstrument(new HashSet<string>(AssemblyOwners(request).Keys, StringComparer.OrdinalIgnoreCase), outputDirectory);
         var generated = ReadGenerated(request, targetPath, assemblies);

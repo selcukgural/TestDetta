@@ -40,7 +40,7 @@ A filter that matches no test is treated as a Sift bug: the project is run again
 |---|---|
 | `sift affected [--format text\|json\|paths\|commands]` | Print what a change affects and why. |
 | `sift test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
-| `sift record [--project <csproj>]... [-c <configuration>] [--parallel <n>]` | Run all tests with coverage and write one map per test project to `.sift/coverage`. `--parallel` spreads the test classes over n test processes. |
+| `sift record [--project <csproj>]... [-c <configuration>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.sift/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. |
 
 Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `-v` for debug logs on stderr.
 
@@ -101,6 +101,7 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
 | `configuration` | `Debug` | build configuration |
 | `projects` | all test projects | record mode: `.csproj` paths, one per line |
 | `parallel` | `1` | record mode: test processes per project (the suite must tolerate several at once) |
+| `no-build` | `false` | record mode: `true` to record the build an earlier step made with the same `configuration` |
 | `dotnet-test-args` | | test mode: extra `dotnet test` arguments |
 | `working-directory` | `.` | any directory inside the repository |
 | `setup-dotnet` | `true` | install the .NET 10 SDK Sift runs on |
