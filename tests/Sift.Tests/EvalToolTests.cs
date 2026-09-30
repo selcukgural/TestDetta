@@ -50,17 +50,23 @@ public sealed class EvalToolTests : IDisposable
             public class MulTests { [Fact] public void Muls() => Assert.Equal(6, new Calculator().Mul(2, 3)); }
             public class FormatTests { [Fact] public void Formats() => Assert.Equal("7", Formatter.Format(7)); }
 
-            // Reaches a type only through its name in a string: no reference, base list or attribute to trace.
-            public class PluginTests
-            {
-                [Fact]
-                public void Runs_the_plugin() =>
-                    Assert.Equal(42, (int)System.Type.GetType("Calc.Plugin, Calc")!.GetMethod("Run")!.Invoke(null, null)!);
-            }
+            // Both reach the plugin only through the registry's cache: the class that runs first fills it.
+            public class PluginTests { [Fact] public void Runs_the_plugin() => Assert.Equal(42, Registry.Answer()); }
+            public class PluginAgainTests { [Fact] public void Runs_the_plugin_again() => Assert.Equal(42, Registry.Answer()); }
             """);
         _repo.Write("src/Calc/Plugin.cs", """
             namespace Calc;
             public static class Plugin { public static int Run() => 42; }
+            """);
+        // Finds the plugin by a string and caches the answer: no reference to trace, and coverage
+        // only sees the class that filled the cache. Sift is blind to the other class by design.
+        _repo.Write("src/Calc/Registry.cs", """
+            namespace Calc;
+            public static class Registry
+            {
+                private static int? _answer;
+                public static int Answer() => _answer ??= (int)System.Type.GetType("Calc.Plugin, Calc")!.GetMethod("Run")!.Invoke(null, null)!;
+            }
             """);
         _repo.Commit("base");
     }
@@ -80,18 +86,18 @@ public sealed class EvalToolTests : IDisposable
     }
 
     [Fact]
-    public void Missed_test_class_is_found_by_mutants_and_by_coverage()
+    public void Missed_test_class_is_found_by_mutants()
     {
-        // Plugin is named by nothing and has no base list or attributes, so Sift treats it as unused;
-        // PluginTests finds it by a string. Sift is blind here by design; the evaluation must not be.
+        // The class that filled the registry's cache is selected from coverage; the other one is
+        // reached by nothing Sift can see. Sift is blind here by design; the evaluation must not be.
         _repo.Replace("src/Calc/Plugin.cs", "=> 42;", "=> 40 + 2;");
         _repo.Commit("compute the answer");
 
         var (exitCode, merge) = Evaluate();
 
         Assert.Equal(3, exitCode);
-        Assert.Contains("Calc.Tests.PluginTests", merge.GetProperty("mutants")[0].GetProperty("missed").EnumerateArray().Select(e => e.GetString()));
-        Assert.Contains(merge.GetProperty("coverageMisses").EnumerateArray(), e => e.GetString()!.EndsWith("Calc.Tests.PluginTests", StringComparison.Ordinal));
+        var missed = merge.GetProperty("mutants")[0].GetProperty("missed").EnumerateArray().Select(e => e.GetString()).ToList();
+        Assert.Single(missed, m => m is "Calc.Tests.PluginTests" or "Calc.Tests.PluginAgainTests");
     }
 
     [Fact]
@@ -126,9 +132,12 @@ public sealed class EvalToolTests : IDisposable
         var mutants = run.GetProperty("mutants").EnumerateArray().ToDictionary(m => m.GetProperty("target").GetString()!);
 
         Assert.Equal(3, exitCode);
-        Assert.Equal(["Calc.Calculator.Add", "Calc.Calculator.Mul", "Calc.Formatter.Format", "Calc.Plugin.Run"], mutants.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            ["Calc.Calculator.Add", "Calc.Calculator.Mul", "Calc.Formatter.Format", "Calc.Plugin.Run", "Calc.Registry.Answer"],
+            mutants.Keys.Order(StringComparer.Ordinal));
         Assert.All(mutants.Values, m => Assert.True(m.GetProperty("detected").GetBoolean()));
-        Assert.Equal(["Calc.Tests: Calc.Tests.PluginTests"], Strings(mutants["Calc.Plugin.Run"], "missed"));
+        Assert.Single(Strings(mutants["Calc.Plugin.Run"], "missed"));
+        Assert.Empty(Strings(mutants["Calc.Registry.Answer"], "missed"));
         Assert.Equal(["Calc.Tests: Calc.Tests.MulTests"], Strings(mutants["Calc.Calculator.Mul"], "killed"));
         Assert.Empty(Strings(mutants["Calc.Calculator.Mul"], "missed"));
         Assert.Empty(Strings(mutants["Calc.Formatter.Format"], "missed"));
@@ -158,8 +167,8 @@ public sealed class EvalToolTests : IDisposable
         var summary = File.ReadAllText(Path.Combine(_output, "runs", "summary.md"));
         Assert.Equal(3, exitCode);
         Assert.True(File.Exists(Path.Combine(_output, "runs", "calc", "synthetic.json")));
-        Assert.Contains("**Missed: 1 of 4 failing mutants**", summary, StringComparison.Ordinal);
-        Assert.Contains("| calc | reflection | done | 4 | 1 |", summary, StringComparison.Ordinal);
+        Assert.Contains("**Missed: 1 of 5 failing mutants**", summary, StringComparison.Ordinal);
+        Assert.Contains("| calc | reflection | done | 5 | 1 |", summary, StringComparison.Ordinal);
     }
 
     /// <summary>A string array property of a JSON object.</summary>

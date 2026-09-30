@@ -152,6 +152,19 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Run_once_change_keeps_the_classes_coverage_saw_running_it()
+    {
+        // Only SlugTests ran the constructor (it filled some cache first), so it counts as run-once
+        // code and is traced by name; SlugTests never names PriceCalculator, yet it depends on it.
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.PriceCalculator", ".ctor"), ("Shop.Slug", "Make")]),
+                 ("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public PriceCalculator() { }", "public PriceCalculator() { _ = 1; }");
+
+        var selection = Select();
+        Assert.True(selection.Mode == TestRunMode.All || selection.TestClasses.Contains("Shop.Tests.SlugTests"), string.Join(", ", selection.TestClasses));
+    }
+
+    [Fact]
     public void Base_class_change_in_test_project_selects_derived_test_classes()
     {
         _repo.Replace("tests/Shop.Tests/TestBase.cs", "=> \"a\"", "=> \"a\" + \"\"");

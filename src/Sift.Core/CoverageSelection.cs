@@ -152,8 +152,9 @@ internal sealed class CoverageSelection
 
     /// <summary>
     /// Selects the test classes that ran <paramref name="change"/> in every affected test project with
-    /// a map downstream of <paramref name="owner"/>. Returns false, selecting nothing, when no such
-    /// project exists or one of their maps cannot answer; the caller then traces the change by name.
+    /// a map downstream of <paramref name="owner"/>. Returns false when no such project exists, one of
+    /// their maps cannot answer, or the change may be run-once code; the caller then traces the change
+    /// by name as well, and the classes the maps know stay selected.
     /// Projects without a map are decided by a separate name-only spread.
     /// </summary>
     /// <param name="change">A changed type or member.</param>
@@ -166,6 +167,7 @@ internal sealed class CoverageSelection
         }
 
         var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
+        var resolved = true;
         foreach (var project in _graph.WithDependents([owner.Path]))
         {
             if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var map))
@@ -173,17 +175,16 @@ internal sealed class CoverageSelection
                 continue;
             }
 
-            if (Lookup(map, change) is not { } classes || MayBeRunOnce(map, change))
+            if (Lookup(map, change) is not { } classes)
             {
-                return false;
+                resolved = false;
+                continue;
             }
 
+            // Run-once code is traced by name, but the classes the map saw running it depend on it
+            // all the same: name tracing can miss them (through generated code or reflection).
+            resolved &= !MayBeRunOnce(map, change);
             answers.Add((project, classes));
-        }
-
-        if (answers.Count == 0)
-        {
-            return false;
         }
 
         foreach (var (project, classes) in answers)
@@ -197,7 +198,7 @@ internal sealed class CoverageSelection
             selected.UnionWith(classes);
         }
 
-        return true;
+        return resolved && answers.Count > 0;
     }
 
     /// <summary>
