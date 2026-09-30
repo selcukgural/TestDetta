@@ -100,7 +100,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework), work);
             LogMode(project, mode);
 
-            var shards = Shards(request);
+            var xunitV3OnTestingPlatform = mode == DotnetTestMode.TestingPlatform
+                                           && File.Exists(Path.Combine(Path.GetDirectoryName(targetPath)!, "xunit.v3.core.dll"));
+            var shards = Shards(request, xunitV3OnTestingPlatform);
             var synchronizedOutput = TextWriter.Synchronized(output);
             var runs = new Task<ShardResult>[shards.Count];
             for (var i = 0; i < shards.Count; i++)
@@ -195,10 +197,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <summary>One test host process of a sharded recording.</summary>
     /// <param name="Dotnet">Process runner.</param>
     /// <param name="Arguments">Shared <c>dotnet test</c> arguments.</param>
-    /// <param name="Filter">Filter selecting this shard's tests, or null to run everything.</param>
+    /// <param name="Filter">Filter arguments selecting this shard's tests; empty to run everything.</param>
     /// <param name="Index">Shard number, for output prefixes and file names.</param>
     /// <param name="Count">Number of shards.</param>
-    private sealed record ShardRun(DotnetProcess Dotnet, List<string> Arguments, string? Filter, int Index, int Count);
+    private sealed record ShardRun(DotnetProcess Dotnet, List<string> Arguments, IReadOnlyList<string> Filter, int Index, int Count);
 
     /// <summary>
     /// Filters for the shards: the known test classes dealt round-robin into
@@ -206,18 +208,19 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// classes, so a class the source index misses is still recorded. A single shard runs unfiltered.
     /// </summary>
     /// <param name="request">What to record.</param>
-    private List<string?> Shards(RecordRequest request)
+    /// <param name="xunitV3OnTestingPlatform">True when the filters must use xUnit v3's own options.</param>
+    private List<IReadOnlyList<string>> Shards(RecordRequest request, bool xunitV3OnTestingPlatform)
     {
         if (request.Parallelism <= 1)
         {
-            return [null];
+            return [[]];
         }
 
         var classes = new TestClassFinder(loggerFactory.CreateLogger<TestClassFinder>())
             .Find(request.Graph, request.RepoRoot, request.TestProject);
         if (classes.Count <= 1)
         {
-            return [null];
+            return [[]];
         }
 
         var groupCount = Math.Min(request.Parallelism, classes.Count);
@@ -232,13 +235,13 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             groups[i % groupCount].Add(classes[i]);
         }
 
-        var filters = new List<string?>(groupCount + 1);
+        var filters = new List<IReadOnlyList<string>>(groupCount + 1);
         foreach (var group in groups)
         {
-            filters.Add(TestFilter.ForClasses(group));
+            filters.Add(TestFilter.Arguments(group, exclude: false, xunitV3OnTestingPlatform));
         }
 
-        filters.Add(TestFilter.ExcludingClasses(classes));
+        filters.Add(TestFilter.Arguments(classes, exclude: true, xunitV3OnTestingPlatform));
         LogShards(request.TestProject.Path, groupCount, classes.Count);
         return filters;
     }
@@ -309,10 +312,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var reportDirectory = Path.Combine(work, $"report-{shard.Index}");
         var reportName = $"sift-record-{Path.GetFileName(work)}-{shard.Index}.trx";
         List<string> arguments = [.. shard.Arguments, .. TestReports.Arguments(context.Mode, context.OutputDirectory, reportDirectory, reportName)];
-        if (shard.Filter is not null)
-        {
-            arguments.AddRange(["--filter", shard.Filter]);
-        }
+        arguments.AddRange(shard.Filter);
 
         var environment = new Dictionary<string, string>
         {

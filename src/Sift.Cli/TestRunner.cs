@@ -138,14 +138,14 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         }
     }
 
-    /// <summary>The same arguments without <c>--filter</c> and its value.</summary>
+    /// <summary>The same arguments without the filter options (<c>--filter</c>, or xUnit v3's class filters) and their values.</summary>
     /// <param name="arguments">Arguments of a filtered invocation.</param>
     private static List<string> WithoutFilter(IReadOnlyList<string> arguments)
     {
         var result = new List<string>(arguments.Count);
         for (var i = 0; i < arguments.Count; i++)
         {
-            if (arguments[i] == "--filter")
+            if (arguments[i] is "--filter" or "--filter-class" or "--filter-not-class")
             {
                 i++;
                 continue;

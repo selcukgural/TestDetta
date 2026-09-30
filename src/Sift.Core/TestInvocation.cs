@@ -17,7 +17,8 @@ public static class TestInvocationBuilder
     /// <param name="extraArguments">Appended to every invocation as given, for example <c>-c Release --no-build</c>.</param>
     /// <param name="mode">
     /// Runner <c>dotnet test</c> uses: VSTest takes the project as an argument, Microsoft.Testing.Platform
-    /// through <c>--project</c>. Both accept the VSTest filter syntax through <c>--filter</c>.
+    /// through <c>--project</c>. Both accept the VSTest filter syntax through <c>--filter</c>, except
+    /// xUnit v3 under the testing platform, which gets its own class filters.
     /// </param>
     public static IReadOnlyList<TestInvocation> Build(
         IReadOnlyList<TestProjectSelection> selections,
@@ -37,8 +38,8 @@ public static class TestInvocationBuilder
             List<string> arguments = mode == DotnetTestMode.TestingPlatform ? ["test", "--project", project] : ["test", project];
             if (selection.Mode == TestRunMode.Filtered)
             {
-                arguments.Add("--filter");
-                arguments.Add(TestFilter.ForClasses(selection.TestClasses));
+                var xunitV3 = mode == DotnetTestMode.TestingPlatform && TestFilter.IsXunitV3(selection.Project);
+                arguments.AddRange(TestFilter.Arguments(selection.TestClasses, exclude: false, xunitV3));
             }
 
             arguments.AddRange(extraArguments);

@@ -71,7 +71,9 @@ public sealed class TestingPlatformRecorderTests : IDisposable
     private readonly GitRepoFixture _repo = new();
 
     /// <summary>Writes the solution; xUnit v3 runs its tests in the test executable under both runners.</summary>
-    private void WriteSolution(bool testingPlatform)
+    /// <param name="testingPlatform">True for Microsoft.Testing.Platform, false for VSTest.</param>
+    /// <param name="mtpV2">True for xunit.v3.mtp-v2, whose runner rejects the VSTest --filter.</param>
+    private void WriteSolution(bool testingPlatform, bool mtpV2 = false)
     {
         _repo.Write("global.json", testingPlatform
             ? """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }"""
@@ -90,7 +92,7 @@ public sealed class TestingPlatformRecorderTests : IDisposable
               <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><OutputType>Exe</OutputType></PropertyGroup>
               <ItemGroup>
                 {{(testingPlatform
-                    ? "<PackageReference Include=\"xunit.v3\" Version=\"4.0.1\" />"
+                    ? mtpV2 ? "<PackageReference Include=\"xunit.v3.mtp-v2\" Version=\"3.2.0\" />" : "<PackageReference Include=\"xunit.v3\" Version=\"4.0.1\" />"
                     // Before 3.0, xUnit v3 did not bring the testing platform along, so VSTest runs it (AutoFixture does this).
                     : "<PackageReference Include=\"xunit.v3\" Version=\"1.0.1\" /><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.14.1\" /><PackageReference Include=\"xunit.runner.visualstudio\" Version=\"3.0.1\" />")}}
                 <ProjectReference Include="../../src/Calc/Calc.csproj" />
@@ -110,11 +112,12 @@ public sealed class TestingPlatformRecorderTests : IDisposable
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Records_an_xunit_v3_project_in_one_and_in_several_processes(bool testingPlatform)
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void Records_an_xunit_v3_project_in_one_and_in_several_processes(bool testingPlatform, bool mtpV2)
     {
-        WriteSolution(testingPlatform);
+        WriteSolution(testingPlatform, mtpV2);
         var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
         var testProject = graph.Projects.Single(p => p.IsTestProject);
         var recorder = new CoverageRecorder(NullLoggerFactory.Instance);
