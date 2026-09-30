@@ -246,7 +246,8 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         var candidatesByProject = new Dictionary<string, int>(Paths.Comparer);
         foreach (var type in index.Types)
         {
-            if (!type.InTestProject || !type.CanContainTests)
+            // A class the coverage map recorded ran tests, whatever attributes the index recognised.
+            if (!type.InTestProject || !(type.CanContainTests || coverage.Recorded(type)))
             {
                 continue;
             }

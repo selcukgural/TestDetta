@@ -145,6 +145,11 @@ internal sealed class CoverageSelection
     public bool FailedWhileRecording(IndexedType type) =>
         _maps.TryGetValue(type.ProjectPath, out var map) && map.Map.FailedClasses!.Contains(type.RuntimeTypeName);
 
+    /// <summary>True when a map of the type's project recorded tests of <paramref name="type"/>.</summary>
+    /// <param name="type">Indexed type of a test project.</param>
+    public bool Recorded(IndexedType type) =>
+        _maps.TryGetValue(type.ProjectPath, out var map) && map.Map.Classes.ContainsKey(type.RuntimeTypeName);
+
     /// <summary>True when coverage selected <paramref name="type"/>, a test class.</summary>
     /// <param name="type">Indexed test class.</param>
     public bool Selects(IndexedType type) =>

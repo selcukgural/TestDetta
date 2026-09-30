@@ -515,9 +515,29 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
     /// <summary>True for <c>Fact</c>, <c>FactAttribute</c> and the other names in <see cref="TestAttributes"/>.</summary>
     /// <param name="name">Attribute name as written.</param>
-    private static bool IsTestAttribute(string name) =>
-        TestAttributes.Contains(name)
-        || (name.EndsWith("Attribute", StringComparison.Ordinal) && TestAttributes.Contains(name[..^"Attribute".Length]));
+    private static bool IsTestAttribute(string name)
+    {
+        var shortName = name.EndsWith("Attribute", StringComparison.Ordinal) ? name[..^"Attribute".Length] : name;
+        if (TestAttributes.Contains(shortName))
+        {
+            return true;
+        }
+
+        // Custom test attributes derive from the framework's and keep its name as a suffix:
+        // [UIFact], [WpfFact], [RetryFact], [CulturedTheory], [NonParallelTest].
+        foreach (var suffix in TestAttributeSuffixes)
+        {
+            if (shortName.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Endings of custom test attribute names; see <see cref="IsTestAttribute"/>.</summary>
+    private static readonly string[] TestAttributeSuffixes = ["Fact", "Theory", "Test", "TestMethod", "TestCase"];
 
     /// <summary>Simple names of the base list entries: <c>: TestBase, IAsyncLifetime</c> gives both.</summary>
     /// <param name="node">Type declaration.</param>

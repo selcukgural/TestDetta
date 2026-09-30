@@ -94,6 +94,35 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Test_class_with_a_custom_test_attribute_is_selected()
+    {
+        // [UIFact] derives from [Fact] (AwesomeAssertions); only its name says so in source.
+        _repo.Write("tests/Shop.Tests/UiTaxTests.cs", """
+            namespace Shop.Tests;
+            public class UiTaxTests { [UIFact] public void Taxes() => Assert.Equal(2m, new PriceCalculator().Tax(10m)); }
+            """);
+        _repo.Commit("ui tests");
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        Assert.Contains("Shop.Tests.UiTaxTests", Select().TestClasses);
+    }
+
+    [Fact]
+    public void Class_the_map_saw_running_tests_is_a_candidate_whatever_its_attributes()
+    {
+        _repo.Write("tests/Shop.Tests/ScenarioTaxTests.cs", """
+            namespace Shop.Tests;
+            public class ScenarioTaxTests { [Scenario] public void Taxes() => Assert.Equal(2m, new PriceCalculator().Tax(10m)); }
+            """);
+        _repo.Commit("scenario tests");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.ScenarioTaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        Assert.Contains("Shop.Tests.ScenarioTaxTests", Select().TestClasses);
+    }
+
+    [Fact]
     public void Static_test_class_is_selected()
     {
         // xUnit and NUnit run static test methods of static classes (Roslynator's tests do).
