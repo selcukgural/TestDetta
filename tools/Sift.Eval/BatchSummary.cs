@@ -68,6 +68,15 @@ internal static class BatchSummary
             {
                 status = "failed: " + syntheticError;
             }
+            else if (synthetic.RootElement.GetProperty("mutants").GetArrayLength() == 0)
+            {
+                // A clean result without data is no result: no test project found, or no library to change.
+                status = "no data: nothing to change";
+            }
+            else if (synthetic.RootElement.TryGetProperty("testClasses", out var recorded) && recorded.GetInt32() == 0)
+            {
+                status = "no coverage: decided by name only";
+            }
 
             foreach (var mutant in synthetic.RootElement.GetProperty("mutants").EnumerateArray())
             {
