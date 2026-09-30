@@ -94,6 +94,26 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Static_test_class_is_selected()
+    {
+        // xUnit and NUnit run static test methods of static classes (Roslynator's tests do).
+        _repo.Write("tests/Shop.Tests/StaticTaxTests.cs", """
+            namespace Shop.Tests;
+            public static class StaticTaxTests
+            {
+                [Fact] public static void Taxes() => Assert.Equal(2m, new PriceCalculator().Tax(10m));
+            }
+            """);
+        _repo.Commit("static tests");
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.Filtered, selection.Mode);
+        Assert.Contains("Shop.Tests.StaticTaxTests", selection.TestClasses);
+    }
+
+    [Fact]
     public void Test_class_inside_a_conditional_is_found_by_name()
     {
         _repo.Write("tests/Shop.Tests/ModernTaxTests.cs", """

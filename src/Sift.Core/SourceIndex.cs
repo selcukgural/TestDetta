@@ -42,9 +42,10 @@ internal sealed record IndexedMember(
 /// <param name="RuntimeTypeName">Name as <c>dotnet test --filter</c> sees it, nested types joined with '+'.</param>
 /// <param name="ProjectPath">Normalized path of the declaring project.</param>
 /// <param name="InTestProject">True when the declaring project is a test project.</param>
-/// <param name="IsConcreteClass">
-/// True for classes that are neither abstract nor static, the only ones a test framework
-/// instantiates. For a partial type, false as soon as one part says otherwise.
+/// <param name="IsRunnableClass">
+/// True for non-abstract classes, the ones whose tests a framework runs (static classes included:
+/// xUnit and NUnit run their static test methods). For a partial type, false as soon as one part
+/// says otherwise.
 /// </param>
 /// <param name="HasTestMethods">True when a method carries a test attribute such as <c>[Fact]</c>, <c>[Test]</c> or <c>[TestMethod]</c>.</param>
 /// <param name="BaseTypeNames">Simple names in the base list, used to find classes that inherit tests.</param>
@@ -62,7 +63,7 @@ internal sealed record IndexedType(
     string RuntimeTypeName,
     string ProjectPath,
     bool InTestProject,
-    bool IsConcreteClass,
+    bool IsRunnableClass,
     bool HasTestMethods,
     IReadOnlyList<string> BaseTypeNames,
     bool CanContainTests,

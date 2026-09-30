@@ -71,7 +71,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                 types[type.TypeName] = types.TryGetValue(type.TypeName, out var existing)
                     ? existing with
                     {
-                        IsConcreteClass = existing.IsConcreteClass && type.IsConcreteClass,
+                        IsRunnableClass = existing.IsRunnableClass && type.IsRunnableClass,
                         HasTestMethods = existing.HasTestMethods || type.HasTestMethods,
                         BaseTypeNames = [.. existing.BaseTypeNames, .. type.BaseTypeNames],
                         MayBeFoundByReflection = existing.MayBeFoundByReflection || type.MayBeFoundByReflection,
@@ -114,7 +114,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
         foreach (var type in types.Values.ToList())
         {
-            if (type.InTestProject && type.IsConcreteClass && DeclaresOrInheritsTests(type, bySimpleName, depth: 0))
+            if (type.InTestProject && type.IsRunnableClass && DeclaresOrInheritsTests(type, bySimpleName, depth: 0))
             {
                 types[type.TypeName] = type with { CanContainTests = true };
             }
@@ -207,7 +207,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                     declaration.RuntimeTypeName,
                     owner.Path,
                     owner.IsTestProject,
-                    IsConcreteClass(declaration.Node),
+                    IsRunnableClass(declaration.Node),
                     HasTestMethods(declaration.Node),
                     BaseTypeNames(declaration.Node),
                     CanContainTests: false,
@@ -262,7 +262,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         // name Program (WebApplicationFactory<Program>); one that starts the app as a separate process
         // is invisible to name tracing for every change, not just this one.
         types.Add(new IndexedType(
-            program, program, owner.Path, owner.IsTestProject, IsConcreteClass: false, HasTestMethods: false, [],
+            program, program, owner.Path, owner.IsTestProject, IsRunnableClass: false, HasTestMethods: false, [],
             CanContainTests: false, MayBeFoundByReflection: false));
     }
 
@@ -484,12 +484,14 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         return names;
     }
 
-    /// <summary>True for a class a test framework could instantiate: not abstract, not static.</summary>
+    /// <summary>
+    /// True for a class whose tests a framework runs: any non-abstract class. Static classes count:
+    /// xUnit and NUnit run the static test methods of a static class without instantiating it.
+    /// </summary>
     /// <param name="node">Type declaration.</param>
-    private static bool IsConcreteClass(MemberDeclarationSyntax node) =>
+    private static bool IsRunnableClass(MemberDeclarationSyntax node) =>
         node is ClassDeclarationSyntax or RecordDeclarationSyntax { ClassOrStructKeyword.RawKind: 0 or (int)SyntaxKind.ClassKeyword }
-        && !node.Modifiers.Any(SyntaxKind.AbstractKeyword)
-        && !node.Modifiers.Any(SyntaxKind.StaticKeyword);
+        && !node.Modifiers.Any(SyntaxKind.AbstractKeyword);
 
     /// <summary>All .cs files below <paramref name="root"/>, skipping build output and tool folders.</summary>
     /// <param name="root">Normalized repository root.</param>
