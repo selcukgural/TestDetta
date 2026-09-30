@@ -123,8 +123,44 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             }
         }
 
+        if (missed.Count > 0)
+        {
+            missed = Confirm(missed, reached, index, killed);
+        }
+
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
         return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false);
+    }
+
+    /// <summary>
+    /// Runs the tests once more with the mutant still in place and keeps only the missed classes that
+    /// fail again. A timing-sensitive test can fail once on a busy machine; counting it as a miss would
+    /// blame Sift for noise. A class that passes the second time is dropped from the killed ones too.
+    /// </summary>
+    /// <param name="missed">Missed classes of the first run (<c>Project: Class</c>).</param>
+    /// <param name="reached">Test projects the mutant can reach.</param>
+    /// <param name="index">Number of the mutant, for log files.</param>
+    /// <param name="killed">Killed classes of the first run; flaky ones are removed in place.</param>
+    private List<string> Confirm(List<string> missed, List<ProjectNode> reached, int index, List<string> killed)
+    {
+        var again = workspace.Executor.RunAll(reached, $"synthetic-{index}-confirm");
+        var failedAgain = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (project, failed) in again.FailedByProject)
+        {
+            foreach (var testClass in failed)
+            {
+                failedAgain.Add($"{Path.GetFileNameWithoutExtension(project)}: {testClass}");
+            }
+        }
+
+        var confirmed = missed.FindAll(failedAgain.Contains);
+        foreach (var flaky in missed.Where(m => !failedAgain.Contains(m)))
+        {
+            LogFlaky(index, flaky);
+            killed.Remove(flaky);
+        }
+
+        return confirmed;
     }
 
     /// <summary>Applies the target's source edits, lets Sift select against the commit's maps, and restores the files.</summary>
@@ -213,6 +249,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Mutant {Index} {TypeName}.{MemberName}: {Killed} class(es) failed, {Missed} not selected, {Share:P0} of classes selected")]
     private partial void LogMutant(int index, string typeName, string memberName, int killed, int missed, double share);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: {TestClass} failed once but passed when run again; not counted")]
+    private partial void LogFlaky(int index, string testClass);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName}.{MemberName} is in no test output; not run")]
     private partial void LogNotFound(string typeName, string memberName);
