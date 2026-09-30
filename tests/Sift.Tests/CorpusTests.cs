@@ -38,8 +38,10 @@ public sealed class CorpusTests : IDisposable
     public void Invalid_corpus_is_rejected(string json) =>
         Assert.Throws<InvalidDataException>(() => Corpus.Load(Write(json)));
 
-    [Fact]
-    public void Repository_corpus_file_is_valid()
+    [Theory]
+    [InlineData("corpus.json")]
+    [InlineData("corpus-extra.json")]
+    public void Repository_corpus_file_is_valid(string file)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (!File.Exists(Path.Combine(root.FullName, "eval", "corpus.json")))
@@ -47,7 +49,7 @@ public sealed class CorpusTests : IDisposable
             root = root.Parent ?? throw new InvalidOperationException("eval/corpus.json not found above the test output");
         }
 
-        var path = Path.Combine(root.FullName, "eval", "corpus.json");
+        var path = Path.Combine(root.FullName, "eval", file);
 
         Assert.NotEmpty(Corpus.Load(path).Repositories);
     }

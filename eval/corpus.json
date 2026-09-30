@@ -13,45 +13,495 @@
     {
       "name": "roslynator",
       "url": "https://github.com/dotnet/roslynator.git",
-      "tags": ["analyzers", "large", "xunit"],
+      "tags": [
+        "analyzers",
+        "large",
+        "xunit"
+      ],
       "notes": "48 projects, AssemblyName built from a property prefix"
     },
     {
       "name": "polly",
       "url": "https://github.com/App-vNext/Polly.git",
-      "tags": ["mtp", "xunit-v3", "async", "packages"],
+      "tags": [
+        "mtp",
+        "xunit-v3",
+        "async",
+        "packages"
+      ],
       "notes": "test packages come from eng/$(ProjectType).targets; runs Microsoft code coverage in every test run"
     },
     {
       "name": "nodatime",
       "url": "https://github.com/nodatime/nodatime.git",
-      "tags": ["nunit", "conditional-compilation", "large-suite"],
+      "tags": [
+        "nunit",
+        "conditional-compilation",
+        "large-suite"
+      ],
       "notes": "about 26,000 tests, heavy use of #if"
     },
     {
       "name": "mapperly",
       "url": "https://github.com/riok/mapperly.git",
-      "tags": ["source-generator", "xunit-v3", "snapshots"],
+      "tags": [
+        "source-generator",
+        "xunit-v3",
+        "snapshots"
+      ],
       "notes": "the generator runs in most tests; Verify snapshots"
     },
     {
       "name": "spectre",
       "url": "https://github.com/spectreconsole/spectre.console.git",
-      "tags": ["xunit", "snapshots", "polyfill"]
+      "tags": [
+        "xunit",
+        "snapshots",
+        "polyfill"
+      ]
     },
     {
       "name": "communitytoolkit",
       "url": "https://github.com/CommunityToolkit/dotnet.git",
-      "tags": ["mstest", "source-generator", "analyzers", "conditional-compilation", "multi-target"],
+      "tags": [
+        "mstest",
+        "source-generator",
+        "analyzers",
+        "conditional-compilation",
+        "multi-target"
+      ],
       "notes": "whole analyzer files inside #if ROSLYN_*; AssemblyName from a property function"
     },
     {
       "name": "argu",
       "url": "https://github.com/fsprojects/Argu.git",
-      "tags": ["fsharp"],
+      "tags": [
+        "fsharp"
+      ],
       "synthetic": 0,
       "merges": 6,
       "notes": "F# is not analysed; history only"
+    },
+    {
+      "name": "automapper",
+      "url": "https://github.com/LuckyPennySoftware/AutoMapper.git",
+      "tags": [
+        "reflection",
+        "dynamic-code",
+        "static-state",
+        "multi-target"
+      ],
+      "notes": "expression-compiled maps, assembly scanning in DI.Tests; UnitTests also net471"
+    },
+    {
+      "name": "autofixture",
+      "url": "https://github.com/AutoFixture/AutoFixture.git",
+      "branch": "release/5.0.0",
+      "tags": [
+        "reflection",
+        "dynamic-code",
+        "xunit-v3",
+        "multi-target"
+      ],
+      "notes": "reflection-driven object creation; 11 test projects incl. AutoMoq/AutoNSubstitute"
+    },
+    {
+      "name": "fluentvalidation",
+      "url": "https://github.com/FluentValidation/FluentValidation.git",
+      "tags": [
+        "reflection",
+        "non-code-inputs",
+        "small",
+        "multi-target"
+      ],
+      "notes": "validator discovery; test .resx and language files"
+    },
+    {
+      "name": "awesomeassertions",
+      "url": "https://github.com/AwesomeAssertions/AwesomeAssertions.git",
+      "tags": [
+        "reflection",
+        "xunit-v3",
+        "mtp",
+        "multi-target",
+        "large"
+      ],
+      "notes": "FluentAssertions fork; reflection-based equivalency; approval tests"
+    },
+    {
+      "name": "autofac",
+      "url": "https://github.com/autofac/Autofac.git",
+      "branch": "develop",
+      "tags": [
+        "di-scanning",
+        "reflection",
+        "dynamic-code"
+      ],
+      "notes": "ScannedAssembly and AssemblyLoadContext scenario projects"
+    },
+    {
+      "name": "scrutor",
+      "url": "https://github.com/khellang/Scrutor.git",
+      "branch": "master",
+      "tags": [
+        "di-scanning",
+        "reflection",
+        "xunit-v3",
+        "mtp",
+        "small"
+      ],
+      "notes": "pure convention scanning"
+    },
+    {
+      "name": "lamar",
+      "url": "https://github.com/JasperFx/lamar.git",
+      "branch": "master",
+      "tags": [
+        "di-scanning",
+        "reflection",
+        "dynamic-code"
+      ],
+      "notes": "code-generating container; stale netcoreapp2.x projects outside the sln"
+    },
+    {
+      "name": "libgit2sharp",
+      "url": "https://github.com/libgit2/libgit2sharp.git",
+      "branch": "master",
+      "framework": "net8.0",
+      "tags": [
+        "pinvoke",
+        "native",
+        "static-state",
+        "multi-target"
+      ],
+      "notes": "native libgit2 from NuGet NativeBinaries"
+    },
+    {
+      "name": "nsec",
+      "url": "https://github.com/ektrah/nsec.git",
+      "branch": "master",
+      "tags": [
+        "pinvoke",
+        "native",
+        "xunit-v3"
+      ],
+      "notes": "libsodium through NuGet; thousands of theory cases"
+    },
+    {
+      "name": "duckdb-net",
+      "url": "https://github.com/Giorgi/DuckDB.NET.git",
+      "branch": "develop",
+      "framework": "net8.0",
+      "tags": [
+        "pinvoke",
+        "native",
+        "static-state"
+      ],
+      "notes": "build downloads DuckDB natives (network); in-process database"
+    },
+    {
+      "name": "newtonsoft-json",
+      "url": "https://github.com/JamesNK/Newtonsoft.Json.git",
+      "branch": "master",
+      "tags": [
+        "serialization",
+        "reflection",
+        "dynamic-code",
+        "static-state",
+        "large",
+        "multi-target"
+      ],
+      "notes": "static contract-resolver caches; netfx TFMs are skipped by -f net10.0"
+    },
+    {
+      "name": "protobuf-net",
+      "url": "https://github.com/protobuf-net/protobuf-net.git",
+      "framework": "net8.0",
+      "setup": "dotnet tool restore",
+      "tags": [
+        "serialization",
+        "dynamic-code",
+        "reflection",
+        "static-state",
+        "xunit-v3",
+        "mtp",
+        "large"
+      ],
+      "notes": "Reflection.Emit serializers; assorted/ WCF projects are Windows-only"
+    },
+    {
+      "name": "yamldotnet",
+      "url": "https://github.com/aaubry/YamlDotNet.git",
+      "branch": "master",
+      "setup": "git submodule update --init --recursive",
+      "tags": [
+        "serialization",
+        "reflection",
+        "non-code-inputs",
+        "source-generator",
+        "cpm",
+        "multi-target"
+      ],
+      "notes": "yaml-test-suite submodule; EmbeddedResource yaml files; static generator"
+    },
+    {
+      "name": "castle-core",
+      "url": "https://github.com/castleproject/Core.git",
+      "branch": "master",
+      "tags": [
+        "dynamic-code",
+        "reflection",
+        "static-state",
+        "nunit",
+        "multi-target"
+      ],
+      "notes": "DynamicProxy with static proxy-type caches (ModuleScope)"
+    },
+    {
+      "name": "nsubstitute",
+      "url": "https://github.com/nsubstitute/NSubstitute.git",
+      "tags": [
+        "dynamic-code",
+        "reflection",
+        "static-state",
+        "nunit",
+        "mtp",
+        "multi-target"
+      ],
+      "notes": "Castle proxies; ambient static SubstitutionContext"
+    },
+    {
+      "name": "nlog",
+      "url": "https://github.com/NLog/NLog.git",
+      "branch": "dev",
+      "tags": [
+        "static-state",
+        "reflection",
+        "multi-target",
+        "large"
+      ],
+      "notes": "static LogManager; extension autoload by assembly scanning; some timing-sensitive tests"
+    },
+    {
+      "name": "unitsnet",
+      "url": "https://github.com/angularsen/UnitsNet.git",
+      "branch": "master",
+      "tags": [
+        "static-state",
+        "reflection",
+        "serialization",
+        "large"
+      ],
+      "notes": "static setup and abbreviation caches; generated code; tests of static init order"
+    },
+    {
+      "name": "serilog",
+      "url": "https://github.com/serilog/serilog.git",
+      "branch": "dev",
+      "tags": [
+        "static-state",
+        "reflection",
+        "snapshots"
+      ],
+      "notes": "static Log.Logger and SelfLog; approval tests"
+    },
+    {
+      "name": "open-xml-sdk",
+      "url": "https://github.com/dotnet/Open-XML-SDK.git",
+      "tags": [
+        "non-code-inputs",
+        "source-generator",
+        "cpm",
+        "conditional-compilation",
+        "multi-target",
+        "mtp",
+        "xunit-v3"
+      ],
+      "notes": "~990 embedded Office files as test assets"
+    },
+    {
+      "name": "scriban",
+      "url": "https://github.com/scriban/scriban.git",
+      "branch": "master",
+      "tags": [
+        "non-code-inputs",
+        "nunit"
+      ],
+      "notes": "349 template/expected-output files read from disk"
+    },
+    {
+      "name": "markdig",
+      "url": "https://github.com/xoofx/markdig.git",
+      "tags": [
+        "non-code-inputs",
+        "nunit"
+      ],
+      "notes": "spec .md files turned into checked-in generated tests"
+    },
+    {
+      "name": "mimekit",
+      "url": "https://github.com/jstedfast/MimeKit.git",
+      "branch": "master",
+      "framework": "net8.0",
+      "tags": [
+        "non-code-inputs",
+        "nunit"
+      ],
+      "notes": "449 TestData fixtures; a few tests may touch the network"
+    },
+    {
+      "name": "vogen",
+      "url": "https://github.com/SteveDunn/Vogen.git",
+      "tags": [
+        "source-generator",
+        "analyzers",
+        "snapshots"
+      ],
+      "notes": "13k Verify snapshots; ConsumerTests need a packed nupkg and are left out when they do not build"
+    },
+    {
+      "name": "mediator",
+      "url": "https://github.com/martinothamar/Mediator.git",
+      "tags": [
+        "source-generator",
+        "snapshots",
+        "cpm",
+        "multi-target",
+        "xunit-v3"
+      ],
+      "notes": "source-generated mediator"
+    },
+    {
+      "name": "immediate-handlers",
+      "url": "https://github.com/ImmediatePlatform/Immediate.Handlers.git",
+      "tags": [
+        "source-generator",
+        "analyzers",
+        "snapshots",
+        "cpm",
+        "mtp",
+        "xunit-v3",
+        "small"
+      ]
+    },
+    {
+      "name": "meziantou-analyzer",
+      "url": "https://github.com/meziantou/Meziantou.Analyzer.git",
+      "tags": [
+        "analyzers",
+        "linked-files",
+        "mtp"
+      ],
+      "notes": "per-Roslyn-version csproj sharing sources; content only in Directory.Build.props; custom test SDK"
+    },
+    {
+      "name": "swashbuckle",
+      "url": "https://github.com/domaindrivendev/Swashbuckle.AspNetCore.git",
+      "branch": "master",
+      "tags": [
+        "aspnet",
+        "integration",
+        "snapshots",
+        "non-code-inputs",
+        "cpm",
+        "multi-target",
+        "xunit-v3",
+        "large"
+      ],
+      "notes": "WebApplicationFactory; 526 verified OpenAPI snapshots; SDK 10.0.401 latestPatch"
+    },
+    {
+      "name": "fastendpoints",
+      "url": "https://github.com/FastEndpoints/FastEndpoints.git",
+      "tags": [
+        "aspnet",
+        "integration",
+        "cpm",
+        "mtp",
+        "xunit-v3",
+        "large"
+      ],
+      "notes": "in-memory AppFixture integration tests; reflection-based endpoint discovery"
+    },
+    {
+      "name": "carter",
+      "url": "https://github.com/CarterCommunity/Carter.git",
+      "tags": [
+        "aspnet",
+        "analyzers",
+        "reflection",
+        "small"
+      ],
+      "notes": "module discovery by assembly scanning; Mvc.Testing samples"
+    },
+    {
+      "name": "aspnetcore-odata",
+      "url": "https://github.com/OData/AspNetCoreOData.git",
+      "framework": "net8.0",
+      "tags": [
+        "aspnet",
+        "integration",
+        "cpm"
+      ],
+      "notes": "large E2E suite on Mvc.Testing, no database"
+    },
+    {
+      "name": "opentelemetry-dotnet",
+      "url": "https://github.com/open-telemetry/opentelemetry-dotnet.git",
+      "tags": [
+        "large",
+        "cpm",
+        "multi-target",
+        "conditional-compilation",
+        "linked-files",
+        "snapshots"
+      ],
+      "notes": "81 csproj; src/Shared linked through $(RepoRoot) wildcards, some per TFM"
+    },
+    {
+      "name": "graphql-dotnet",
+      "url": "https://github.com/graphql-dotnet/graphql-dotnet.git",
+      "branch": "master",
+      "tags": [
+        "large",
+        "analyzers",
+        "aspnet",
+        "multi-target",
+        "conditional-compilation",
+        "snapshots"
+      ],
+      "notes": "property- and OS-conditional TFMs; public API approval files"
+    },
+    {
+      "name": "guardclauses",
+      "url": "https://github.com/ardalis/GuardClauses.git",
+      "framework": "net8.0",
+      "tags": [
+        "small"
+      ],
+      "notes": "two-project baseline"
+    },
+    {
+      "name": "cliwrap",
+      "url": "https://github.com/Tyrrrz/CliWrap.git",
+      "branch": "prime",
+      "tags": [
+        "small",
+        "cpm",
+        "non-code-inputs"
+      ],
+      "notes": "tests run a separately built Dummy executable"
+    },
+    {
+      "name": "fluid",
+      "url": "https://github.com/sebastienros/fluid.git",
+      "tags": [
+        "small",
+        "cpm",
+        "mtp",
+        "xunit-v3"
+      ],
+      "notes": "Liquid templates; fast single test project"
     }
   ]
 }

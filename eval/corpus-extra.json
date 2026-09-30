@@ -1,0 +1,179 @@
+// Second-wave and riskier candidates: what keeps each out of corpus.json is in its notes.
+// sift-eval --corpus eval/corpus-extra.json --only <name> --out <dir>
+{
+  "defaults": {
+    "branch": "main",
+    "framework": "net10.0",
+    "parallel": 4,
+    "synthetic": 100,
+    "merges": 0
+  },
+  "repositories": [
+    {
+      "name": "mapster",
+      "url": "https://github.com/MapsterMapper/Mapster.git",
+      "branch": "master",
+      "setup": "dotnet tool restore",
+      "tags": [
+        "reflection",
+        "dynamic-code",
+        "mstest",
+        "multi-target"
+      ],
+      "notes": "ExpressionDebugger.Tests targets net6/7"
+    },
+    {
+      "name": "stashbox",
+      "url": "https://github.com/z4kn4fein/stashbox.git",
+      "branch": "master",
+      "tags": [
+        "di-scanning",
+        "dynamic-code",
+        "multi-target"
+      ],
+      "notes": "net5..net10 test TFMs"
+    },
+    {
+      "name": "clangsharp",
+      "url": "https://github.com/dotnet/ClangSharp.git",
+      "tags": [
+        "pinvoke",
+        "native",
+        "nunit",
+        "large"
+      ],
+      "notes": "libClang natives through NuGet; osx-arm64 resolution unconfirmed"
+    },
+    {
+      "name": "net-vips",
+      "url": "https://github.com/kleisauke/net-vips.git",
+      "branch": "master",
+      "tags": [
+        "pinvoke",
+        "native",
+        "xunit-v3",
+        "mtp"
+      ],
+      "notes": "needs -p:TestWithNuGetBinaries=true or a system libvips; sift-eval cannot pass MSBuild properties yet"
+    },
+    {
+      "name": "wasmtime-dotnet",
+      "url": "https://github.com/bytecodealliance/wasmtime-dotnet.git",
+      "framework": "net9.0",
+      "setup": "dotnet tool restore",
+      "tags": [
+        "pinvoke",
+        "native"
+      ],
+      "notes": "net9.0 only: needs a .NET 9 runtime or DOTNET_ROLL_FORWARD=Major"
+    },
+    {
+      "name": "messagepack",
+      "url": "https://github.com/MessagePack-CSharp/MessagePack-CSharp.git",
+      "branch": "master",
+      "framework": "net9.0",
+      "setup": "dotnet tool restore",
+      "tags": [
+        "serialization",
+        "dynamic-code",
+        "reflection",
+        "static-state",
+        "linked-files"
+      ],
+      "notes": "global.json 10.0.300 rollForward patch: needs an SDK in the 10.0.3xx band"
+    },
+    {
+      "name": "jint",
+      "url": "https://github.com/sebastienros/jint.git",
+      "tags": [
+        "static-state",
+        "dynamic-code",
+        "reflection",
+        "nunit",
+        "mtp",
+        "large"
+      ],
+      "notes": "exclude Jint.Tests.Test262 (needs suite generation)"
+    },
+    {
+      "name": "log4net",
+      "url": "https://github.com/apache/logging-log4net.git",
+      "branch": "master",
+      "tags": [
+        "static-state",
+        "reflection",
+        "nunit"
+      ]
+    },
+    {
+      "name": "anglesharp",
+      "url": "https://github.com/AngleSharp/AngleSharp.git",
+      "branch": "devel",
+      "tags": [
+        "nunit",
+        "non-code-inputs"
+      ]
+    },
+    {
+      "name": "njsonschema",
+      "url": "https://github.com/RicoSuter/NJsonSchema.git",
+      "branch": "master",
+      "framework": "net8.0",
+      "tags": [
+        "snapshots",
+        "non-code-inputs",
+        "cpm",
+        "multi-target",
+        "xunit-v3"
+      ]
+    },
+    {
+      "name": "nswag",
+      "url": "https://github.com/RicoSuter/NSwag.git",
+      "branch": "master",
+      "framework": "net8.0",
+      "tags": [
+        "snapshots",
+        "non-code-inputs",
+        "cpm",
+        "xunit-v3",
+        "large"
+      ],
+      "notes": "TypeScript generator tests may need Node"
+    },
+    {
+      "name": "asp-versioning",
+      "url": "https://github.com/dotnet/aspnet-api-versioning.git",
+      "tags": [
+        "aspnet",
+        "integration",
+        "analyzers",
+        "multi-target",
+        "mtp",
+        "large"
+      ],
+      "notes": "some test projects target net472 unconditionally"
+    },
+    {
+      "name": "netescapades-enumgenerators",
+      "url": "https://github.com/andrewlock/NetEscapades.EnumGenerators.git",
+      "tags": [
+        "source-generator",
+        "snapshots",
+        "linked-files"
+      ],
+      "notes": "integration tests link *Tests.cs from a sibling project"
+    },
+    {
+      "name": "imagesharp",
+      "url": "https://github.com/SixLabors/ImageSharp.git",
+      "setup": "git lfs install && git submodule update --init --recursive && git lfs pull",
+      "tags": [
+        "non-code-inputs",
+        "conditional-compilation",
+        "large"
+      ],
+      "notes": "~2450 LFS images; very long suite"
+    }
+  ]
+}
