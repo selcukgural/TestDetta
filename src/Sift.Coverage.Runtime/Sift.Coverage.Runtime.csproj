@@ -13,4 +13,8 @@
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sift.Tests" />
+  </ItemGroup>
+
 </Project>

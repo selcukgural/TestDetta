@@ -134,6 +134,13 @@ public static class SiftTracker
             return;
         }
 
+        WriteResults(path);
+    }
+
+    /// <summary>Writes the collected data to <paramref name="path"/>, replacing it in one step.</summary>
+    /// <param name="path">Results file.</param>
+    internal static void WriteResults(string path)
+    {
         lock (Gate)
         {
             // Close the time of the bucket still current; a later call (process exit after the
@@ -145,16 +152,24 @@ public static class SiftTracker
                 _lastSwitch = now;
             }
 
-            using var stream = File.Create(path);
-            using var json = new Utf8JsonWriter(stream);
-            json.WriteStartObject();
-            WriteBuckets(json, "classes", Classes);
-            WriteBuckets(json, "fixtures", Fixtures);
-            WriteIds(json, "ambient", Startup.Bits);
-            WriteSeconds(json, "classSeconds", Classes);
-            WriteSeconds(json, "fixtureSeconds", Fixtures);
-            json.WriteNumber("startupSeconds", _startupSeconds);
-            json.WriteEndObject();
+            // Written next to the target and moved over it: under VSTest the results are written at
+            // session end and again at process exit, and the test host may be killed during the
+            // second write. A rename never leaves a half-written file; the earlier one stays.
+            var temporary = $"{path}.{Environment.ProcessId}.tmp";
+            using (var stream = File.Create(temporary))
+            using (var json = new Utf8JsonWriter(stream))
+            {
+                json.WriteStartObject();
+                WriteBuckets(json, "classes", Classes);
+                WriteBuckets(json, "fixtures", Fixtures);
+                WriteIds(json, "ambient", Startup.Bits);
+                WriteSeconds(json, "classSeconds", Classes);
+                WriteSeconds(json, "fixtureSeconds", Fixtures);
+                json.WriteNumber("startupSeconds", _startupSeconds);
+                json.WriteEndObject();
+            }
+
+            File.Move(temporary, path, overwrite: true);
         }
     }
 

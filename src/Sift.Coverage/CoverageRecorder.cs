@@ -409,7 +409,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         foreach (var file in resultsFiles)
         {
-            using var document = JsonDocument.Parse(File.ReadAllBytes(file));
+            using var document = ReadResults(file);
             var root = document.RootElement;
             MergeBuckets(root.GetProperty("classes"), merged);
             MergeBuckets(root.GetProperty("fixtures"), mergedFixtures);
@@ -484,6 +484,24 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         foreach (var entry in element.EnumerateObject())
         {
             seconds[entry.Name] = seconds.GetValueOrDefault(entry.Name) + entry.Value.GetDouble();
+        }
+    }
+
+    /// <summary>Parses one shard's results.</summary>
+    /// <param name="file">Results file written by <see cref="SiftTracker.WriteResults"/>.</param>
+    /// <exception cref="InvalidOperationException">The file is empty or not JSON: its test host ended while writing.</exception>
+    private static JsonDocument ReadResults(string file)
+    {
+        try
+        {
+            return JsonDocument.Parse(File.ReadAllBytes(file));
+        }
+        catch (JsonException ex)
+        {
+            // A map built without this shard would silently lack its test classes.
+            throw new InvalidOperationException(
+                $"The coverage results of a test process are unreadable ({Path.GetFileName(file)}); its test host probably ended while writing them. Record again.",
+                ex);
         }
     }
 
