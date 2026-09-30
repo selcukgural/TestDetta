@@ -93,10 +93,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         {
             // Under Microsoft.Testing.Platform the tests run in the test project's own executable,
             // where no VSTest collector loads the runtime; it goes into the output instead.
-            // xUnit v3 runs its tests in the test project's own executable under VSTest too, where the
-            // collector is not loaded either.
-            var isXunitV3 = File.Exists(Path.Combine(Path.GetDirectoryName(targetPath)!, "xunit.v3.core.dll"));
-            deployment = mode == DotnetTestMode.TestingPlatform || isXunitV3 ? new RuntimeDeployment(targetPath) : null;
+            // The runtime always goes into the output, so instrumented code finds it without the VSTest
+            // collector: xUnit v3 runs tests in the test executable, where no collector loads, and old
+            // test hosts (Microsoft.NET.Test.Sdk 16) do not load the collector at all.
+            deployment = new RuntimeDeployment(targetPath);
             var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework), work);
             LogMode(project, mode);
 
@@ -463,8 +463,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// </summary>
     /// <param name="directory">Where to write the file.</param>
     /// <param name="withCollector">
-    /// True under VSTest. Under Microsoft.Testing.Platform the runtime is deployed into the test
-    /// output instead, and a second copy loaded by a collector would split the tracker's state.
+    /// True under VSTest, where the collector writes the results at session end, before the host may
+    /// be killed. The runtime is in the test output as well; both are the same assembly, so the host
+    /// loads it once. Microsoft.Testing.Platform has no collectors.
     /// </param>
     private static string WriteRunSettings(string directory, bool withCollector)
     {
