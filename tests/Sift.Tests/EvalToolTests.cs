@@ -106,6 +106,38 @@ public sealed class EvalToolTests : IDisposable
         Assert.Contains("Calc.Tests.FormatTests", merge.GetProperty("mutants")[0].GetProperty("killed").EnumerateArray().Select(e => e.GetString()));
     }
 
+    [Fact]
+    public void Synthetic_changes_find_the_same_miss_and_nothing_else()
+    {
+        var stdout = Console.Out;
+        int exitCode;
+        try
+        {
+            Console.SetOut(TextWriter.Null);
+            exitCode = EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--out", _output]);
+        }
+        finally
+        {
+            Console.SetOut(stdout);
+        }
+
+        var run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_output, "synthetic.json"))).RootElement;
+        Assert.True(run.GetProperty("error").ValueKind == JsonValueKind.Null, run.GetProperty("error").ToString());
+        var mutants = run.GetProperty("mutants").EnumerateArray().ToDictionary(m => m.GetProperty("target").GetString()!);
+
+        Assert.Equal(3, exitCode);
+        Assert.Equal(["Calc.Calculator.Add", "Calc.Calculator.Mul", "Calc.Formatter.Format", "Calc.Plugin.Run"], mutants.Keys.Order(StringComparer.Ordinal));
+        Assert.All(mutants.Values, m => Assert.True(m.GetProperty("detected").GetBoolean()));
+        Assert.Equal(["Calc.Tests: Calc.Tests.PluginTests"], Strings(mutants["Calc.Plugin.Run"], "missed"));
+        Assert.Equal(["Calc.Tests: Calc.Tests.MulTests"], Strings(mutants["Calc.Calculator.Mul"], "killed"));
+        Assert.Empty(Strings(mutants["Calc.Calculator.Mul"], "missed"));
+        Assert.Empty(Strings(mutants["Calc.Formatter.Format"], "missed"));
+    }
+
+    /// <summary>A string array property of a JSON object.</summary>
+    private static string[] Strings(JsonElement element, string property) =>
+        [.. element.GetProperty(property).EnumerateArray().Select(static e => e.GetString()!)];
+
     /// <summary>Evaluates the latest commit and returns the exit code and its JSON entry.</summary>
     private (int ExitCode, JsonElement Merge) Evaluate()
     {

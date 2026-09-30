@@ -27,7 +27,7 @@ internal sealed class EvalGit(string root)
     /// <param name="count">Number of commits.</param>
     public IReadOnlyList<EvalCommit> History(string branch, int count)
     {
-        var reference = Run(root, "rev-parse", "--verify", "--quiet", branch).Count > 0 ? branch : $"origin/{branch}";
+        var reference = Reference(branch);
         var lines = Run(root, "log", "--first-parent", $"-{count}", "--format=%H%x09%P%x09%s", reference);
 
         var commits = new List<EvalCommit>(lines.Count);
@@ -46,6 +46,15 @@ internal sealed class EvalGit(string root)
         commits.Reverse();
         return commits;
     }
+
+    /// <summary>The commit at the tip of <paramref name="branch"/>, which may have no parent.</summary>
+    /// <param name="branch">Branch name, local or <c>origin/</c>.</param>
+    public string Head(string branch) => Run(root, "rev-parse", Reference(branch) + "^{commit}")[0];
+
+    /// <summary>The branch itself when it exists locally, otherwise its <c>origin/</c> counterpart.</summary>
+    /// <param name="branch">Branch name.</param>
+    private string Reference(string branch) =>
+        Run(root, "rev-parse", "--verify", "--quiet", branch).Count > 0 ? branch : $"origin/{branch}";
 
     /// <summary>Checks out <paramref name="sha"/> (detached), discarding changes to tracked files.</summary>
     /// <param name="sha">Commit to check out.</param>

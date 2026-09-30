@@ -6,8 +6,10 @@ namespace Sift.Eval;
 /// <summary>What to evaluate.</summary>
 /// <param name="Repository">Path or URL of the repository; it is cloned, never changed.</param>
 /// <param name="Branch">Branch whose first-parent history holds the merges to evaluate.</param>
-/// <param name="Merges">How many of the latest merges (or commits) to evaluate.</param>
-internal sealed record EvalTarget(string Repository, string Branch, int Merges);
+/// <param name="Merges">How many of the latest merges (or commits) to evaluate; 0 for none.</param>
+/// <param name="Synthetic">Members to change synthetically at the branch head; 0 for none.</param>
+/// <param name="Seed">Seed for picking the synthetic changes.</param>
+internal sealed record EvalTarget(string Repository, string Branch, int Merges, int Synthetic = 0, int Seed = 1);
 
 /// <summary>Parsed command line of <c>sift-eval</c>.</summary>
 /// <param name="Target">What to evaluate.</param>
@@ -29,7 +31,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
 
           --repo <path-or-url>   Repository to evaluate (required); it is cloned, never changed
           --branch <name>        Branch to walk (default: main)
-          --merges <n>           Latest first-parent commits to evaluate (default: 8)
+          --merges <n>           Latest first-parent commits to evaluate (default: 8, or 0 with --synthetic)
+          --synthetic <n>        Also change <n> sampled members at the branch head, one at a time, and
+                                 check each selection against a mutant of that member
+          --seed <n>             Seed for sampling the synthetic changes (default: 1)
           --parallel <n>         Test processes per project when recording (default: 1)
           --mutants <n>          Changed members to mutate per merge (default: 3, 0 turns it off)
           --project <csproj>     Only use this test project (path in the repository); repeat for several
@@ -48,7 +53,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     {
         string? repository = null;
         var branch = "main";
-        var merges = 8;
+        int? merges = null;
+        var synthetic = 0;
+        var seed = 1;
         var run = new RunSettings(Parallelism: 1, Mutants: 3, Projects: [], new RepoCommands(Setup: null, Cleanup: null), Framework: null);
         var logLevel = LogLevel.Information;
         var output = Path.Combine(Path.GetTempPath(), "sift-eval-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
@@ -101,14 +108,16 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { Projects = [.. run.Projects, value] };
                     break;
 
-                case "--merges" or "--parallel" or "--mutants":
-                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg != "--mutants"))
+                case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg == "--parallel"))
                     {
                         error = $"{arg} needs a positive number, not {value}";
                         return false;
                     }
 
                     merges = arg == "--merges" ? number : merges;
+                    synthetic = arg == "--synthetic" ? number : synthetic;
+                    seed = arg == "--seed" ? number : seed;
                     run = arg switch
                     {
                         "--parallel" => run with { Parallelism = number },
@@ -129,7 +138,14 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
             return false;
         }
 
-        options = new EvalOptions(new EvalTarget(repository, branch, merges), run, output, logLevel);
+        var target = new EvalTarget(repository, branch, merges ?? (synthetic > 0 ? 0 : 8), synthetic, seed);
+        if (target is { Merges: 0, Synthetic: 0 })
+        {
+            error = "Nothing to evaluate: give --merges or --synthetic a positive number";
+            return false;
+        }
+
+        options = new EvalOptions(target, run, output, logLevel);
         return true;
     }
 }

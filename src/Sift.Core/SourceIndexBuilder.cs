@@ -493,7 +493,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
     /// <summary>All .cs files below <paramref name="root"/>, skipping build output and tool folders.</summary>
     /// <param name="root">Normalized repository root.</param>
-    private static IEnumerable<string> EnumerateSourceFiles(string root)
+    internal static IEnumerable<string> EnumerateSourceFiles(string root)
     {
         var pending = new Stack<string>();
         pending.Push(root);

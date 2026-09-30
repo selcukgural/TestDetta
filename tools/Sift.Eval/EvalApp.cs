@@ -4,7 +4,7 @@ using Sift.Core;
 
 namespace Sift.Eval;
 
-/// <summary>Entry point of <c>sift-eval</c>: clones the repository and evaluates its latest merges.</summary>
+/// <summary>Entry point of <c>sift-eval</c>: clones the repository, evaluates its latest merges and, if asked, synthetic changes.</summary>
 internal static partial class EvalApp
 {
     /// <summary>Runs the evaluation and returns the exit code: 0 when nothing was missed, 3 when a test class was, 2 for usage errors.</summary>
@@ -47,20 +47,44 @@ internal static partial class EvalApp
         var workspace = new EvalWorkspace(git, root, Path.Combine(options.Output, "maps"), executor, loggerFactory);
         var evaluator = new MergeEvaluator(workspace, options.Run);
 
-        var results = new List<MergeResult>();
-        foreach (var commit in git.History(options.Target.Branch, options.Target.Merges))
+        var passed = true;
+        if (options.Target.Merges > 0)
         {
-            LogEvaluating(logger, commit.Sha[..7], commit.Subject);
-            results.Add(evaluator.Evaluate(commit));
+            var results = new List<MergeResult>();
+            foreach (var commit in git.History(options.Target.Branch, options.Target.Merges))
+            {
+                LogEvaluating(logger, commit.Sha[..7], commit.Subject);
+                results.Add(evaluator.Evaluate(commit));
 
-            // Written after every merge, so a long evaluation can be read while it runs.
-            EvalReport.Write(options.Output, options.Repository, results);
+                // Written after every merge, so a long evaluation can be read while it runs.
+                EvalReport.Write(options.Output, options.Repository, results);
+            }
+
+            Console.Out.Write(EvalReport.Markdown(options.Repository, results));
+            Console.Out.WriteLine($"\nReports: {Path.Combine(options.Output, "results.md")}");
+            passed = results.All(static r => r.Safety?.Passed ?? true);
         }
 
-        Console.Out.Write(EvalReport.Markdown(options.Repository, results));
-        Console.Out.WriteLine($"\nReports: {Path.Combine(options.Output, "results.md")}");
-        return results.All(static r => r.Safety?.Passed ?? true) ? 0 : 3;
+        if (options.Target.Synthetic > 0)
+        {
+            var head = git.Head(options.Target.Branch);
+            LogSynthetic(logger, options.Target.Synthetic, head[..7]);
+            var run = new SyntheticEvaluator(workspace, options.Run).Evaluate(
+                head,
+                new SampleRequest(options.Target.Synthetic, options.Target.Seed),
+                progress => SyntheticReport.Write(options.Output, options.Repository, progress));
+            SyntheticReport.Write(options.Output, options.Repository, run);
+
+            Console.Out.Write(SyntheticReport.Markdown(options.Repository, run).Split("\n## Mutants", 2)[0]);
+            Console.Out.WriteLine($"\nReports: {Path.Combine(options.Output, "synthetic.md")}");
+            passed &= run.Error is null && run.Mutants.All(static m => m.MissedClasses.Count == 0);
+        }
+
+        return passed ? 0 : 3;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Changing {Count} sampled member(s) at {Sha}")]
+    private static partial void LogSynthetic(ILogger logger, int count, string sha);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Evaluating {Sha} {Subject}")]
     private static partial void LogEvaluating(ILogger logger, string sha, string subject);
