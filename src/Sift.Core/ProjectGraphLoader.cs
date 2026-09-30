@@ -126,21 +126,14 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     isTest = true;
                     break;
 
-                case "PackageReference"
-                    when string.Equals(element.Attribute("Include")?.Value, "Microsoft.NET.Test.Sdk",
-                        StringComparison.OrdinalIgnoreCase):
+                case "PackageReference" when element.Attribute("Include")?.Value is { } package && TestPackages.Contains(package):
                     isTest = true;
                     break;
             }
         }
 
-        // Test packages are often added from Directory.Build.props, which is not evaluated here.
-        // The naming convention catches those; a false positive only runs an extra project.
-        if (!isTest && HasTestProjectName(projectPath))
-        {
-            LogTestByName(projectPath);
-            isTest = true;
-        }
+        // <Project Sdk="MSTest.Sdk/3.8.0"> brings MSTest and its runner along.
+        isTest |= doc.Root?.Attribute("Sdk")?.Value.StartsWith("MSTest.Sdk", StringComparison.OrdinalIgnoreCase) == true;
 
         // In MSBuild's order: Directory.Build.props, the project, Directory.Build.targets, so that a
         // property the project sets is known when the targets file imports a path built from it.
@@ -155,6 +148,16 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         if (FindAbove(projectDir, ImplicitImports[1], root) is { } targets)
         {
             Walk(targets, inputs, visited, document: null);
+        }
+
+        // Test packages are often added from Directory.Build.props or targets; those count when they
+        // are added unconditionally. The naming convention catches the rest; a false positive only
+        // runs an extra project, which reports that it has no tests.
+        isTest |= inputs.MarksTestProject;
+        if (!isTest && HasTestProjectName(projectPath))
+        {
+            LogTestByName(projectPath);
+            isTest = true;
         }
 
         LogParsed(projectPath, isTest, references.Count);
@@ -226,6 +229,12 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         /// <summary>True when an <c>AssemblyName</c> property was set to a value that could not be expanded.</summary>
         public bool AssemblyNameUnresolved { get; set; }
 
+        /// <summary>
+        /// True when an imported file unconditionally references a test runner package or sets
+        /// <c>IsTestProject</c> to true. Conditions are not evaluated, so conditional ones do not count.
+        /// </summary>
+        public bool MarksTestProject { get; set; }
+
         /// <summary>Packages named by <c>PackageReference</c> items.</summary>
         public HashSet<string> Packages { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
@@ -263,6 +272,13 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         foreach (var element in document.Descendants())
         {
             var name = element.Name.LocalName;
+            if (!IsConditional(element)
+                && (name == "IsTestProject" && string.Equals(element.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase)
+                    || name == "PackageReference" && element.Attribute("Include")?.Value is { } testPackage && TestPackages.Contains(testPackage)))
+            {
+                inputs.MarksTestProject = true;
+            }
+
             if (element.Parent?.Name.LocalName == "PropertyGroup" && !element.HasElements)
             {
                 if (!RecordProperty(inputs, name, element.Value.Trim()) && name.Equals("AssemblyName", StringComparison.OrdinalIgnoreCase))
@@ -496,7 +512,34 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
     {
         var name = Path.GetFileNameWithoutExtension(projectPath.AsSpan());
         return name.EndsWith("Tests", StringComparison.OrdinalIgnoreCase)
-               || name.EndsWith("Test", StringComparison.OrdinalIgnoreCase);
+               || name.EndsWith("Test", StringComparison.OrdinalIgnoreCase)
+               || name.EndsWith("Specs", StringComparison.OrdinalIgnoreCase)
+               || name.EndsWith("Spec", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Packages that make a project a test project: the VSTest host, and the frameworks that bring
+    /// their own runner (xUnit v3, MSTest, NUnit's adapter, TUnit). Plain framework packages
+    /// (<c>xunit.extensibility.core</c>, <c>NUnit</c>) are also used by libraries of test helpers.
+    /// </summary>
+    private static readonly FrozenSet<string> TestPackages = FrozenSet.Create(
+        StringComparer.OrdinalIgnoreCase,
+        "Microsoft.NET.Test.Sdk", "xunit.v3", "xunit.v3.mtp-v1", "xunit.v3.mtp-v2", "xunit.v3.mtp-off",
+        "MSTest", "MSTest.TestAdapter", "NUnit3TestAdapter", "TUnit", "TUnit.Engine");
+
+    /// <summary>True when the element or one of its ancestors has a <c>Condition</c>.</summary>
+    /// <param name="element">MSBuild element.</param>
+    private static bool IsConditional(XElement element)
+    {
+        for (var current = element; current is not null; current = current.Parent)
+        {
+            if (current.Attribute("Condition") is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
