@@ -1,7 +1,8 @@
 # Backlog
 
-Work agreed on but not started, in the order we plan to take it. The evaluation corpus comes
-first: every finding there is fixed before anything below.
+Work agreed on but not started, in the order we plan to take it. Reliability and correctness
+come first: the evaluation corpus and every finding there before anything below, and features
+that report numbers (value reporting) only once the numbers are proven right.
 
 ## Now: evaluation corpus, round 1
 
