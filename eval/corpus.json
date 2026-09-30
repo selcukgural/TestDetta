@@ -3,7 +3,6 @@
 // settings next to it: what it needs to build and test on a plain macOS/Linux machine.
 {
   "defaults": {
-    "branch": "main",
     "framework": "net10.0",
     "parallel": 4,
     "synthetic": 100,

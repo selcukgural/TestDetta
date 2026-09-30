@@ -164,7 +164,8 @@ internal static partial class BatchRunner
             entry.Projects ?? [],
             new RepoCommands(entry.Setup, entry.Cleanup),
             entry.Framework);
-        var target = new EvalTarget(entry.Url, entry.Branch ?? "main", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
+        // Without a branch, the repository's default branch, whatever it is called.
+        var target = new EvalTarget(entry.Url, entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
         var evalOptions = new EvalOptions(target, run, directory, options.LogLevel);
 
         LogStarting(logger, entry.Name, entry.Url);

@@ -15,7 +15,7 @@ internal sealed record CorpusEntry
     /// <summary>Clone URL or local path.</summary>
     public required string Url { get; init; }
 
-    /// <summary>Branch to evaluate.</summary>
+    /// <summary>Branch to evaluate; the repository's default branch when left out.</summary>
     public string? Branch { get; init; }
 
     /// <summary>Target framework to build, record and test.</summary>

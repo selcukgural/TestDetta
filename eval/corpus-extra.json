@@ -2,7 +2,6 @@
 // sift-eval --corpus eval/corpus-extra.json --only <name> --out <dir>
 {
   "defaults": {
-    "branch": "main",
     "framework": "net10.0",
     "parallel": 4,
     "synthetic": 100,
