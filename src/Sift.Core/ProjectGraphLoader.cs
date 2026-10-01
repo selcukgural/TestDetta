@@ -114,7 +114,8 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         {
             switch (element.Name.LocalName)
             {
-                case "ProjectReference" when element.Attribute("Include")?.Value is { Length: > 0 } include:
+                case "ProjectReference" when element.Attribute("Include")?.Value is { Length: > 0 } include
+                                             && !include.Contains("$(", StringComparison.Ordinal) && !include.Contains("@(", StringComparison.Ordinal):
                     var reference = Paths.Normalize(Path.Combine(projectDir, include.Replace('\\', '/')));
                     if (!references.Contains(reference, Paths.Comparer))
                     {
@@ -132,8 +133,9 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             }
         }
 
-        // <Project Sdk="MSTest.Sdk/3.8.0"> brings MSTest and its runner along.
-        isTest |= doc.Root?.Attribute("Sdk")?.Value.StartsWith("MSTest.Sdk", StringComparison.OrdinalIgnoreCase) == true;
+        // <Project Sdk="MSTest.Sdk/3.8.0"> brings MSTest and its runner along, and so does a company
+        // SDK for test projects such as Meziantou.NET.Sdk.Test.
+        isTest |= doc.Root?.Attribute("Sdk")?.Value is { } sdk && IsTestSdk(sdk);
 
         // In MSBuild's order: Directory.Build.props, the project, Directory.Build.targets, so that a
         // property the project sets is known when the targets file imports a path built from it.
@@ -160,6 +162,35 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             isTest = true;
         }
 
+        // References declared by imports, or through properties and items, are resolved like imports.
+        // One that cannot be resolved becomes a pattern over project paths, its unknown parts matching
+        // anything, and the project depends on every project the pattern matches.
+        var unknownReferences = new List<string>();
+        foreach (var (include, declaringDirectory) in ExpandItems(inputs.ProjectReferences, inputs))
+        {
+            var resolved = Resolve(include, projectDir, projectDir, inputs, declaringDirectory).ToList();
+            // A property expanded to a path that is not there was guessed wrong (conditions are not
+            // evaluated), and one with an assignment only MSBuild can compute may have another value
+            // altogether; a plain path that is not there names no project and is ignored as before.
+            var properties = PropertyReference().Matches(include).Select(static m => m.Groups[1].Value).Where(static p => !IsPathProperty(p)).ToList();
+            if (resolved.Count == 0 || properties.Any(inputs.IncompleteProperties.Contains) || properties.Count > 0 && resolved.Any(static r => !File.Exists(r)))
+            {
+                unknownReferences.Add(ReferencePattern(include, projectDir, declaringDirectory));
+                continue;
+            }
+
+            foreach (var reference in resolved.Where(r => !references.Contains(r, Paths.Comparer)))
+            {
+                references.Add(reference);
+            }
+        }
+
+        if (unknownReferences.Count > 0 && logger.IsEnabled(LogLevel.Debug))
+        {
+            var patterns = string.Join(", ", unknownReferences);
+            LogUnknownReferences(projectPath, patterns);
+        }
+
         LogParsed(projectPath, isTest, references.Count);
         LogBuildInputs(projectPath, inputs.Imports.Count, inputs.ExternalItems.Count, inputs.Unresolved);
         var node = new ProjectNode(projectPath, projectDir, isTest, references)
@@ -168,6 +199,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             Imports = inputs.Imports,
             ExternalItems = inputs.ExternalItems,
             HasUnresolvedInputs = inputs.Unresolved,
+            UnknownReferencePatterns = unknownReferences,
             PackageReferences = inputs.Packages,
         };
 
@@ -216,6 +248,24 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         /// property may have several candidate values; a path built from it resolves to each.
         /// </summary>
         public Dictionary<string, HashSet<string>> Properties { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// <c>ProjectReference</c> includes that need resolving: those declared by an import, and those
+        /// of the project itself that use a property or item. With the directory of the declaring file.
+        /// </summary>
+        public List<(string Include, string Directory)> ProjectReferences { get; } = [];
+
+        /// <summary>
+        /// Item includes by item name, with the directory of the declaring file, so that a reference
+        /// written as <c>@(Name)</c> can be resolved. Conditions are not evaluated: every include counts.
+        /// </summary>
+        public Dictionary<string, List<(string Include, string Directory)>> Items { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Properties with an assignment that could not be recorded (a property function, an unknown
+        /// property): their candidate values in <see cref="Properties"/> may miss the real one.
+        /// </summary>
+        public HashSet<string> IncompleteProperties { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Imported MSBuild files, existing or not (an optional import may be added later).</summary>
         public List<string> Imports { get; } = [];
@@ -281,9 +331,10 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
             if (element.Parent?.Name.LocalName == "PropertyGroup" && !element.HasElements)
             {
-                if (!RecordProperty(inputs, name, element.Value.Trim()) && name.Equals("AssemblyName", StringComparison.OrdinalIgnoreCase))
+                if (!RecordProperty(inputs, name, element.Value.Trim()))
                 {
-                    inputs.AssemblyNameUnresolved = true;
+                    inputs.IncompleteProperties.Add(name);
+                    inputs.AssemblyNameUnresolved |= name.Equals("AssemblyName", StringComparison.OrdinalIgnoreCase);
                 }
 
                 continue;
@@ -302,6 +353,33 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     if (!Glob.IsPattern(resolved) && File.Exists(resolved))
                     {
                         Walk(resolved, inputs, visited, document: null);
+                    }
+                }
+
+                continue;
+            }
+
+            if (element.Parent?.Name.LocalName == "ItemGroup" && element.Attribute("Include")?.Value is { Length: > 0 } item)
+            {
+                if (!inputs.Items.TryGetValue(name, out var items))
+                {
+                    items = [];
+                    inputs.Items[name] = items;
+                }
+
+                items.Add((item, directory));
+            }
+
+            if (name == "ProjectReference" && element.Attribute("Include")?.Value is { Length: > 0 } projectReference)
+            {
+                // The project's own plain references were read with the project; the rest wait for
+                // the properties its imports set.
+                var own = Paths.Comparer.Equals(file, Paths.Normalize(Path.Combine(inputs.ProjectDirectory, inputs.ProjectName + Path.GetExtension(file))));
+                foreach (var part in projectReference.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!own || part.Contains("$(", StringComparison.Ordinal) || part.Contains("@(", StringComparison.Ordinal))
+                    {
+                        inputs.ProjectReferences.Add((part, directory));
                     }
                 }
 
@@ -409,6 +487,70 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         return results.Count > 0 && results[0].Contains("$(", StringComparison.Ordinal) ? [] : results;
     }
 
+    /// <summary>
+    /// Replaces a reference written as exactly <c>@(Name)</c> with the includes of the items of that
+    /// name (Open-XML-SDK's <c>@(OoxGenerator)</c>); others, and items never declared, pass unchanged.
+    /// </summary>
+    /// <param name="references">Reference includes with their declaring directory.</param>
+    /// <param name="inputs">Collected inputs with the declared items.</param>
+    private static IEnumerable<(string Include, string Directory)> ExpandItems(List<(string Include, string Directory)> references, BuildInputs inputs)
+    {
+        foreach (var reference in references)
+        {
+            if (ItemReference().Match(reference.Include) is { Success: true } match
+                && inputs.Items.TryGetValue(match.Groups[1].Value, out var items) && items.Count > 0)
+            {
+                foreach (var item in items)
+                {
+                    foreach (var part in item.Include.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        yield return (part, item.Directory);
+                    }
+                }
+
+                continue;
+            }
+
+            yield return reference;
+        }
+    }
+
+    /// <summary>
+    /// An anchored, case-insensitive pattern over normalized project paths for a reference that could
+    /// not be resolved: the known directory properties are substituted, every other property, item or
+    /// metadata reference matches anything, and a relative path starts at the project.
+    /// </summary>
+    /// <param name="include">Reference include as written.</param>
+    /// <param name="projectDirectory">Directory of the project.</param>
+    /// <param name="fileDirectory">Directory of the declaring file.</param>
+    private static string ReferencePattern(string include, string projectDirectory, string fileDirectory)
+    {
+        const string unknown = "\u0001";
+        var path = include.Trim().Replace('\\', '/')
+            .Replace("$(MSBuildThisFileDirectory)", fileDirectory + "/", StringComparison.OrdinalIgnoreCase)
+            .Replace("$(MSBuildProjectDirectory)", projectDirectory, StringComparison.OrdinalIgnoreCase);
+        path = UnknownPart().Replace(path, unknown);
+        if (!path.StartsWith(unknown, StringComparison.Ordinal))
+        {
+            path = Paths.Normalize(Path.IsPathRooted(path) ? path : Path.Combine(projectDirectory, path));
+        }
+
+        return "(?i)^" + System.Text.RegularExpressions.Regex.Escape(path).Replace(unknown, ".*", StringComparison.Ordinal) + "$";
+    }
+
+    /// <summary>Matches a reference that is exactly one item list, such as <c>@(OoxGenerator)</c>.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*@\((\w+)\)\s*$")]
+    private static partial System.Text.RegularExpressions.Regex ItemReference();
+
+    /// <summary>Matches a property reference with any nesting of parentheses, an item list or a metadata reference.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"\$\((?>[^()]+|\((?<d>)|\)(?<-d>))*(?(d)(?!))\)|@\([^)]*\)|%\([^)]*\)")]
+    private static partial System.Text.RegularExpressions.Regex UnknownPart();
+
+    /// <summary>True for the properties <see cref="Resolve"/> substitutes exactly: the declaring file's and the project's directory.</summary>
+    /// <param name="name">Property name.</param>
+    private static bool IsPathProperty(string name) =>
+        name.Equals("MSBuildThisFileDirectory", StringComparison.OrdinalIgnoreCase) || name.Equals("MSBuildProjectDirectory", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Matches a plain property reference such as <c>$(ProjectType)</c>.</summary>
     [System.Text.RegularExpressions.GeneratedRegex(@"\$\((\w+)\)")]
     private static partial System.Text.RegularExpressions.Regex PropertyReference();
@@ -511,10 +653,40 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
     private static bool HasTestProjectName(string projectPath)
     {
         var name = Path.GetFileNameWithoutExtension(projectPath.AsSpan());
+        // A suffix after the test part: Lib.Test.roslyn5.9.csproj (one project per Roslyn version).
+        foreach (var segment in name.ToString().Split('.'))
+        {
+            if (segment.Equals("Test", StringComparison.OrdinalIgnoreCase) || segment.Equals("Tests", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
         return name.EndsWith("Tests", StringComparison.OrdinalIgnoreCase)
                || name.EndsWith("Test", StringComparison.OrdinalIgnoreCase)
                || name.EndsWith("Specs", StringComparison.OrdinalIgnoreCase)
                || name.EndsWith("Spec", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// True for an MSBuild SDK that makes a project a test project: <c>MSTest.Sdk</c>, or an SDK whose
+    /// name has a <c>Test</c> or <c>Tests</c> part, such as <c>Meziantou.NET.Sdk.Test</c>. A false
+    /// positive only runs an extra project.
+    /// </summary>
+    /// <param name="sdk">Value of the <c>Sdk</c> attribute, possibly several separated by <c>;</c>, each with an optional <c>/version</c>.</param>
+    private static bool IsTestSdk(string sdk)
+    {
+        foreach (var part in sdk.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var name = part.Split('/')[0];
+            if (name.StartsWith("MSTest.Sdk", StringComparison.OrdinalIgnoreCase)
+                || name.Split('.').Any(static s => s.Equals("Test", StringComparison.OrdinalIgnoreCase) || s.Equals("Tests", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -569,6 +741,10 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Parsed {Project} (test: {IsTest}, references: {ReferenceCount})")]
     private partial void LogParsed(string project, bool isTest, int referenceCount);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "{Project} has project references that cannot be resolved; it depends on every project matching {Patterns}")]
+    private partial void LogUnknownReferences(string project, string patterns);
 
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{Project} has no test markers in its own file; treated as a test project because of its name")]

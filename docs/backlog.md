@@ -18,6 +18,19 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
+- **Project graph from MSBuild files read as XML** (interim: next commit; Meziantou.Analyzer had
+  no test project at all). Test projects marked only by a company SDK (`Meziantou.NET.Sdk.Test`)
+  or named `X.Test.roslyn5.9` were not recognised, and `ProjectReference` items declared in imports
+  or written with properties were dropped, so a change selected nothing. Now: an SDK or file name
+  with a `Test`/`Tests` part marks a test project, references in imports are followed, `@(Item)`
+  lists are expanded, and a reference only MSBuild can compute (`$(RoslynVersion)` from a property
+  function) becomes a path pattern whose unknown parts match anything, the project depending on
+  every project it matches. Still guessed: conditions are not evaluated, a test SDK without "Test"
+  in its name is missed, and a property used in the directory part widens the pattern. Complete
+  fix: evaluate projects with MSBuild (`dotnet msbuild -getProperty:IsTestProject
+  -getItem:ProjectReference`, or MSBuildLocator in-process) when the XML reading is unsure, cache
+  per commit, and fall back to the pattern only when evaluation fails. Measure the cost on large
+  solutions first.
 - **Hand-rolled lazy initialisation** (interim: 5d01d7a; Open-XML-SDK, 1 of 80
   missed). `Interlocked.CompareExchange(ref _x, new X(), null)` is now a cache fill from where its
   arguments start, when they are straight-line code that constructs or calls something. Still not

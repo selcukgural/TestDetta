@@ -56,6 +56,25 @@ public sealed class ProjectGraph
                 list.Add(node.Path);
             }
         }
+
+        // A project with a reference that could not be resolved may reference any project its pattern matches.
+        foreach (var node in nodes.Values.Where(static p => p.HasUnknownReferences))
+        {
+            var patterns = node.UnknownReferencePatterns.Select(static p => new System.Text.RegularExpressions.Regex(p)).ToList();
+            foreach (var other in nodes.Keys.Where(k => !Paths.Comparer.Equals(k, node.Path) && patterns.Any(p => p.IsMatch(k))))
+            {
+                if (!_dependents.TryGetValue(other, out var list))
+                {
+                    list = [];
+                    _dependents[other] = list;
+                }
+
+                if (!list.Contains(node.Path, Paths.Comparer))
+                {
+                    list.Add(node.Path);
+                }
+            }
+        }
     }
 
     /// <summary>All projects found in the repository.</summary>

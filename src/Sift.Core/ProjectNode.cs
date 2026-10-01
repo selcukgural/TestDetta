@@ -62,6 +62,18 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     public bool HasUnresolvedInputs { get; init; }
 
     /// <summary>
+    /// Patterns (anchored regular expressions over normalized project paths) for the
+    /// <c>ProjectReference</c> items that could not be resolved to one project file: the parts only
+    /// MSBuild can compute (a property function, an unknown property or item) match anything. The
+    /// graph makes the project depend on every project a pattern matches; empty when every reference
+    /// resolved.
+    /// </summary>
+    public IReadOnlyList<string> UnknownReferencePatterns { get; init; } = [];
+
+    /// <summary>True when some <c>ProjectReference</c> could not be resolved; see <see cref="UnknownReferencePatterns"/>.</summary>
+    public bool HasUnknownReferences => UnknownReferencePatterns.Count > 0;
+
+    /// <summary>
     /// Packages the project references with <c>PackageReference</c>, in its own file, the files it
     /// imports or the <c>Directory.Build.*</c> files above it. Used to tell which projects a central
     /// package version change reaches.
