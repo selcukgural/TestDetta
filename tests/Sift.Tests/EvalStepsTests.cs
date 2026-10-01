@@ -43,5 +43,37 @@ public sealed class EvalStepsTests : IDisposable
         Assert.Equal("Good.Tests.csproj", Path.GetFileName(Assert.Single(projects).Path));
     }
 
+    [Fact]
+    public void Assembly_copied_from_a_NuGet_package_is_not_a_repository_assembly()
+    {
+        // Carter's Newtonsoft negotiator tests use the published Carter package; mutating that copy
+        // made them fail although no source change can reach them.
+        var root = Path.Combine(Path.GetTempPath(), "sift-packaged-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var packages = Path.Combine(root, "packages");
+            var packageLib = Path.Combine(packages, "lib", "1.0.0", "lib", "net10.0");
+            var fromPackage = Path.Combine(root, "UsesPackage");
+            var fromProject = Path.Combine(root, "UsesProject");
+            foreach (var directory in new[] { packageLib, fromPackage, fromProject })
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            // Two builds with different module ids under one file name.
+            File.Copy(typeof(GitClient).Assembly.Location, Path.Combine(packageLib, "Lib.dll"));
+            File.Copy(typeof(GitClient).Assembly.Location, Path.Combine(fromPackage, "Lib.dll"));
+            File.Copy(typeof(EvalApp).Assembly.Location, Path.Combine(fromProject, "Lib.dll"));
+
+            var copies = EvalSteps.RepositoryAssemblies(new HashSet<string>(["Lib.dll"]), [fromPackage, fromProject], packages);
+
+            Assert.Equal([Path.Combine(fromProject, "Lib.dll")], copies);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     public void Dispose() => _repo.Dispose();
 }
