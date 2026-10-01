@@ -18,7 +18,7 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
-- **Project graph from MSBuild files read as XML** (interim: next commit; Meziantou.Analyzer had
+- **Project graph from MSBuild files read as XML** (interim: 24df010; Meziantou.Analyzer had
   no test project at all). Test projects marked only by a company SDK (`Meziantou.NET.Sdk.Test`)
   or named `X.Test.roslyn5.9` were not recognised, and `ProjectReference` items declared in imports
   or written with properties were dropped, so a change selected nothing. Now: an SDK or file name
