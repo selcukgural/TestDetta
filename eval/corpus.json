@@ -365,6 +365,8 @@
     {
       "name": "immediate-handlers",
       "url": "https://github.com/ImmediatePlatform/Immediate.Handlers.git",
+      "branch": "7cbdb9c",
+      "notes": "Pinned to 7cbdb9c (2026-03-25), the last commit before net11.0 targets: restore fails with NETSDK1045 on the .NET 10 SDK.",
       "tags": [
         "source-generator",
         "analyzers",
