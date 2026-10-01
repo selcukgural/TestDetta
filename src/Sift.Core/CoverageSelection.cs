@@ -43,14 +43,31 @@ internal sealed class CoverageSelection
     /// Test classes of <paramref name="project"/> whose code names the fixture type and each of its
     /// generic arguments, typically in a constructor parameter or base list:
     /// <c>ApiHost`1[BlogProfile]</c> is used by classes that name both <c>ApiHost</c> and <c>BlogProfile</c>.
+    /// A setup scope (<see cref="CoverageMap.SetUpScopePrefix"/>) is used by every class in its namespace.
     /// </summary>
     /// <param name="index">Indexed source code.</param>
     /// <param name="project">Normalized test project path.</param>
     /// <param name="fixture">Fixture name from the map, such as <c>App.Tests.ApiHost`1[App.Tests.BlogProfile]</c>.</param>
     private static List<string> ClassesUsing(SourceIndex index, string project, string fixture)
     {
-        var names = FixtureNames(fixture);
         var classes = new List<string>();
+        if (fixture.StartsWith(CoverageMap.SetUpScopePrefix, StringComparison.Ordinal))
+        {
+            // Setup for a namespace serves every class in it and in the namespaces below it.
+            var scope = fixture[CoverageMap.SetUpScopePrefix.Length..];
+            foreach (var type in index.Types)
+            {
+                if (type.CanContainTests && Paths.Comparer.Equals(type.ProjectPath, project)
+                    && (scope.Length == 0 || type.RuntimeTypeName.StartsWith(scope + ".", StringComparison.Ordinal)))
+                {
+                    classes.Add(type.RuntimeTypeName);
+                }
+            }
+
+            return classes;
+        }
+
+        var names = FixtureNames(fixture);
         foreach (var type in index.Types)
         {
             if (!type.CanContainTests || !Paths.Comparer.Equals(type.ProjectPath, project))
@@ -166,11 +183,40 @@ internal sealed class CoverageSelection
     /// <param name="owner">Project that owns the changed file.</param>
     public bool TryResolve(SymbolChange change, ProjectNode owner)
     {
-        if (_maps.Count == 0 || !IsAnswerable(change))
+        if (_maps.Count == 0)
         {
             return false;
         }
 
+        // A static constructor runs once per process, for whichever class came first, so the map
+        // cannot name its users; every class that ran a member of the type used what it set up, often
+        // through extension methods that never name the type (MimeKit's HtmlAttributeIdExtensions).
+        // The change is still traced by name for classes that only read its static fields.
+        if (change.MemberName?.StartsWith(".cctor", StringComparison.Ordinal) == true)
+        {
+            SelectAll(Answers(change with { MemberName = null }, owner).Answers);
+            return false;
+        }
+
+        if (!IsAnswerable(change))
+        {
+            return false;
+        }
+
+        var (answers, resolved) = Answers(change, owner);
+        SelectAll(answers);
+        return resolved && answers.Count > 0;
+    }
+
+    /// <summary>
+    /// What the maps of the affected test projects downstream of <paramref name="owner"/> say about
+    /// <paramref name="change"/>: the classes each one names, and false when one of them cannot answer
+    /// or the change may be run-once code.
+    /// </summary>
+    /// <param name="change">A changed type or member.</param>
+    /// <param name="owner">Project that owns the changed file.</param>
+    private (List<(string Project, IReadOnlySet<string> Classes)> Answers, bool Resolved) Answers(SymbolChange change, ProjectNode owner)
+    {
         var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
         var resolved = true;
         foreach (var project in _graph.WithDependents([owner.Path]))
@@ -192,6 +238,13 @@ internal sealed class CoverageSelection
             answers.Add((project, classes));
         }
 
+        return (answers, resolved);
+    }
+
+    /// <summary>Adds the classes of every answer to the selection of its project.</summary>
+    /// <param name="answers">Classes per test project.</param>
+    private void SelectAll(List<(string Project, IReadOnlySet<string> Classes)> answers)
+    {
         foreach (var (project, classes) in answers)
         {
             if (!_selected.TryGetValue(project, out var selected))
@@ -202,8 +255,6 @@ internal sealed class CoverageSelection
 
             selected.UnionWith(classes);
         }
-
-        return resolved && answers.Count > 0;
     }
 
     /// <summary>

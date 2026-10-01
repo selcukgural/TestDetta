@@ -165,8 +165,10 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTypeInitializer))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterCache))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCache))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterAmbient))!));
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterAmbient))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterSetUpScope))!));
         var fixtures = containsTests ? FixtureTypes(module) : [];
+        var scopes = containsTests ? SetUpScopes(module) : [];
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
 
         foreach (var type in module.GetTypes())
@@ -192,11 +194,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 methods.Add(MethodNames.Map(method));
                 var dataUser = dataSources.GetValueOrDefault(method);
                 // A data source serves the classes that name it, whatever class declares it.
-                var marker = dataSources.ContainsKey(method) ? Marker.DataSource
+                var scope = scopes.GetValueOrDefault(method);
+                var marker = scope is not null ? Marker.SetUpScope
+                    : dataSources.ContainsKey(method) ? Marker.DataSource
                     : isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
                     : isFixture && IsFixtureSetup(method) ? Marker.Fixture
                     : Marker.None;
-                InsertProbes(method, probes, new ProbeSite(id, marker, dataUser));
+                InsertProbes(method, probes, new ProbeSite(id, marker, scope ?? dataUser));
             }
         }
 
@@ -213,6 +217,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="EnterCache"><see cref="SiftTracker.EnterCache"/>.</param>
     /// <param name="ExitCache"><see cref="SiftTracker.ExitCache"/>.</param>
     /// <param name="EnterAmbient"><see cref="SiftTracker.EnterAmbient"/>.</param>
+    /// <param name="EnterSetUpScope"><see cref="SiftTracker.EnterSetUpScope"/>.</param>
     private sealed record Probes(
         MethodReference Hit,
         MethodReference EnterTestInstance,
@@ -222,14 +227,15 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         MethodReference ExitTypeInitializer,
         MethodReference EnterCache,
         MethodReference ExitCache,
-        MethodReference EnterAmbient);
+        MethodReference EnterAmbient,
+        MethodReference EnterSetUpScope);
 
     /// <summary>What the probes of one method record.</summary>
     /// <param name="Id">Method id.</param>
     /// <param name="Marker">Bucket marker to insert, if any.</param>
     /// <param name="DataUser">
     /// For a data source, the runtime name of the test class it serves; null when it serves several,
-    /// and its code then counts as running outside every test.
+    /// and its code then counts as running outside every test. For a setup scope, its fixture name.
     /// </param>
     private readonly record struct ProbeSite(int Id, Marker Marker, string? DataUser);
 
@@ -247,6 +253,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>A member that supplies test data, see <see cref="DataSources"/>.</summary>
         DataSource,
+
+        /// <summary>Setup scoped to a namespace or assembly, see <see cref="SetUpScopes"/>.</summary>
+        SetUpScope,
     }
 
     /// <summary>
@@ -294,6 +303,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             case Marker.Fixture:
                 il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
                 il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterFixtureInstance));
+                break;
+
+            case Marker.SetUpScope when site.DataUser is { } scope:
+                il.InsertBefore(first, il.Create(OpCodes.Ldstr, scope));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterSetUpScope));
                 break;
         }
 
@@ -572,6 +586,48 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         return fixtures;
     }
+
+    /// <summary>
+    /// Setup methods whose failure fails a whole namespace or assembly, with the fixture name they
+    /// record under: the constructor and <c>[OneTimeSetUp]</c> methods of an NUnit <c>[SetUpFixture]</c>
+    /// (scoped to its namespace; none means the assembly), and MSTest <c>[AssemblyInitialize]</c>
+    /// methods (the assembly). Their code would otherwise count as running outside every test, or for
+    /// the one test class that declares it.
+    /// </summary>
+    /// <param name="module">Test module.</param>
+    private static Dictionary<MethodDefinition, string> SetUpScopes(ModuleDefinition module)
+    {
+        var scopes = new Dictionary<MethodDefinition, string>();
+        foreach (var type in module.GetTypes())
+        {
+            var outer = type;
+            while (outer.DeclaringType is { } declaring)
+            {
+                outer = declaring;
+            }
+
+            var isSetUpFixture = HasAttribute(type.CustomAttributes, "NUnit.Framework.SetUpFixtureAttribute");
+            foreach (var method in type.Methods.Where(static m => m.HasBody))
+            {
+                if (isSetUpFixture && ((method.IsConstructor && !method.IsStatic) || HasAttribute(method.CustomAttributes, "NUnit.Framework.OneTimeSetUpAttribute")))
+                {
+                    scopes[method] = CoverageMap.SetUpScopePrefix + outer.Namespace;
+                }
+                else if (HasAttribute(method.CustomAttributes, "Microsoft.VisualStudio.TestTools.UnitTesting.AssemblyInitializeAttribute"))
+                {
+                    scopes[method] = CoverageMap.SetUpScopePrefix;
+                }
+            }
+        }
+
+        return scopes;
+    }
+
+    /// <summary>True when one of <paramref name="attributes"/> is of the type named <paramref name="fullName"/>.</summary>
+    /// <param name="attributes">Custom attributes.</param>
+    /// <param name="fullName">Full name of the attribute type.</param>
+    private static bool HasAttribute(IEnumerable<CustomAttribute> attributes, string fullName) =>
+        attributes.Any(a => a.AttributeType.FullName == fullName);
 
     /// <summary>Constructors and <c>InitializeAsync</c> of a fixture type: the code that sets the fixture up.</summary>
     /// <param name="method">Method of a fixture type.</param>

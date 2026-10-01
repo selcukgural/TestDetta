@@ -204,6 +204,14 @@ public static class SiftTracker
     public static void EnterFixtureInstance(object instance) => Enter(Fixtures, FixtureName(instance.GetType()), isFixture: true);
 
     /// <summary>
+    /// Makes the setup scope <paramref name="name"/> the current bucket. Called at the start of
+    /// NUnit <c>[SetUpFixture]</c> setup and MSTest <c>[AssemblyInitialize]</c> methods, which may be
+    /// static and run once before every test of their namespace or assembly.
+    /// </summary>
+    /// <param name="name">Fixture name: the scope prefix and the namespace, written by the instrumenter.</param>
+    public static void EnterSetUpScope(string name) => Enter(Fixtures, name, isFixture: true);
+
+    /// <summary>
     /// Writes the collected data next to the file named by <see cref="OutputVariable"/>, with this
     /// process's id in the name: <c>coverage-0.json</c> becomes <c>coverage-0.4711.json</c>.
     /// Microsoft.Testing.Platform may run the tests in a child process under a controller process

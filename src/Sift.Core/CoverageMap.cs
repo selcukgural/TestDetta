@@ -57,6 +57,13 @@ public sealed record CoverageMap(
     CoverageHits Hits,
     CoverageTimings? Timings = null)
 {
+    /// <summary>
+    /// Prefix of a fixture name that stands for setup scoped to a namespace rather than a type: NUnit's
+    /// <c>[SetUpFixture]</c> (the namespace follows the prefix) and MSTest's <c>[AssemblyInitialize]</c>
+    /// (nothing follows: the whole assembly). Every test class in the scope depends on its code.
+    /// </summary>
+    public const string SetUpScopePrefix = "[setup-scope]";
+
     /// <summary>Test project path relative to the repository root.</summary>
     public string TestProject => Header.TestProject;
 

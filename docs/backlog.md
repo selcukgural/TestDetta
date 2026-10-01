@@ -22,6 +22,21 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
+- **Setup that runs before every test of a scope** (interim: next commit; MimeKit, 60 classes
+  missed). NUnit `[SetUpFixture]` setup (constructor, `[OneTimeSetUp]`) and MSTest
+  `[AssemblyInitialize]` now record under a setup scope that selects every class in its namespace
+  (or assembly). Still ambient, so traced by name only: xUnit v3 assembly fixtures,
+  `[ModuleInitializer]` in test assemblies, TUnit `[Before(Assembly)]`/`[Before(TestSession)]`,
+  NUnit `[OneTimeSetUp]` inherited from a base class in another namespace. Complete fix: classify
+  every ambient method by what entered it (discovery data, framework setup, module initializer)
+  and let setup-like ambient code select its whole scope; measure the precision cost first
+  (AutoFixture.NUnit4 has 81 % of its covered code ambient, mostly discovery data).
+- **Static constructors** (interim: same commit; MimeKit HtmlAttributeIdExtensions, 12 classes
+  missed). A change to a static constructor now selects every class that ran a member of the type,
+  besides name tracing. Still missed: static field initializers without an explicit static
+  constructor when the field is read only from other types' code, and types whose static state is
+  read without calling any of their methods. Complete fix: probes on static field reads (`ldsfld`)
+  per bucket, so the readers of what a static constructor set up are known.
 - **Project graph from MSBuild files read as XML** (interim: 24df010; Meziantou.Analyzer had
   no test project at all). Test projects marked only by a company SDK (`Meziantou.NET.Sdk.Test`)
   or named `X.Test.roslyn5.9` were not recognised, and `ProjectReference` items declared in imports
