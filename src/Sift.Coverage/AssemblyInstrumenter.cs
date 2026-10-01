@@ -559,8 +559,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
     /// <summary>
     /// Types of the module used as xUnit class or collection fixtures (<c>IClassFixture&lt;T&gt;</c>,
-    /// <c>ICollectionFixture&lt;T&gt;</c>), plus their base classes in the same module, whose
-    /// constructors and <c>InitializeAsync</c> run as part of the fixture.
+    /// <c>ICollectionFixture&lt;T&gt;</c>, and <c>IAssemblyFixture&lt;T&gt;</c> of frameworks that add
+    /// one), plus their base classes in the same module, whose constructors and <c>InitializeAsync</c>
+    /// run as part of the fixture. The interface may be declared by a base class in another library,
+    /// with the fixture as its type argument: FastEndpoints.Testing's <c>TestBase&lt;TAppFixture&gt;</c>
+    /// implements <c>IClassFixture&lt;TAppFixture&gt;</c> for every test class derived from it.
     /// </summary>
     /// <param name="module">Test module.</param>
     private static HashSet<TypeDefinition> FixtureTypes(ModuleDefinition module)
@@ -568,23 +571,74 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var fixtures = new HashSet<TypeDefinition>();
         foreach (var type in module.GetTypes())
         {
-            foreach (var implementation in type.Interfaces)
+            TypeReference? current = type;
+            for (var depth = 0; current is not null && depth < 16; depth++)
             {
-                if (implementation.InterfaceType is not GenericInstanceType { ElementType.Name: "IClassFixture`1" or "ICollectionFixture`1" } fixture)
+                if (TryResolve(current) is not { } definition)
                 {
-                    continue;
+                    break;
                 }
 
-                var argument = fixture.GenericArguments[0] is GenericInstanceType generic ? generic.ElementType : fixture.GenericArguments[0];
-                for (var definition = argument.Module == module ? argument.Resolve() : null;
-                     definition is not null && fixtures.Add(definition);
-                     definition = definition.BaseType is { } baseType && baseType.Module == module ? baseType.Resolve() : null)
+                foreach (var implementation in definition.Interfaces)
                 {
+                    if (implementation.InterfaceType is GenericInstanceType { ElementType.Name: "IClassFixture`1" or "ICollectionFixture`1" or "IAssemblyFixture`1" } fixture)
+                    {
+                        AddFixture(Bind(fixture.GenericArguments[0], current), module, fixtures);
+                    }
                 }
+
+                current = definition.BaseType is { } baseType ? Bind(baseType, current) : null;
             }
         }
 
         return fixtures;
+    }
+
+    /// <summary>Adds the fixture type, when it is declared in <paramref name="module"/>, and its base classes there.</summary>
+    /// <param name="argument">Type argument of the fixture interface, generic arguments already bound.</param>
+    /// <param name="module">Test module.</param>
+    /// <param name="fixtures">Fixture types found so far; updated in place.</param>
+    private static void AddFixture(TypeReference argument, ModuleDefinition module, HashSet<TypeDefinition> fixtures)
+    {
+        var element = argument is GenericInstanceType generic ? generic.ElementType : argument;
+        for (var definition = element.Module == module ? TryResolve(element) : null;
+             definition is not null && fixtures.Add(definition);
+             definition = definition.BaseType is { } baseType && baseType.Module == module ? TryResolve(baseType) : null)
+        {
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="type"/> with the generic parameters of the type it is declared on replaced by
+    /// <paramref name="context"/>'s arguments: <c>IClassFixture&lt;TAppFixture&gt;</c> seen from
+    /// <c>TestBase&lt;Fixture&gt;</c> is <c>IClassFixture&lt;Fixture&gt;</c>.
+    /// </summary>
+    /// <param name="type">A type as written inside a generic type definition.</param>
+    /// <param name="context">The generic instance it is seen through; other references bind nothing.</param>
+    private static TypeReference Bind(TypeReference type, TypeReference context)
+    {
+        if (context is not GenericInstanceType instance)
+        {
+            return type;
+        }
+
+        switch (type)
+        {
+            case GenericParameter { Type: GenericParameterType.Type } parameter when parameter.Position < instance.GenericArguments.Count:
+                return instance.GenericArguments[parameter.Position];
+
+            case GenericInstanceType generic:
+                var bound = new GenericInstanceType(generic.ElementType);
+                foreach (var argument in generic.GenericArguments)
+                {
+                    bound.GenericArguments.Add(Bind(argument, context));
+                }
+
+                return bound;
+
+            default:
+                return type;
+        }
     }
 
     /// <summary>

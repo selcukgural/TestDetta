@@ -22,6 +22,20 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
+- **Fixtures declared by a base class** (interim: next commit; FastEndpoints, 31 classes missed).
+  `IClassFixture<T>`/`ICollectionFixture<T>`/`IAssemblyFixture<T>` implemented by a base class,
+  also in another library, with the fixture as a generic argument (FastEndpoints.Testing's
+  `TestBase<TAppFixture>`) now marks the fixture. Still ambient: xUnit v3
+  `[assembly: AssemblyFixture(typeof(X))]` and fixtures created by a custom test framework without
+  such an interface. Complete fix: treat assembly fixtures as a setup scope for the assembly, and
+  credit code that runs before the first test of a class while a fixture type's constructor is on
+  the stack to that fixture.
+- **Recording can hang on a lingering MSBuild node** (seen in Sift.Tests while the corpus ran:
+  the test host waited at 0 % CPU with no child process; `MSBUILDDISABLENODEREUSE=1` fixed it).
+  `sift record` and the evaluation build with node reuse on and read the child's output, which a
+  reused node or compiler server may keep open. Fix: pass `-nodeReuse:false` (and
+  `UseSharedCompilation=false` if needed) to the builds Sift starts, with a test that builds two
+  projects in parallel and must finish.
 - **Projects sharing a directory** (interim: 232ee1a; Meziantou.Analyzer, every mutant missed
   in 4 of 5 test projects). A file in a directory with several projects now belongs to all of
   them, so each Roslyn-version project and each of its test projects is affected and indexed.
