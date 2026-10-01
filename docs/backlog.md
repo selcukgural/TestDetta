@@ -59,10 +59,26 @@ Interim fixes that are safe for the common case; come back for the complete solu
 
 ## Next
 
-1. **Precision round**: safety fixes made selection broader (NodaTime 16% → 34%); measure where
+1. **Tolerate map drift with a static bridge (priority).** Maps are used only when recorded exactly
+   at the merge base. With AI-assisted teams merging dozens of commits a day, a PR's merge base
+   rarely has a map, so Sift falls back to the full suite in exactly the setting it is for, and
+   recording on every main commit is too expensive. Plan: take the newest map recorded at an
+   ancestor of the merge base and cover the commits in between with static analysis (Roslyn
+   reference graph: changed symbols → callers → test classes), widening wherever static analysis
+   is blind (reflection, DI, source generators). The same bridge covers new code and new tests the
+   map has not seen. Measure first: how many commits behind main a PR's merge base typically is,
+   and how the miss rate and selection change as the map ages (corpus: record at N−k, evaluate at
+   N). Safety rule unchanged: when the bridge is unsure, select more.
+2. **Compare with dotnet-tia on the corpus.** dotnet-tia (github.com/SebHenn/dotnet-tia, MIT) is
+   an open-source .NET tool doing the same job by static analysis only (method level, mutation
+   gate, reports zero misses and 35.5% selection on NodaTime). Run it on the same repositories with
+   the same mutants and report misses, selection share, precision and analysis time side by side,
+   so the claims about runtime coverage (reflection, DI, F#, interface dispatch) rest on numbers.
+   Its approach is also the reference for item 1.
+3. **Precision round**: safety fixes made selection broader (NodaTime 16% → 34%); measure where
    the extra classes come from and narrow without losing safety (override names scoped to their
    hierarchy, run-once rules, name spreading through common member names like `Initialize`).
-2. **Value reporting: show exactly what Sift saved, and why it was safe.** Not "you saved five
+4. **Value reporting: show exactly what Sift saved, and why it was safe.** Not "you saved five
    minutes" but the breakdown behind it, in formats people and tools use:
    - Per run: every test project and class that ran or was skipped, the reason for each decision
      (the changed member, the coverage map and commit it came from, or the fallback rule), and
@@ -75,7 +91,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
      often a fallback ran everything and why, so the numbers can be trusted.
    - Formats: GitHub job summary and PR comment (Markdown), JSON and CSV export, an HTML dashboard,
      a badge, a weekly digest (Slack/e-mail), and an API for the hosted tier.
-3. **Method-level selection, measured first**: record buckets per test method as an option and
+5. **Method-level selection, measured first**: record buckets per test method as an option and
    compute how much a method-level filter would save over class-level before building it.
 
 ## Later
