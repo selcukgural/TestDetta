@@ -11,6 +11,21 @@ namespace Sift.Eval;
 /// <param name="MutatedMethods">Number of compiled methods that now throw.</param>
 internal sealed record Mutation(IReadOnlyDictionary<string, string> Backups, int MutatedMethods) : IDisposable
 {
+    /// <summary>
+    /// Puts the originals in place until the returned object is disposed, then the mutant again, so a
+    /// control run can show how tests behave without the mutant while it is still applied.
+    /// </summary>
+    public IDisposable Lift()
+    {
+        foreach (var (original, backup) in Backups)
+        {
+            File.Move(original, original + ".mutant", overwrite: true);
+            File.Copy(backup, original, overwrite: true);
+        }
+
+        return new Restore(Backups.Keys);
+    }
+
     /// <summary>Copies the originals back.</summary>
     public void Dispose()
     {
@@ -18,6 +33,20 @@ internal sealed record Mutation(IReadOnlyDictionary<string, string> Backups, int
         {
             File.Copy(backup, original, overwrite: true);
             File.Delete(backup);
+        }
+    }
+}
+
+/// <summary>Puts lifted mutants back; see <see cref="Mutation.Lift"/>.</summary>
+/// <param name="originals">Rewritten files whose mutated copies were set aside.</param>
+internal sealed class Restore(IEnumerable<string> originals) : IDisposable
+{
+    /// <summary>Moves each mutated copy back over the original.</summary>
+    public void Dispose()
+    {
+        foreach (var original in originals)
+        {
+            File.Move(original + ".mutant", original, overwrite: true);
         }
     }
 }

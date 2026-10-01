@@ -113,7 +113,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var run = workspace.Executor.RunAll(reached, $"synthetic-{index}");
         if (!run.Complete)
         {
-            return RunOutsideSelection(target, new MutantRun(analysis, reached, index, detected, share), mutation.MutatedMethods);
+            return RunOutsideSelection(target, new MutantRun(analysis, reached, index, detected, share), mutation);
         }
 
         var killed = new List<string>();
@@ -134,7 +134,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
         if (missed.Count > 0)
         {
-            missed = Confirm(missed, reached, index, killed);
+            missed = Confirm(missed, new MutantScope(reached, index, mutation), killed);
         }
 
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
@@ -157,9 +157,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// </summary>
     /// <param name="target">The mutated member.</param>
     /// <param name="state">The mutant's state.</param>
-    /// <param name="mutatedMethods">Number of mutated compiled methods.</param>
-    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, int mutatedMethods)
+    /// <param name="mutation">The applied mutant.</param>
+    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, Mutation mutation)
     {
+        var mutatedMethods = mutation.MutatedMethods;
         var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);
         var invocations = new List<TestInvocation>();
         foreach (var project in state.Reached)
@@ -199,7 +200,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         var killed = new List<string>(failed);
-        var missed = Confirm(failed, state.Reached, state.Index, killed);
+        var missed = Confirm(failed, new MutantScope(state.Reached, state.Index, mutation), killed);
         LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
         return new SyntheticMutant(target, state.Detected, mutatedMethods, killed, missed, state.Share, Inconclusive: false)
         {
@@ -207,50 +208,103 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         };
     }
 
+    /// <summary>The mutant a miss is confirmed for.</summary>
+    /// <param name="Reached">Test projects the mutant can reach.</param>
+    /// <param name="Index">Number of the mutant, for log files.</param>
+    /// <param name="Mutation">The applied mutant, lifted for control runs.</param>
+    private sealed record MutantScope(List<ProjectNode> Reached, int Index, Mutation Mutation);
+
+    /// <summary>
+    /// Whether a test class fails when it runs alone without any mutant, by <c>Project: Class</c>.
+    /// Every mutant of a commit shares the same build, so the answer holds for all of them.
+    /// </summary>
+    private readonly Dictionary<string, bool> _failsAlone = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Runs the missed classes again, alone, with the mutant still in place, and keeps only those that
     /// fail again. A class can fail in the full run without depending on the change: a timing-sensitive
     /// test on a busy machine, or a class that runs after a failing one which left shared state behind
     /// (a global option it never restored). Sift selected the class that really fails in that case, so
     /// counting the others as misses would blame Sift for the suite's order dependence. A class that
-    /// passes alone is dropped from the killed ones too.
+    /// passes alone is dropped from the killed ones too. A class that fails alone also fails alone
+    /// without the mutant (NLog: tests that pass only after others set things up), so the classes that
+    /// fail again are run once more with the mutant lifted, and those failing there too are dropped.
     /// </summary>
     /// <param name="missed">Missed classes of the first run (<c>Project: Class</c>).</param>
-    /// <param name="reached">Test projects the mutant can reach.</param>
-    /// <param name="index">Number of the mutant, for log files.</param>
+    /// <param name="scope">The mutant and the projects it reaches.</param>
     /// <param name="killed">Killed classes of the first run; unconfirmed ones are removed in place.</param>
-    private List<string> Confirm(List<string> missed, List<ProjectNode> reached, int index, List<string> killed)
+    private List<string> Confirm(List<string> missed, MutantScope scope, List<string> killed)
+    {
+        var again = RunAlone(missed, scope.Reached, $"synthetic-{scope.Index}-confirm");
+        var confirmed = missed.FindAll(again.Failed.Contains);
+        foreach (var unconfirmed in missed.Where(m => !again.Failed.Contains(m)))
+        {
+            LogUnconfirmed(scope.Index, unconfirmed);
+            killed.Remove(unconfirmed);
+        }
+
+        var unknown = confirmed.FindAll(c => !_failsAlone.ContainsKey(c));
+        if (unknown.Count > 0)
+        {
+            RunOutcome control;
+            using (scope.Mutation.Lift())
+            {
+                control = RunAlone(unknown, scope.Reached, $"synthetic-{scope.Index}-control");
+            }
+
+            // A control run that crashed proves nothing; the miss stands and the class is asked again next time.
+            if (control.Complete)
+            {
+                foreach (var testClass in unknown)
+                {
+                    _failsAlone[testClass] = control.Failed.Contains(testClass);
+                }
+            }
+        }
+
+        foreach (var broken in confirmed.Where(c => _failsAlone.GetValueOrDefault(c)))
+        {
+            LogFailsWithoutMutant(scope.Index, broken);
+            killed.Remove(broken);
+        }
+
+        return confirmed.FindAll(c => !_failsAlone.GetValueOrDefault(c));
+    }
+
+    /// <summary>Failed classes of a run of some classes alone, and whether the run was complete.</summary>
+    /// <param name="Failed">Failed classes as <c>Project: Class</c>.</param>
+    /// <param name="Complete">Every run wrote a report and no host crashed.</param>
+    private sealed record RunOutcome(HashSet<string> Failed, bool Complete);
+
+    /// <summary>Runs <paramref name="classes"/> (<c>Project: Class</c>) alone, each project filtered to its own.</summary>
+    /// <param name="classes">Classes to run.</param>
+    /// <param name="reached">Test projects they may belong to.</param>
+    /// <param name="label">Name for log files.</param>
+    private RunOutcome RunAlone(List<string> classes, List<ProjectNode> reached, string label)
     {
         var selections = new List<TestProjectSelection>();
         foreach (var project in reached)
         {
             var prefix = Path.GetFileNameWithoutExtension(project.Path) + ": ";
-            var classes = missed.Where(m => m.StartsWith(prefix, StringComparison.Ordinal)).Select(m => m[prefix.Length..]).ToList();
-            if (classes.Count > 0)
+            var own = classes.Where(m => m.StartsWith(prefix, StringComparison.Ordinal)).Select(m => m[prefix.Length..]).ToList();
+            if (own.Count > 0)
             {
-                selections.Add(new TestProjectSelection(project, TestRunMode.Filtered, classes, "confirming a miss"));
+                selections.Add(new TestProjectSelection(project, TestRunMode.Filtered, own, "confirming a miss"));
             }
         }
 
         var invocations = TestInvocationBuilder.Build(selections, workspace.RepoRoot, [], DotnetTestModeDetector.Detect(workspace.RepoRoot));
-        var again = workspace.Executor.RunSelected(invocations, $"synthetic-{index}-confirm");
-        var failedAgain = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (project, failed) in again.FailedByProject)
+        var run = workspace.Executor.RunSelected(invocations, label);
+        var failed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (project, classesFailed) in run.FailedByProject)
         {
-            foreach (var testClass in failed)
+            foreach (var testClass in classesFailed)
             {
-                failedAgain.Add($"{Path.GetFileNameWithoutExtension(project)}: {testClass}");
+                failed.Add($"{Path.GetFileNameWithoutExtension(project)}: {testClass}");
             }
         }
 
-        var confirmed = missed.FindAll(failedAgain.Contains);
-        foreach (var unconfirmed in missed.Where(m => !failedAgain.Contains(m)))
-        {
-            LogUnconfirmed(index, unconfirmed);
-            killed.Remove(unconfirmed);
-        }
-
-        return confirmed;
+        return new RunOutcome(failed, run.Complete);
     }
 
     /// <summary>Applies the target's source edits, lets Sift select against the commit's maps, and restores the files.</summary>
@@ -258,13 +312,15 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="target">Member to change.</param>
     private AnalysisResult Analyze(string sha, SyntheticTarget target)
     {
-        var originals = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Bytes, not text: a rewrite through File.WriteAllText drops a UTF-8 byte order mark, and the
+        // clone would keep a change in that file for every later mutant.
+        var originals = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         try
         {
             foreach (var group in target.Edits.GroupBy(static e => e.Path, StringComparer.Ordinal))
             {
+                originals[group.Key] = File.ReadAllBytes(group.Key);
                 var text = File.ReadAllText(group.Key);
-                originals[group.Key] = text;
 
                 // From the end, so earlier offsets stay valid.
                 var edited = new System.Text.StringBuilder(text);
@@ -282,9 +338,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         finally
         {
             _steps.ClearMaps();
-            foreach (var (path, text) in originals)
+            foreach (var (path, bytes) in originals)
             {
-                File.WriteAllText(path, text);
+                File.WriteAllBytes(path, bytes);
             }
         }
     }
@@ -343,6 +399,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Mutant {Index} {TypeName}.{MemberName}: {Killed} class(es) failed, {Missed} not selected, {Share:P0} of classes selected")]
     private partial void LogMutant(int index, string typeName, string memberName, int killed, int missed, double share);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: {TestClass} fails alone without the mutant too; not counted")]
+    private partial void LogFailsWithoutMutant(int index, string testClass);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: {TestClass} failed in the full run but passed alone; not counted")]
     private partial void LogUnconfirmed(int index, string testClass);
