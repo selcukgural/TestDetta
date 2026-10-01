@@ -147,8 +147,10 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <param name="types">All merged types; updated in place.</param>
     private static void MarkTestClasses(Dictionary<string, IndexedType> types)
     {
-        // Simple name -> types of test projects with that name, to follow base lists by name.
-        var bySimpleName = new Dictionary<string, List<IndexedType>>(StringComparer.Ordinal);
+        // Test-project types by (project, simple name of a base they list), to walk base lists backwards.
+        var byBaseName = new Dictionary<(string Project, string Name), List<IndexedType>>();
+        var marked = new HashSet<IndexedType>(ReferenceEqualityComparer.Instance);
+        var queue = new Queue<IndexedType>();
         foreach (var type in types.Values)
         {
             if (!type.InTestProject)
@@ -156,61 +158,50 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                 continue;
             }
 
-            var simple = DeclarationWalker.SimpleTypeName(type.TypeName);
-            if (!bySimpleName.TryGetValue(simple, out var list))
+            foreach (var baseName in type.BaseTypeNames)
             {
-                list = [];
-                bySimpleName[simple] = list;
+                if (!byBaseName.TryGetValue((type.ProjectPath, baseName), out var list))
+                {
+                    list = [];
+                    byBaseName[(type.ProjectPath, baseName)] = list;
+                }
+
+                list.Add(type);
             }
 
-            list.Add(type);
-        }
-
-        foreach (var type in types.Values.ToList())
-        {
-            if (type.InTestProject && type.IsRunnableClass && DeclaresOrInheritsTests(type, bySimpleName, depth: 0))
+            if (type.HasTestMethods && marked.Add(type))
             {
-                types[TypeKey(type)] = type with { CanContainTests = true };
+                queue.Enqueue(type);
             }
         }
-    }
 
-    /// <summary>True when <paramref name="type"/> or a base class of the same project declares test methods.</summary>
-    /// <param name="type">Type to check.</param>
-    /// <param name="bySimpleName">Test-project types by simple name.</param>
-    /// <param name="depth">Recursion depth; stops at 16 so a cyclic base list (invalid code) cannot loop.</param>
-    private static bool DeclaresOrInheritsTests(
-        IndexedType type,
-        Dictionary<string, List<IndexedType>> bySimpleName,
-        int depth)
-    {
-        if (type.HasTestMethods)
+        // A type inherits tests when a base it names, by simple name in the same project, declares or
+        // inherits them. Walking from the types with tests to the types that name them visits each type
+        // once: following base lists forwards tried every type sharing a simple name at every level,
+        // which never finished on Swashbuckle's snapshot folders of generated clients.
+        while (queue.TryDequeue(out var withTests))
         {
-            return true;
-        }
-
-        if (depth >= 16)
-        {
-            return false;
-        }
-
-        foreach (var baseName in type.BaseTypeNames)
-        {
-            if (!bySimpleName.TryGetValue(baseName, out var candidates))
+            if (!byBaseName.TryGetValue((withTests.ProjectPath, DeclarationWalker.SimpleTypeName(withTests.TypeName)), out var derived))
             {
                 continue;
             }
 
-            foreach (var candidate in candidates)
+            foreach (var type in derived)
             {
-                if (candidate.ProjectPath == type.ProjectPath && DeclaresOrInheritsTests(candidate, bySimpleName, depth + 1))
+                if (marked.Add(type))
                 {
-                    return true;
+                    queue.Enqueue(type);
                 }
             }
         }
 
-        return false;
+        foreach (var type in types.Values.ToList())
+        {
+            if (type.InTestProject && type.IsRunnableClass && marked.Contains(type))
+            {
+                types[TypeKey(type)] = type with { CanContainTests = true };
+            }
+        }
     }
 
     /// <summary>Members and types of one file as compiled by one project.</summary>
