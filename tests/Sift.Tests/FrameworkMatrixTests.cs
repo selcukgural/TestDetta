@@ -49,6 +49,9 @@ public sealed class FrameworkMatrixTests : IDisposable
         // Class-level setup ([ClassInitialize], [OneTimeSetUp]) counts for its class.
         Assert.Equal(["Warm"], CalculatorMembers(map, "Calc.Tests.WarmTests"));
 
+        // Test data ([DynamicData], [TestCaseSource]) runs before its class and counts for it.
+        Assert.Equal(["Seed"], CalculatorMembers(map, "Calc.Tests.DataTests"));
+
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         _repo.Replace("src/Calc/Calculator.cs", "a * b", "b * a");
 
@@ -82,7 +85,7 @@ public sealed class FrameworkMatrixTests : IDisposable
             """);
         _repo.Write("src/Calc/Calculator.cs", """
             namespace Calc;
-            public class Calculator { public int Add(int a, int b) => a + b; public int Mul(int a, int b) => a * b; public int Warm() => 0; }
+            public class Calculator { public int Add(int a, int b) => a + b; public int Mul(int a, int b) => a * b; public int Warm() => 0; public int Seed() => 5; }
             """);
 
         if (framework == "mstest")
@@ -105,6 +108,7 @@ public sealed class FrameworkMatrixTests : IDisposable
                 [TestClass] public class MulTests { [TestMethod] public void Muls() => Assert.AreEqual(6, new Calculator().Mul(2, 3)); }
                 [TestClass] public class WarmTests { [ClassInitialize] public static void Init(TestContext _) => new Calculator().Warm(); [TestMethod] public void Warm() { } }
                 [TestClass] public class BrokenTests { [TestMethod] public void Fails() => Assert.AreEqual(3, new Calculator().Add(1, 1)); }
+                [TestClass] public class DataTests { public static IEnumerable<object[]> Rows => [[new Calculator().Seed()]]; [TestMethod, DynamicData(nameof(Rows))] public void Seeds(int n) => Assert.AreEqual(5, n); }
                 """);
         }
         else
@@ -129,6 +133,7 @@ public sealed class FrameworkMatrixTests : IDisposable
                 public class MulTests { [Test] public void Muls() => Assert.That(new Calculator().Mul(2, 3), Is.EqualTo(6)); }
                 public class WarmTests { [OneTimeSetUp] public void Init() => new Calculator().Warm(); [Test] public void Warm() { } }
                 public class BrokenTests { [Test] public void Fails() => Assert.That(new Calculator().Add(1, 1), Is.EqualTo(3)); }
+                public class DataTests { static IEnumerable<int> Rows() { yield return new Calculator().Seed(); } [TestCaseSource(nameof(Rows))] public void Seeds(int n) => Assert.That(n, Is.EqualTo(5)); }
                 """);
         }
 

@@ -164,8 +164,10 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTypeInitializer))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTypeInitializer))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterCache))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCache))!));
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCache))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterAmbient))!));
         var fixtures = containsTests ? FixtureTypes(module) : [];
+        var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
 
         foreach (var type in module.GetTypes())
         {
@@ -188,10 +190,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
                 var id = methods.Count;
                 methods.Add(MethodNames.Map(method));
-                var marker = isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
+                var dataUser = dataSources.GetValueOrDefault(method);
+                // A data source serves the classes that name it, whatever class declares it.
+                var marker = dataSources.ContainsKey(method) ? Marker.DataSource
+                    : isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
                     : isFixture && IsFixtureSetup(method) ? Marker.Fixture
                     : Marker.None;
-                InsertProbes(method, probes, id, marker);
+                InsertProbes(method, probes, new ProbeSite(id, marker, dataUser));
             }
         }
 
@@ -207,6 +212,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="ExitTypeInitializer"><see cref="SiftTracker.ExitTypeInitializer"/>.</param>
     /// <param name="EnterCache"><see cref="SiftTracker.EnterCache"/>.</param>
     /// <param name="ExitCache"><see cref="SiftTracker.ExitCache"/>.</param>
+    /// <param name="EnterAmbient"><see cref="SiftTracker.EnterAmbient"/>.</param>
     private sealed record Probes(
         MethodReference Hit,
         MethodReference EnterTestInstance,
@@ -215,7 +221,17 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         MethodReference EnterTypeInitializer,
         MethodReference ExitTypeInitializer,
         MethodReference EnterCache,
-        MethodReference ExitCache);
+        MethodReference ExitCache,
+        MethodReference EnterAmbient);
+
+    /// <summary>What the probes of one method record.</summary>
+    /// <param name="Id">Method id.</param>
+    /// <param name="Marker">Bucket marker to insert, if any.</param>
+    /// <param name="DataUser">
+    /// For a data source, the runtime name of the test class it serves; null when it serves several,
+    /// and its code then counts as running outside every test.
+    /// </param>
+    private readonly record struct ProbeSite(int Id, Marker Marker, string? DataUser);
 
     /// <summary>Which bucket marker, if any, a method starts with.</summary>
     private enum Marker
@@ -228,6 +244,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>Setup of a test fixture.</summary>
         Fixture,
+
+        /// <summary>A member that supplies test data, see <see cref="DataSources"/>.</summary>
+        DataSource,
     }
 
     /// <summary>
@@ -237,14 +256,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// </summary>
     /// <param name="method">Method to instrument.</param>
     /// <param name="probes">Tracker references.</param>
-    /// <param name="id">Method id.</param>
-    /// <param name="marker">Bucket marker to insert, if any.</param>
+    /// <param name="site">Method id and marker.</param>
     /// <remarks>
     /// Short branch forms are expanded before and re-optimized after the insertion, so offsets that
     /// no longer fit in a byte do not corrupt the method. In a constructor the marker runs before
     /// the base constructor call; it only reads the object's type, which is set at allocation.
     /// </remarks>
-    private static void InsertProbes(MethodDefinition method, Probes probes, int id, Marker marker)
+    private static void InsertProbes(MethodDefinition method, Probes probes, ProbeSite site)
     {
         var body = method.Body;
         body.SimplifyMacros();
@@ -252,8 +270,17 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var il = body.GetILProcessor();
         var first = body.Instructions[0];
 
-        switch (marker)
+        switch (site.Marker)
         {
+            case Marker.DataSource when site.DataUser is { } user:
+                il.InsertBefore(first, il.Create(OpCodes.Ldstr, user));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTestClass));
+                break;
+
+            case Marker.DataSource:
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterAmbient));
+                break;
+
             case Marker.TestClass when method.IsStatic:
                 il.InsertBefore(first, il.Create(OpCodes.Ldstr, method.DeclaringType.FullName.Replace('/', '+')));
                 il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTestClass));
@@ -276,7 +303,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTypeInitializer));
         }
 
-        il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, id));
+        il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, site.Id));
         il.InsertBefore(first, il.Create(OpCodes.Call, probes.Hit));
 
         if (isTypeInitializer)

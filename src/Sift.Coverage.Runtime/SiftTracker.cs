@@ -184,6 +184,18 @@ public static class SiftTracker
     public static void EnterTestClass(string testClass) => Enter(Classes, testClass, isFixture: false);
 
     /// <summary>
+    /// Makes code outside every test the current bucket. Called at the start of a test data source
+    /// that several test classes use: its rows serve all of them, so the map must not credit them to
+    /// one, and code that ran outside every test is answered by the safe fallback rules instead.
+    /// </summary>
+    public static void EnterAmbient()
+    {
+        _cacheDepth = 0;
+        _typeInitializerDepth = 0;
+        Current.Value = Startup;
+    }
+
+    /// <summary>
     /// Makes the fixture <paramref name="instance"/> the current bucket. Called at the start of fixture
     /// constructors and <c>InitializeAsync</c>, including those inherited from a base class, so the
     /// runtime type names the concrete fixture.
