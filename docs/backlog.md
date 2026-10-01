@@ -22,7 +22,7 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
-- **Projects sharing a directory** (interim: next commit; Meziantou.Analyzer, every mutant missed
+- **Projects sharing a directory** (interim: 232ee1a; Meziantou.Analyzer, every mutant missed
   in 4 of 5 test projects). A file in a directory with several projects now belongs to all of
   them, so each Roslyn-version project and each of its test projects is affected and indexed.
   Projects that split one directory with `Compile Remove`/`Include` are over-selected. Complete fix:
