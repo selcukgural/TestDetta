@@ -119,25 +119,19 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                                            && File.Exists(Path.Combine(Path.GetDirectoryName(targetPath)!, "xunit.v3.core.dll"));
             var shards = Shards(request, xunitV3OnTestingPlatform);
             var synchronizedOutput = TextWriter.Synchronized(output);
-            var runs = new Task<ShardResult>[shards.Count];
-            for (var i = 0; i < shards.Count; i++)
-            {
-                // The catch-all shard usually matches nothing; under the testing platform that is exit
-                // code 8, reported as an error unless the platform is told to accept it.
-                var isCatchAll = shards.Count > 1 && i == shards.Count - 1;
-                var arguments = isCatchAll && mode == DotnetTestMode.TestingPlatform
-                    ? [.. testArguments, "--ignore-exit-code", TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture)]
-                    : testArguments;
-                var shard = new ShardRun(dotnet, arguments, shards[i], i, shards.Count);
-                var context = new ShardContext(request, mode, Path.GetDirectoryName(targetPath)!, instrumentation, work);
-                runs[i] = Task.Run(() => RunShard(shard, context, synchronizedOutput));
-            }
+            var runs = RunShards(shards, new ShardContext(request, mode, outputDirectory, instrumentation, work), testArguments, synchronizedOutput);
+            ThrowIfTimedOut(runs, project, request);
 
-            Task.WaitAll(runs);
-            if (runs.Any(static r => r.Result.ExitCode == DotnetProcess.TimedOut))
+            // A shard that crashed before its process wrote results (NLog: a subset of its classes takes
+            // the host down when they run without the others) would cost the project its whole map.
+            // The suite passes in one process, so the project is recorded again the way dotnet test runs it.
+            if (shards.Count > 1 && runs.Any(static r => r.Result.ResultsFiles.Count == 0))
             {
-                throw new RecordingTimedOutException(
-                    $"A test process of {Path.GetFileName(project)} did not finish within {request.Options.Timeout?.TotalMinutes:0} min and was killed.");
+                LogShardCrashed(project);
+                var single = Path.Combine(work, "single");
+                Directory.CreateDirectory(single);
+                runs = RunShards([[]], new ShardContext(request, mode, outputDirectory, instrumentation, single), testArguments, synchronizedOutput);
+                ThrowIfTimedOut(runs, project, request);
             }
 
             var resultsFiles = new List<string>(runs.Length);
@@ -168,6 +162,44 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             deployment?.Dispose();
             instrumenter.Restore(instrumentation);
             Directory.Delete(work, recursive: true);
+        }
+    }
+
+    /// <summary>Runs every shard in its own test process and waits for all of them.</summary>
+    /// <param name="shards">Filters, one per shard; a single empty one runs everything.</param>
+    /// <param name="context">What every shard shares.</param>
+    /// <param name="testArguments"><c>dotnet test</c> arguments shared by all shards.</param>
+    /// <param name="output">Shared, synchronized output.</param>
+    private Task<ShardResult>[] RunShards(List<IReadOnlyList<string>> shards, ShardContext context, List<string> testArguments, TextWriter output)
+    {
+        var dotnet = new DotnetProcess(_logger);
+        var runs = new Task<ShardResult>[shards.Count];
+        for (var i = 0; i < shards.Count; i++)
+        {
+            // The catch-all shard usually matches nothing; under the testing platform that is exit
+            // code 8, reported as an error unless the platform is told to accept it.
+            var isCatchAll = shards.Count > 1 && i == shards.Count - 1;
+            var arguments = isCatchAll && context.Mode == DotnetTestMode.TestingPlatform
+                ? [.. testArguments, "--ignore-exit-code", TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture)]
+                : testArguments;
+            var shard = new ShardRun(dotnet, arguments, shards[i], i, shards.Count);
+            runs[i] = Task.Run(() => RunShard(shard, context, output));
+        }
+
+        Task.WaitAll(runs);
+        return runs;
+    }
+
+    /// <summary>Throws when a test process was killed for running too long; a hang would repeat.</summary>
+    /// <param name="runs">Finished shards.</param>
+    /// <param name="project">Test project path, for the message.</param>
+    /// <param name="request">What is recorded, for the time limit.</param>
+    private static void ThrowIfTimedOut(Task<ShardResult>[] runs, string project, RecordRequest request)
+    {
+        if (runs.Any(static r => r.Result.ExitCode == DotnetProcess.TimedOut))
+        {
+            throw new RecordingTimedOutException(
+                $"A test process of {Path.GetFileName(project)} did not finish within {request.Options.Timeout?.TotalMinutes:0} min and was killed.");
         }
     }
 
@@ -680,6 +712,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Recording {Project} in {ShardCount} process(es) for {ClassCount} known test class(es), plus a catch-all process")]
     private partial void LogShards(string project, int shardCount, int classCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "A test process of {Project} crashed before writing coverage; recording it again in one process")]
+    private partial void LogShardCrashed(string project);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Recording {Project} with the {Mode} runner")]
     private partial void LogMode(string project, DotnetTestMode mode);

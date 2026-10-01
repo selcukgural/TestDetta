@@ -41,6 +41,13 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `Microsoft.Testing.Extensions.TrxReport` to such projects at build time (a
   `CustomAfterMicrosoftCommonTargets` file, `VersionOverride` under central package management),
   so they can be evaluated instead of skipped.
+- **Recording suites that only pass in parallel** (interim: this commit records a project again in
+  one process when a shard crashes). NLog.UnitTests takes its own test host down ("Out of memory")
+  whenever its classes run one at a time, without Sift too; recording requires that, so NLog gets
+  no map and falls back to name tracing. Complete fix: when the sequential recording crashes,
+  record with the suite's own parallelism, credit code inside a test flow (AsyncLocal) as now, and
+  treat code outside every flow as ambient (selected for any change) instead of crediting the
+  class entered last. Add a test with a suite that crashes when run sequentially.
 
 ## Next
 
