@@ -43,7 +43,7 @@ internal static class SyntheticReport
         if (run.Unreported.Count > 0)
         {
             text.AppendLine(CultureInfo.InvariantCulture,
-                $"**Left out, wrote no test report:** {Cell(string.Join(", ", run.Unreported))}");
+                $"**Left out, no complete test report without mutants (none, empty or crashed):** {Cell(string.Join(", ", run.Unreported))}");
             text.AppendLine();
         }
 

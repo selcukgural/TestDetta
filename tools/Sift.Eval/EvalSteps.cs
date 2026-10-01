@@ -198,9 +198,10 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     }
 
     /// <summary>
-    /// The projects whose run without mutants produced a test report. Without one a project's failures
-    /// are unknown: counting them as none would let a mutant only that project catches look harmless,
-    /// or a crash outside the selection look caught. Such projects are left out and named.
+    /// The projects whose run without mutants produced a test report and did not crash. Without one a
+    /// project's failures are unknown: counting them as none would let a mutant only that project
+    /// catches look harmless, or a crash outside the selection look caught; and a project that crashes
+    /// anyway would count every mutant as caught by a crash. Such projects are left out and named.
     /// </summary>
     /// <param name="testProjects">Projects that ran.</param>
     /// <param name="baseline">Their run without mutants.</param>
@@ -209,7 +210,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         var reporting = new List<ProjectNode>(testProjects.Count);
         foreach (var project in testProjects)
         {
-            if (baseline.Unreported.Contains(project.Path))
+            if (baseline.Unreported.Contains(project.Path) || baseline.Crashed.Contains(project.Path))
             {
                 LogUnreported(project.Path);
                 continue;

@@ -22,6 +22,13 @@ internal sealed record TestRunOutcome(
     IReadOnlySet<string> Unreported,
     int Aborted)
 {
+    /// <summary>
+    /// Normalized paths of the projects whose test host crashed twice or hung. In the run without
+    /// mutants this makes a project useless: its report is partial, and a crash with a mutant says
+    /// nothing about the mutant (NLog.UnitTests runs out of memory in one process).
+    /// </summary>
+    public IReadOnlySet<string> Crashed { get; init; } = new HashSet<string>();
+
     /// <summary>True when every run produced a report and no test host crashed or hung.</summary>
     public bool Complete => Unreported.Count == 0 && Aborted == 0;
 }
@@ -102,6 +109,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         var total = 0;
         var unreported = new HashSet<string>(Paths.Comparer);
         var aborted = 0;
+        var crashedProjects = new HashSet<string>(Paths.Comparer);
         var failed = new Dictionary<string, IReadOnlySet<string>>(Paths.Comparer);
         var dotnet = new DotnetProcess(logger);
 
@@ -164,6 +172,11 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             }
 
             aborted += crashed ? 1 : 0;
+            if (crashed)
+            {
+                crashedProjects.Add(project.Path);
+            }
+
             // A host that aborted before running a test (built for another architecture, Vogen's
             // SnapshotTests) leaves an empty report: its failures are unknown, as with no report.
             if (outcome is null || crashed && outcome.Total == 0)
@@ -176,7 +189,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             failed[project.Path] = outcome.FailedClasses;
         }
 
-        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, unreported, aborted);
+        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, unreported, aborted) { Crashed = crashedProjects };
     }
 
     /// <summary>Time limit of a run of <paramref name="project"/>; a generous fixed one before the project ran once.</summary>

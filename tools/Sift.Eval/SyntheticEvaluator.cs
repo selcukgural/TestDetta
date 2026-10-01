@@ -42,7 +42,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             workspace.Executor.Outputs = _steps.OutputDirectories(testProjects);
             var baseline = workspace.Executor.RunAll(testProjects, "baseline");
-            var unreported = testProjects.Where(p => baseline.Unreported.Contains(p.Path))
+            var unreported = testProjects.Where(p => baseline.Unreported.Contains(p.Path) || baseline.Crashed.Contains(p.Path))
                 .Select(p => Path.GetRelativePath(workspace.RepoRoot, p.Path).Replace('\\', '/')).ToList();
             testProjects = _steps.Reporting(testProjects, baseline);
             if (testProjects.Count == 0)

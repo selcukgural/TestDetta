@@ -149,6 +149,77 @@ public sealed class EvalUnreportedTests : IDisposable
         Assert.Empty(mutants["Calc.Calculator.Neg"].GetProperty("killed").EnumerateArray());
     }
 
+    [Fact]
+    public void Project_whose_test_host_crashes_without_mutants_is_left_out_and_named()
+    {
+        // The host dies after a test passed, in the run without mutants too (NLog.UnitTests runs out
+        // of memory when run in one process): a partial report, and every later crash says nothing.
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.sift/\nTestResults/\n");
+        _repo.Write("src/Calc/Calc.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+            </Project>
+            """);
+        _repo.Write("src/Calc/Calculator.cs", """
+            namespace Calc;
+            public static class Calculator { public static int Add(int a, int b) => a + b; public static int Neg(int a) => -a; }
+            """);
+        foreach (var name in new[] { "Add", "Neg" })
+        {
+            _repo.Write($"tests/{name}.Tests/{name}.Tests.csproj", """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+                  <ItemGroup>
+                    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                    <PackageReference Include="xunit" Version="2.9.3" />
+                    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+                    <ProjectReference Include="../../src/Calc/Calc.csproj" />
+                  </ItemGroup>
+                </Project>
+                """);
+        }
+
+        _repo.Write("tests/Add.Tests/Tests.cs", """
+            using Xunit;
+            namespace Add.Tests;
+            public class AddTests { [Fact] public void Adds() => Assert.Equal(3, Calc.Calculator.Add(1, 2)); }
+            """);
+        _repo.Write("tests/Neg.Tests/Tests.cs", """
+            using Xunit;
+            namespace Neg.Tests;
+            public class NegTests
+            {
+                [Fact]
+                public void Negates()
+                {
+                    Assert.Equal(-2, Calc.Calculator.Neg(2));
+                    new Thread(static () => { Thread.Sleep(1500); Environment.FailFast("host dies"); }).Start();
+                }
+            }
+
+            public class SlowTests { [Fact] public void Waits() => Thread.Sleep(5000); }
+            """);
+        _repo.Commit("base");
+
+        var stdout = Console.Out;
+        try
+        {
+            Console.SetOut(TextWriter.Null);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--out", _output]);
+        }
+        finally
+        {
+            Console.SetOut(stdout);
+        }
+
+        var run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_output, "synthetic.json"))).RootElement;
+        Assert.True(run.GetProperty("error").ValueKind == JsonValueKind.Null, run.GetProperty("error").ToString());
+        Assert.Equal(["tests/Neg.Tests/Neg.Tests.csproj"], run.GetProperty("unreported").EnumerateArray().Select(static p => p.GetString()));
+        var mutants = run.GetProperty("mutants").EnumerateArray().ToDictionary(static m => m.GetProperty("target").GetString()!);
+        Assert.False(mutants["Calc.Calculator.Neg"].GetProperty("caughtByCrash").GetBoolean());
+    }
+
     public void Dispose()
     {
         _repo.Dispose();
