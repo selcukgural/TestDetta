@@ -43,7 +43,7 @@ internal static class SyntheticReport
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Members changed: {mutants.Count} ({mutants.Count(static m => m.Target.Covered)} covered by a recorded test)");
         text.AppendLine(CultureInfo.InvariantCulture,
-            $"- Mutants in a test output: {injected}; failed a test class: {killing.Count}; crashed or hung: {mutants.Count(static m => m.Inconclusive)}");
+            $"- Mutants in a test output: {injected}; failed a test class: {killing.Count} ({mutants.Count(static m => m.CaughtByCrash)} by crashing or hanging inside the selection); still crashed or hung: {mutants.Count(static m => m.Inconclusive)}");
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- **Missed: {missed.Count} of {killing.Count} failing mutants ({missed.Sum(static m => m.MissedClasses.Count)} test classes)**; " +
             $"95% upper bound of the miss rate: {MissRate.UpperBound(missed.Count, killing.Count):P2}");
@@ -89,7 +89,10 @@ internal static class SyntheticReport
         text.AppendLine("|---|---|---|---|---|---|---|---|");
         foreach (var (mutant, index) in mutants.Take(MaxRows).Select(static (m, i) => (m, i + 1)))
         {
-            var failed = mutant.Inconclusive ? "crashed or hung" : mutant.MutatedMethods == 0 ? "not in output" : mutant.KilledClasses.Count.ToString(CultureInfo.InvariantCulture);
+            var failed = mutant.Inconclusive ? "crashed or hung"
+                : mutant.CaughtByCrash ? "crashed inside the selection"
+                : mutant.MutatedMethods == 0 ? "not in output"
+                : mutant.KilledClasses.Count.ToString(CultureInfo.InvariantCulture);
             text.AppendLine(CultureInfo.InvariantCulture,
                 $"| {index} | {Code(Member(mutant))} | {MutantKinds.Name(mutant.Target.Kind)} | {YesNo(mutant.Target.Covered)} | {YesNo(mutant.Detected)} | {failed} | {mutant.MissedClasses.Count} | {mutant.SelectedShare:P0} |");
         }
@@ -127,6 +130,7 @@ internal static class SyntheticReport
                 json.WriteBoolean("detected", mutant.Detected);
                 json.WriteNumber("mutatedMethods", mutant.MutatedMethods);
                 json.WriteBoolean("inconclusive", mutant.Inconclusive);
+                json.WriteBoolean("caughtByCrash", mutant.CaughtByCrash);
                 json.WriteNumber("selectedShare", Math.Round(mutant.SelectedShare, 4));
                 WriteStrings(json, "killed", mutant.KilledClasses);
                 WriteStrings(json, "missed", mutant.MissedClasses);

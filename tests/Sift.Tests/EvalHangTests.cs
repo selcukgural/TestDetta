@@ -18,7 +18,7 @@ public sealed class EvalHangTests : IDisposable
     private readonly TimeSpan _minimumTimeout = TestExecutor.MinimumTimeout;
 
     [Fact]
-    public void Hanging_mutant_run_is_killed_and_reported_inconclusive()
+    public void Hanging_mutant_run_is_killed_and_counts_as_caught_when_the_hang_is_in_the_selection()
     {
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write(".gitignore", "bin/\nobj/\n.sift/\n");
@@ -75,7 +75,9 @@ public sealed class EvalHangTests : IDisposable
         Assert.True(run.GetProperty("error").ValueKind == JsonValueKind.Null, run.GetProperty("error").ToString());
         var mutant = Assert.Single(run.GetProperty("mutants").EnumerateArray());
         Assert.Equal("Signals.Waiter.Signal", mutant.GetProperty("target").GetString());
-        Assert.True(mutant.GetProperty("inconclusive").GetBoolean());
+        // WaiterTests hangs and Sift selected it; everything left out passes, so the mutant was caught.
+        Assert.False(mutant.GetProperty("inconclusive").GetBoolean());
+        Assert.True(mutant.GetProperty("caughtByCrash").GetBoolean());
     }
 
     [Fact]

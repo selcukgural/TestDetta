@@ -80,7 +80,8 @@ internal static class BatchSummary
 
             foreach (var mutant in synthetic.RootElement.GetProperty("mutants").EnumerateArray())
             {
-                if (mutant.GetProperty("inconclusive").GetBoolean() || mutant.GetProperty("killed").GetArrayLength() == 0)
+                var caughtByCrash = mutant.TryGetProperty("caughtByCrash", out var crash) && crash.GetBoolean();
+                if (mutant.GetProperty("inconclusive").GetBoolean() || (mutant.GetProperty("killed").GetArrayLength() == 0 && !caughtByCrash))
                 {
                     continue;
                 }

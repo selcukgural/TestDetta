@@ -104,7 +104,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var run = workspace.Executor.RunAll(reached, $"synthetic-{index}");
         if (run.Aborted > 0)
         {
-            return new SyntheticMutant(target, detected, mutation.MutatedMethods, [], [], share, Inconclusive: true);
+            return RunOutsideSelection(target, new MutantRun(analysis, reached, index, detected, share), mutation.MutatedMethods);
         }
 
         var killed = new List<string>();
@@ -130,6 +130,71 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
         return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false);
+    }
+
+    /// <summary>One mutant's state while it is evaluated.</summary>
+    /// <param name="Analysis">Sift's analysis of the synthetic change.</param>
+    /// <param name="Reached">Test projects the mutant can reach.</param>
+    /// <param name="Index">Number of the mutant, for log files.</param>
+    /// <param name="Detected">Whether Sift saw the change.</param>
+    /// <param name="Share">Share of recorded classes Sift selected.</param>
+    private sealed record MutantRun(AnalysisResult Analysis, List<ProjectNode> Reached, int Index, bool Detected, double Share);
+
+    /// <summary>
+    /// After a full run crashed or hung, runs only what Sift left out, with the mutant in place. A miss
+    /// can only be there: if it passes, the failure was in the selection and the mutant counts as
+    /// caught; classes that fail are confirmed alone like any miss; a second crash or hang leaves the
+    /// mutant inconclusive. A project Sift runs completely has nothing left out.
+    /// </summary>
+    /// <param name="target">The mutated member.</param>
+    /// <param name="state">The mutant's state.</param>
+    /// <param name="mutatedMethods">Number of mutated compiled methods.</param>
+    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, int mutatedMethods)
+    {
+        var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);
+        var invocations = new List<TestInvocation>();
+        foreach (var project in state.Reached)
+        {
+            var decision = state.Analysis.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, project.Path, StringComparison.Ordinal));
+            if (decision?.Mode == TestRunMode.All)
+            {
+                continue;
+            }
+
+            var relative = Path.GetRelativePath(workspace.RepoRoot, project.Path).Replace('\\', '/');
+            List<string> arguments = mode == DotnetTestMode.TestingPlatform ? ["test", "--project", relative] : ["test", relative];
+            if (decision is { Mode: TestRunMode.Filtered, TestClasses.Count: > 0 })
+            {
+                var xunitV3 = mode == DotnetTestMode.TestingPlatform && TestFilter.IsXunitV3(project);
+                arguments.AddRange(TestFilter.Arguments(decision.TestClasses, exclude: true, xunitV3));
+            }
+
+            invocations.Add(new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "outside the selection"), arguments));
+        }
+
+        var outside = workspace.Executor.RunSelected(invocations, $"synthetic-{state.Index}-outside");
+        if (outside.Aborted > 0)
+        {
+            return new SyntheticMutant(target, state.Detected, mutatedMethods, [], [], state.Share, Inconclusive: true);
+        }
+
+        var failed = outside.FailedByProject
+            .SelectMany(p => p.Value.Select(c => $"{Path.GetFileNameWithoutExtension(p.Key)}: {c}"))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        if (failed.Count == 0)
+        {
+            LogCaughtByCrash(state.Index, target.Member.TypeName, target.Member.MemberName);
+            return new SyntheticMutant(target, state.Detected, mutatedMethods, [], [], state.Share, Inconclusive: false) { CaughtByCrash = true };
+        }
+
+        var killed = new List<string>(failed);
+        var missed = Confirm(failed, state.Reached, state.Index, killed);
+        LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
+        return new SyntheticMutant(target, state.Detected, mutatedMethods, killed, missed, state.Share, Inconclusive: false)
+        {
+            CaughtByCrash = killed.Count == 0,
+        };
     }
 
     /// <summary>
@@ -257,6 +322,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
         return covered;
     }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Mutant {Index} {TypeName}.{MemberName}: the full run crashed or hung, everything Sift left out passed; caught")]
+    private partial void LogCaughtByCrash(int index, string typeName, string memberName);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sampled {Count} member(s), {Covered} of them covered")]
     private partial void LogSampled(int count, int covered);

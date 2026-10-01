@@ -33,9 +33,7 @@ that report numbers (value reporting) only once the numbers are proven right.
      often a fallback ran everything and why, so the numbers can be trusted.
    - Formats: GitHub job summary and PR comment (Markdown), JSON and CSV export, an HTML dashboard,
      a badge, a weekly digest (Slack/e-mail), and an API for the hosted tier.
-3. **Hung mutants**: find which test class hung (VSTest blame-hang, testing-platform hang dump)
-   so hangs count as data instead of inconclusive (Polly: 15 of 100).
-4. **Method-level selection, measured first**: record buckets per test method as an option and
+3. **Method-level selection, measured first**: record buckets per test method as an option and
    compute how much a method-level filter would save over class-level before building it.
 
 ## Later

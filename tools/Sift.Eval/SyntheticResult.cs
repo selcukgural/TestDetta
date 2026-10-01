@@ -17,8 +17,14 @@ internal sealed record SyntheticMutant(
     double SelectedShare,
     bool Inconclusive)
 {
+    /// <summary>
+    /// True when the full run crashed or hung, but the classes Sift left out passed with the mutant
+    /// in place: the failure was in the selection, so Sift caught it without a class list to show.
+    /// </summary>
+    public bool CaughtByCrash { get; init; }
+
     /// <summary>True when the mutant failed at least one test class, so it can prove a miss or its absence.</summary>
-    public bool Killing => !Inconclusive && KilledClasses.Count > 0;
+    public bool Killing => !Inconclusive && (KilledClasses.Count > 0 || CaughtByCrash);
 }
 
 /// <summary>A synthetic evaluation of one commit.</summary>
