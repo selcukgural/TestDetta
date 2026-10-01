@@ -47,6 +47,28 @@ public sealed class RunOnceCodeTests : IDisposable
                 public static int Get() => Value.Value;
             }
 
+            // A shared instance builds its member on first use (Open-XML-SDK's DefaultFeatures); the
+            // instance method the constructor calls is only covered by the cache rule.
+            public sealed class Sizer { public int Measure() => 4; }
+            public sealed class Resolver { public Resolver() => Size = new Sizer().Measure(); public int Size { get; } }
+            public sealed class Features
+            {
+                public static Features Shared { get; } = new();
+                private Resolver? _resolver;
+                public Resolver Resolver
+                {
+                    get
+                    {
+                        if (_resolver is null)
+                        {
+                            System.Threading.Interlocked.CompareExchange(ref _resolver, new Resolver(), null);
+                        }
+
+                        return _resolver;
+                    }
+                }
+            }
+
             // Filled on first use, once per process.
             public static class LazyCatalog
             {
@@ -69,9 +91,9 @@ public sealed class RunOnceCodeTests : IDisposable
         _repo.Write("tests/Cache.Tests/Tests.cs", """
             using Xunit;
             namespace Cache.Tests;
-            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); } }
-            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); } }
-            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); } }
+            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); } }
+            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); } }
+            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); } }
             """);
         _repo.Commit("base");
     }
@@ -91,6 +113,7 @@ public sealed class RunOnceCodeTests : IDisposable
         Assert.DoesNotContain(new CoveredMethod("Cache.LazyCatalog", "Load"), map.SharedInProcess!.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Maker", "Make"), map.Initialization.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Computer", "Compute"), map.Initialization.Select(id => map.Methods[id]));
+        Assert.Contains(new CoveredMethod("Cache.Sizer", "Measure"), map.Initialization.Select(id => map.Methods[id]));
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         string[] all = ["Cache.Tests.AlphaTests", "Cache.Tests.BetaTests", "Cache.Tests.GammaTests"];
@@ -108,6 +131,10 @@ public sealed class RunOnceCodeTests : IDisposable
 
         _repo.Replace("src/Cache/Catalog.cs", "=> key.Length + 0;", "=> key.Length;");
         _repo.Replace("src/Cache/Catalog.cs", "Compute() => 3;", "Compute() => 1 + 2;");
+        AssertSelectsAll(all);
+
+        _repo.Replace("src/Cache/Catalog.cs", "Compute() => 1 + 2;", "Compute() => 3;");
+        _repo.Replace("src/Cache/Catalog.cs", "Measure() => 4;", "Measure() => 2 + 2;");
         AssertSelectsAll(all);
     }
 

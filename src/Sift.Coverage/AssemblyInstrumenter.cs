@@ -357,7 +357,114 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             il.InsertAfter(call, il.Create(OpCodes.Call, probes.ExitCache));
             Retarget(body, call, enter);
         }
+
+        // Hand-rolled lazy initialisation, Interlocked.CompareExchange(ref _x, new X(), null): the
+        // value is built before the call, so the mark starts where its arguments start.
+        var exchanges = body.Instructions
+            .Where(static i => i.OpCode == OpCodes.Call && i.Operand is MethodReference target
+                               && target.DeclaringType.FullName == "System.Threading.Interlocked" && target.Name == "CompareExchange"
+                               && i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
+            .ToList();
+
+        foreach (var exchange in exchanges)
+        {
+            if (ArgumentStart(body, exchange) is not { } start)
+            {
+                continue;
+            }
+
+            var enter = il.Create(OpCodes.Call, probes.EnterCache);
+            il.InsertBefore(start, enter);
+            il.InsertAfter(exchange, il.Create(OpCodes.Call, probes.ExitCache));
+            Retarget(body, start, enter);
+        }
     }
+
+    /// <summary>
+    /// The first instruction that pushes the arguments of <paramref name="call"/>, when they are built
+    /// in straight-line code that constructs or calls something (a lazily built value, not a counter);
+    /// null otherwise. Code with a branch, a branch target or a handler boundary inside is left alone.
+    /// </summary>
+    /// <param name="body">Method body with short branches already expanded.</param>
+    /// <param name="call">Call whose arguments are wanted.</param>
+    private static Instruction? ArgumentStart(MethodBody body, Instruction call)
+    {
+        var targets = new HashSet<Instruction>();
+        foreach (var instruction in body.Instructions)
+        {
+            if (instruction.Operand is Instruction target)
+            {
+                targets.Add(target);
+            }
+            else if (instruction.Operand is Instruction[] table)
+            {
+                targets.UnionWith(table);
+            }
+        }
+
+        foreach (var handler in body.ExceptionHandlers)
+        {
+            targets.UnionWith(new[] { handler.TryStart, handler.TryEnd, handler.HandlerStart, handler.HandlerEnd, handler.FilterStart }.OfType<Instruction>());
+        }
+
+        // A jump straight to the call would skip the enter mark but not the exit.
+        if (targets.Contains(call))
+        {
+            return null;
+        }
+
+        var needed = Pops(call) ?? 0;
+        var buildsValue = false;
+        for (var (instruction, steps) = (call.Previous, 0); instruction is not null && steps < 64; (instruction, steps) = (instruction.Previous, steps + 1))
+        {
+            if (instruction.OpCode.FlowControl is not (FlowControl.Next or FlowControl.Call) || instruction.OpCode.OpCodeType == OpCodeType.Prefix
+                || Pops(instruction) is not { } pops || Pushes(instruction) is not { } pushes)
+            {
+                return null;
+            }
+
+            buildsValue |= instruction.OpCode == OpCodes.Newobj || instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt;
+            needed += pops - pushes;
+            if (needed == 0)
+            {
+                return buildsValue ? instruction : null;
+            }
+
+            if (needed < 0 || targets.Contains(instruction))
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Values <paramref name="instruction"/> takes off the stack; null when unknown (<c>ret</c>, <c>leave</c>).</summary>
+    /// <param name="instruction">Instruction.</param>
+    private static int? Pops(Instruction instruction) => instruction.OpCode.StackBehaviourPop switch
+    {
+        StackBehaviour.Pop0 => 0,
+        StackBehaviour.Pop1 or StackBehaviour.Popi or StackBehaviour.Popref => 1,
+        StackBehaviour.Pop1_pop1 or StackBehaviour.Popi_pop1 or StackBehaviour.Popi_popi or StackBehaviour.Popi_popi8
+            or StackBehaviour.Popi_popr4 or StackBehaviour.Popi_popr8 or StackBehaviour.Popref_pop1 or StackBehaviour.Popref_popi => 2,
+        StackBehaviour.Popi_popi_popi or StackBehaviour.Popref_popi_popi or StackBehaviour.Popref_popi_popi8 or StackBehaviour.Popref_popi_popr4
+            or StackBehaviour.Popref_popi_popr8 or StackBehaviour.Popref_popi_popref => 3,
+        StackBehaviour.Varpop when instruction.Operand is MethodReference method =>
+            method.Parameters.Count + (method.HasThis && instruction.OpCode != OpCodes.Newobj ? 1 : 0),
+        _ => null,
+    };
+
+    /// <summary>Values <paramref name="instruction"/> leaves on the stack; null when unknown.</summary>
+    /// <param name="instruction">Instruction.</param>
+    private static int? Pushes(Instruction instruction) => instruction.OpCode.StackBehaviourPush switch
+    {
+        StackBehaviour.Push0 => 0,
+        StackBehaviour.Push1 or StackBehaviour.Pushi or StackBehaviour.Pushi8 or StackBehaviour.Pushr4 or StackBehaviour.Pushr8 or StackBehaviour.Pushref => 1,
+        StackBehaviour.Push1_push1 => 2,
+        StackBehaviour.Varpush when instruction.Operand is MethodReference method =>
+            instruction.OpCode == OpCodes.Newobj || method.ReturnType.MetadataType != MetadataType.Void ? 1 : 0,
+        _ => null,
+    };
 
     /// <summary>Points branches, switch tables and exception handler boundaries at <paramref name="to"/> instead of <paramref name="from"/>.</summary>
     /// <param name="body">Method body.</param>

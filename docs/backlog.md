@@ -14,19 +14,19 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Track new findings per repository; maturity shows when several repositories in a row find none.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
-- **Hand-rolled lazy initialisation is not a cache fill** (Open-XML-SDK, 1 of 80 missed). A shared
-  singleton builds a member on first use with `Interlocked.CompareExchange(ref _x, new X(), null)`
-  (or `_x ??= new X()`); the code `new X()` runs (here `OpenXmlNamespace.GetHashCode` via a
-  dictionary) is credited to the first class only, and an instance member that runs in many
-  buckets escapes the run-once rule. Wrapping the call is not enough: the argument is evaluated
-  before it. Options: mark the span from the null check to the store (IL pattern match), or credit
-  the code to every bucket that later reads the field (field-read probes). Needs a red test with
-  two classes sharing such a singleton.
-
 ## Known gaps behind shipped fixes
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
+- **Hand-rolled lazy initialisation** (interim: next commit after b3ea9fa; Open-XML-SDK, 1 of 80
+  missed). `Interlocked.CompareExchange(ref _x, new X(), null)` is now a cache fill from where its
+  arguments start, when they are straight-line code that constructs or calls something. Still not
+  seen: `_x ??= new X()` and `if (_x == null) _x = new X()` on an instance field, and arguments with
+  branches inside; an instance method that only such a builder runs is credited to the first class
+  (static members and constructors are covered by the run-once rule). Complete fix: probes on
+  reads of fields that are written once, crediting the code that built the value to every bucket
+  that reads it, or an IL pattern match of null check → store. Red test: an instance method
+  reached only from a `??=` builder on a shared instance, used by three classes in two processes.
 - **Test data credited to both buckets** (interim: 7c33ec6). A data member enters the class that
   uses it and the marker is not undone on return, so lazily built rows stay with that class. A
   test that calls another class's data member directly therefore credits the rest of its own code
