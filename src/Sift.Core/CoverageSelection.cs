@@ -235,9 +235,11 @@ internal sealed class CoverageSelection
     /// <param name="change">A changed member.</param>
     private bool MayBeRunOnce(CoverageIndex map, SymbolChange change)
     {
+        // A whole type answered from coverage is only as good as its members: one built by a static
+        // initializer was credited to whichever class came first.
         if (change.MemberName is null)
         {
-            return false;
+            return map.TypeRanDuringInitialization(change.TypeName);
         }
 
         var isConstructor = change.MemberName.StartsWith(".ctor", StringComparison.Ordinal);

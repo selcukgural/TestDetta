@@ -21,6 +21,9 @@ internal sealed class CoverageIndex
     /// <summary>Members with an overload that ran inside a static constructor or a cache fill.</summary>
     private readonly HashSet<CoveredMethod> _initialization = [];
 
+    /// <summary>Types (and the types they are nested in) with a member in <see cref="_initialization"/>.</summary>
+    private readonly HashSet<string> _initializationTypes = new(StringComparer.Ordinal);
+
     /// <summary>Members that some process ran in two or more buckets; null when the map does not say.</summary>
     private readonly HashSet<CoveredMethod>? _sharedInProcess;
 
@@ -85,6 +88,10 @@ internal sealed class CoverageIndex
         foreach (var id in map.Initialization)
         {
             _initialization.Add(map.Methods[id]);
+            foreach (var type in EnclosingTypes(map.Methods[id].TypeName))
+            {
+                _initializationTypes.Add(type);
+            }
         }
 
         if (map.SharedInProcess is { } shared)
@@ -92,6 +99,10 @@ internal sealed class CoverageIndex
             _sharedInProcess = [.. shared.Select(id => map.Methods[id])];
         }
     }
+
+    /// <summary>True when some member of <paramref name="typeName"/> or a type nested in it ran inside a static constructor or a cache fill.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public bool TypeRanDuringInitialization(string typeName) => _initializationTypes.Contains(typeName);
 
     /// <summary>True when an overload of the member ran inside a static constructor or a cache fill.</summary>
     /// <param name="typeName">Qualified type name.</param>

@@ -123,6 +123,79 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Change_reaching_a_static_field_initializer_selects_every_user_of_the_type()
+    {
+        // NSec: a private static field's initializer runs in the type initializer, which any use of the
+        // type triggers; the test registry uses the type without naming the field.
+        _repo.Write("src/Shop/Algorithms.cs", """
+            namespace Shop;
+            public sealed class Formatter { public Formatter() { } }
+            public static class Algorithms
+            {
+                private static readonly Formatter s_formatter = new Formatter();
+                public static int Size => 1;
+                public static string Describe() => s_formatter.ToString();
+            }
+            """);
+        _repo.Write("tests/Shop.Tests/RegistryTests.cs", """
+            namespace Shop.Tests;
+            internal static class Registry { public static readonly int[] Sizes = [Algorithms.Size]; }
+            public class RegistryTests { [Fact] public void Has_sizes() => Assert.NotEmpty(Registry.Sizes); }
+            """);
+        _repo.Commit("algorithms");
+        _repo.Replace("src/Shop/Algorithms.cs", "public Formatter() { }", "public Formatter() { _ = 1; }");
+
+        Assert.Contains("Shop.Tests.RegistryTests", Select().TestClasses);
+    }
+
+    [Fact]
+    public void Type_built_by_a_static_initializer_is_not_answered_by_coverage()
+    {
+        // NSec: Algorithms' type initializer builds an XFormatter; ExportTests came first and is the only
+        // class the map credits, but RegistryTests triggers the same initializer through Algorithms.Size.
+        _repo.Write("src/Shop/Algorithms.cs", """
+            namespace Shop;
+            public abstract class KeyFormatter { protected KeyFormatter() { } }
+            public sealed class XFormatter : KeyFormatter { }
+            public static class Algorithms
+            {
+                private static readonly KeyFormatter s_formatter = new XFormatter();
+                public static int Size => 1;
+                public static string Export() => s_formatter.ToString()!;
+            }
+            """);
+        _repo.Write("tests/Shop.Tests/RegistryTests.cs", """
+            namespace Shop.Tests;
+            internal static class Registry { public static readonly int[] Sizes = [Algorithms.Size]; }
+            public class RegistryTests { [Fact] public void Has_sizes() => Assert.NotEmpty(Registry.Sizes); }
+            public class ExportTests { [Fact] public void Exports() => Assert.NotNull(Algorithms.Export()); }
+            """);
+        _repo.Commit("algorithms");
+        List<CoveredMethod> methods =
+        [
+            new("Shop.KeyFormatter", ".ctor"), new("Shop.XFormatter", ".ctor"), new("Shop.Algorithms", ".cctor"),
+            new("Shop.Algorithms", "Size"), new("Shop.Algorithms", "Export"),
+        ];
+        var head = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
+        var map = Map(head, methods, new Dictionary<string, IReadOnlyList<int>>
+        {
+            ["Shop.Tests.ExportTests"] = [0, 1, 2, 4],
+            ["Shop.Tests.RegistryTests"] = [3],
+        }) with { Initialization = [0, 1, 2] };
+        CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Shop.Tests/Shop.Tests.csproj")), map);
+        File.WriteAllText(Path.Combine(_repo.Root, ".gitignore"), ".sift/\n");
+        _repo.Commit("ignore maps");
+        CoverageMapStore.Write(
+            CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Shop.Tests/Shop.Tests.csproj")),
+            map with { Header = map.Header with { Commit = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root) } });
+        _repo.Replace("src/Shop/Algorithms.cs", "protected KeyFormatter() { }", "protected KeyFormatter() { _ = 1; }");
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.All || selection.TestClasses.Contains("Shop.Tests.RegistryTests"), string.Join(", ", selection.TestClasses));
+    }
+
+    [Fact]
     public void Static_test_class_is_selected()
     {
         // xUnit and NUnit run static test methods of static classes (Roslynator's tests do).

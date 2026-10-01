@@ -442,6 +442,14 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         var member = declaration.Node;
         var names = DeclarationWalker.ReferenceNames(declaration.MemberName!);
 
+        // An initializer runs in the type initializer (static) or every constructor (instance), which
+        // any use of the type triggers, not only code that names the field or property.
+        if (member is BaseFieldDeclarationSyntax field && field.Declaration.Variables.Any(static v => v.Initializer is not null)
+            || member is PropertyDeclarationSyntax { Initializer: not null })
+        {
+            return true;
+        }
+
         if (names.Count == 0 || member.AttributeLists.Count > 0 || member.Modifiers.Any(SyntaxKind.OverrideKeyword))
         {
             return true;
