@@ -33,7 +33,11 @@ internal sealed record SyntheticMutant(
 /// <param name="BaselineSeconds">Time of the full suite without mutants.</param>
 /// <param name="Mutants">One result per sampled member, in sample order.</param>
 /// <param name="Error">Why the commit could not be evaluated, or null.</param>
-internal sealed record SyntheticRun(string Sha, int TestClasses, double BaselineSeconds, IReadOnlyList<SyntheticMutant> Mutants, string? Error);
+internal sealed record SyntheticRun(string Sha, int TestClasses, double BaselineSeconds, IReadOnlyList<SyntheticMutant> Mutants, string? Error)
+{
+    /// <summary>Test projects left out because they wrote no test report, relative to the repository root.</summary>
+    public IReadOnlyList<string> Unreported { get; init; } = [];
+}
 
 /// <summary>Confidence bounds for a miss rate measured with mutants.</summary>
 internal static class MissRate

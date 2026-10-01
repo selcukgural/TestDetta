@@ -40,6 +40,13 @@ internal static class SyntheticReport
             text.AppendLine();
         }
 
+        if (run.Unreported.Count > 0)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"**Left out, wrote no test report:** {Cell(string.Join(", ", run.Unreported))}");
+            text.AppendLine();
+        }
+
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Members changed: {mutants.Count} ({mutants.Count(static m => m.Target.Covered)} covered by a recorded test)");
         text.AppendLine(CultureInfo.InvariantCulture,
@@ -120,6 +127,13 @@ internal static class SyntheticReport
             json.WriteString("error", run.Error);
             json.WriteNumber("testClasses", run.TestClasses);
             json.WriteNumber("baselineSeconds", Math.Round(run.BaselineSeconds, 1));
+            json.WriteStartArray("unreported");
+            foreach (var project in run.Unreported)
+            {
+                json.WriteStringValue(project);
+            }
+
+            json.WriteEndArray();
             json.WriteStartArray("mutants");
             foreach (var mutant in run.Mutants)
             {
@@ -169,12 +183,14 @@ internal static class SyntheticReport
     /// <param name="testClasses">Recorded test classes the selected share is taken of.</param>
     private static double? OverSelection(List<SyntheticMutant> killing, int testClasses)
     {
-        if (killing.Count == 0 || testClasses == 0)
+        // A mutant caught only by a crash has no failed class to divide by.
+        var classified = killing.Where(static m => m.KilledClasses.Count > 0).ToList();
+        if (classified.Count == 0 || testClasses == 0)
         {
             return null;
         }
 
-        var ratios = killing
+        var ratios = classified
             .Select(m => Math.Max(m.SelectedShare * testClasses, m.KilledClasses.Count) / m.KilledClasses.Count)
             .Order()
             .ToList();

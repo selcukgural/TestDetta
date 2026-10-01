@@ -9,14 +9,22 @@ namespace Sift.Eval;
 /// <param name="Seconds">Wall-clock time of all runs, including dotnet test start-up.</param>
 /// <param name="Total">Tests that ran, according to the TRX reports.</param>
 /// <param name="FailedByProject">Failed test classes per normalized test project path.</param>
-/// <param name="MissingReports">Runs that produced no TRX report (for example NUnit under Microsoft.Testing.Platform).</param>
+/// <param name="Unreported">
+/// Normalized paths of the projects whose run produced no TRX report (NUnit under
+/// Microsoft.Testing.Platform without the TRX extension, a test host that died at start). Their
+/// failures are unknown, not absent.
+/// </param>
 /// <param name="Aborted">Runs whose test host crashed twice or hung; their results are incomplete.</param>
 internal sealed record TestRunOutcome(
     double Seconds,
     int Total,
     IReadOnlyDictionary<string, IReadOnlySet<string>> FailedByProject,
-    int MissingReports,
-    int Aborted);
+    IReadOnlySet<string> Unreported,
+    int Aborted)
+{
+    /// <summary>True when every run produced a report and no test host crashed or hung.</summary>
+    public bool Complete => Unreported.Count == 0 && Aborted == 0;
+}
 
 /// <summary>What <see cref="TestExecutor"/> runs in.</summary>
 /// <param name="RepoRoot">Clone directory.</param>
@@ -92,7 +100,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     {
         var stopwatch = Stopwatch.StartNew();
         var total = 0;
-        var missing = 0;
+        var unreported = new HashSet<string>(Paths.Comparer);
         var aborted = 0;
         var failed = new Dictionary<string, IReadOnlySet<string>>(Paths.Comparer);
         var dotnet = new DotnetProcess(logger);
@@ -158,7 +166,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             aborted += crashed ? 1 : 0;
             if (outcome is null)
             {
-                missing++;
+                unreported.Add(project.Path);
                 continue;
             }
 
@@ -166,7 +174,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             failed[project.Path] = outcome.FailedClasses;
         }
 
-        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, missing, aborted);
+        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, unreported, aborted);
     }
 
     /// <summary>Time limit of a run of <paramref name="project"/>; a generous fixed one before the project ran once.</summary>

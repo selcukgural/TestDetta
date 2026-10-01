@@ -34,6 +34,13 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `deps.json` broke xUnit 2.3's own JSON reader through `+` escaping. Complete fix: a test
   that patches real SDK-written `deps.json` files and compares them with the original except for
   the added entries, and the same check for any other file Sift rewrites.
+- **Eval: test projects without a test report are left out** (interim: this commit). NUnit
+  under Microsoft.Testing.Platform has no TRX extension unless the repository adds it
+  (NSubstitute: every test project, so no data at all), and some hosts die at start
+  (protobuf-net.Test, exit 134). Complete fix: make the evaluation add
+  `Microsoft.Testing.Extensions.TrxReport` to such projects at build time (a
+  `CustomAfterMicrosoftCommonTargets` file, `VersionOverride` under central package management),
+  so they can be evaluated instead of skipped.
 
 ## Next
 

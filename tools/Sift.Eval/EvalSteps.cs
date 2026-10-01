@@ -197,6 +197,30 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         return built;
     }
 
+    /// <summary>
+    /// The projects whose run without mutants produced a test report. Without one a project's failures
+    /// are unknown: counting them as none would let a mutant only that project catches look harmless,
+    /// or a crash outside the selection look caught. Such projects are left out and named.
+    /// </summary>
+    /// <param name="testProjects">Projects that ran.</param>
+    /// <param name="baseline">Their run without mutants.</param>
+    public List<ProjectNode> Reporting(List<ProjectNode> testProjects, TestRunOutcome baseline)
+    {
+        var reporting = new List<ProjectNode>(testProjects.Count);
+        foreach (var project in testProjects)
+        {
+            if (baseline.Unreported.Contains(project.Path))
+            {
+                LogUnreported(project.Path);
+                continue;
+            }
+
+            reporting.Add(project);
+        }
+
+        return reporting;
+    }
+
     /// <summary>Copies the cached maps of <paramref name="sha"/> to where Sift looks for them.</summary>
     /// <param name="sha">Commit the maps were recorded at.</param>
     public void PlaceMaps(string sha)
@@ -288,6 +312,9 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} does not build here and is left out: {Errors}")]
     private partial void LogBuildFailed(string project, string errors);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} wrote no test report without mutants; its failures cannot be seen, so it is left out")]
+    private partial void LogUnreported(string project);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} cannot be evaluated by MSBuild here and is left out: {Error}")]
     private partial void LogNotEvaluable(string project, string error);

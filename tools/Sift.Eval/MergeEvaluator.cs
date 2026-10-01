@@ -56,7 +56,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
 
             var selected = workspace.Executor.RunSelected(invocations, "selected");
             var full = workspace.Executor.RunAll(testProjects, "full");
-            var mutants = RunMutants(analysis, testProjects, full);
+            var mutants = RunMutants(analysis, _steps.Reporting(testProjects, full), full);
 
             var afterMaps = _steps.RecordAt(commit.Sha);
             var coverageMisses = CoverageMisses(analysis, afterMaps);
@@ -96,9 +96,9 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             }
 
             var run = workspace.Executor.RunAll(testProjects, $"mutant-{index}");
-            if (run.Aborted > 0)
+            if (!run.Complete)
             {
-                // A crash hides which classes failed; a missing class would prove nothing either way.
+                // A crash or a missing report hides which classes failed; a missing class would prove nothing either way.
                 results.Add(new MutantResult(target, mutation.MutatedMethods, [], [], Inconclusive: true));
                 continue;
             }

@@ -42,6 +42,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             workspace.Executor.Outputs = _steps.OutputDirectories(testProjects);
             var baseline = workspace.Executor.RunAll(testProjects, "baseline");
+            var unreported = testProjects.Where(p => baseline.Unreported.Contains(p.Path))
+                .Select(p => Path.GetRelativePath(workspace.RepoRoot, p.Path).Replace('\\', '/')).ToList();
+            testProjects = _steps.Reporting(testProjects, baseline);
+            if (testProjects.Count == 0)
+            {
+                throw new InvalidOperationException("No test project wrote a test report.");
+            }
+
             var testClasses = maps.Values.Sum(static m => m.Classes.Count);
 
             var targets = TargetSampler.Sample(graph, workspace.RepoRoot, CoveredMembers(maps), request);
@@ -54,10 +62,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             foreach (var target in targets)
             {
                 mutants.Add(Run(sha, target, new MutantContext(testProjects, maps, assemblies, baseline), mutants.Count + 1));
-                progress(new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null));
+                progress(new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported });
             }
 
-            return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null);
+            return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported };
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException)
         {
@@ -101,8 +109,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var reached = context.TestProjects
             .Where(p => workspace.Executor.Outputs.TryGetValue(p.Path, out var output) && mutatedDirectories.Contains(output))
             .ToList();
+        // A project that wrote no report this time died with the mutant in place, like a crash.
         var run = workspace.Executor.RunAll(reached, $"synthetic-{index}");
-        if (run.Aborted > 0)
+        if (!run.Complete)
         {
             return RunOutsideSelection(target, new MutantRun(analysis, reached, index, detected, share), mutation.MutatedMethods);
         }
@@ -172,8 +181,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             invocations.Add(new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "outside the selection"), arguments));
         }
 
+        // No report is no evidence that what Sift left out passed.
         var outside = workspace.Executor.RunSelected(invocations, $"synthetic-{state.Index}-outside");
-        if (outside.Aborted > 0)
+        if (!outside.Complete)
         {
             return new SyntheticMutant(target, state.Detected, mutatedMethods, [], [], state.Share, Inconclusive: true);
         }

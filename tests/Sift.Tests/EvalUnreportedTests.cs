@@ -1,0 +1,95 @@
+using System.Text.Json;
+using Sift.Eval;
+
+namespace Sift.Tests;
+
+/// <summary>
+/// A test project that writes no test report hides its failures; the evaluation must leave it out
+/// and say so, not count it as passing. Slow: builds, records and runs a small repository.
+/// </summary>
+[Trait("Category", "Slow")]
+public sealed class EvalUnreportedTests : IDisposable
+{
+    private readonly GitRepoFixture _repo = new();
+    private readonly string _output = Path.Combine(Path.GetTempPath(), "sift-eval-unreported-" + Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void Project_without_a_test_report_is_left_out_and_named()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.sift/\nTestResults/\n");
+        _repo.Write("src/Calc/Calc.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+            </Project>
+            """);
+        _repo.Write("src/Calc/Calculator.cs", """
+            namespace Calc;
+            public static class Calculator { public static int Add(int a, int b) => a + b; public static int Neg(int a) => -a; }
+            """);
+        // MSTest under the testing platform writes TRX reports.
+        _repo.Write("tests/Add.Tests/Add.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><EnableMSTestRunner>true</EnableMSTestRunner><OutputType>Exe</OutputType></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="MSTest" Version="4.4.1" />
+                <ProjectReference Include="../../src/Calc/Calc.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Add.Tests/Tests.cs", """
+            using Microsoft.VisualStudio.TestTools.UnitTesting;
+            namespace Add.Tests;
+            [TestClass] public class AddTests { [TestMethod] public void Adds() => Assert.AreEqual(3, Calc.Calculator.Add(1, 2)); }
+            """);
+        // NUnit under the testing platform ships no TRX extension, like NSubstitute's test projects.
+        _repo.Write("tests/Neg.Tests/Neg.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><EnableNUnitRunner>true</EnableNUnitRunner><OutputType>Exe</OutputType></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+                <PackageReference Include="NUnit" Version="4.4.0" />
+                <PackageReference Include="NUnit3TestAdapter" Version="6.3.0" />
+                <ProjectReference Include="../../src/Calc/Calc.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Neg.Tests/Tests.cs", """
+            using NUnit.Framework;
+            namespace Neg.Tests;
+            public class NegTests { [Test] public void Negates() => Assert.That(Calc.Calculator.Neg(2), Is.EqualTo(-2)); }
+            """);
+        _repo.Commit("base");
+
+        var stdout = Console.Out;
+        try
+        {
+            Console.SetOut(TextWriter.Null);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--out", _output]);
+        }
+        finally
+        {
+            Console.SetOut(stdout);
+        }
+
+        var run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_output, "synthetic.json"))).RootElement;
+        Assert.True(run.GetProperty("error").ValueKind == JsonValueKind.Null, run.GetProperty("error").ToString());
+        Assert.Equal(["tests/Neg.Tests/Neg.Tests.csproj"], run.GetProperty("unreported").EnumerateArray().Select(static p => p.GetString()));
+
+        var mutants = run.GetProperty("mutants").EnumerateArray().ToDictionary(static m => m.GetProperty("target").GetString()!);
+        Assert.Equal(["Add.Tests: Add.Tests.AddTests"], mutants["Calc.Calculator.Add"].GetProperty("killed").EnumerateArray().Select(static c => c.GetString()));
+        // Only the unreported project could fail; the mutant proves nothing, and nothing is claimed.
+        var neg = mutants["Calc.Calculator.Neg"];
+        Assert.Empty(neg.GetProperty("killed").EnumerateArray());
+        Assert.False(neg.GetProperty("caughtByCrash").GetBoolean());
+    }
+
+    public void Dispose()
+    {
+        _repo.Dispose();
+        if (Directory.Exists(_output))
+        {
+            Directory.Delete(_output, recursive: true);
+        }
+    }
+}

@@ -167,7 +167,7 @@ internal static class EvalReport
         json.WriteStartObject(name);
         json.WriteNumber("seconds", Math.Round(run.Seconds, 1));
         json.WriteNumber("tests", run.Total);
-        json.WriteNumber("missingReports", run.MissingReports);
+        json.WriteNumber("missingReports", run.Unreported.Count);
         json.WriteNumber("aborted", run.Aborted);
         json.WriteEndObject();
     }
