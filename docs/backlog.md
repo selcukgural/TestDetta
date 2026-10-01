@@ -22,7 +22,7 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
-- **Fixtures declared by a base class** (interim: next commit; FastEndpoints, 31 classes missed).
+- **Fixtures declared by a base class** (interim: 514238e; FastEndpoints, 31 classes missed).
   `IClassFixture<T>`/`ICollectionFixture<T>`/`IAssemblyFixture<T>` implemented by a base class,
   also in another library, with the fixture as a generic argument (FastEndpoints.Testing's
   `TestBase<TAppFixture>`) now marks the fixture. Still ambient: xUnit v3
