@@ -347,7 +347,8 @@
         "analyzers",
         "snapshots"
       ],
-      "notes": "13k Verify snapshots; ConsumerTests need a packed nupkg and are left out when they do not build"
+      "setup": "mkdir -p artifacts local-global-packages",
+      "notes": "13k Verify snapshots; NuGet.config lists ./artifacts and ./local-global-packages, which its build script creates (restore fails with NU1301 without them); ConsumerTests need a packed nupkg and are left out when they do not build"
     },
     {
       "name": "mediator",
