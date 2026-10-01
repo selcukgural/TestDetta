@@ -22,7 +22,7 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
-- **Setup that runs before every test of a scope** (interim: next commit; MimeKit, 60 classes
+- **Setup that runs before every test of a scope** (interim: 7cd8528; MimeKit, 60 classes
   missed). NUnit `[SetUpFixture]` setup (constructor, `[OneTimeSetUp]`) and MSTest
   `[AssemblyInitialize]` now record under a setup scope that selects every class in its namespace
   (or assembly). Still ambient, so traced by name only: xUnit v3 assembly fixtures,
