@@ -37,7 +37,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// The newest version directory of every shared framework (Microsoft.NETCore.App,
     /// Microsoft.AspNetCore.App, ...) of the dotnet installation Sift runs on.
     /// </summary>
-    private static readonly Lazy<List<string>> SharedFrameworkDirectories = new(FindSharedFrameworkDirectories);
+    internal static readonly Lazy<List<string>> SharedFrameworkDirectories = new(FindSharedFrameworkDirectories);
 
     /// <summary>Instruments <paramref name="assemblies"/>, numbering methods across all of them.</summary>
     /// <param name="assemblies">Paths of the assemblies to rewrite.</param>

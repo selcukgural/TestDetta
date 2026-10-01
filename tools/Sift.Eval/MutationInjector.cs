@@ -118,6 +118,13 @@ internal static class MutationInjector
     {
         using var resolver = new DefaultAssemblyResolver();
         resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
+
+        // Writing resolves the types of constants, such as an ASP.NET Core enum as a default
+        // parameter value (FastEndpoints), whose assemblies live in the shared framework.
+        foreach (var directory in AssemblyInstrumenter.SharedFrameworkDirectories.Value)
+        {
+            resolver.AddSearchDirectory(directory);
+        }
         // A .pdb left next to a rewritten assembly no longer matches it, and tools that read symbols
         // (PublicApiGenerator in approval tests) then fail for every mutant, so it is rewritten too.
         var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
