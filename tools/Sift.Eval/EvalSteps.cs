@@ -128,7 +128,20 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 
         var dotnet = new DotnetProcess(_logger);
         List<string> query = ["msbuild", project.Path, "-getProperty:TargetFramework", "-getProperty:TargetFrameworks"];
-        using var properties = System.Text.Json.JsonDocument.Parse(dotnet.Capture(query, workspace.RepoRoot));
+        string output;
+        try
+        {
+            output = dotnet.Capture(query, workspace.RepoRoot);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A stale project (an import that no longer exists, a Visual Studio-only target) cannot be
+            // evaluated, let alone built; it is left out instead of ending the whole evaluation.
+            LogNotEvaluable(project.Path, ex.Message);
+            return false;
+        }
+
+        using var properties = System.Text.Json.JsonDocument.Parse(output);
         var values = properties.RootElement.GetProperty("Properties");
         var frameworks = $"{values.GetProperty("TargetFramework").GetString()};{values.GetProperty("TargetFrameworks").GetString()}"
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -275,6 +288,9 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} does not build here and is left out: {Errors}")]
     private partial void LogBuildFailed(string project, string errors);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} cannot be evaluated by MSBuild here and is left out: {Error}")]
+    private partial void LogNotEvaluable(string project, string error);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Project} does not target {Framework}; left out")]
     private partial void LogSkippedFramework(string project, string framework);
