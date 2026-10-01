@@ -97,8 +97,9 @@ public sealed class ProjectGraph
     public ProjectNode? FindOwner(string file) => Array.Find(_byDepth, p => Paths.IsUnder(file, p.Directory));
 
     /// <summary>
-    /// Every project a changed <paramref name="file"/> can affect directly, and how: the project whose
-    /// directory contains it and projects that pull it in from outside their directory are
+    /// Every project a changed <paramref name="file"/> can affect directly, and how: the projects whose
+    /// directory contains it (all of them when several share the innermost directory) and projects
+    /// that pull it in from outside their directory are
     /// <see cref="FileRole.Source"/>; projects that import it are <see cref="FileRole.BuildInput"/>.
     /// A build or source file no project claims is a build input of every project with unresolved
     /// inputs, since it may be what those resolve to.
@@ -109,7 +110,15 @@ public sealed class ProjectGraph
         var owners = new List<FileOwner>();
         if (FindOwner(file) is { } owner)
         {
-            owners.Add(new FileOwner(owner, FileRole.Source));
+            // Projects that share the directory compile the same files (one project per Roslyn
+            // version in Meziantou.Analyzer); each of them owns the file.
+            foreach (var sibling in _byDepth)
+            {
+                if (Paths.Comparer.Equals(sibling.Directory, owner.Directory))
+                {
+                    owners.Add(new FileOwner(sibling, FileRole.Source));
+                }
+            }
         }
 
         foreach (var (project, items, imports) in _inputs)

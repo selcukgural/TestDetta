@@ -22,6 +22,11 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
+- **Projects sharing a directory** (interim: next commit; Meziantou.Analyzer, every mutant missed
+  in 4 of 5 test projects). A file in a directory with several projects now belongs to all of
+  them, so each Roslyn-version project and each of its test projects is affected and indexed.
+  Projects that split one directory with `Compile Remove`/`Include` are over-selected. Complete fix:
+  honour each project's compile items when they exclude files of its own directory.
 - **Setup that runs before every test of a scope** (interim: 7cd8528; MimeKit, 60 classes
   missed). NUnit `[SetUpFixture]` setup (constructor, `[OneTimeSetUp]`) and MSTest
   `[AssemblyInitialize]` now record under a setup scope that selects every class in its namespace
