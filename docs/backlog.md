@@ -15,6 +15,26 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 
+## Known gaps behind shipped fixes
+
+Interim fixes that are safe for the common case; come back for the complete solution.
+
+- **Test data credited to both buckets** (interim: 7c33ec6). A data member enters the class that
+  uses it and the marker is not undone on return, so lazily built rows stay with that class. A
+  test that calls another class's data member directly therefore credits the rest of its own code
+  to that class: a possible miss. Complete fix: while data code runs, and until the next class or
+  fixture is entered, credit hits to both the data's class and the bucket that was current
+  before. Measure the cost on the hit path first (one extra field read per hit) and add a test
+  where a test calls another class's data member.
+- **Startup time vs. discovery-time data** (interim: 7c33ec6). Theory data enumerated during
+  discovery now ends the recorded startup time early and adds discovery time to the first data
+  class. Complete fix: count time spent in data members during discovery as startup (it is paid
+  by every run), so per-class times and the value report stay right.
+- **Files rewritten for other tools match the SDK byte for byte** (interim: 911e519). The patched
+  `deps.json` broke xUnit 2.3's own JSON reader through `+` escaping. Complete fix: a test
+  that patches real SDK-written `deps.json` files and compares them with the original except for
+  the added entries, and the same check for any other file Sift rewrites.
+
 ## Next
 
 1. **Precision round**: safety fixes made selection broader (NodaTime 16% → 34%); measure where
