@@ -7,7 +7,7 @@ using Sift.Coverage;
 namespace Sift.Eval;
 
 /// <summary>Assemblies rewritten for one mutant, and how to put them back.</summary>
-/// <param name="Backups">Rewritten file to its backup copy.</param>
+/// <param name="Backups">Rewritten file (assembly or its .pdb) to its backup copy.</param>
 /// <param name="MutatedMethods">Number of compiled methods that now throw.</param>
 internal sealed record Mutation(IReadOnlyDictionary<string, string> Backups, int MutatedMethods) : IDisposable
 {
@@ -78,14 +78,32 @@ internal static class MutationInjector
             var backup = Path.Combine(backupDirectory, $"{backups.Count}-{Path.GetFileName(assembly)}");
             File.Copy(assembly, backup, overwrite: true);
 
+            // The .pdb is rewritten with the assembly (see InjectOne), so it is backed up and lifted too.
+            var pdb = Path.ChangeExtension(assembly, ".pdb");
+            var pdbBackup = File.Exists(pdb) ? Path.ChangeExtension(backup, ".pdb") : null;
+            if (pdbBackup is not null)
+            {
+                File.Copy(pdb, pdbBackup, overwrite: true);
+            }
+
             var count = InjectOne(assembly, target, kind);
             if (count == 0)
             {
                 File.Delete(backup);
+                if (pdbBackup is not null)
+                {
+                    File.Delete(pdbBackup);
+                }
+
                 continue;
             }
 
             backups[assembly] = backup;
+            if (pdbBackup is not null)
+            {
+                backups[pdb] = pdbBackup;
+            }
+
             mutated += count;
         }
 
@@ -100,7 +118,10 @@ internal static class MutationInjector
     {
         using var resolver = new DefaultAssemblyResolver();
         resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
-        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, AssemblyResolver = resolver });
+        // A .pdb left next to a rewritten assembly no longer matches it, and tools that read symbols
+        // (PublicApiGenerator in approval tests) then fail for every mutant, so it is rewritten too.
+        var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
+        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, ReadSymbols = hasSymbols, AssemblyResolver = resolver });
 
         var exception = new TypeReference("System", nameof(InvalidOperationException), module, module.TypeSystem.CoreLibrary);
         var constructor = new MethodReference(".ctor", module.TypeSystem.Void, exception) { HasThis = true };
@@ -150,7 +171,7 @@ internal static class MutationInjector
 
         if (count > 0)
         {
-            module.Write(path);
+            module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
         }
 
         return count;
