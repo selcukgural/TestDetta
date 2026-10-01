@@ -90,7 +90,9 @@
         "static-state",
         "multi-target"
       ],
-      "exclude": ["src/IntegrationTests/AutoMapper.IntegrationTests.csproj"],
+      "exclude": [
+        "src/IntegrationTests/AutoMapper.IntegrationTests.csproj"
+      ],
       "notes": "expression-compiled maps, assembly scanning in DI.Tests; UnitTests also net471; IntegrationTests need SQL Server"
     },
     {
@@ -186,18 +188,6 @@
         "xunit-v3"
       ],
       "notes": "libsodium through NuGet; thousands of theory cases"
-    },
-    {
-      "name": "duckdb-net",
-      "url": "https://github.com/Giorgi/DuckDB.NET.git",
-      "branch": "develop",
-      "framework": "net8.0",
-      "tags": [
-        "pinvoke",
-        "native",
-        "static-state"
-      ],
-      "notes": "build downloads DuckDB natives (network); in-process database"
     },
     {
       "name": "newtonsoft-json",

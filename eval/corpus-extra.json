@@ -173,6 +173,18 @@
         "large"
       ],
       "notes": "~2450 LFS images; very long suite"
+    },
+    {
+      "name": "duckdb-net",
+      "url": "https://github.com/Giorgi/DuckDB.NET.git",
+      "branch": "develop",
+      "framework": "net8.0",
+      "tags": [
+        "pinvoke",
+        "native",
+        "static-state"
+      ],
+      "notes": "the build does not put the native duckdb.dylib into the osx-arm64 test output, so most tests fail with DllNotFoundException; runs only where the native library is provided"
     }
   ]
 }
