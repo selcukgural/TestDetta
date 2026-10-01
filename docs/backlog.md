@@ -18,7 +18,7 @@ that report numbers (value reporting) only once the numbers are proven right.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
-- **Hand-rolled lazy initialisation** (interim: next commit after b3ea9fa; Open-XML-SDK, 1 of 80
+- **Hand-rolled lazy initialisation** (interim: 5d01d7a; Open-XML-SDK, 1 of 80
   missed). `Interlocked.CompareExchange(ref _x, new X(), null)` is now a cache fill from where its
   arguments start, when they are straight-line code that constructs or calls something. Still not
   seen: `_x ??= new X()` and `if (_x == null) _x = new X()` on an instance field, and arguments with
