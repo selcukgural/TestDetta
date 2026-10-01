@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Sift.Coverage.Runtime;
@@ -50,6 +51,18 @@ internal sealed class RuntimeDeployment : IDisposable
         }
     }
 
+    /// <summary>Writes the patched file as the SDK does: indented, and without escaping characters such as <c>+</c>.</summary>
+    /// <remarks>
+    /// The default encoder writes the <c>+</c> of package hashes as <c>\u002B</c>. The host reads that,
+    /// but the JSON reader bundled with xUnit 2.3's VSTest adapter does not: it then sees no reference
+    /// to xUnit and finds no tests (Newtonsoft.Json).
+    /// </remarks>
+    private static readonly JsonSerializerOptions WriteOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     /// <summary>
     /// Adds the runtime as a project library of the runtime target. The host puts the runtime assets
     /// of every library of the target on the assembly path, so nothing needs to depend on it.
@@ -81,6 +94,6 @@ internal sealed class RuntimeDeployment : IDisposable
             ["sha512"] = string.Empty,
         };
 
-        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        return root.ToJsonString(WriteOptions);
     }
 }

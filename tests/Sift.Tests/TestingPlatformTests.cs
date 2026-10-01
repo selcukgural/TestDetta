@@ -61,6 +61,24 @@ public sealed class TestingPlatformTests : IDisposable
         Assert.NotNull(target["App.Tests/1.0.0"]);
     }
 
+    [Fact]
+    public void Patched_deps_json_keeps_characters_unescaped()
+    {
+        // xUnit 2.3's adapter could not read \u002B and found no tests in Newtonsoft.Json.
+        const string deps = """
+            {
+              "runtimeTarget": { "name": ".NETCoreApp,Version=v10.0" },
+              "targets": { ".NETCoreApp,Version=v10.0": { "App.Tests/1.0.0": { "runtime": { "App.Tests.dll": {} } } } },
+              "libraries": { "App.Tests/1.0.0": { "type": "project" }, "xunit/2.3.1": { "type": "package", "sha512": "sha512-a+b/c==" } }
+            }
+            """;
+
+        var patched = RuntimeDeployment.AddRuntime(deps);
+
+        Assert.Contains("\"sha512-a+b/c==\"", patched, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\u", patched, StringComparison.Ordinal);
+    }
+
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 }
 

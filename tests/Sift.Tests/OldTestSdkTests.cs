@@ -6,7 +6,8 @@ namespace Sift.Tests;
 
 /// <summary>
 /// Recording against what a pipeline hands it: old test hosts (Microsoft.NET.Test.Sdk 16, as
-/// FluentValidation uses) that do not load Sift's VSTest collector, and an existing build output
+/// FluentValidation uses) that do not load Sift's VSTest collector, xUnit 2.3 adapters that read
+/// the dependency graph (Newtonsoft.Json), and an existing build output
 /// (--no-build). Slow: builds and records.
 /// </summary>
 [Trait("Category", "Slow")]
@@ -14,22 +15,24 @@ public sealed class OldTestSdkTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
 
-    [Fact]
-    public void Records_with_a_test_sdk_that_does_not_load_the_collector()
+    [Theory]
+    [InlineData("16.0.1", "2.2.0")]
+    [InlineData("16.3.0", "2.3.1")]
+    public void Records_with_a_test_sdk_that_does_not_load_the_collector(string testSdk, string xunit)
     {
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write("src/Calc/Calc.csproj", """
             <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>
             """);
         _repo.Write("src/Calc/Calculator.cs", "namespace Calc; public class Calculator { public int Add(int a, int b) => a + b; }");
-        _repo.Write("tests/Calc.Tests/Calc.Tests.csproj", """
+        _repo.Write("tests/Calc.Tests/Calc.Tests.csproj", $$"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
               <ItemGroup>
-                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.0.1" />
-                <PackageReference Include="Microsoft.TestPlatform.TestHost" Version="16.0.1" />
-                <PackageReference Include="xunit" Version="2.2.0" />
-                <PackageReference Include="xunit.runner.visualstudio" Version="2.2.0" />
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="{{testSdk}}" />
+                <PackageReference Include="Microsoft.TestPlatform.TestHost" Version="{{testSdk}}" />
+                <PackageReference Include="xunit" Version="{{xunit}}" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="{{xunit}}" />
                 <ProjectReference Include="../../src/Calc/Calc.csproj" />
               </ItemGroup>
             </Project>
