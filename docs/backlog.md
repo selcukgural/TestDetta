@@ -15,6 +15,10 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- **x64-only test projects are left out on Apple silicon** (Vogen's SnapshotTests: "Could not find
+  'dotnet' host for the 'X64' architecture"). The evaluation now leaves out a project whose run
+  without mutants aborted before running a test, instead of counting every later abort as a mutant
+  caught by a crash. Evaluate such repositories once on an x64 runner (CI) to cover them.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 

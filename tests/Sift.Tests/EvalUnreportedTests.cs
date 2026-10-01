@@ -84,6 +84,71 @@ public sealed class EvalUnreportedTests : IDisposable
         Assert.False(neg.GetProperty("caughtByCrash").GetBoolean());
     }
 
+    [Fact]
+    public void Project_whose_test_host_cannot_start_is_left_out_and_named()
+    {
+        // Built for the other architecture, the test host cannot start: VSTest writes an empty report
+        // and "Test Run Aborted", in the run without mutants too (Vogen's SnapshotTests are x64-only).
+        var other = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "x64" : "arm64";
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.sift/\nTestResults/\n");
+        _repo.Write("src/Calc/Calc.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+            </Project>
+            """);
+        _repo.Write("src/Calc/Calculator.cs", """
+            namespace Calc;
+            public static class Calculator { public static int Add(int a, int b) => a + b; public static int Neg(int a) => -a; }
+            """);
+        foreach (var (name, platform) in new[] { ("Add", ""), ("Neg", $"<PlatformTarget>{other}</PlatformTarget>") })
+        {
+            _repo.Write($"tests/{name}.Tests/{name}.Tests.csproj", $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings>{platform}</PropertyGroup>
+                  <ItemGroup>
+                    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                    <PackageReference Include="xunit" Version="2.9.3" />
+                    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+                    <ProjectReference Include="../../src/Calc/Calc.csproj" />
+                  </ItemGroup>
+                </Project>
+                """);
+        }
+
+        _repo.Write("tests/Add.Tests/Tests.cs", """
+            using Xunit;
+            namespace Add.Tests;
+            public class AddTests { [Fact] public void Adds() => Assert.Equal(3, Calc.Calculator.Add(1, 2)); }
+            """);
+        _repo.Write("tests/Neg.Tests/Tests.cs", """
+            using Xunit;
+            namespace Neg.Tests;
+            public class NegTests { [Fact] public void Negates() => Assert.Equal(-2, Calc.Calculator.Neg(2)); }
+            """);
+        _repo.Commit("base");
+
+        var stdout = Console.Out;
+        try
+        {
+            Console.SetOut(TextWriter.Null);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--out", _output]);
+        }
+        finally
+        {
+            Console.SetOut(stdout);
+        }
+
+        var run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_output, "synthetic.json"))).RootElement;
+        Assert.True(run.GetProperty("error").ValueKind == JsonValueKind.Null, run.GetProperty("error").ToString());
+        Assert.Equal(["tests/Neg.Tests/Neg.Tests.csproj"], run.GetProperty("unreported").EnumerateArray().Select(static p => p.GetString()));
+
+        // The host that never starts is not a crash the mutant caused.
+        var mutants = run.GetProperty("mutants").EnumerateArray().ToDictionary(static m => m.GetProperty("target").GetString()!);
+        Assert.False(mutants["Calc.Calculator.Neg"].GetProperty("caughtByCrash").GetBoolean());
+        Assert.Empty(mutants["Calc.Calculator.Neg"].GetProperty("killed").EnumerateArray());
+    }
+
     public void Dispose()
     {
         _repo.Dispose();

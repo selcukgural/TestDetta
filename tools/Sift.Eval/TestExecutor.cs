@@ -11,8 +11,8 @@ namespace Sift.Eval;
 /// <param name="FailedByProject">Failed test classes per normalized test project path.</param>
 /// <param name="Unreported">
 /// Normalized paths of the projects whose run produced no TRX report (NUnit under
-/// Microsoft.Testing.Platform without the TRX extension, a test host that died at start). Their
-/// failures are unknown, not absent.
+/// Microsoft.Testing.Platform without the TRX extension, a test host that died at start), or an
+/// empty one from a run that aborted. Their failures are unknown, not absent.
 /// </param>
 /// <param name="Aborted">Runs whose test host crashed twice or hung; their results are incomplete.</param>
 internal sealed record TestRunOutcome(
@@ -164,7 +164,9 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             }
 
             aborted += crashed ? 1 : 0;
-            if (outcome is null)
+            // A host that aborted before running a test (built for another architecture, Vogen's
+            // SnapshotTests) leaves an empty report: its failures are unknown, as with no report.
+            if (outcome is null || crashed && outcome.Total == 0)
             {
                 unreported.Add(project.Path);
                 continue;
