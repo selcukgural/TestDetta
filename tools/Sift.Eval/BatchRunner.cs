@@ -20,6 +20,9 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
     /// <summary>Where toolchains are installed (<c>--toolchains</c>); needed when an entry names a toolchain.</summary>
     public string? Toolchains { get; init; }
 
+    /// <summary>Directory or <c>summary.json</c> of an earlier run to compare with (<c>--compare</c>); null for none.</summary>
+    public string? Compare { get; init; }
+
     /// <summary>True when the command line asks for a corpus run or a summary.</summary>
     /// <param name="args">Raw arguments.</param>
     public static bool IsBatch(ReadOnlySpan<string> args)
@@ -48,6 +51,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         var logLevel = LogLevel.Information;
         var overrides = new BatchOverrides();
         string? toolchains = null;
+        string? compare = null;
         options = null!;
         error = null;
 
@@ -80,6 +84,10 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 
                 case "--out":
                     output = Path.GetFullPath(value);
+                    break;
+
+                case "--compare":
+                    compare = Path.GetFullPath(value);
                     break;
 
                 case "--toolchains":
@@ -118,7 +126,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         }
 
         output ??= Path.Combine(Path.GetTempPath(), "sift-corpus-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains };
+        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains, Compare = compare };
         return true;
     }
 }
@@ -188,6 +196,12 @@ internal static partial class BatchRunner
         // A run of a few repositories (a nightly smoke run) reports on those, not on the whole corpus.
         var summary = BatchSummary.Write(options.Output, corpus, options.Only);
         Console.Out.Write(summary);
+        if (options.Compare is { } previous)
+        {
+            Console.Out.WriteLine();
+            Console.Out.Write(BatchComparison.Write(options.Output, previous));
+        }
+
         Console.Out.WriteLine($"\nSummary: {Path.Combine(options.Output, "summary.md")}");
         return exitCode;
     }

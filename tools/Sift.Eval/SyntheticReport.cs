@@ -135,6 +135,8 @@ internal static class SyntheticReport
             json.WriteBoolean("schema", run.Schema);
             json.WriteNumber("mutantParallelism", run.MutantParallelism);
             json.WriteString("toolchain", run.Toolchain);
+            json.WriteString("siftCommit", EvalBuild.Commit);
+            json.WriteNumber("seconds", Math.Round(run.Seconds, 1));
             json.WriteStartArray("unreported");
             foreach (var project in run.Unreported)
             {

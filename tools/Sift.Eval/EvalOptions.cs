@@ -25,8 +25,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
                sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
-                         [--mutant-parallelism <n>] [--parallel <n>] [--toolchains <dir>] [-v]
-               sift-eval --summarize <dir> --corpus <file>
+                         [--mutant-parallelism <n>] [--parallel <n>] [--toolchains <dir>] [--compare <dir>] [-v]
+               sift-eval --summarize <dir> --corpus <file> [--compare <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
         merge's first parent, lets Sift select tests for the merge, runs the selection and the full
@@ -71,6 +71,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
         With --corpus, every repository of the corpus file is evaluated with its own settings into
         <out>/<name>, and <out>/summary.md adds them up. --summarize only rebuilds the summary. A corpus
         whose entries name a toolchain needs --toolchains; the lock is toolchains.lock.json next to it.
+        --compare <dir> compares the run with an earlier one (its summary.json) into comparison.md.
         """;
 
     /// <summary>Parses the command line.</summary>

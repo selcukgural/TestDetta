@@ -6,7 +6,8 @@ using Sift.Cli;
 namespace Sift.Eval;
 
 /// <summary>
-/// Adds up the reports of a corpus run into <c>summary.md</c>: per repository, per tag and in total.
+/// Adds up the reports of a corpus run into <c>summary.md</c>: per repository, per tag and in total,
+/// and into <c>summary.json</c>, which <see cref="BatchComparison"/> compares with an earlier run.
 /// It reads the JSON reports on disk, so it also summarises a run that is still going or was stopped.
 /// </summary>
 internal static class BatchSummary
@@ -22,7 +23,7 @@ internal static class BatchSummary
     /// <param name="FullSeconds">History: time of the full suites.</param>
     /// <param name="SelectedSeconds">History: time of Sift's selections.</param>
     /// <param name="MissedNames">Missed mutants as <c>Type.Member</c>, for the list at the end.</param>
-    private sealed record RepositoryTotals(
+    internal sealed record RepositoryTotals(
         CorpusEntry Entry,
         string Status,
         int Killing,
@@ -32,7 +33,26 @@ internal static class BatchSummary
         int Commits,
         double FullSeconds,
         double SelectedSeconds,
-        List<string> MissedNames);
+        List<string> MissedNames)
+    {
+        /// <summary>Commit the synthetic changes were made on; null without a synthetic report.</summary>
+        public string? Sha { get; init; }
+
+        /// <summary>Sift build that evaluated it (see <see cref="EvalBuild.Commit"/>).</summary>
+        public string? SiftCommit { get; init; }
+
+        /// <summary>Pinned toolchain, or null for the <c>dotnet</c> on PATH.</summary>
+        public string? Toolchain { get; init; }
+
+        /// <summary>Wall-clock time of the synthetic evaluation.</summary>
+        public double Seconds { get; init; }
+
+        /// <summary>Synthetic mutants whose test outcome came from the outcome cache.</summary>
+        public int Reused { get; init; }
+
+        /// <summary>Average share of recorded test classes Sift selected for a killing synthetic mutant.</summary>
+        public double SelectedShare => SyntheticKilling == 0 ? 0 : Selected / SyntheticKilling;
+    }
 
     /// <summary>Writes <c>summary.md</c> and returns its text.</summary>
     /// <param name="directory">Corpus output directory.</param>
@@ -46,7 +66,88 @@ internal static class BatchSummary
             .ToList();
         var text = Markdown(totals);
         File.WriteAllText(Path.Combine(directory, "summary.md"), text);
+        File.WriteAllText(Path.Combine(directory, "summary.json"), Json(totals));
         return text;
+    }
+
+    /// <summary>Reads the <c>summary.json</c> of a run directory (or the file itself); null when there is none.</summary>
+    /// <param name="path">Run directory or summary file.</param>
+    public static List<RepositoryTotals>? ReadSummary(string path)
+    {
+        var file = Directory.Exists(path) ? Path.Combine(path, "summary.json") : path;
+        using var document = ReadJson(file);
+        if (document is null)
+        {
+            return null;
+        }
+
+        var totals = new List<RepositoryTotals>();
+        foreach (var r in document.RootElement.GetProperty("repositories").EnumerateArray())
+        {
+            var killing = r.GetProperty("syntheticKilling").GetInt32();
+            totals.Add(new RepositoryTotals(
+                new CorpusEntry { Name = r.GetProperty("name").GetString()!, Url = string.Empty },
+                r.GetProperty("status").GetString()!,
+                r.GetProperty("killing").GetInt32(),
+                r.GetProperty("missed").GetInt32(),
+                r.GetProperty("selectedShare").GetDouble() * killing,
+                killing,
+                r.GetProperty("commits").GetInt32(),
+                0,
+                0,
+                [.. r.GetProperty("missedMutants").EnumerateArray().Select(static m => m.GetString()!)])
+            {
+                Sha = r.GetProperty("sha").GetString(),
+                SiftCommit = r.GetProperty("siftCommit").GetString(),
+                Toolchain = r.GetProperty("toolchain").GetString(),
+                Seconds = r.GetProperty("seconds").GetDouble(),
+                Reused = r.GetProperty("reused").GetInt32(),
+            });
+        }
+
+        return totals;
+    }
+
+    /// <summary>The totals as JSON, one object per repository.</summary>
+    /// <param name="totals">One entry per evaluated repository.</param>
+    private static string Json(List<RepositoryTotals> totals)
+    {
+        using var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        {
+            json.WriteStartObject();
+            json.WriteString("siftCommit", EvalBuild.Commit);
+            json.WriteStartArray("repositories");
+            foreach (var t in totals)
+            {
+                json.WriteStartObject();
+                json.WriteString("name", t.Entry.Name);
+                json.WriteString("status", t.Status);
+                json.WriteString("sha", t.Sha);
+                json.WriteString("siftCommit", t.SiftCommit);
+                json.WriteString("toolchain", t.Toolchain);
+                json.WriteNumber("seconds", Math.Round(t.Seconds, 1));
+                json.WriteNumber("killing", t.Killing);
+                json.WriteNumber("syntheticKilling", t.SyntheticKilling);
+                json.WriteNumber("missed", t.Missed);
+                json.WriteNumber("selectedShare", Math.Round(t.SelectedShare, 4));
+                json.WriteNumber("reused", t.Reused);
+                json.WriteNumber("commits", t.Commits);
+                json.WriteStartArray("missedMutants");
+                foreach (var name in t.MissedNames)
+                {
+                    json.WriteStringValue(name);
+                }
+
+                json.WriteEndArray();
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
+            json.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
     /// <summary>Reads one repository's reports.</summary>
@@ -61,13 +162,18 @@ internal static class BatchSummary
             : Directory.Exists(folder) ? "running"
             : "not run";
 
-        int killing = 0, missed = 0, syntheticKilling = 0, commits = 0;
-        double selected = 0, fullSeconds = 0, selectedSeconds = 0;
+        int killing = 0, missed = 0, syntheticKilling = 0, commits = 0, reused = 0;
+        double selected = 0, fullSeconds = 0, selectedSeconds = 0, seconds = 0;
+        string? sha = null, siftCommit = null, toolchain = null;
         var missedNames = new List<string>();
 
         using var syntheticReport = ReadJson(Path.Combine(folder, "synthetic.json"));
         if (syntheticReport is { } synthetic)
         {
+            sha = Optional(synthetic.RootElement, "sha")?.GetString();
+            siftCommit = Optional(synthetic.RootElement, "siftCommit")?.GetString();
+            toolchain = Optional(synthetic.RootElement, "toolchain")?.GetString();
+            seconds = Optional(synthetic.RootElement, "seconds")?.GetDouble() ?? 0;
             if (synthetic.RootElement.GetProperty("error").GetString() is { } syntheticError)
             {
                 status = "failed: " + syntheticError;
@@ -84,6 +190,7 @@ internal static class BatchSummary
 
             foreach (var mutant in synthetic.RootElement.GetProperty("mutants").EnumerateArray())
             {
+                reused += Optional(mutant, "reused")?.GetBoolean() == true ? 1 : 0;
                 var caughtByCrash = mutant.TryGetProperty("caughtByCrash", out var crash) && crash.GetBoolean();
                 if (mutant.GetProperty("inconclusive").GetBoolean() || (mutant.GetProperty("killed").GetArrayLength() == 0 && !caughtByCrash))
                 {
@@ -131,8 +238,21 @@ internal static class BatchSummary
             }
         }
 
-        return new RepositoryTotals(entry, status, killing, missed, selected, syntheticKilling, commits, fullSeconds, selectedSeconds, missedNames);
+        return new RepositoryTotals(entry, status, killing, missed, selected, syntheticKilling, commits, fullSeconds, selectedSeconds, missedNames)
+        {
+            Sha = sha,
+            SiftCommit = siftCommit,
+            Toolchain = toolchain,
+            Seconds = seconds,
+            Reused = reused,
+        };
     }
+
+    /// <summary>A property that reports of older builds lack; null when missing or null.</summary>
+    /// <param name="element">Report object.</param>
+    /// <param name="name">Property name.</param>
+    private static JsonElement? Optional(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null ? value : null;
 
     /// <summary>Parses a report, or null when it does not exist yet or is being written.</summary>
     /// <param name="path">Report file.</param>

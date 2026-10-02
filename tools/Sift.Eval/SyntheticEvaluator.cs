@@ -31,6 +31,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     public SyntheticRun Evaluate(string sha, SampleRequest request, Action<SyntheticRun> progress)
     {
         var mutants = new List<SyntheticMutant>();
+        var started = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             // What the tests do depends on the SDK and runtime too, so a toolchain has its own outcomes.
@@ -107,18 +108,18 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                     mutants.Clear();
                     mutants.AddRange(results.OfType<SyntheticMutant>());
                     progress(new SyntheticRun(sha, testClasses, baseline.Seconds, [.. mutants], null)
-                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description });
+                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds });
                 }
             });
 
             return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null)
-                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description };
+                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds };
         }
         catch (Exception ex) when (Expected(ex))
         {
             var cause = ex is AggregateException aggregate ? aggregate.InnerExceptions[0] : ex;
             LogFailed(sha, cause);
-            return new SyntheticRun(sha, 0, 0, mutants, cause.Message) { Toolchain = settings.Toolchain?.Description };
+            return new SyntheticRun(sha, 0, 0, mutants, cause.Message) { Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds };
         }
     }
 

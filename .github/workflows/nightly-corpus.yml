@@ -1,6 +1,7 @@
 name: Nightly corpus
 
-# A small synthetic evaluation of real repositories every night: Sift must miss no failing test.
+# A small synthetic evaluation of real repositories every night: Sift must miss no failing test, and
+# the summary compares the night with the previous successful one (comparison.md).
 # Kept to about 30-40 minutes on a 2-core runner so the private repository's Actions minutes last;
 # the full corpus runs on a dedicated machine. A miss or an evaluation error fails the run.
 on:
@@ -21,6 +22,8 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      # To download the previous night's report for the comparison; only that step gets the token.
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,6 +35,16 @@ jobs:
 
       - name: Build the evaluation tool
         run: dotnet build tools/Sift.Eval -c Release
+
+      - name: Fetch the previous night's report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          previous=$(gh run list --repo "$REPOSITORY" --workflow nightly-corpus.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$previous" ]; then
+            gh run download "$previous" --repo "$REPOSITORY" --name nightly-corpus --dir "$RUNNER_TEMP/previous" || echo "No report in run $previous"
+          fi
 
       # Third-party test suites run here: the job has no secrets and only read access. They build and
       # run with the corpus toolchain, installed from archives pinned in eval/toolchains.lock.json
@@ -45,6 +58,7 @@ jobs:
           --mutant-parallelism 2
           --parallel 2
           --toolchains "$RUNNER_TEMP/toolchains"
+          --compare "$RUNNER_TEMP/previous"
           --out "$RUNNER_TEMP/corpus"
           | tee "$RUNNER_TEMP/corpus-summary.md"; exit "${PIPESTATUS[0]}"
 
@@ -62,6 +76,7 @@ jobs:
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/corpus/*.md
+            ${{ runner.temp }}/corpus/summary.json
             ${{ runner.temp }}/corpus/*/stdout.md
             ${{ runner.temp }}/corpus/*/synthetic.md
             ${{ runner.temp }}/corpus/*/synthetic.json

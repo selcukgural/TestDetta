@@ -49,6 +49,9 @@ internal sealed record SyntheticRun(string Sha, int TestClasses, double Baseline
 
     /// <summary>The pinned toolchain the run used, such as <c>SDK 10.0.401 + 8.0.31 (osx-arm64)</c>; null for the <c>dotnet</c> on PATH.</summary>
     public string? Toolchain { get; init; }
+
+    /// <summary>Wall-clock time of the evaluation so far, recording and building included.</summary>
+    public double Seconds { get; init; }
 }
 
 /// <summary>Confidence bounds for a miss rate measured with mutants.</summary>

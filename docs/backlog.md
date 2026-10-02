@@ -150,8 +150,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
      anchor the schema and parallel checks.
    - ~~Tiers~~: nightly smoke corpus on GitHub done (6a1a57e; Scriban, Fluid, Carter, 20 mutants each,
      about 18 minutes on a 2-core runner; first run 0 of 47 missed). User chose nightly over per-commit
-     and kept the repository private (Actions minutes). Still: the full corpus on a schedule on the
-     dedicated machine, and comparing a night with the previous one beyond "no miss".
+     and kept the repository private (Actions minutes). A run is compared with an earlier one
+     (`--compare`, comparison.md: failures, new misses, wider or narrower selection and changed
+     outcomes at the same commit and toolchain, slow runs); the nightly compares with the previous
+     successful night. Still: the full corpus on a schedule on the dedicated machine.
    - ~~Hermetic, reproducible runners~~: done for toolchains (docs/design/hermetic-toolchains.md):
      SDK and runtimes pinned per corpus entry, installed side by side into directories never
      changed afterwards, archives checked against `eval/toolchains.lock.json` (read-only in CI),
