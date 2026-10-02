@@ -119,6 +119,9 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     /// </summary>
     private const int RecordingVersion = 1;
 
+    /// <summary>Longest a test project's build may take; a build that hangs leaves the project out instead of stopping the evaluation.</summary>
+    private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(30);
+
     /// <summary>
     /// What decides a recording besides the commit: Sift's recording code (the contents of the core,
     /// coverage and tracker assemblies, so any change to Sift records again), the evaluation's recording
@@ -240,12 +243,18 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             int exitCode;
             using (var log = File.CreateText(logPath))
             {
-                exitCode = dotnet.Run(arguments, workspace.RepoRoot, new Dictionary<string, string>(), log);
+                exitCode = dotnet.Run(arguments, workspace.RepoRoot, new Dictionary<string, string>(), log, BuildTimeout);
             }
 
             if (exitCode == 0)
             {
                 built.Add(project);
+                continue;
+            }
+
+            if (exitCode == DotnetProcess.TimedOut)
+            {
+                LogBuildFailed(project.Path, $"did not build within {BuildTimeout.TotalMinutes:0} minutes");
                 continue;
             }
 

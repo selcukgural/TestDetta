@@ -33,12 +33,11 @@ Interim fixes that are safe for the common case; come back for the complete solu
   such an interface. Complete fix: treat assembly fixtures as a setup scope for the assembly, and
   credit code that runs before the first test of a class while a fixture type's constructor is on
   the stack to that fixture.
-- **Recording can hang on a lingering MSBuild node** (seen in Sift.Tests while the corpus ran:
-  the test host waited at 0 % CPU with no child process; `MSBUILDDISABLENODEREUSE=1` fixed it).
-  `sift record` and the evaluation build with node reuse on and read the child's output, which a
-  reused node or compiler server may keep open. Fix: pass `-nodeReuse:false` (and
-  `UseSharedCompilation=false` if needed) to the builds Sift starts, with a test that builds two
-  projects in parallel and must finish.
+- ~~Recording can hang on a lingering MSBuild node~~ (done, next commit). The cause was not node
+  reuse but how Sift waited: after dotnet exited, it waited for its output to close, and a child
+  left behind (MSBuild node, compiler server, a test's background process) kept it open. Sift now
+  waits for the process only and reads its output for 10 more seconds at most; node reuse stays on,
+  since it speeds builds up.
 - **Linked files whose path needs evaluation** (interim: ea5acb7; OpenTelemetry, 7 classes
   missed). `<Compile Include="$(RepoRoot)\test\OpenTelemetry.Tests\Metrics\MetricApiTests.cs" />`
   with `RepoRoot` from a property function now becomes a path pattern, and the project owns every
@@ -153,9 +152,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
      side-by-side without touching a live dotnet (2026-10-02 incident), an x64 runner for
      x64-only suites, no shared ports or global state between parallel jobs, NuGet cache warmed
      once, MSBuild node reuse off.
-   - **Watchdogs and clean failure**: per-mutant adaptive timeouts, the fast-failure guard of the
-     queue (3 quick failures stop a worker), a heartbeat that flags a run with no progress, and an
-     incident log.
+   - **Watchdogs and clean failure**: done for the evaluation: time limits on builds (30 min), test
+     runs (adaptive, scaled with parallel mutants), recording, and each analysis (bb5b676, reports a
+     hang in Sift); no wait on a child's output (next commit); the queue's fast-failure guard. Still:
+     a heartbeat over the queue and an incident log, with the runner work below.
    - **Dashboard**: per repository and Sift commit, misses, selection share, precision, run time
      and what was reused, so trends and regressions are visible at a glance.
 
