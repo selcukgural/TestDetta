@@ -62,7 +62,6 @@ internal static class TargetSampler
     public static List<SyntheticTarget> Sample(ProjectGraph graph, string repoRoot, IReadOnlySet<CoveredMethod> covered, SampleRequest request)
     {
         var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue));
-        var random = new Random(request.Seed);
         MutantKind[] methodKinds = [.. request.Kinds.Where(static k => k != MutantKind.FieldValue).Order()];
         var coveredPool = new List<SyntheticTarget>();
         var otherPool = new List<SyntheticTarget>();
@@ -82,20 +81,38 @@ internal static class TargetSampler
             }
 
             // A field is covered when the constructor that sets it ran.
-            var kind = isField ? MutantKind.FieldValue : methodKinds[random.Next(methodKinds.Length)];
+            var kind = isField ? MutantKind.FieldValue : methodKinds[(int)(StableKey(member, request.Seed, "kind") % (ulong)methodKinds.Length)];
             var isCovered = covered.Contains(isField ? new CoveredMethod(member.TypeName, ".cctor") : member)
                             || (isField && covered.Contains(new CoveredMethod(member.TypeName, ".ctor")));
             var target = new SyntheticTarget(member, edits, isCovered) { Kind = kind };
             (target.Covered ? coveredPool : otherPool).Add(target);
         }
 
-        random.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(coveredPool));
-        random.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(otherPool));
+        // Each member's place and kind come from a hash of the member and the seed, not from a shared
+        // random sequence: adding or dropping one candidate (a fix to Sift's project graph) then
+        // leaves every other pick and kind as it was, and stored test outcomes stay usable.
+        coveredPool.Sort((a, b) => StableKey(a.Member, request.Seed, "order").CompareTo(StableKey(b.Member, request.Seed, "order")));
+        otherPool.Sort((a, b) => StableKey(a.Member, request.Seed, "order").CompareTo(StableKey(b.Member, request.Seed, "order")));
 
         var fromCovered = Math.Min(coveredPool.Count, (int)Math.Round(request.Count * request.CoveredShare));
         var fromOther = Math.Min(otherPool.Count, request.Count - fromCovered);
         fromCovered = Math.Min(coveredPool.Count, request.Count - fromOther);
         return [.. coveredPool.Take(fromCovered), .. otherPool.Take(fromOther)];
+    }
+
+    /// <summary>A 64-bit FNV-1a hash of the member, the seed and a purpose, the same on every run and machine.</summary>
+    /// <param name="member">Sampled member.</param>
+    /// <param name="seed">Sample seed.</param>
+    /// <param name="purpose">What the key decides, so order and kind are independent.</param>
+    private static ulong StableKey(CoveredMethod member, int seed, string purpose)
+    {
+        var hash = 14695981039346656037UL;
+        foreach (var c in $"{purpose}|{seed}|{member.TypeName}|{member.MemberName}")
+        {
+            hash = (hash ^ c) * 1099511628211UL;
+        }
+
+        return hash;
     }
 
     /// <summary>

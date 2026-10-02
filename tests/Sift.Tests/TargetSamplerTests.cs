@@ -42,5 +42,28 @@ public sealed class TargetSamplerTests : IDisposable
         Assert.All(targets, static t => Assert.NotEmpty(t.Edits));
     }
 
+    [Fact]
+    public void Adding_a_member_changes_at_most_one_pick_of_the_sample()
+    {
+        // A fix to Sift's project graph can add or drop a candidate; the outcome cache only pays off
+        // when the other mutants of the commit stay the same, kinds included.
+        var members = string.Join("\n", Enumerable.Range(0, 40).Select(static i => $"    public static int M{i:00}(int x) => x + {i};"));
+        _repo.Write("src/Lib/Many.cs", $"namespace Lib;\npublic static class Many\n{{\n{members}\n}}\n");
+        var kinds = new HashSet<MutantKind> { MutantKind.Throw, MutantKind.ReturnDefault, MutantKind.FlipBranch };
+        var request = new SampleRequest(10, Seed: 7) { Kinds = kinds };
+
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var before = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), request)
+            .Select(static t => $"{t.Member.MemberName}:{t.Kind}").ToHashSet(StringComparer.Ordinal);
+
+        _repo.Write("src/Lib/Extra.cs", "namespace Lib;\npublic static class AAExtra { public static int First(int x) => x - 1; }\n");
+        graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var after = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), request)
+            .Select(static t => $"{t.Member.MemberName}:{t.Kind}").ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(10, before.Count);
+        Assert.True(before.Intersect(after).Count() >= 9, $"before: {string.Join(", ", before)}; after: {string.Join(", ", after)}");
+    }
+
     public void Dispose() => _repo.Dispose();
 }

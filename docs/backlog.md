@@ -15,12 +15,9 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
-- **Stable mutant sample across Sift versions.** The outcome cache (f12e713) keys outcomes by
-  mutant, but `TargetSampler` samples from candidates that depend on Sift's project graph and the
-  recorded maps, so a graph fix (ea5acb7) changed OpenTelemetry's whole sample and nothing was
-  reused. Sample from what does not depend on Sift (members of the repository's compiled
-  assemblies, or source files in a fixed order, filtered by coverage only at the end), so a commit
-  keeps its mutants and results stay comparable between Sift versions.
+- ~~Stable mutant sample across Sift versions~~ (done, next commit): each candidate's place and
+  kind come from a hash of the member and the seed, so adding or dropping a candidate (a graph
+  fix) changes at most that pick and stored outcomes stay usable. Samples differ from round 1's.
 - **x64-only test projects are left out on Apple silicon** (Vogen's SnapshotTests: "Could not find
   'dotnet' host for the 'X64' architecture"). The evaluation now leaves out a project whose run
   without mutants aborted before running a test, instead of counting every later abort as a mutant
@@ -149,7 +146,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
      run at once in separate test processes on the same binaries.
    - **Parallel mutants**: with schemata (or per-worker copies of the test outputs), run N mutants
      concurrently on one repository instead of one repository per worker.
-   - **Stable sample + outcome cache** (cache shipped in f12e713; stable sample in "Now"): a Sift
+   - **Stable sample + outcome cache** (cache f12e713, stable sample done): a Sift
      change re-evaluates a repository by recording and computing selections only.
    - **Cache recordings and baselines** per commit and instrumenter version, so a selection-only
      change does not even re-record.
