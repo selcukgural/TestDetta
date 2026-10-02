@@ -80,7 +80,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             // Each worker runs in its own copy of the clone; a mutant takes a free one for all its runs.
             var free = new System.Collections.Concurrent.ConcurrentBag<TestExecutor>(
-                copies?.Roots.Select(workspace.Executor.In) ?? [workspace.Executor]);
+                copies is null ? [workspace.Executor] : Executors(copies));
             var results = new SyntheticMutant?[targets.Count];
             var gate = new object();
             Parallel.For(0, targets.Count, new ParallelOptions { MaxDegreeOfParallelism = parallelism }, i =>
@@ -212,7 +212,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             return (1, null);
         }
 
-        var executors = copies.Roots.Select(workspace.Executor.In).ToList();
+        var executors = Executors(copies);
         var checks = new TestRunOutcome[wanted];
         workspace.Executor.Concurrency = wanted;
         Parallel.For(0, wanted, new ParallelOptions { MaxDegreeOfParallelism = wanted }, i =>
@@ -230,6 +230,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         copies.Dispose();
         return (1, null);
     }
+
+    /// <summary>One executor per worker, each in its copy of the clone with its own temporary directory.</summary>
+    /// <param name="copies">The workers' copies.</param>
+    private List<TestExecutor> Executors(WorkerCopies copies) =>
+        [.. copies.Roots.Select((root, i) => workspace.Executor.In(root, copies.Environment(i)))];
 
     /// <summary>
     /// The mutant the tests run against: switched on through the environment when the commit has a

@@ -80,11 +80,15 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// output directories are shared, so log names stay unique and a hang is judged the same everywhere.
     /// </summary>
     /// <param name="root">Root of the copy.</param>
-    public TestExecutor In(string root)
+    /// <param name="environment">Environment every process of the copy gets, such as its own temporary directory.</param>
+    public TestExecutor In(string root, IReadOnlyDictionary<string, string> environment)
     {
         _state.Clone ??= context.RepoRoot;
-        return new TestExecutor(context with { RepoRoot = root }, logger) { _state = _state, Outputs = Outputs };
+        return new TestExecutor(context with { RepoRoot = root }, logger) { _state = _state, Outputs = Outputs, _environment = environment };
     }
+
+    /// <summary>Environment every process of this executor gets, before a run's own variables; see <see cref="In"/>.</summary>
+    private IReadOnlyDictionary<string, string> _environment = new Dictionary<string, string>();
 
     /// <summary>Runs every test of <paramref name="projects"/>, one project after another.</summary>
     /// <param name="projects">Test projects.</param>
@@ -124,7 +128,12 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// <param name="environment">Extra environment variables of the test processes; null for none.</param>
     private TestRunOutcome Run(List<(ProjectNode Project, List<string> Arguments)> runs, string label, IReadOnlyDictionary<string, string>? environment)
     {
-        Dictionary<string, string> variables = environment is null ? [] : new(environment);
+        Dictionary<string, string> variables = new(_environment);
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            variables[name] = value;
+        }
+
         var stopwatch = Stopwatch.StartNew();
         var total = 0;
         var unreported = new HashSet<string>(Paths.Comparer);

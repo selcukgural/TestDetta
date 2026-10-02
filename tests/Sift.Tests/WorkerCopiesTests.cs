@@ -20,6 +20,7 @@ public sealed class WorkerCopiesTests : IDisposable
         File.CreateSymbolicLink(Path.Combine(Clone, "link.dll"), "bin/Tests.dll");
 
         string[] roots;
+        string[] temporary;
         using (var copies = WorkerCopies.Create(Clone, 3, [Path.Combine(Clone, "bin")], NullLogger.Instance))
         {
             Assert.NotNull(copies);
@@ -31,6 +32,12 @@ public sealed class WorkerCopiesTests : IDisposable
                 Assert.Equal("bin/Tests.dll", new FileInfo(Path.Combine(copy, "link.dll")).LinkTarget);
             }
 
+            // Every worker has its own temporary directory, the clone's included.
+            temporary = [.. copies.Temporary];
+            Assert.Equal(3, temporary.Distinct().Count());
+            Assert.All(temporary, static t => Assert.True(Directory.Exists(t)));
+            Assert.Equal(temporary[1] + Path.DirectorySeparatorChar, copies.Environment(1)["TMPDIR"]);
+
             // A write in one copy stays there.
             File.WriteAllText(Path.Combine(roots[1], "bin", "Tests.dll"), "changed");
             Assert.Equal("binary", File.ReadAllText(Path.Combine(Clone, "bin", "Tests.dll")));
@@ -38,6 +45,7 @@ public sealed class WorkerCopiesTests : IDisposable
 
         Assert.True(Directory.Exists(Clone));
         Assert.All(roots.Skip(1), static copy => Assert.False(Directory.Exists(copy)));
+        Assert.All(temporary, static t => Assert.False(Directory.Exists(t)));
     }
 
     [Fact]

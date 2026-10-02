@@ -10,14 +10,15 @@ namespace Sift.Eval;
 /// at once removed it under each other (2026-10-02). A check run cannot prove that no such race
 /// exists, since it shows up only sometimes; separate copies rule it out. Worker 0 uses the clone
 /// itself. The copies are made after the schema is written in, so they hold the same binaries, and
-/// are deleted on disposal.
+/// are deleted on disposal. Every worker also gets its own temporary directory, since many suites
+/// write fixed names under the system's one.
 /// </summary>
 internal sealed partial class WorkerCopies : IDisposable
 {
     /// <summary>Longest a copy may take; a full copy of a large clone on a disk without copy-on-write takes minutes.</summary>
     private static readonly TimeSpan CopyTimeout = TimeSpan.FromMinutes(30);
 
-    /// <summary>The copies, without the clone itself.</summary>
+    /// <summary>The copies, without the clone itself, and the temporary directories; all deleted on disposal.</summary>
     private readonly List<string> _copies;
 
     /// <summary>Receives the copies made and removed.</summary>
@@ -25,17 +26,35 @@ internal sealed partial class WorkerCopies : IDisposable
 
     /// <summary>Takes ownership of made copies.</summary>
     /// <param name="roots">Root of each worker; the first is the clone.</param>
-    /// <param name="copies">The copies among them.</param>
+    /// <param name="temporary">Temporary directory of each worker.</param>
+    /// <param name="copies">Directories to delete on disposal, filled while they are made.</param>
     /// <param name="logger">Receives removal failures.</param>
-    private WorkerCopies(IReadOnlyList<string> roots, List<string> copies, ILogger logger)
+    private WorkerCopies(IReadOnlyList<string> roots, IReadOnlyList<string> temporary, List<string> copies, ILogger logger)
     {
         Roots = roots;
+        Temporary = temporary;
         _copies = copies;
         _logger = logger;
     }
 
     /// <summary>Root directory of each worker; the first is the clone itself.</summary>
     public IReadOnlyList<string> Roots { get; }
+
+    /// <summary>
+    /// Temporary directory of each worker, in the order of <see cref="Roots"/>. Short paths under
+    /// <c>/tmp</c> on Unix: .NET puts Unix domain sockets (named pipes of MSBuild and the test
+    /// platform) there, and a socket path may not exceed 104 bytes on macOS.
+    /// </summary>
+    public IReadOnlyList<string> Temporary { get; }
+
+    /// <summary>Environment of worker <paramref name="index"/>'s processes: its temporary directory.</summary>
+    /// <param name="index">Position in <see cref="Roots"/>.</param>
+    public IReadOnlyDictionary<string, string> Environment(int index) => new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["TMPDIR"] = Temporary[index] + Path.DirectorySeparatorChar,
+        ["TMP"] = Temporary[index],
+        ["TEMP"] = Temporary[index],
+    };
 
     /// <summary>
     /// Makes <paramref name="workers"/> - 1 copies of <paramref name="repoRoot"/> next to it, or returns
@@ -56,9 +75,21 @@ internal sealed partial class WorkerCopies : IDisposable
         }
 
         var copies = new List<string>();
-        var made = new WorkerCopies([repoRoot, .. Enumerable.Range(2, workers - 1).Select(k => $"{root}.worker-{k}")], copies, logger);
+        var temporaryRoot = OperatingSystem.IsWindows() ? Path.GetTempPath() : "/tmp";
+        var made = new WorkerCopies(
+            [repoRoot, .. Enumerable.Range(2, workers - 1).Select(k => $"{root}.worker-{k}")],
+            [.. Enumerable.Range(1, workers).Select(k => Path.Combine(temporaryRoot, $"sift-{System.Environment.ProcessId}-w{k}"))],
+            copies,
+            logger);
         try
         {
+            foreach (var temporary in made.Temporary)
+            {
+                Remove(temporary);
+                copies.Add(temporary);
+                Directory.CreateDirectory(temporary);
+            }
+
             foreach (var copy in made.Roots.Skip(1))
             {
                 // A killed evaluation leaves its copies behind; an old copy would mix in stale files.

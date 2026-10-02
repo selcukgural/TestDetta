@@ -29,10 +29,12 @@ public sealed class EvalParallelMutantsTests : IDisposable
         Assert.Equal(sequential.Results, parallel.Results);
     }
 
-    [Fact]
-    public void Tests_claiming_a_file_in_the_repository_run_apart_in_worker_copies()
+    [Theory]
+    [InlineData(SharedFile.InRepository)]
+    [InlineData(SharedFile.InTemporaryDirectory)]
+    public void Tests_claiming_a_fixed_file_run_apart_in_worker_copies(SharedFile sharedFile)
     {
-        WriteRepository(SharedFile.InRepository);
+        WriteRepository(sharedFile);
 
         var sequential = Evaluate(Path.Combine(_root, "one"), parallelism: 1);
         var parallel = Evaluate(Path.Combine(_root, "three"), parallelism: 3);
@@ -62,7 +64,10 @@ public sealed class EvalParallelMutantsTests : IDisposable
         /// <summary>Next to the test binaries, inside the repository.</summary>
         InRepository,
 
-        /// <summary>In the temporary directory, which every copy of the repository shares.</summary>
+        /// <summary>In the system's temporary directory, which each worker gets its own of.</summary>
+        InTemporaryDirectory,
+
+        /// <summary>In a fixed directory outside the repository, which every worker shares.</summary>
         OutsideRepository,
     }
 
@@ -70,9 +75,12 @@ public sealed class EvalParallelMutantsTests : IDisposable
     /// <param name="sharedFile">Where that class's file is.</param>
     private void WriteRepository(SharedFile sharedFile)
     {
-        var lockDirectory = sharedFile == SharedFile.OutsideRepository
-            ? $"\"{_root.Replace("\\", "\\\\", StringComparison.Ordinal)}\""
-            : "System.AppContext.BaseDirectory";
+        var lockDirectory = sharedFile switch
+        {
+            SharedFile.OutsideRepository => $"\"{_root.Replace("\\", "\\\\", StringComparison.Ordinal)}\"",
+            SharedFile.InTemporaryDirectory => "System.IO.Path.GetTempPath()",
+            _ => "System.AppContext.BaseDirectory",
+        };
         Directory.CreateDirectory(_root);
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write(".gitignore", "bin/\nobj/\n.sift/\n");
