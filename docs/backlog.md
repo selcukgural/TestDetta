@@ -21,7 +21,10 @@ that report numbers (value reporting) only once the numbers are proven right.
 - **x64-only test projects are left out on Apple silicon** (Vogen's SnapshotTests: "Could not find
   'dotnet' host for the 'X64' architecture"). The evaluation now leaves out a project whose run
   without mutants aborted before running a test, instead of counting every later abort as a mutant
-  caught by a crash. Evaluate such repositories once on an x64 runner (CI) to cover them.
+  caught by a crash. A corpus toolchain with `architecture: x64` now runs such suites under Rosetta
+  (checked 2026-10-02: Vogen's SnapshotTests start and run). Vogen still gives no data: 744 of 749
+  snapshots fail without any mutant, since they expect the Vogen package its build script packs
+  locally (version 1.0.0, other formatting); its setup command would have to run that script.
 
 Interim fixes that are safe for the common case; come back for the complete solution.
 
