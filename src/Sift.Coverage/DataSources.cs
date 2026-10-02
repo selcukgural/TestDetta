@@ -17,8 +17,8 @@ namespace Sift.Coverage;
 /// <para>
 /// The marker is not undone when the member returns: rows built lazily (LINQ, iterators) are
 /// produced after it, and the framework creates the class right afterwards anyway. A test that
-/// calls another class's data member itself would credit the rest of its code to that class; that
-/// is rare, and the trade keeps the common case exact.
+/// calls another class's data member itself keeps its bucket: the tracker sees the test's frame
+/// below the data member and does not switch (<c>SiftTracker.CalledFromRunningTest</c>).
 /// </para>
 /// </remarks>
 internal static class DataSources

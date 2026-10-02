@@ -75,21 +75,15 @@ Interim fixes that are safe for the common case; come back for the complete solu
   reads of fields that are written once, crediting the code that built the value to every bucket
   that reads it, or an IL pattern match of null check → store. Red test: an instance method
   reached only from a `??=` builder on a shared instance, used by three classes in two processes.
-- **Helpers of another test class** (interim: 00668d2; OpenTelemetry, 1 class missed). A static
-  method of a test class counted as its entry point whenever it had any attribute, and the
-  compiler adds nullable metadata to ordinary helpers, so a test calling another class's helper
-  (SpanBuilderShimTests → SpanContextShimTests.GetSpanContextShim) credited everything after the
-  call to that class. Compiler and analyzer attributes no longer count. Still: a helper with a real
-  test attribute, or an instance of another test class created by hand, switches the bucket.
-  Complete fix: same as the item below (credit the bucket that was current, and do not switch
-  buckets inside a running test for anything but the framework's own entry points).
-- **Test data credited to both buckets** (interim: 7c33ec6). A data member enters the class that
-  uses it and the marker is not undone on return, so lazily built rows stay with that class. A
-  test that calls another class's data member directly therefore credits the rest of its own code
-  to that class: a possible miss. Complete fix: while data code runs, and until the next class or
-  fixture is entered, credit hits to both the data's class and the bucket that was current
-  before. Measure the cost on the hit path first (one extra field read per hit) and add a test
-  where a test calls another class's data member.
+- ~~Helpers of another test class~~ and ~~test data credited to both buckets~~: done. An entry point
+  of another class (constructor, attributed helper, data member) called while a test of the current
+  class runs no longer switches the bucket: the tracker reads the stack when a switch would happen
+  (never on the hit path) and keeps the bucket when a frame of the running class (its methods,
+  lambdas, iterators, async state machines) lies below the entry point before any test-framework
+  frame. Frames of the entry point's own class are skipped, so a data member declared on the
+  running class but used by another still switches when the framework calls it. Still the old
+  behaviour, which switches: calls from test methods declared on a base class of the running
+  class (frames of the base type), and between classes nested in one outer class.
 - **Startup time vs. discovery-time data** (interim: 7c33ec6). Theory data enumerated during
   discovery now ends the recorded startup time early and adds discovery time to the first data
   class. Complete fix: count time spent in data members during discovery as startup (it is paid

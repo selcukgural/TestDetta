@@ -177,19 +177,142 @@ public static class SiftTracker
     /// inherited tests count for the derived class that runs them.
     /// </summary>
     /// <param name="instance">The test class instance (<c>this</c>).</param>
-    public static void EnterTestInstance(object instance) => EnterTestClass(RuntimeName(instance.GetType()));
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static void EnterTestInstance(object instance) => EnterClass(RuntimeName(instance.GetType()));
 
     /// <summary>Makes <paramref name="testClass"/> the current bucket.</summary>
     /// <param name="testClass">Runtime class name, nested classes joined with '+'.</param>
-    public static void EnterTestClass(string testClass) => Enter(Classes, testClass, isFixture: false);
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static void EnterTestClass(string testClass) => EnterClass(testClass);
+
+    /// <summary>
+    /// Makes <paramref name="testClass"/> the current bucket, unless a test of the current class is
+    /// running and calls into it: a test that creates another test class's instance, calls its
+    /// attributed helper or its data member. The code that test runs afterwards is still its own, and
+    /// crediting it to the other class would hide it from the calling class's map.
+    /// </summary>
+    /// <param name="testClass">Runtime class name, nested classes joined with '+'.</param>
+    private static void EnterClass(string testClass)
+    {
+        if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
+            && !string.Equals(current.Name, testClass, StringComparison.Ordinal)
+            && CalledFromRunningTest(current.Name, testClass))
+        {
+            return;
+        }
+
+        Enter(Classes, testClass, isFixture: false);
+    }
+
+    /// <summary>
+    /// True when the entry point being entered was called by code of the test class
+    /// <paramref name="running"/> (its methods, lambdas, iterators, async state machines), not by the
+    /// test framework. The stack is read from the entry point down: frames of Sift, of the class being
+    /// entered and of the class declaring the entry point are skipped (a data member declared on the
+    /// running class but used by another is called by the framework for that other class), a frame of
+    /// the running class means a call from its test, and a frame
+    /// of a test framework means the framework started the entry point, as it does for every test
+    /// (also when it runs on inline from the end of the previous class's async test, whose frames are
+    /// then further down). Only read when the bucket would change, never on the hit path.
+    /// </summary>
+    /// <param name="running">Name of the current class bucket.</param>
+    /// <param name="entered">Name of the class being entered; null when entering code outside every class.</param>
+    internal static bool CalledFromRunningTest(string running, string? entered)
+    {
+        var frames = new StackTrace(1, fNeedFileInfo: false).GetFrames();
+        string? entryPoint = null;
+        foreach (var frame in frames)
+        {
+            var type = frame.GetMethod()?.DeclaringType;
+            if (type is null || type == typeof(SiftTracker))
+            {
+                continue;
+            }
+
+            entryPoint ??= RuntimeName(Outermost(type));
+            if (IsOrIsNestedIn(type, entryPoint) || entered is not null && IsOrIsNestedIn(type, entered))
+            {
+                continue;
+            }
+
+            if (IsOrIsNestedIn(type, running))
+            {
+                return true;
+            }
+
+            if (IsTestFramework(type.Assembly))
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The top-level type <paramref name="type"/> is nested in, or itself.</summary>
+    /// <param name="type">A type.</param>
+    private static Type Outermost(Type type)
+    {
+        var outer = type;
+        while (outer.DeclaringType is { } declaring)
+        {
+            outer = declaring;
+        }
+
+        return outer;
+    }
+
+    /// <summary>True when <paramref name="type"/> or a type it is nested in has the runtime name <paramref name="name"/>.</summary>
+    /// <param name="type">Declaring type of a stack frame.</param>
+    /// <param name="name">Runtime class name.</param>
+    private static bool IsOrIsNestedIn(Type type, string name)
+    {
+        for (var t = type; t is not null; t = t.DeclaringType)
+        {
+            if (string.Equals(RuntimeName(t), name, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Assembly name prefixes of test frameworks and platforms, whose frames start tests.</summary>
+    private static readonly string[] TestFrameworkPrefixes =
+        ["xunit", "nunit", "MSTest", "Microsoft.VisualStudio.TestPlatform", "Microsoft.VisualStudio.TestTools", "Microsoft.TestPlatform", "Microsoft.Testing", "TUnit", "testhost"];
+
+    /// <summary>True for an assembly of a test framework or test platform.</summary>
+    /// <param name="assembly">Assembly of a stack frame.</param>
+    private static bool IsTestFramework(System.Reflection.Assembly assembly)
+    {
+        var name = assembly.GetName().Name ?? string.Empty;
+        foreach (var prefix in TestFrameworkPrefixes)
+        {
+            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Makes code outside every test the current bucket. Called at the start of a test data source
     /// that several test classes use: its rows serve all of them, so the map must not credit them to
     /// one, and code that ran outside every test is answered by the safe fallback rules instead.
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     public static void EnterAmbient()
     {
+        // A test that calls a shared data member itself keeps its own bucket, as for any entry point.
+        if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
+            && CalledFromRunningTest(current.Name, entered: null))
+        {
+            return;
+        }
+
         _cacheDepth = 0;
         _typeInitializerDepth = 0;
         Current.Value = Startup;
