@@ -178,7 +178,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterSetUpScope))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterDataSource))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Read))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Stored))!));
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Stored))!))
+        {
+            EnterTestCode = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestCode))!),
+            ExitTestCode = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTestCode))!),
+            ExitTestCodeWhenComplete = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTestCodeWhenComplete))!),
+            PrepareTestInstance = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.PrepareTestInstance))!),
+        };
         var tracked = new Dictionary<FieldDefinition, int>();
         foreach (var field in TrackedFields(module))
         {
@@ -254,7 +260,20 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         MethodReference EnterSetUpScope,
         MethodReference EnterDataSource,
         MethodReference Read,
-        MethodReference Stored);
+        MethodReference Stored)
+    {
+        /// <summary><see cref="SiftTracker.EnterTestCode"/>.</summary>
+        public required MethodReference EnterTestCode { get; init; }
+
+        /// <summary><see cref="SiftTracker.ExitTestCode"/>.</summary>
+        public required MethodReference ExitTestCode { get; init; }
+
+        /// <summary><see cref="SiftTracker.ExitTestCodeWhenComplete"/>.</summary>
+        public required MethodReference ExitTestCodeWhenComplete { get; init; }
+
+        /// <summary><see cref="SiftTracker.PrepareTestInstance"/>.</summary>
+        public required MethodReference PrepareTestInstance { get; init; }
+    }
 
     /// <summary>
     /// Fields whose value may be built once and read by many tests: reference-typed (or generic)
@@ -475,6 +494,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTypeInitializer));
         }
 
+        // Before the hit, so the entry point's own hit already counts as test code.
+        var testCodeEnd = site.Marker == Marker.TestClass && !isTypeInitializer ? EndOf(method) : (TestCodeEnd?)null;
+        if (testCodeEnd is { } beginning)
+        {
+            il.InsertBefore(first, il.Create(OpCodes.Call, beginning == TestCodeEnd.Unseen ? probes.PrepareTestInstance : probes.EnterTestCode));
+        }
+
         il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, site.Id));
         il.InsertBefore(first, il.Create(OpCodes.Call, probes.Hit));
 
@@ -484,7 +510,112 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType));
+        if (testCodeEnd is TestCodeEnd.Return or TestCodeEnd.Task)
+        {
+            TrackTestCode(method, il, probes, first);
+        }
+
         body.OptimizeMacros();
+    }
+
+    /// <summary>How the end of a test-class entry point is seen.</summary>
+    private enum TestCodeEnd
+    {
+        /// <summary>When the method returns or throws (<c>finally</c>).</summary>
+        Return,
+
+        /// <summary>When the returned task completes; a throw before that ends it at once (<c>fault</c>).</summary>
+        Task,
+
+        /// <summary>
+        /// Not at all: a constructor (its test method follows), or a method returning <c>ValueTask</c>,
+        /// which may be awaited only once, or <c>async void</c>. The tracker counts test code as being
+        /// prepared until the next tracked end.
+        /// </summary>
+        Unseen,
+    }
+
+    /// <summary>When the test code that <paramref name="method"/>, a test-class entry point, runs ends.</summary>
+    /// <param name="method">Entry point.</param>
+    private static TestCodeEnd EndOf(MethodDefinition method)
+    {
+        var returns = method.ReturnType;
+        var name = returns is GenericInstanceType generic ? generic.ElementType.Name : returns.Name;
+        if (method.IsConstructor || returns.Namespace == "System.Threading.Tasks" && name is "ValueTask" or "ValueTask`1")
+        {
+            return TestCodeEnd.Unseen;
+        }
+
+        if (returns.Namespace == "System.Threading.Tasks" && name is "Task" or "Task`1")
+        {
+            return TestCodeEnd.Task;
+        }
+
+        var isAsync = method.CustomAttributes.Any(static a => a.AttributeType.FullName == "System.Runtime.CompilerServices.AsyncStateMachineAttribute");
+        return isAsync && returns.MetadataType == MetadataType.Void ? TestCodeEnd.Unseen : TestCodeEnd.Return;
+    }
+
+    /// <summary>
+    /// Lets the tracker see when the test code an entry point runs ends, so code the framework runs
+    /// between tests is told apart (docs/design/between-tests-code.md): after <see cref="SiftTracker.EnterTestCode"/>,
+    /// inserted with the other probes, the original body goes into a <c>try</c> whose <c>finally</c> (or, for a returned
+    /// task, <c>fault</c>) calls <see cref="SiftTracker.ExitTestCode"/>; every <c>ret</c> becomes a
+    /// <c>leave</c> to a new return after the handler, keeping the value in a local. A returned task
+    /// is handed to <see cref="SiftTracker.ExitTestCodeWhenComplete"/> before leaving.
+    /// </summary>
+    /// <param name="method">Test-class entry point whose end can be seen, probes inserted, short branches expanded.</param>
+    /// <param name="il">Processor of the body.</param>
+    /// <param name="probes">Tracker references.</param>
+    /// <param name="first">First instruction of the original body: the start of the protected region.</param>
+    private static void TrackTestCode(MethodDefinition method, ILProcessor il, Probes probes, Instruction first)
+    {
+        var end = EndOf(method);
+        var body = method.Body;
+        VariableDefinition? result = null;
+        if (method.ReturnType.MetadataType != MetadataType.Void)
+        {
+            result = new VariableDefinition(method.ReturnType);
+            body.Variables.Add(result);
+            body.InitLocals = true;
+        }
+
+        var exit = result is null ? il.Create(OpCodes.Ret) : il.Create(OpCodes.Ldloc, result);
+        foreach (var ret in body.Instructions.Where(static i => i.OpCode == OpCodes.Ret).ToList())
+        {
+            if (result is not null)
+            {
+                var store = il.Create(OpCodes.Stloc, result);
+                il.InsertBefore(ret, store);
+                if (end == TestCodeEnd.Task)
+                {
+                    il.InsertBefore(ret, il.Create(OpCodes.Ldloc, result));
+                    il.InsertBefore(ret, il.Create(OpCodes.Call, probes.ExitTestCodeWhenComplete));
+                }
+
+                Retarget(body, ret, store);
+            }
+
+            // In place: handler boundaries that named the instruction after a region stay valid.
+            ret.OpCode = OpCodes.Leave;
+            ret.Operand = exit;
+        }
+
+        var handler = il.Create(OpCodes.Call, probes.ExitTestCode);
+        il.Append(handler);
+        il.Append(il.Create(OpCodes.Endfinally));
+        il.Append(exit);
+        if (result is not null)
+        {
+            il.Append(il.Create(OpCodes.Ret));
+        }
+
+        body.ExceptionHandlers.Add(new ExceptionHandler(end == TestCodeEnd.Task ? ExceptionHandlerType.Fault : ExceptionHandlerType.Finally)
+        {
+            TryStart = first,
+            TryEnd = handler,
+            HandlerStart = handler,
+            HandlerEnd = exit,
+        });
     }
 
     /// <summary>

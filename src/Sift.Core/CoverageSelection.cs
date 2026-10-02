@@ -198,6 +198,14 @@ internal sealed class CoverageSelection
             return false;
         }
 
+        // An instance serves more classes than the one that built it: a singleton a DI container builds
+        // once, between tests or before them, and hands to every class (docs/design/between-tests-code.md).
+        // Every class that ran a member of the type used an instance some constructor built.
+        if (change.MemberName?.StartsWith(".ctor", StringComparison.Ordinal) == true)
+        {
+            SelectAll(Answers(change with { MemberName = null }, owner).Answers);
+        }
+
         if (!IsAnswerable(change))
         {
             return false;

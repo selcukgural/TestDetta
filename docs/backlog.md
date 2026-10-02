@@ -32,9 +32,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `IClassFixture<T>`/`ICollectionFixture<T>`/`IAssemblyFixture<T>` implemented by a base class,
   also in another library, with the fixture as a generic argument (FastEndpoints.Testing's
   `TestBase<TAppFixture>`) now marks the fixture; xUnit v3 assembly fixtures are an assembly setup
-  scope (see below). Still not exact: objects a DI-based extension (Xunit.DependencyInjection and
-  the like) builds once and injects through constructor parameters, usually typed as interfaces;
-  their construction runs between tests and counts for the class that ran last. Analysis
+  scope (see below). ~~Still not exact: objects a DI-based extension (Xunit.DependencyInjection and
+  the like) builds once and injects through constructor parameters~~ (done 2026-10-02,
+  docs/design/between-tests-code.md: code between tests goes to the next class and is run-once
+  evidence; a constructor change selects every user of the type). Analysis
   (2026-10-02): treating test-class constructor parameter types as fixtures adds nothing for xUnit
   (its only concrete parameters are fixtures already found) and misses the interface case; the
   complete fix needs to know when the framework is between tests (exit probes on test methods, or

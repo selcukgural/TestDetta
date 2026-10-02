@@ -101,6 +101,25 @@ public static class SiftTracker
     private static readonly ulong[] InitializationBits = new ulong[Words];
 
     /// <summary>
+    /// Methods that ran between tests since the last class was entered: no test code was running, so
+    /// the framework ran them, mostly to build what the next test class gets injected. Added to the
+    /// next class entered (docs/design/between-tests-code.md).
+    /// </summary>
+    private static readonly ulong[] BetweenBits = new ulong[Words];
+
+    /// <summary>True when <see cref="BetweenBits"/> may have bits set; spares every test entry a scan of the set.</summary>
+    private static bool _hasBetween;
+
+    /// <summary>How many calls of tracked test code (test methods, lifecycle methods) are running, on any thread.</summary>
+    private static int _testCodeDepth;
+
+    /// <summary>
+    /// True from a test class constructor (or a test-class entry point whose end cannot be seen) until
+    /// the next tracked test code exits: the instance is being prepared for its test.
+    /// </summary>
+    private static bool _instancePending;
+
+    /// <summary>
     /// How many type initializers are running on this thread: a static constructor may trigger
     /// another. Only type initializers of instrumented assemblies are counted.
     /// </summary>
@@ -147,7 +166,14 @@ public static class SiftTracker
             Mark(InitializationBits, word, bit);
         }
 
-        Mark(BucketForHit().Bits, word, bit);
+        var bucket = BucketForHit();
+        Mark(bucket.Bits, word, bit);
+        if (IsBetweenTests(bucket))
+        {
+            MarkBetween(word, bit);
+            Mark(InitializationBits, word, bit);
+        }
+
         var recent = _recent ??= new int[RecentSize];
         recent[(int)(_recentCount++ & (RecentSize - 1))] = id;
     }
@@ -160,8 +186,82 @@ public static class SiftTracker
     public static void Read(int field)
     {
         var id = MethodCount + field;
-        Mark(BucketForHit().Bits, id >> 6, 1UL << (id & 63));
+        var bucket = BucketForHit();
+        Mark(bucket.Bits, id >> 6, 1UL << (id & 63));
+        if (IsBetweenTests(bucket))
+        {
+            MarkBetween(id >> 6, 1UL << (id & 63));
+        }
     }
+
+    /// <summary>
+    /// True when a hit for <paramref name="bucket"/> happens between tests: tests have started, the
+    /// hit would go to a test class, and no test code is running or being prepared. Suites recorded
+    /// with their own parallelism have no "between".
+    /// </summary>
+    /// <param name="bucket">Bucket the hit goes to.</param>
+    private static bool IsBetweenTests(Bucket bucket) =>
+        !ParallelFlows && _testsStarted && !bucket.IsFixture && !ReferenceEquals(bucket, Startup)
+        && Volatile.Read(ref _testCodeDepth) == 0 && !Volatile.Read(ref _instancePending);
+
+    /// <summary>Records a hit between tests for the next class entered.</summary>
+    /// <param name="word">Index of the 64-bit word.</param>
+    /// <param name="bit">Mask of the bit in the word.</param>
+    private static void MarkBetween(int word, ulong bit)
+    {
+        Mark(BetweenBits, word, bit);
+        if (!Volatile.Read(ref _hasBetween))
+        {
+            Volatile.Write(ref _hasBetween, true);
+        }
+    }
+
+    /// <summary>Called at the start of tracked test code, after its bucket marker; <see cref="ExitTestCode"/> ends it.</summary>
+    public static void EnterTestCode() => Interlocked.Increment(ref _testCodeDepth);
+
+    /// <summary>
+    /// Called when tracked test code ends, also by an exception (from a <c>finally</c>). When no test
+    /// code runs any more, the instance it ran on is done too.
+    /// </summary>
+    public static void ExitTestCode()
+    {
+        var depth = Interlocked.Decrement(ref _testCodeDepth);
+        if (depth > 0)
+        {
+            return;
+        }
+
+        if (depth < 0)
+        {
+            Interlocked.Exchange(ref _testCodeDepth, 0);
+        }
+
+        Volatile.Write(ref _instancePending, false);
+    }
+
+    /// <summary>
+    /// Called with the task an entry point returns: the test code ends when the task does, not when
+    /// the method returns at its first <c>await</c>. Registered before the framework awaits the task,
+    /// so the exit is counted before the framework moves on.
+    /// </summary>
+    /// <param name="task">Returned value; anything but an unfinished task ends the test code at once.</param>
+    public static void ExitTestCodeWhenComplete(object? task)
+    {
+        if (task is Task { IsCompleted: false } running)
+        {
+            running.ContinueWith(static _ => ExitTestCode(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return;
+        }
+
+        ExitTestCode();
+    }
+
+    /// <summary>
+    /// Called at the start of a test class constructor, and of an entry point whose end cannot be
+    /// seen (one returning <c>ValueTask</c>): test code is being prepared or runs until the next
+    /// tracked test code exits.
+    /// </summary>
+    public static void PrepareTestInstance() => Volatile.Write(ref _instancePending, true);
 
     /// <summary>
     /// Records what built the value just stored into tracked field <paramref name="field"/> by
@@ -301,7 +401,12 @@ public static class SiftTracker
     /// </summary>
     /// <param name="testClass">Runtime name of the class using the data.</param>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    public static void EnterDataSource(string testClass) => EnterClass(testClass, data: true);
+    public static void EnterDataSource(string testClass)
+    {
+        // The framework enumerates a class's data right before its tests; that is the class's code.
+        PrepareTestInstance();
+        EnterClass(testClass, data: true);
+    }
 
     /// <summary>
     /// Makes <paramref name="testClass"/> the current bucket, unless a test of the current class is
@@ -565,6 +670,7 @@ public static class SiftTracker
         if (Current.Value is { } current && ReferenceEquals(current, Volatile.Read(ref _lastEntered))
             && string.Equals(current.Name, name, StringComparison.Ordinal) && (_testsStarted || data))
         {
+            TakeBetweenTests(current);
             return;
         }
 
@@ -598,7 +704,34 @@ public static class SiftTracker
             Volatile.Write(ref _lastEntered, bucket);
         }
 
+        TakeBetweenTests(bucket);
         Current.Value = bucket;
+    }
+
+    /// <summary>
+    /// Adds what ran between tests since the last class was entered to <paramref name="bucket"/>, when
+    /// it is a test class: the framework built it for this class (an injected service, its data).
+    /// </summary>
+    /// <param name="bucket">Bucket being entered.</param>
+    private static void TakeBetweenTests(Bucket bucket)
+    {
+        if (bucket.IsFixture || ReferenceEquals(bucket, Startup) || !Volatile.Read(ref _hasBetween))
+        {
+            return;
+        }
+
+        lock (Gate)
+        {
+            Volatile.Write(ref _hasBetween, false);
+            for (var word = 0; word < BetweenBits.Length; word++)
+            {
+                var pending = Interlocked.Exchange(ref BetweenBits[word], 0);
+                if (pending != 0)
+                {
+                    Interlocked.Or(ref bucket.Bits[word], pending);
+                }
+            }
+        }
     }
 
     /// <summary>Name of a type as test platforms print it: nested types with '+', generic definitions without arguments.</summary>
