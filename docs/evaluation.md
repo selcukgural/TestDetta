@@ -10,8 +10,8 @@ macOS arm64, .NET SDK 10.0.401 (+ ASP.NET Core 8.0.31 for net8.0 suites). Durati
 with several repositories running at once and are noisy; selection shares and misses are not.
 
 **Headline: 41 repositories, 3 missed of 2941 failing mutants (95% upper bound of the miss rate
-0.26%); all three are first-day results from builds that predate the fixes, and two of them are
-verified fixed (see below).** Every miss found later was fixed with a test that fails without the
+0.26%); all three are first-day results from builds that predate the fixes, and all three are
+verified fixed on fresh recordings (see below).** Every miss found later was fixed with a test that fails without the
 fix, and its repository rerun until clean. Refit was added after round 1.
 
 | Repository | Failing mutants | Missed | Selected (mean share) | Precision (median classes run per failing class) |
@@ -75,7 +75,10 @@ added after round 1 (first TUnit suite).
   with the current Sift (2026-10-02):
   - NodaTime: all 7 classes are selected (the test project runs whole).
   - FluentValidation: all 4 are selected.
-  - CommunityToolkit: is checked on round 2's recording, since its suite takes about 20 minutes.
+  - CommunityToolkit: all 3 projects select the class, by coverage. It was a real dependency: with
+    a `throw` in `Initialize`, the class fails alone too (`WeakReferenceMessenger.Default`'s static
+    initializer builds a `Dictionary2`). The field-read probes now credit that building code to
+    every reader of `Default`. Checked on round 2's recording at the same commit.
 - Found and fixed later, repository rerun clean: MimeKit (NUnit `[SetUpFixture]`, static
   constructor), Open-XML-SDK (hand-rolled lazy init), Meziantou.Analyzer (test projects sharing a
   directory, object pool create delegate), FastEndpoints (fixture declared by a base class in a
