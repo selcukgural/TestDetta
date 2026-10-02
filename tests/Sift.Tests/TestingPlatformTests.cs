@@ -42,6 +42,28 @@ public sealed class TestingPlatformTests : IDisposable
     }
 
     [Fact]
+    public void Nunit_result_file_tells_failed_and_executed_classes()
+    {
+        var results = Path.Combine(_directory, "results");
+        Directory.CreateDirectory(results);
+        File.WriteAllText(Path.Combine(results, "App.Tests.xml"), """
+            <test-run testcasecount="4"><test-suite><test-suite>
+              <test-case fullname="App.OrderTests.Places" classname="App.OrderTests" result="Passed" />
+              <test-case fullname="App.Outer+CartTests.Adds(1)" classname="App.Outer+CartTests" result="Failed" />
+              <test-case fullname="App.SkipTests.Later" classname="App.SkipTests" result="Skipped" />
+              <test-case fullname="App.WarnTests.Warns" classname="App.WarnTests" result="Warning" />
+            </test-suite></test-suite></test-run>
+            """);
+        File.WriteAllText(Path.Combine(results, "other.xml"), "<settings />");
+
+        var outcome = TrxReport.Read(results)!;
+
+        Assert.Equal(4, outcome.Total);
+        Assert.Equal(["App.Outer+CartTests"], outcome.FailedClasses);
+        Assert.Equal(["App.OrderTests", "App.Outer+CartTests", "App.WarnTests"], outcome.ExecutedClasses.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Patched_deps_json_keeps_every_sdk_written_byte()
     {
         // A real SDK-written file: this test project's own, with package hashes full of '+' and '/',

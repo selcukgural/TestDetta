@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Sift.Core;
 
 namespace Sift.Coverage;
@@ -35,9 +36,50 @@ internal static class TestReports
             return ["--report-xunit-trx", "--report-xunit-trx-filename", reportName];
         }
 
-        return File.Exists(Path.Combine(outputDirectory, "Microsoft.Testing.Extensions.TrxReport.dll"))
-            ? ["--report-trx", "--report-trx-filename", reportName]
-            : [];
+        if (File.Exists(Path.Combine(outputDirectory, "Microsoft.Testing.Extensions.TrxReport.dll")))
+        {
+            return ["--report-trx", "--report-trx-filename", reportName];
+        }
+
+        if (!UsesNUnitXml(mode, outputDirectory))
+        {
+            return [];
+        }
+
+        var settings = new XElement("RunSettings");
+        AddNUnitXml(settings, results);
+        Directory.CreateDirectory(results);
+        var path = Path.Combine(results, "sift-nunit.runsettings");
+        new XDocument(settings).Save(path);
+        return ["--settings", path];
+    }
+
+    /// <summary>
+    /// True for NUnit under the testing platform without the TRX extension (NSubstitute): no TRX
+    /// report can be asked for, but NUnit's adapter writes its own result file when the run settings
+    /// name a folder (<see cref="AddNUnitXml"/>), which <see cref="TrxReport.Read"/> reads as well.
+    /// </summary>
+    /// <param name="mode">Runner <c>dotnet test</c> uses.</param>
+    /// <param name="outputDirectory">Output directory of the test project.</param>
+    public static bool UsesNUnitXml(DotnetTestMode mode, string outputDirectory) =>
+        mode == DotnetTestMode.TestingPlatform
+        && !File.Exists(Path.Combine(outputDirectory, "xunit.v3.core.dll"))
+        && !File.Exists(Path.Combine(outputDirectory, "Microsoft.Testing.Extensions.TrxReport.dll"))
+        && File.Exists(Path.Combine(outputDirectory, "NUnit3.TestAdapter.dll"));
+
+    /// <summary>Makes NUnit's adapter write its result XML into <paramref name="results"/>.</summary>
+    /// <param name="runSettings">The <c>RunSettings</c> element; its <c>NUnit</c> section is created or extended.</param>
+    /// <param name="results">Folder for the result file, named after the test assembly.</param>
+    public static void AddNUnitXml(XElement runSettings, string results)
+    {
+        if (runSettings.Element("NUnit") is not { } nunit)
+        {
+            nunit = new XElement("NUnit");
+            runSettings.Add(nunit);
+        }
+
+        nunit.SetElementValue("TestOutputXml", results);
+        nunit.SetElementValue("OutputXmlFolderMode", "AsSpecified");
     }
 
     /// <summary>

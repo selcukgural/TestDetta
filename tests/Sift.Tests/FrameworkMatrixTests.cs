@@ -39,10 +39,9 @@ public sealed class FrameworkMatrixTests : IDisposable
         }
 
         // BrokenTests fails on purpose: the map names it, so selection never trusts its coverage.
-        // NUnit under the testing platform ships no TRX extension, so which class failed is unknown.
-        var failuresKnown = !(framework == "nunit" && testingPlatform);
+        // NUnit under the testing platform has no TRX extension; its own result file tells instead.
         Assert.False(passed, output.ToString());
-        Assert.Equal(failuresKnown ? ["Calc.Tests.BrokenTests"] : null, map.FailedClasses);
+        Assert.Equal(["Calc.Tests.BrokenTests"], map.FailedClasses);
         Assert.Equal(["Add"], CalculatorMembers(map, "Calc.Tests.AddTests"));
         Assert.Equal(["Mul"], CalculatorMembers(map, "Calc.Tests.MulTests"));
 
@@ -57,8 +56,8 @@ public sealed class FrameworkMatrixTests : IDisposable
 
         var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();
         Assert.Equal(TestRunMode.Filtered, selection.Mode);
-        // Without known failures the map is not used, and names alone select MulTests.
-        Assert.Equal(failuresKnown ? ["Calc.Tests.BrokenTests", "Calc.Tests.MulTests"] : ["Calc.Tests.MulTests"], selection.TestClasses);
+        // The class that failed while recording always runs, besides the one the change reaches.
+        Assert.Equal(["Calc.Tests.BrokenTests", "Calc.Tests.MulTests"], selection.TestClasses);
     }
 
     /// <summary>Calculator members a test class ran, without constructors.</summary>

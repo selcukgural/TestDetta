@@ -88,13 +88,11 @@ Interim fixes that are safe for the common case; come back for the complete solu
   uses `--treenode-filter /*/*/(Class)|(Other)/**` (namespace left open, so classes sharing a simple
   name across namespaces go together) and `--maximum-parallel-tests 1` while recording. Add a TUnit
   repository to the corpus.
-- **Eval: test projects without a test report are left out** (interim: 871f6aa). NUnit
-  under Microsoft.Testing.Platform has no TRX extension unless the repository adds it
-  (NSubstitute: every test project, so no data at all), and some hosts die at start
-  (protobuf-net.Test, exit 134). Complete fix: make the evaluation add
-  `Microsoft.Testing.Extensions.TrxReport` to such projects at build time (a
-  `CustomAfterMicrosoftCommonTargets` file, `VersionOverride` under central package management),
-  so they can be evaluated instead of skipped.
+- ~~Eval: NUnit under the testing platform wrote no test report~~ (interim 871f6aa, completed): such
+  runs now ask NUnit's adapter for its own result file through run settings (`TestOutputXml`), and
+  reports are read from it, in the evaluation and when recording, without adding a package.
+  NSubstitute can be evaluated. Still left out and named: test hosts that die before running a test
+  (protobuf-net.Test, exit 134).
 - **Recording suites that only pass in parallel** (interim: this commit records a project again in
   one process when a shard crashes). NLog.UnitTests takes its own test host down ("Out of memory")
   whenever its classes run one at a time, without Sift too; recording requires that, so NLog gets

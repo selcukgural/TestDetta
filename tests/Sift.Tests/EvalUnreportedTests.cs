@@ -14,7 +14,7 @@ public sealed class EvalUnreportedTests : IDisposable
     private readonly string _output = Path.Combine(Path.GetTempPath(), "sift-eval-unreported-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Project_without_a_test_report_is_left_out_and_named()
+    public void Nunit_under_the_testing_platform_reports_through_its_own_result_file()
     {
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }""");
         _repo.Write(".gitignore", "bin/\nobj/\n.sift/\nTestResults/\n");
@@ -42,7 +42,8 @@ public sealed class EvalUnreportedTests : IDisposable
             namespace Add.Tests;
             [TestClass] public class AddTests { [TestMethod] public void Adds() => Assert.AreEqual(3, Calc.Calculator.Add(1, 2)); }
             """);
-        // NUnit under the testing platform ships no TRX extension, like NSubstitute's test projects.
+        // NUnit under the testing platform ships no TRX extension, like NSubstitute's test projects;
+        // its adapter's own result file says which classes failed.
         _repo.Write("tests/Neg.Tests/Neg.Tests.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><EnableNUnitRunner>true</EnableNUnitRunner><OutputType>Exe</OutputType></PropertyGroup>
@@ -74,14 +75,12 @@ public sealed class EvalUnreportedTests : IDisposable
 
         var run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_output, "synthetic.json"))).RootElement;
         Assert.True(run.GetProperty("error").ValueKind == JsonValueKind.Null, run.GetProperty("error").ToString());
-        Assert.Equal(["tests/Neg.Tests/Neg.Tests.csproj"], run.GetProperty("unreported").EnumerateArray().Select(static p => p.GetString()));
+        Assert.Empty(run.GetProperty("unreported").EnumerateArray());
 
         var mutants = run.GetProperty("mutants").EnumerateArray().ToDictionary(static m => m.GetProperty("target").GetString()!);
         Assert.Equal(["Add.Tests: Add.Tests.AddTests"], mutants["Calc.Calculator.Add"].GetProperty("killed").EnumerateArray().Select(static c => c.GetString()));
-        // Only the unreported project could fail; the mutant proves nothing, and nothing is claimed.
-        var neg = mutants["Calc.Calculator.Neg"];
-        Assert.Empty(neg.GetProperty("killed").EnumerateArray());
-        Assert.False(neg.GetProperty("caughtByCrash").GetBoolean());
+        Assert.Equal(["Neg.Tests: Neg.Tests.NegTests"], mutants["Calc.Calculator.Neg"].GetProperty("killed").EnumerateArray().Select(static c => c.GetString()));
+        Assert.All(mutants.Values, static m => Assert.Empty(m.GetProperty("missed").EnumerateArray()));
     }
 
     [Fact]

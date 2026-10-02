@@ -369,7 +369,31 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var resultsFile = Path.Combine(work, $"coverage-{shard.Index}.json");
         var reportDirectory = Path.Combine(work, $"report-{shard.Index}");
         var reportName = $"sift-record-{Path.GetFileName(work)}-{shard.Index}.trx";
-        List<string> arguments = [.. shard.Arguments, .. TestReports.Arguments(context.Mode, context.OutputDirectory, reportDirectory, reportName)];
+        List<string> arguments = [.. shard.Arguments];
+        if (TestReports.UsesNUnitXml(context.Mode, context.OutputDirectory))
+        {
+            // NUnit names its result file after the assembly, so every shard writes its own folder,
+            // through its own copy of the run settings.
+            var at = arguments.IndexOf("--settings");
+            var settings = at >= 0 ? XDocument.Load(arguments[at + 1]).Root! : new XElement("RunSettings");
+            TestReports.AddNUnitXml(settings, reportDirectory);
+            Directory.CreateDirectory(reportDirectory);
+            var path = Path.Combine(reportDirectory, "sift.runsettings");
+            new XDocument(settings).Save(path);
+            if (at >= 0)
+            {
+                arguments[at + 1] = path;
+            }
+            else
+            {
+                arguments.AddRange(["--settings", path]);
+            }
+        }
+        else
+        {
+            arguments.AddRange(TestReports.Arguments(context.Mode, context.OutputDirectory, reportDirectory, reportName));
+        }
+
         arguments.AddRange(shard.Filter);
 
         var environment = new Dictionary<string, string>

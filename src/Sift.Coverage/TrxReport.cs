@@ -8,10 +8,13 @@ namespace Sift.Coverage;
 /// <param name="ExecutedClasses">Test classes (runtime names) with at least one test that ran, passed or failed.</param>
 internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses, IReadOnlySet<string> ExecutedClasses);
 
-/// <summary>Reads the parts of a Visual Studio TRX test report Sift needs: how many tests ran and which classes failed.</summary>
+/// <summary>
+/// Reads the parts of a test report Sift needs: how many tests ran and which classes failed. Visual
+/// Studio TRX reports, and NUnit's own result XML for NUnit runs that cannot write TRX.
+/// </summary>
 internal static class TrxReport
 {
-    /// <summary>Reads every <c>.trx</c> file in <paramref name="directory"/> and combines them.</summary>
+    /// <summary>Reads every <c>.trx</c> file and NUnit result file in <paramref name="directory"/> and combines them.</summary>
     /// <param name="directory">Results directory of one or more runs.</param>
     /// <returns>The combined outcome, or null when the directory holds no report.</returns>
     public static TrxOutcome? Read(string directory)
@@ -22,7 +25,8 @@ internal static class TrxReport
         }
 
         var files = Directory.GetFiles(directory, "*.trx", SearchOption.AllDirectories);
-        if (files.Length == 0)
+        var nunitFiles = Directory.GetFiles(directory, "*.xml", SearchOption.AllDirectories);
+        if (files.Length == 0 && nunitFiles.Length == 0)
         {
             return null;
         }
@@ -30,6 +34,43 @@ internal static class TrxReport
         var total = 0;
         var failed = new HashSet<string>(StringComparer.Ordinal);
         var executed = new HashSet<string>(StringComparer.Ordinal);
+        var reports = files.Length;
+        foreach (var file in nunitFiles)
+        {
+            var document = XDocument.Load(file);
+            if (document.Root?.Name.LocalName != "test-run")
+            {
+                continue;
+            }
+
+            reports++;
+            foreach (var testCase in document.Descendants("test-case"))
+            {
+                total++;
+                if (testCase.Attribute("classname")?.Value is not { } testClass)
+                {
+                    continue;
+                }
+
+                // Skipped and inconclusive tests never enter their class, as with TRX.
+                var result = testCase.Attribute("result")?.Value;
+                if (result is "Passed" or "Failed" or "Warning")
+                {
+                    executed.Add(testClass);
+                }
+
+                if (result == "Failed")
+                {
+                    failed.Add(testClass);
+                }
+            }
+        }
+
+        if (reports == 0)
+        {
+            return null;
+        }
+
         foreach (var file in files)
         {
             var document = XDocument.Load(file);
