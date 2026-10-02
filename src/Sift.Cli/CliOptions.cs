@@ -23,6 +23,9 @@ internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLeve
 {
     /// <summary>How many commits a coverage map may be behind the merge base and still be used through the drift bridge.</summary>
     public int MaxMapAge { get; init; } = Sift.Core.AnalysisOptions.DefaultMaxMapAge;
+
+    /// <summary>What a test project does when its older map's drift cannot be bridged.</summary>
+    public Sift.Core.DriftFallback DriftFallback { get; init; } = Sift.Core.DriftFallback.RunAll;
 }
 
 /// <summary>Options of <c>sift affected</c>.</summary>
@@ -74,6 +77,10 @@ internal sealed record CliOptions(
           --log-level <level>  trace, debug, information, warning (default), error or none
           --max-map-age <n>    Use coverage maps recorded up to n commits before the merge base,
                                bridging the changes in between (default: 50; 0 = only exact maps)
+          --drift-fallback <all|name>  When the changes since an older map include a build file,
+                               configuration or a global using, run the affected test projects
+                               completely (all, the default) or decide them by name (name: faster,
+                               blind to calls made through configuration or reflection)
 
         sift affected:
           --tests-only         Only list affected test projects
@@ -191,7 +198,7 @@ internal sealed record CliOptions(
                 options = options with { Record = options.Record with { NoBuild = true } };
                 return true;
 
-            case "--base" or "--repo" or "--log-level" or "--max-map-age":
+            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback":
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
             case "--summary-file" when options.Command == CliCommand.Test:
@@ -217,6 +224,19 @@ internal sealed record CliOptions(
 
             case "--repo":
                 options = options with { Analysis = options.Analysis with { RepoPath = value } };
+                return true;
+
+            case "--drift-fallback":
+                if (value is not ("all" or "name"))
+                {
+                    error = $"--drift-fallback is all or name, not {value}";
+                    return false;
+                }
+
+                options = options with
+                {
+                    Analysis = options.Analysis with { DriftFallback = value == "all" ? Sift.Core.DriftFallback.RunAll : Sift.Core.DriftFallback.ByName },
+                };
                 return true;
 
             case "--max-map-age":

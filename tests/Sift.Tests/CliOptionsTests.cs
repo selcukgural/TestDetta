@@ -50,6 +50,17 @@ public sealed class CliOptionsTests
         Assert.False(CliOptions.TryParse(["affected", "--max-map-age", "-1"], "/repo", out _, out _));
     }
 
+    [Fact]
+    public void Drift_fallback_runs_all_unless_name_is_chosen()
+    {
+        Assert.True(CliOptions.TryParse(["test"], "/repo", out var defaults, out _));
+        Assert.Equal(Sift.Core.DriftFallback.RunAll, defaults.Analysis.DriftFallback);
+
+        Assert.True(CliOptions.TryParse(["affected", "--drift-fallback", "name"], "/repo", out var byName, out _));
+        Assert.Equal(Sift.Core.DriftFallback.ByName, byName.Analysis.DriftFallback);
+        Assert.False(CliOptions.TryParse(["affected", "--drift-fallback", "fast"], "/repo", out _, out _));
+    }
+
     [Theory]
     [InlineData("affected", "--no-build")]
     [InlineData("affected", "--dry-run")]

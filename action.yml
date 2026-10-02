@@ -36,6 +36,10 @@ inputs:
     description: Test mode only. Use the newest coverage map recorded up to this many first-parent commits before the merge base; the changes in between are bridged. 0 uses only a map recorded at the merge base.
     required: false
     default: '50'
+  drift-fallback:
+    description: "Test mode only. When the changes since an older map include a build file, configuration or a global using: 'all' runs the affected test projects completely (safest), 'name' decides them by name (faster, blind to calls made through configuration or reflection)."
+    required: false
+    default: all
   github-token:
     description: Test mode only. Token that lists the repository's Actions caches to find the newest map (needs the actions read permission). Without it only a map at the merge base is found.
     required: false
@@ -155,9 +159,10 @@ runs:
         CONFIGURATION: ${{ inputs.configuration }}
         EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
         MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
+        DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
-        dotnet "$SIFT" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+        dotnet "$SIFT" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
 
     - name: Record coverage map
       if: inputs.mode == 'record'

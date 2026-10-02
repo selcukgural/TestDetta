@@ -74,4 +74,7 @@ public sealed record TestSelectionRequest(
     /// comparison base, matched by <see cref="MapDrift.FromCommit"/>; empty when all maps are current.
     /// </summary>
     public IReadOnlyList<MapDrift> Drifts { get; init; } = [];
+
+    /// <summary>What a test project does when its map's drift cannot be bridged; see <see cref="Core.DriftFallback"/>.</summary>
+    public DriftFallback DriftFallback { get; init; } = DriftFallback.RunAll;
 }

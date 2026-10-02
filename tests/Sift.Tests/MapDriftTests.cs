@@ -95,14 +95,20 @@ public sealed class MapDriftTests : IDisposable
     }
 
     [Fact]
-    public void Drift_that_no_member_describes_leaves_the_map_unused()
+    public void Drift_that_no_member_describes_runs_the_project_or_leaves_it_to_names()
     {
         _repo.Write("src/Shop/rates.json", """{ "tax": 0.2 }""");
         _repo.Commit("rates");
         ChangeTax();
 
+        var safest = Select();
+        Assert.Equal(TestRunMode.All, safest.Mode);
+        Assert.Contains("rates.json", safest.Reason, StringComparison.Ordinal);
+
         // Decided by name, as without a map: the label test names Tax without running it.
-        Assert.Contains("Shop.Tests.TaxLabelTests", Select().TestClasses);
+        var byName = Select(new AnalysisOptions { DriftFallback = DriftFallback.ByName });
+        Assert.Equal(TestRunMode.Filtered, byName.Mode);
+        Assert.Contains("Shop.Tests.TaxLabelTests", byName.TestClasses);
     }
 
     [Fact]

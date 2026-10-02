@@ -21,7 +21,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             return [];
         }
 
-        request = WithoutDriftedMaps(request);
+        (request, var driftRunAll) = WithoutDriftedMaps(request);
         var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)
@@ -40,7 +40,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             ? Trace(request, index, projectLevel, coverage, Bridge(request, index, byName))
             : byName;
 
-        var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage));
+        var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { DriftRunAll = driftRunAll });
         for (var i = 0; i < decisions.Count; i++)
         {
             decisions[i] = decisions[i] with { Estimate = coverage.Estimate(decisions[i]) };
@@ -57,14 +57,17 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     /// <summary>
     /// Drops the maps whose drift changed something no member describes (build files, non-C# files,
     /// global usings) in a project the test project depends on: the map's view of that project may be
-    /// wrong anywhere, so the test project is decided by name, as without a map.
+    /// wrong anywhere. With <see cref="DriftFallback.RunAll"/> (the default) such a test project runs
+    /// completely; with <see cref="DriftFallback.ByName"/> it is decided by name, as without a map.
     /// </summary>
     /// <param name="request">Selection input with every usable map.</param>
-    private TestSelectionRequest WithoutDriftedMaps(TestSelectionRequest request)
+    /// <returns>The request without those maps, and the test projects that must run completely, with the reason.</returns>
+    private (TestSelectionRequest Request, Dictionary<string, string> RunAll) WithoutDriftedMaps(TestSelectionRequest request)
     {
+        var runAll = new Dictionary<string, string>(Paths.Comparer);
         if (request.Drifts.Count == 0)
         {
-            return request;
+            return (request, runAll);
         }
 
         var maps = new Dictionary<string, CoverageMap>(request.CoverageMaps, Paths.Comparer);
@@ -77,11 +80,15 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 {
                     maps.Remove(project);
                     LogDriftedMap(project, drift.FromCommit, reason);
+                    if (request.DriftFallback == DriftFallback.RunAll)
+                    {
+                        runAll.TryAdd(project, $"since the coverage map was recorded ({drift.FromCommit[..Math.Min(12, drift.FromCommit.Length)]}), {reason}");
+                    }
                 }
             }
         }
 
-        return request with { CoverageMaps = maps };
+        return (request with { CoverageMaps = maps }, runAll);
     }
 
     /// <summary>
@@ -331,7 +338,11 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         SourceIndex Index,
         TraceResult ByName,
         TraceResult WithCoverage,
-        CoverageSelection Coverage);
+        CoverageSelection Coverage)
+    {
+        /// <summary>Test projects that run completely because their map's drift cannot be bridged, with the reason.</summary>
+        public Dictionary<string, string> DriftRunAll { get; init; } = [];
+    }
 
     /// <summary>Turns fallbacks, name propagation and coverage into one decision per test project.</summary>
     /// <param name="decision">Inputs of the decision.</param>
@@ -371,7 +382,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         {
             var project = test.Project;
             var runAll = coverage.HasMap(project.Path) ? runAllWithCoverage : runAllByName;
-            if (runAll.TryGetValue(project.Path, out var reason))
+            if (decision.DriftRunAll.TryGetValue(project.Path, out var reason) || runAll.TryGetValue(project.Path, out reason))
             {
                 result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], reason)));
                 continue;

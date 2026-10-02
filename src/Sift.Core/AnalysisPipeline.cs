@@ -87,7 +87,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         }
 
         var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>())
-            .Select(new TestSelectionRequest(graph, root, changed, impact, maps) { Drifts = drifts });
+            .Select(new TestSelectionRequest(graph, root, changed, impact, maps) { Drifts = drifts, DriftFallback = options.DriftFallback });
 
         return new AnalysisResult(root, changed, graph, impact, Plan(graph, tests, maps)) { Drifts = drifts };
     }

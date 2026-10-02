@@ -23,8 +23,28 @@ public sealed record AnalysisOptions
     /// </summary>
     public int MaxMapAge { get; init; } = DefaultMaxMapAge;
 
+    /// <summary>
+    /// What a test project with an older map does when the changes since the map include one no member
+    /// describes (a build file, configuration, a global using) in a project it depends on.
+    /// </summary>
+    public DriftFallback DriftFallback { get; init; } = DriftFallback.RunAll;
+
     /// <summary>How maps are used; anything but <see cref="MapUse.Bridge"/> exists for evaluation only.</summary>
     internal MapUse Maps { get; init; } = MapUse.Bridge;
+}
+
+/// <summary>
+/// How a test project whose older map cannot be bridged is decided: the changes since the map include
+/// one that no member describes, such as configuration that wires a new DI registration, which the map
+/// cannot know and the name trace cannot see.
+/// </summary>
+public enum DriftFallback
+{
+    /// <summary>Run the whole test project (the default: such a change may have created any call).</summary>
+    RunAll,
+
+    /// <summary>Decide by name, as without a map: faster, but blind to calls made through configuration or reflection.</summary>
+    ByName,
 }
 
 /// <summary>How an analysis uses coverage maps.</summary>

@@ -129,11 +129,12 @@ project may be wrong in ways no member explains. Those test projects do not use 
 take today's no-map path (name trace). The PR's own project-level changes still mean "run all",
 unchanged.
 
-Open question for review: a configuration-only change in the drift that wires a new DI
-registration would be missed by the name trace, as it would be today without a map. The stricter
-option is "run all" for those test projects. That would make some PRs slower than today in
-exchange for closing a gap that exists today too. Default in this design: name trace, since it
-equals today's behaviour. Revisit with measurement 2.
+Decided 2026-10-02 (user): safety first, with a choice. By default (`--drift-fallback all`, action
+input `drift-fallback`) those test projects run completely: a configuration-only change in the
+drift, such as one that wires a new DI registration, is a call neither the map nor the name trace
+can see. `--drift-fallback name` decides them by name instead, as Sift did before the bridge with no
+usable map: faster, with that blind spot. Only test projects that use the older map are affected;
+projects without any map are decided by name either way.
 
 ### Limits
 
@@ -232,7 +233,8 @@ A bridge miss gets a complete fix and a red test, as with every other miss.
   and project-level impact of `A..B`, package changes included. `AnalysisResult.Drifts` is reported
   in text, JSON (`olderCoverageMaps`) and the Markdown summary.
 - `TestSelector`: `WithoutDriftedMaps` drops the map of every test project downstream of a
-  project-level drift change (the same rules that make a PR change "run all"); `Bridge` takes the
+  project-level drift change (the same rules that make a PR change "run all") and, with the default
+  `DriftFallback.RunAll`, runs that test project completely (`ByName`: decided by name); `Bridge` takes the
   drift's added and modified members that the uncut name spread of the PR's changes reached
   (`ImpactPropagation.Reached`; for a type-level change, any member of the type) and resolves each
   like a change: coverage where the map answers, name trace otherwise.

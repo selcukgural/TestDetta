@@ -48,7 +48,8 @@ Coverage maps are best recorded at the merge base of your branch. A map recorded
 earlier (`--max-map-age`) is still used: code changed in between could have created calls the map
 does not know, so Sift also selects the classes that ran any changed-since member that can reach
 your change, and traces new code by name. When something in between cannot be described by members
-(a build file, `appsettings.json`), the affected test projects are decided by name, as without a map.
+(a build file, `appsettings.json`), the affected test projects run completely; `--drift-fallback name`
+decides them by name instead, as without a map (faster, but blind to calls wired by configuration).
 Add `.sift/` to `.gitignore`.
 
 ## GitHub Actions
@@ -110,6 +111,7 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `no-build` | `false` | record mode: `true` to record the build an earlier step made with the same `configuration` |
 | `dotnet-test-args` | | test mode: extra `dotnet test` arguments |
 | `max-map-age` | `50` | test mode: commits a map may be behind the merge base (0: only an exact map) |
+| `drift-fallback` | `all` | test mode: `all` runs test projects completely when the changes since an older map include a build file or configuration; `name` decides them by name |
 | `github-token` | `github.token` | test mode: lists the Actions caches to find the newest map |
 | `working-directory` | `.` | any directory inside the repository |
 | `setup-dotnet` | `true` | install the .NET 10 SDK Sift runs on |

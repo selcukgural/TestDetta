@@ -51,7 +51,7 @@ internal static partial class CliApp
             analysis = new AnalysisPipeline(loggerFactory, new Sift.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(
                 options.Analysis.RepoPath,
                 options.Analysis.BaseRef,
-                new AnalysisOptions { MaxMapAge = options.Analysis.MaxMapAge });
+                new AnalysisOptions { MaxMapAge = options.Analysis.MaxMapAge, DriftFallback = options.Analysis.DriftFallback });
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException
                                        or UnauthorizedAccessException)
