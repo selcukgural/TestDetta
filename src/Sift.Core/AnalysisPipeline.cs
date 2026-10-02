@@ -24,7 +24,8 @@ public sealed record AnalysisResult(
 /// project impact and test selection. Front ends (the CLI, CI integrations) only format the result.
 /// </summary>
 /// <param name="loggerFactory">Creates the loggers of every step.</param>
-public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory)
+/// <param name="evaluator">Evaluates the projects with MSBuild for the graph; null to read them as XML only.</param>
+public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProjectEvaluator? evaluator = null)
 {
     /// <summary>Logger for decisions of the pipeline itself, such as ignoring a stale coverage map.</summary>
     private readonly ILogger _logger = loggerFactory.CreateLogger<AnalysisPipeline>();
@@ -48,7 +49,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory)
         var codeChanges = new CodeChangeReader(git, detector, loggerFactory.CreateLogger<CodeChangeReader>())
             .Read(root, mergeBase, changed);
 
-        var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>()).Load(root);
+        var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), evaluator).Load(root);
         var packageChanges = PackageChanges(git, root, mergeBase, changed);
         var impact = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>())
             .Analyze(graph, root, changed, codeChanges, packageChanges);

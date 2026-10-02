@@ -9,6 +9,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Sift.Tests" />
     <InternalsVisibleTo Include="Sift.Eval" />
+    <InternalsVisibleTo Include="Sift.Coverage" />
   </ItemGroup>
 
 </Project>

@@ -48,7 +48,7 @@ internal static partial class CliApp
         AnalysisResult analysis;
         try
         {
-            analysis = new AnalysisPipeline(loggerFactory).Run(options.Analysis.RepoPath, options.Analysis.BaseRef);
+            analysis = new AnalysisPipeline(loggerFactory, new Sift.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(options.Analysis.RepoPath, options.Analysis.BaseRef);
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException
                                        or UnauthorizedAccessException)
@@ -138,7 +138,7 @@ internal static partial class CliApp
         try
         {
             var root = new GitClient(loggerFactory.CreateLogger<GitClient>()).TopLevel(options.Analysis.RepoPath);
-            var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>()).Load(root);
+            var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), new Sift.Coverage.MsBuildProjectEvaluator(loggerFactory)).Load(root);
             var testProjects = SelectTestProjects(graph, root, options.Record.Projects);
             if (testProjects.Count == 0)
             {

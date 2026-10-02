@@ -9,11 +9,14 @@ namespace Sift.Core;
 /// <summary>
 /// Finds every project file (<c>.csproj</c>, <c>.fsproj</c>, <c>.vbproj</c>) under a repository root
 /// and reads its references, its imports and the files it pulls in from outside its directory.
-/// The files are read as plain XML: MSBuild is not evaluated, so conditions are ignored and only the
-/// common path properties are resolved; anything else is marked unresolved.
+/// The files are read as plain XML, where conditions are ignored and only the common path properties
+/// are resolved; anything else is marked unresolved. With an <see cref="IProjectEvaluator"/>, MSBuild's
+/// answers then replace the guesses for every project it could evaluate (references, items, test
+/// flag, assembly name), and the XML reading stays for imports and for projects it could not.
 /// </summary>
 /// <param name="logger">Receives debug details about scanned directories and parsed projects.</param>
-public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logger)
+/// <param name="evaluator">Evaluates the projects with MSBuild; null to read them as XML only.</param>
+public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logger, IProjectEvaluator? evaluator = null)
 {
     /// <summary>Directories that never contain source projects and are expensive to walk.</summary>
     private static readonly FrozenSet<string> SkippedDirectories =
@@ -50,6 +53,11 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             nodes[node.Path] = node;
         }
 
+        if (evaluator is not null && nodes.Count > 0)
+        {
+            ApplyEvaluation(root, nodes, evaluator);
+        }
+
         var graph = new ProjectGraph(nodes);
         WarnAboutMissingReferences(nodes);
         LogLoaded(nodes.Count, stopwatch.ElapsedMilliseconds);
@@ -84,6 +92,53 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 pending.Push(sub);
             }
         }
+    }
+
+    /// <summary>
+    /// Replaces the XML guesses of every project MSBuild evaluated with its answers. References,
+    /// items and the assembly name come from MSBuild alone, and so the patterns that stood for
+    /// references and items the XML reading could not resolve are dropped. The test flag is the union
+    /// of both: without a restore, MSBuild does not see the props of test packages that set
+    /// <c>IsTestProject</c>, and taking a library for a test project costs an empty run while the
+    /// opposite loses its tests. Imports keep the XML reading.
+    /// </summary>
+    /// <param name="root">Normalized repository root.</param>
+    /// <param name="nodes">Projects read as XML, replaced in place.</param>
+    /// <param name="projectEvaluator">The evaluator.</param>
+    private void ApplyEvaluation(string root, Dictionary<string, ProjectNode> nodes, IProjectEvaluator projectEvaluator)
+    {
+        var evaluated = projectEvaluator.Evaluate(root, nodes.Keys);
+        if (evaluated is null)
+        {
+            LogNotEvaluated(nodes.Count);
+            return;
+        }
+
+        foreach (var (path, node) in nodes.ToList())
+        {
+            if (!evaluated.TryGetValue(path, out var project))
+            {
+                LogProjectNotEvaluated(path);
+                continue;
+            }
+
+            var packages = new HashSet<string>(node.PackageReferences, StringComparer.OrdinalIgnoreCase);
+            packages.UnionWith(project.Packages);
+            nodes[path] = node with
+            {
+                IsTestProject = node.IsTestProject || project.IsTestProject || project.Packages.Any(TestPackages.Contains),
+                References = project.References,
+                UnknownReferencePatterns = [],
+                UnknownItemPatterns = [],
+                ExternalItems = [],
+                PackageReferences = packages,
+                AssemblyName = project.AssemblyName ?? node.AssemblyName,
+                AssemblyNameUnresolved = project.AssemblyName is null && node.AssemblyNameUnresolved,
+                EvaluatedItems = project.Items,
+            };
+        }
+
+        LogEvaluated(evaluated.Count, nodes.Count);
     }
 
     /// <summary>
@@ -802,6 +857,15 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read imported file {File}: {Error}; treating the project's inputs as unresolved")]
     private partial void LogUnreadableImport(string file, string error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "MSBuild could not evaluate the {Count} project(s); their references and files are read from the XML only")]
+    private partial void LogNotEvaluated(int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "MSBuild could not evaluate {Project}; its references and files are read from the XML only")]
+    private partial void LogProjectNotEvaluated(string project);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "MSBuild evaluated {Evaluated} of {Count} project(s)")]
+    private partial void LogEvaluated(int evaluated, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Loaded {Count} project(s) in {ElapsedMs} ms")]
     private partial void LogLoaded(int count, long elapsedMs);

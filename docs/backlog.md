@@ -38,18 +38,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   left behind (MSBuild node, compiler server, a test's background process) kept it open. Sift now
   waits for the process only and reads its output for 10 more seconds at most; node reuse stays on,
   since it speeds builds up.
-- **Linked files whose path needs evaluation** (interim: ea5acb7; OpenTelemetry, 7 classes
-  missed). `<Compile Include="$(RepoRoot)\test\OpenTelemetry.Tests\Metrics\MetricApiTests.cs" />`
-  with `RepoRoot` from a property function now becomes a path pattern, and the project owns every
-  file it matches, when enough of the path is literal (two segments or a file name). Paths with
-  nothing literal (`@(Bundle)`, `$(Shared)**\*.cs`) and non-Compile items keep the older rule (the
-  project claims files nobody else does), since a match-everything pattern made every project own
-  every file. Complete fix: MSBuild evaluation, as for project references.
-- **Projects sharing a directory** (interim: 232ee1a; Meziantou.Analyzer, every mutant missed
-  in 4 of 5 test projects). A file in a directory with several projects now belongs to all of
-  them, so each Roslyn-version project and each of its test projects is affected and indexed.
-  Projects that split one directory with `Compile Remove`/`Include` are over-selected. Complete fix:
-  honour each project's compile items when they exclude files of its own directory.
+- ~~Linked files whose path needs evaluation~~: done with MSBuild evaluation (docs/design/msbuild-evaluation.md); the XML reading
+  stays for imports and for projects MSBuild cannot evaluate.
+- ~~Projects sharing a directory~~: done with MSBuild evaluation (docs/design/msbuild-evaluation.md); the XML reading
+  stays for imports and for projects MSBuild cannot evaluate.
 - **Setup that runs before every test of a scope** (interim: 7cd8528; MimeKit, 60 classes
   missed). NUnit `[SetUpFixture]` setup (constructor, `[OneTimeSetUp]`) and MSTest
   `[AssemblyInitialize]` now record under a setup scope that selects every class in its namespace
@@ -65,19 +57,8 @@ Interim fixes that are safe for the common case; come back for the complete solu
   constructor when the field is read only from other types' code, and types whose static state is
   read without calling any of their methods. Complete fix: probes on static field reads (`ldsfld`)
   per bucket, so the readers of what a static constructor set up are known.
-- **Project graph from MSBuild files read as XML** (interim: 24df010; Meziantou.Analyzer had
-  no test project at all). Test projects marked only by a company SDK (`Meziantou.NET.Sdk.Test`)
-  or named `X.Test.roslyn5.9` were not recognised, and `ProjectReference` items declared in imports
-  or written with properties were dropped, so a change selected nothing. Now: an SDK or file name
-  with a `Test`/`Tests` part marks a test project, references in imports are followed, `@(Item)`
-  lists are expanded, and a reference only MSBuild can compute (`$(RoslynVersion)` from a property
-  function) becomes a path pattern whose unknown parts match anything, the project depending on
-  every project it matches. Still guessed: conditions are not evaluated, a test SDK without "Test"
-  in its name is missed, and a property used in the directory part widens the pattern. Complete
-  fix: evaluate projects with MSBuild (`dotnet msbuild -getProperty:IsTestProject
-  -getItem:ProjectReference`, or MSBuildLocator in-process) when the XML reading is unsure, cache
-  per commit, and fall back to the pattern only when evaluation fails. Measure the cost on large
-  solutions first.
+- ~~Project graph from MSBuild files read as XML~~: done with MSBuild evaluation (docs/design/msbuild-evaluation.md); the XML reading
+  stays for imports and for projects MSBuild cannot evaluate.
 - **Object pools** (interim: d462594, 6badd5d; Meziantou.Analyzer, 5 classes missed). `Create` on
   a pool policy (`IPooledObjectPolicy<T>`, `PooledObjectPolicy<T>`, matched by name since libraries
   copy Microsoft.Extensions.ObjectPool) is now a cache fill, also when the pool binds it to a

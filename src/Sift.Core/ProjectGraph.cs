@@ -18,6 +18,9 @@ public sealed class ProjectGraph
     /// <summary>Projects whose inputs could not all be resolved.</summary>
     private readonly ProjectNode[] _unresolved;
 
+    /// <summary>Evaluated projects by each file of their build items (see <see cref="ProjectNode.EvaluatedItems"/>).</summary>
+    private readonly Dictionary<string, List<ProjectNode>> _itemOwners = new(Paths.Comparer);
+
     /// <summary>Projects with item paths that could not be resolved, with their compiled patterns.</summary>
     private readonly (ProjectNode Project, System.Text.RegularExpressions.Regex[] Patterns)[] _unknownItems;
 
@@ -45,6 +48,17 @@ public sealed class ProjectGraph
 
         foreach (var node in nodes.Values)
         {
+            foreach (var item in node.EvaluatedItems ?? (IEnumerable<string>)[])
+            {
+                if (!_itemOwners.TryGetValue(item, out var owners))
+                {
+                    owners = [];
+                    _itemOwners[item] = owners;
+                }
+
+                owners.Add(node);
+            }
+
             foreach (var reference in node.References)
             {
                 // References to projects outside the repository are not part of the graph.
@@ -103,24 +117,34 @@ public sealed class ProjectGraph
     public ProjectNode? FindOwner(string file) => Array.Find(_byDepth, p => Paths.IsUnder(file, p.Directory));
 
     /// <summary>
-    /// Every project a changed <paramref name="file"/> can affect directly, and how: the projects whose
-    /// directory contains it (all of them when several share the innermost directory) and projects
-    /// that pull it in from outside their directory are
-    /// <see cref="FileRole.Source"/>; projects that import it are <see cref="FileRole.BuildInput"/>.
-    /// A build or source file no project claims is a build input of every project with unresolved
-    /// inputs, since it may be what those resolve to.
+    /// Every project a changed <paramref name="file"/> can affect directly, and how. As
+    /// <see cref="FileRole.Source"/>: the evaluated projects whose build items include it; the projects
+    /// of the innermost directory containing it (all of them when several share it) that were not
+    /// evaluated, or all of them when no evaluated project includes the file, since a target may read
+    /// a file that is no item; and projects that pull it in from outside their directory by a path
+    /// the XML reading found. Projects that import it are <see cref="FileRole.BuildInput"/>. A build
+    /// or source file no project claims is a build input of every project with unresolved inputs,
+    /// since it may be what those resolve to.
     /// </summary>
     /// <param name="file">Normalized absolute file path.</param>
     public IReadOnlyList<FileOwner> ResolveFile(string file)
     {
         var owners = new List<FileOwner>();
+        var included = _itemOwners.GetValueOrDefault(file);
+        foreach (var project in included ?? [])
+        {
+            owners.Add(new FileOwner(project, FileRole.Source));
+        }
+
         if (FindOwner(file) is { } owner)
         {
-            // Projects that share the directory compile the same files (one project per Roslyn
-            // version in Meziantou.Analyzer); each of them owns the file.
+            // Projects that share the directory and were not evaluated compile the same files as far
+            // as the XML tells (one project per Roslyn version in Meziantou.Analyzer); each owns it.
             foreach (var sibling in _byDepth)
             {
-                if (Paths.Comparer.Equals(sibling.Directory, owner.Directory))
+                if (Paths.Comparer.Equals(sibling.Directory, owner.Directory)
+                    && (sibling.EvaluatedItems is null || included is null)
+                    && !owners.Exists(o => ReferenceEquals(o.Project, sibling)))
                 {
                     owners.Add(new FileOwner(sibling, FileRole.Source));
                 }

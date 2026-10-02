@@ -87,4 +87,11 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     /// package version change reaches.
     /// </summary>
     public IReadOnlySet<string> PackageReferences { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Normalized full paths of the files in the project's build items as MSBuild evaluated them
+    /// (see <see cref="IProjectEvaluator"/>), over all its target frameworks; null when the project
+    /// was not evaluated and its files are known only by directory and the XML reading.
+    /// </summary>
+    public IReadOnlySet<string>? EvaluatedItems { get; init; }
 }
