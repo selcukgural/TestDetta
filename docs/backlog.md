@@ -69,6 +69,12 @@ Interim fixes that are safe for the common case; come back for the complete solu
   -getItem:ProjectReference`, or MSBuildLocator in-process) when the XML reading is unsure, cache
   per commit, and fall back to the pattern only when evaluation fails. Measure the cost on large
   solutions first.
+- **Object pools** (interim: next commit; Meziantou.Analyzer, 5 classes missed). `Create` on a
+  pool policy (`IPooledObjectPolicy<T>`, `PooledObjectPolicy<T>`, matched by name since libraries
+  copy Microsoft.Extensions.ObjectPool) is now a cache fill. Other pools (`ArrayPool`, hand-rolled
+  `Stack<T>` caches, `[ThreadStatic]` buffers) still credit what they build to the first class.
+  Complete fix: same as hand-rolled lazy initialisation below (field-read probes), or detect
+  "create on miss" call sites generally.
 - **Hand-rolled lazy initialisation** (interim: 5d01d7a; Open-XML-SDK, 1 of 80
   missed). `Interlocked.CompareExchange(ref _x, new X(), null)` is now a cache fill from where its
   arguments start, when they are straight-line code that constructs or calls something. Still not

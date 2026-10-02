@@ -346,7 +346,17 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         "Microsoft.Extensions.Caching.Memory.CacheExtensions::GetOrCreateAsync");
 
     /// <summary>
-    /// Surrounds every call of <see cref="CacheFills"/> with <see cref="SiftTracker.EnterCache"/> and
+    /// True for <c>Create</c> on an object pool policy (<c>IPooledObjectPolicy&lt;T&gt;</c>,
+    /// <c>PooledObjectPolicy&lt;T&gt;</c>), which a pool calls only when it is empty, so the code it
+    /// runs is credited to the first class that empties the pool. Matched by type name in any
+    /// namespace: libraries copy Microsoft.Extensions.ObjectPool (Meziantou.Analyzer's Internals).
+    /// </summary>
+    /// <param name="target">Called method.</param>
+    private static bool IsPoolPolicyCreate(MethodReference target) =>
+        target.Name == "Create" && target.DeclaringType.GetElementType().Name is "IPooledObjectPolicy`1" or "PooledObjectPolicy`1";
+
+    /// <summary>
+    /// Surrounds every call of <see cref="CacheFills"/> and <see cref="IsPoolPolicyCreate"/> with <see cref="SiftTracker.EnterCache"/> and
     /// <see cref="SiftTracker.ExitCache"/>. The calls take and leave nothing on the stack, so the call
     /// in between keeps its arguments and result. Branches and handler boundaries that pointed at the
     /// call move to the inserted enter. A call after a <c>tail.</c> or <c>constrained.</c> prefix is
@@ -360,7 +370,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var calls = body.Instructions
             .Where(static i => (i.OpCode == OpCodes.Call || i.OpCode == OpCodes.Callvirt)
                                && i.Operand is MethodReference target
-                               && CacheFills.Contains($"{target.DeclaringType.GetElementType().FullName}::{target.Name}")
+                               && (CacheFills.Contains($"{target.DeclaringType.GetElementType().FullName}::{target.Name}") || IsPoolPolicyCreate(target))
                                && i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
             .ToList();
 

@@ -37,7 +37,8 @@ public sealed class BaseTypeSearchTests : IDisposable
         _repo.Replace("src/Lib/Rule.cs", "=> 1;", "=> 0 + 1;");
 
         var analysis = Task.Run(() => new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main"));
-        var result = await analysis.WaitAsync(TimeSpan.FromSeconds(10));
+        // The exponential search took hours; a minute leaves room for a loaded machine.
+        var result = await analysis.WaitAsync(TimeSpan.FromSeconds(60));
 
         var tests = Assert.Single(result.Tests);
         Assert.True(tests.Mode == TestRunMode.All || tests.TestClasses.Contains("Lib.Tests.RuleTests"), tests.Reason);

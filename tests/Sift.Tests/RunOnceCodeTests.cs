@@ -69,6 +69,23 @@ public sealed class RunOnceCodeTests : IDisposable
                 }
             }
 
+            // An object pool calls its policy's Create only when it is empty (Meziantou.Analyzer's copy
+            // of Microsoft.Extensions.ObjectPool); the instance method Create calls is only covered by the cache rule.
+            public sealed class BufferMaker { public System.Text.StringBuilder Make() => new(16); }
+            public abstract class PooledObjectPolicy<T> { public abstract T Create(); }
+            public sealed class BufferPolicy : PooledObjectPolicy<System.Text.StringBuilder> { public override System.Text.StringBuilder Create() => new BufferMaker().Make(); }
+            public sealed class Pool<T>(PooledObjectPolicy<T> policy) where T : class
+            {
+                private readonly Stack<T> _items = new();
+                public T Get() => _items.TryPop(out var item) ? item : policy.Create();
+                public void Return(T item) => _items.Push(item);
+            }
+            public static class Buffers
+            {
+                private static readonly Pool<System.Text.StringBuilder> Shared = new(new BufferPolicy());
+                public static int Capacity() { var b = Shared.Get(); var c = b.Capacity; Shared.Return(b); return c; }
+            }
+
             // Filled on first use, once per process.
             public static class LazyCatalog
             {
@@ -91,9 +108,9 @@ public sealed class RunOnceCodeTests : IDisposable
         _repo.Write("tests/Cache.Tests/Tests.cs", """
             using Xunit;
             namespace Cache.Tests;
-            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); } }
-            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); } }
-            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); } }
+            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); } }
+            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); } }
+            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); } }
             """);
         _repo.Commit("base");
     }
@@ -114,6 +131,7 @@ public sealed class RunOnceCodeTests : IDisposable
         Assert.Contains(new CoveredMethod("Cache.Maker", "Make"), map.Initialization.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Computer", "Compute"), map.Initialization.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Sizer", "Measure"), map.Initialization.Select(id => map.Methods[id]));
+        Assert.Contains(new CoveredMethod("Cache.BufferMaker", "Make"), map.Initialization.Select(id => map.Methods[id]));
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         string[] all = ["Cache.Tests.AlphaTests", "Cache.Tests.BetaTests", "Cache.Tests.GammaTests"];
@@ -135,6 +153,10 @@ public sealed class RunOnceCodeTests : IDisposable
 
         _repo.Replace("src/Cache/Catalog.cs", "Compute() => 1 + 2;", "Compute() => 3;");
         _repo.Replace("src/Cache/Catalog.cs", "Measure() => 4;", "Measure() => 2 + 2;");
+        AssertSelectsAll(all);
+
+        _repo.Replace("src/Cache/Catalog.cs", "Measure() => 2 + 2;", "Measure() => 4;");
+        _repo.Replace("src/Cache/Catalog.cs", "Make() => new(16);", "Make() => new(8 + 8);");
         AssertSelectsAll(all);
     }
 
