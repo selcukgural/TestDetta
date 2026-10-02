@@ -69,7 +69,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
   -getItem:ProjectReference`, or MSBuildLocator in-process) when the XML reading is unsure, cache
   per commit, and fall back to the pattern only when evaluation fails. Measure the cost on large
   solutions first.
-- **Object pools** (interim: next commit; Meziantou.Analyzer, 5 classes missed). `Create` on a
+- **Object pools** (interim: d462594; Meziantou.Analyzer, 5 classes missed). `Create` on a
   pool policy (`IPooledObjectPolicy<T>`, `PooledObjectPolicy<T>`, matched by name since libraries
   copy Microsoft.Extensions.ObjectPool) is now a cache fill. Other pools (`ArrayPool`, hand-rolled
   `Stack<T>` caches, `[ThreadStatic]` buffers) still credit what they build to the first class.
