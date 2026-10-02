@@ -1,5 +1,97 @@
 # Evaluation on real repositories
 
+## Corpus round 1 (2026-09-30 → 2026-10-02)
+
+`sift-eval --corpus eval/corpus.json`: per repository, coverage is recorded at the default branch's
+head, then up to 100 sampled members are changed one at a time (source edit for Sift, a `throw` in
+the compiled member for the tests) and every test class that fails because of the mutant must be in
+Sift's selection. A missed class is confirmed by running it alone with and without the mutant.
+macOS arm64, .NET SDK 10.0.401 (+ ASP.NET Core 8.0.31 for net8.0 suites). Durations were measured
+with several repositories running at once and are noisy; selection shares and misses are not.
+
+**Headline: 41 repositories, 3 missed of 2941 failing mutants (95% upper bound of the miss rate
+0.26%); all three are first-day results from builds that predate the fixes, and two of them are
+verified fixed (see below).** Every miss found later was fixed with a test that fails without the
+fix, and its repository rerun until clean. Refit was added after round 1.
+
+| Repository | Failing mutants | Missed | Selected (mean share) | Precision (median classes run per failing class) |
+|---|---|---|---|---|
+| roslynator | 80 | 0 | 8% | 1.0 |
+| polly | 65 | 0 | 7% | 1.0 |
+| nodatime | 80 | 1 | 43% | 1.0 |
+| mapperly | 79 | 0 | 89% | 5.7 |
+| spectre | 80 | 0 | 9% | 2.0 |
+| communitytoolkit | 76 | 1 | 18% | 1.5 |
+| argu | 0 | 0 | – | – |
+| automapper | 80 | 0 | 67% | 1.7 |
+| autofixture | 80 | 0 | 16% | 1.0 |
+| fluentvalidation | 80 | 1 | 32% | 1.0 |
+| awesomeassertions | 81 | 0 | 27% | 2.0 |
+| autofac | 77 | 0 | 49% | 1.0 |
+| scrutor | 80 | 0 | 57% | 1.0 |
+| lamar | 80 | 0 | 26% | 1.0 |
+| libgit2sharp | 57 | 0 | 19% | 1.0 |
+| nsec | 79 | 0 | 13% | 1.0 |
+| newtonsoft-json | 80 | 0 | 47% | 4.5 |
+| protobuf-net | 80 | 0 | 78% | 31.1 |
+| yamldotnet | 80 | 0 | 78% | 3.4 |
+| castle-core | 80 | 0 | 19% | 1.3 |
+| nsubstitute | 3 | 0 | 29% | – |
+| nlog | 65 | 0 | 82% | 3.0 |
+| unitsnet | 80 | 0 | 34% | 2.0 |
+| serilog | 79 | 0 | 20% | 1.5 |
+| open-xml-sdk | 80 | 0 | 30% | 1.0 |
+| scriban | 71 | 0 | 100% | 5.6 |
+| markdig | 80 | 0 | 98% | 6.0 |
+| mimekit | 79 | 0 | 14% | 5.0 |
+| vogen | 77 | 0 | 36% | 1.0 |
+| mediator | 80 | 0 | 21% | 1.2 |
+| immediate-handlers | 43 | 0 | 29% | 1.0 |
+| meziantou-analyzer | 80 | 0 | 63% | 186.6 |
+| swashbuckle | 80 | 0 | 12% | 1.0 |
+| fastendpoints | 80 | 0 | 23% | 1.8 |
+| carter | 80 | 0 | 24% | 1.0 |
+| aspnetcore-odata | 79 | 0 | 13% | 2.1 |
+| opentelemetry-dotnet | 79 | 0 | 6% | 1.3 |
+| graphql-dotnet | 80 | 0 | 45% | 4.8 |
+| guardclauses | 24 | 0 | 13% | 1.0 |
+| cliwrap | 69 | 0 | 81% | 5.0 |
+| fluid | 79 | 0 | 23% | 1.0 |
+
+Not informative: Argu (F#: no C# member to change), NSubstitute (3 failing mutants: NUnit under the
+testing platform wrote no report; fixed for round 2), Guard Clauses (small library, 24). Refit was
+added after round 1 (first TUnit suite).
+
+### Misses
+
+- First day (2026-09-30), from builds before the run-once rules, generated-code reading and the
+  alone-confirmation:
+  - NodaTime `TextCursor..ctor` (7 classes that use patterns parsed once in static initialisers);
+  - CommunityToolkit `Dictionary2<,>.Initialize` (3 classes);
+  - FluentValidation `RuleBase<,,>.Current` (4 classes).
+
+  The round-1 maps of these runs lack initialization and field-read data, and with them the NodaTime
+  miss still reproduces. So each change was checked again on a fresh recording at the same commit
+  with the current Sift (2026-10-02):
+  - NodaTime: all 7 classes are selected (the test project runs whole).
+  - FluentValidation: all 4 are selected.
+  - CommunityToolkit: is checked on round 2's recording, since its suite takes about 20 minutes.
+- Found and fixed later, repository rerun clean: MimeKit (NUnit `[SetUpFixture]`, static
+  constructor), Open-XML-SDK (hand-rolled lazy init), Meziantou.Analyzer (test projects sharing a
+  directory, object pool create delegate), FastEndpoints (fixture declared by a base class in a
+  library), OpenTelemetry (test files linked into other test projects, a static helper of another
+  test class), plus evaluation artefacts (stale `.pdb`, package copies of the library, crashed
+  baselines) that are now detected.
+
+### Precision
+
+Safety comes first; the cost is selection size. Worst: Meziantou.Analyzer (186 classes per failing
+class: a change spreads through common names such as `Create` across its Roslyn-version projects),
+protobuf-net (31), Markdig (6), Mapperly (5.7), Scriban (5.6), MimeKit, CliWrap (5). These are the
+precision round's starting point, measured again on round 2's data.
+
+## Pilot: history mode (2026-09-30)
+
 State on 2026-09-30, Sift at `2a657c3`. Every run used `sift-eval`: for each of the latest
 first-parent commits it records coverage at the parent, lets Sift select, runs the selection and
 the full suite, checks the selection against coverage recorded after the commit, and injects
