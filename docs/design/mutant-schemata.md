@@ -76,6 +76,23 @@ schemata are turned off for the commit and the evaluation falls back to one-at-a
   already rejects failures that do not repeat; and the evaluation records, per repository, whether a
   parallel run's baseline-equivalent check (below) passed, falling back to 1 if it did not.
 
+### 3b. Finding: parallel runs must not share the clone (2026-10-02)
+
+Measuring Scriban at 2 mutants at once gave one result different from 1 at a time: its `TestAot`
+runs `dotnet publish` into a fixed folder inside the repository, two mutants' runs removed and wrote
+it at the same moment, and one failed ("Unable to remove directory"). The interference check of
+section 3 passed: two baseline runs at once did not happen to collide, since a race shows up only
+sometimes. A check cannot prove the absence of a race; isolation can.
+
+Design change: each parallel worker runs in its own copy of the built clone (the repository with
+its build outputs and the schema written in), made once per commit after the schema check:
+copy-on-write where the file system has it (`cp -c` on APFS, `cp --reflink=auto` on Linux), a plain
+copy otherwise. Test runs of worker k use copy k as working directory and output folders; project
+paths are mapped from the clone to the copy. What tests write into the repository (publish folders,
+snapshot `.received` files, local databases) then stays per worker. The interference check stays as a
+second guard for what copies cannot isolate (fixed ports, global temp files, machine-wide state).
+Copies are removed at the end of the commit.
+
 ### 4. Equivalence, before switching the default
 
 - Unit tests: for each kind, a small compiled assembly is rewritten with schemata; loading it in a
