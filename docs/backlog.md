@@ -32,9 +32,13 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `IClassFixture<T>`/`ICollectionFixture<T>`/`IAssemblyFixture<T>` implemented by a base class,
   also in another library, with the fixture as a generic argument (FastEndpoints.Testing's
   `TestBase<TAppFixture>`) now marks the fixture; xUnit v3 assembly fixtures are an assembly setup
-  scope (see below). Still ambient: fixtures a custom test framework creates without such an
-  interface. Complete fix: credit code that runs before the first test of a class while a fixture
-  type's constructor is on the stack to that fixture.
+  scope (see below). Still not exact: objects a DI-based extension (Xunit.DependencyInjection and
+  the like) builds once and injects through constructor parameters, usually typed as interfaces;
+  their construction runs between tests and counts for the class that ran last. Analysis
+  (2026-10-02): treating test-class constructor parameter types as fixtures adds nothing for xUnit
+  (its only concrete parameters are fixtures already found) and misses the interface case; the
+  complete fix needs to know when the framework is between tests (exit probes on test methods, or
+  the frameworks' own hooks) and credit that code to the class it builds for.
 - ~~Recording can hang on a lingering MSBuild node~~ (done, 2cbf3bf). The cause was not node
   reuse but how Sift waited: after dotnet exited, it waited for its output to close, and a child
   left behind (MSBuild node, compiler server, a test's background process) kept it open. Sift now
@@ -61,8 +65,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   copy Microsoft.Extensions.ObjectPool) is now a cache fill, also when the pool binds it to a
   `Func<T>` and calls that on a miss, as `DefaultObjectPool` does. Other pools (`ArrayPool`, hand-rolled
   `Stack<T>` caches, `[ThreadStatic]` buffers) still credit what they build to the first class.
+  `[ThreadStatic]` buffers stored in fields are covered by field-read probes now.
   Complete fix: detect "create on miss" call sites generally (a pool keeps its objects in a
-  collection, so field-read probes do not see them).
+  collection, so field-read probes do not see them); a hand-rolled `Stack<T>` cache still relies on
+  the run-once constructor rule (traced by name).
 - ~~Hand-rolled lazy initialisation~~ (completed by field-read probes): `_x ??= new X()` and
   `if (_x == null) _x = ...` on any field credit the builder to every reader. Not seen: a value
   built on another thread and handed over before the store; the run-once rules stay for it.
