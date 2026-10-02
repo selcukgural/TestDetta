@@ -70,6 +70,14 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     /// </summary>
     public IReadOnlyList<string> UnknownReferencePatterns { get; init; } = [];
 
+    /// <summary>
+    /// Patterns (as <see cref="UnknownReferencePatterns"/>) for compile and content items outside the
+    /// project whose path could not be resolved, such as OpenTelemetry's
+    /// <c>$(RepoRoot)\test\OpenTelemetry.Tests\Metrics\MetricApiTests.cs</c>: every file a pattern
+    /// matches belongs to the project too.
+    /// </summary>
+    public IReadOnlyList<string> UnknownItemPatterns { get; init; } = [];
+
     /// <summary>True when some <c>ProjectReference</c> could not be resolved; see <see cref="UnknownReferencePatterns"/>.</summary>
     public bool HasUnknownReferences => UnknownReferencePatterns.Count > 0;
 

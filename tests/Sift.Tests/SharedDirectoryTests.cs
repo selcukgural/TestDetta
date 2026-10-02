@@ -52,5 +52,41 @@ public sealed class SharedDirectoryTests : IDisposable
         Assert.All(tests, t => Assert.True(t.Mode == TestRunMode.All || t.TestClasses.Contains("Lib.Tests.RuleTests"), t.Reason));
     }
 
+    [Fact]
+    public void Linked_file_whose_path_needs_evaluation_belongs_to_the_linking_project()
+    {
+        // OpenTelemetry compiles test files of one test project into others through $(RepoRoot),
+        // which a property function computes: the linking project must own them too.
+        _repo.Write("build/Common.props", """
+            <Project><PropertyGroup><RepoRoot>$([System.IO.Directory]::GetParent($(MSBuildThisFileDirectory)).Parent.FullName)</RepoRoot></PropertyGroup></Project>
+            """);
+        _repo.Write("test/Directory.Build.props", """<Project><Import Project="../build/Common.props" /></Project>""");
+        _repo.Write("test/Core.Tests/Core.Tests.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
+        _repo.Write("test/Core.Tests/Metrics/MetricApiTests.cs", "namespace Core.Tests; public class MetricApiTests { }");
+        _repo.Write("test/Hosting.Tests/Hosting.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup><Compile Include="$(RepoRoot)\test\Core.Tests\Metrics\MetricApiTests.cs" Link="Includes\MetricApiTests.cs" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Write("test/Core.Tests/Other.cs", "namespace Core.Tests; public class Other { }");
+        // Paths with nothing literal to match (OpenTelemetry's Common.prod.props) must not claim every file.
+        _repo.Write("build/Common.prod.props", """
+            <Project><ItemGroup>
+              <Content Include="@(SigstoreBundleWithTfm)" Pack="True" />
+              <Compile Include="$(SharedSources)**/*.cs" />
+              <None Include="$(RepoRoot)\test\Core.Tests\Metrics\MetricApiTests.cs" />
+            </ItemGroup></Project>
+            """);
+        _repo.Write("src/Lib/Lib.csproj", """<Project Sdk="Microsoft.NET.Sdk"><Import Project="../../build/Common.prod.props" /></Project>""");
+
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        string[] Owners(string file) => [.. graph.ResolveFile(Paths.Normalize(Path.Combine(_repo.Root, file)))
+            .Where(static o => o.Role == FileRole.Source).Select(static o => Path.GetFileName(o.Project.Path)).Order(StringComparer.Ordinal)];
+
+        Assert.Equal(["Core.Tests.csproj", "Hosting.Tests.csproj"], Owners("test/Core.Tests/Metrics/MetricApiTests.cs"));
+        // Only the linked file: the pattern's unknown part is the root, not the file name.
+        Assert.Equal(["Core.Tests.csproj"], Owners("test/Core.Tests/Other.cs"));
+    }
+
     public void Dispose() => _repo.Dispose();
 }

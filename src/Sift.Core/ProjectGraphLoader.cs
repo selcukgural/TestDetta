@@ -175,7 +175,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             var properties = PropertyReference().Matches(include).Select(static m => m.Groups[1].Value).Where(static p => !IsPathProperty(p)).ToList();
             if (resolved.Count == 0 || properties.Any(inputs.IncompleteProperties.Contains) || properties.Count > 0 && resolved.Any(static r => !File.Exists(r)))
             {
-                unknownReferences.Add(ReferencePattern(include, projectDir, declaringDirectory));
+                unknownReferences.Add(PathPattern(include, projectDir, declaringDirectory));
                 continue;
             }
 
@@ -200,6 +200,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             ExternalItems = inputs.ExternalItems,
             HasUnresolvedInputs = inputs.Unresolved,
             UnknownReferencePatterns = unknownReferences,
+            UnknownItemPatterns = inputs.UnknownItems,
             PackageReferences = inputs.Packages,
         };
 
@@ -254,6 +255,9 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         /// of the project itself that use a property or item. With the directory of the declaring file.
         /// </summary>
         public List<(string Include, string Directory)> ProjectReferences { get; } = [];
+
+        /// <summary>Patterns for compile and content items whose path could not be resolved.</summary>
+        public List<string> UnknownItems { get; } = [];
 
         /// <summary>
         /// Item includes by item name, with the directory of the declaring file, so that a reference
@@ -400,7 +404,18 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             // Items are relative to the project, wherever they are declared.
             foreach (var part in include.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                foreach (var resolved in Resolve(part, inputs.ProjectDirectory, inputs.ProjectDirectory, inputs, directory))
+                var resolvedItems = Resolve(part, inputs.ProjectDirectory, inputs.ProjectDirectory, inputs, directory).ToList();
+                if (resolvedItems.Count == 0 && name == "Compile" && IsSpecificUnresolvedPath(part))
+                {
+                    // A path only MSBuild can compute: the files it may name still belong to the project.
+                    var pattern = PathPattern(part, inputs.ProjectDirectory, directory);
+                    if (!inputs.UnknownItems.Contains(pattern))
+                    {
+                        inputs.UnknownItems.Add(pattern);
+                    }
+                }
+
+                foreach (var resolved in resolvedItems)
                 {
                     if (!Paths.IsUnder(resolved, inputs.ProjectDirectory) && !inputs.ExternalItems.Contains(resolved, Paths.Comparer))
                     {
@@ -516,26 +531,53 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
     }
 
     /// <summary>
-    /// An anchored, case-insensitive pattern over normalized project paths for a reference that could
-    /// not be resolved: the known directory properties are substituted, every other property, item or
-    /// metadata reference matches anything, and a relative path starts at the project.
+    /// An anchored, case-insensitive pattern over normalized paths for a reference or item path that
+    /// could not be resolved: the known directory properties are substituted, every other property,
+    /// item or metadata reference matches anything, globs (<c>*</c>, <c>**</c>, <c>?</c>) keep their
+    /// meaning, and a relative path starts at the project.
     /// </summary>
-    /// <param name="include">Reference include as written.</param>
+    /// <param name="include">Path as written.</param>
     /// <param name="projectDirectory">Directory of the project.</param>
     /// <param name="fileDirectory">Directory of the declaring file.</param>
-    private static string ReferencePattern(string include, string projectDirectory, string fileDirectory)
+    private static string PathPattern(string include, string projectDirectory, string fileDirectory)
     {
-        const string unknown = "\u0001";
+        const string unknown = "\u0001", anyDepth = "\u0002", anyName = "\u0003", anyChar = "\u0004";
         var path = include.Trim().Replace('\\', '/')
             .Replace("$(MSBuildThisFileDirectory)", fileDirectory + "/", StringComparison.OrdinalIgnoreCase)
             .Replace("$(MSBuildProjectDirectory)", projectDirectory, StringComparison.OrdinalIgnoreCase);
         path = UnknownPart().Replace(path, unknown);
+        path = path.Replace("**/", anyDepth, StringComparison.Ordinal).Replace("**", unknown, StringComparison.Ordinal)
+            .Replace("*", anyName, StringComparison.Ordinal).Replace("?", anyChar, StringComparison.Ordinal);
         if (!path.StartsWith(unknown, StringComparison.Ordinal))
         {
             path = Paths.Normalize(Path.IsPathRooted(path) ? path : Path.Combine(projectDirectory, path));
         }
 
-        return "(?i)^" + System.Text.RegularExpressions.Regex.Escape(path).Replace(unknown, ".*", StringComparison.Ordinal) + "$";
+        return "(?i)^" + System.Text.RegularExpressions.Regex.Escape(path)
+            .Replace(unknown, ".*", StringComparison.Ordinal)
+            .Replace(anyDepth, "(.*/)?", StringComparison.Ordinal)
+            .Replace(anyName, "[^/]*", StringComparison.Ordinal)
+            .Replace(anyChar, "[^/]", StringComparison.Ordinal) + "$";
+    }
+
+    /// <summary>
+    /// True for a path with a part only MSBuild can compute that still names something specific once
+    /// that part is unknown: at least two literal segments, or a literal file name
+    /// (<c>$(RepoRoot)\test\Core.Tests\X.cs</c>). <c>@(Bundle)</c> or <c>$(Shared)**\*.cs</c> would
+    /// match every file; such items keep the older rule (the project claims files nobody else does).
+    /// </summary>
+    /// <param name="path">Item path as written.</param>
+    private static bool IsSpecificUnresolvedPath(string path)
+    {
+        if (!path.Contains("$(", StringComparison.Ordinal) && !path.Contains("@(", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var segments = UnknownPart().Replace(path, "/").Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        var literal = segments.Count(static x => x.IndexOfAny(['*', '?']) < 0);
+        var fileName = segments.Length > 0 && segments[^1].IndexOfAny(['*', '?']) < 0 && segments[^1].Contains('.', StringComparison.Ordinal);
+        return literal >= 2 || fileName;
     }
 
     /// <summary>Matches a reference that is exactly one item list, such as <c>@(OoxGenerator)</c>.</summary>

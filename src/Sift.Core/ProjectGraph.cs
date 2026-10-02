@@ -18,6 +18,9 @@ public sealed class ProjectGraph
     /// <summary>Projects whose inputs could not all be resolved.</summary>
     private readonly ProjectNode[] _unresolved;
 
+    /// <summary>Projects with item paths that could not be resolved, with their compiled patterns.</summary>
+    private readonly (ProjectNode Project, System.Text.RegularExpressions.Regex[] Patterns)[] _unknownItems;
+
     /// <summary>
     /// Extensions of files that may be an unresolved project's hidden import or source; other
     /// unclaimed files (documentation, scripts) stay unclaimed.
@@ -36,6 +39,9 @@ public sealed class ProjectGraph
             .Where(static p => p.ExternalItems.Count > 0 || p.Imports.Count > 0)
             .Select(static p => (p, new PathMatcher(p.ExternalItems), new PathMatcher(p.Imports)))];
         _unresolved = [.. nodes.Values.Where(static p => p.HasUnresolvedInputs)];
+        _unknownItems = [.. nodes.Values
+            .Where(static p => p.UnknownItemPatterns.Count > 0)
+            .Select(static p => (p, p.UnknownItemPatterns.Select(static x => new System.Text.RegularExpressions.Regex(x, System.Text.RegularExpressions.RegexOptions.Compiled)).ToArray()))];
 
         foreach (var node in nodes.Values)
         {
@@ -118,6 +124,15 @@ public sealed class ProjectGraph
                 {
                     owners.Add(new FileOwner(sibling, FileRole.Source));
                 }
+            }
+        }
+
+        // Files named by an item path only MSBuild can compute (a linked file under $(RepoRoot)).
+        foreach (var (project, patterns) in _unknownItems)
+        {
+            if (!owners.Exists(o => o.Project == project && o.Role == FileRole.Source) && Array.Exists(patterns, p => p.IsMatch(file)))
+            {
+                owners.Add(new FileOwner(project, FileRole.Source));
             }
         }
 
