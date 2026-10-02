@@ -1,8 +1,8 @@
 # Map drift: using an older map through a static bridge
 
 Status: design 2026-10-02; selection side and the evaluator's drift modes implemented the same day
-(see "As built"). Still open: running measurement 2, the size cap, and the action's restore of an
-ancestor map.
+(see "As built"), the action's restore of an ancestor map too. Still open: running measurement 2
+and the size cap.
 
 ## Problem
 
@@ -248,3 +248,9 @@ A bridge miss gets a complete fix and a red test, as with every other miss.
   has `mapAge`, `mapCommit` and per mutant `drift.{bridge,noMap,naive}.{missed,selectedShare}`;
   `synthetic.md` a "Map drift" table (missed mutants, missed classes, mean share, precision).
   With `--map-age 0` nothing changes. `EvalMapAgeTests` (end to end, sabotage-checked).
+- Action: a "Find newest coverage map" step lists `sift-coverage-*` caches with `gh cache list`
+  (input `github-token`, default `github.token`; the job needs `actions: read`) and walks
+  `git rev-list --first-parent -n <max-map-age + 1> <merge-base>` for the first commit that has
+  one; without the permission it notices and falls back to the exact key. Input `max-map-age`
+  (default 50) is passed to `sift test`. Checked locally with a stub `gh` (ancestor found, 403
+  fallback, age limit).

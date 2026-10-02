@@ -64,6 +64,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # lets pull requests find the newest coverage map in the Actions cache
 
 jobs:
   test:
@@ -95,7 +96,9 @@ jobs:
 ```
 
 Maps are stored in the Actions cache under `sift-coverage-<commit>`. Pull requests can read caches
-of their base branch. Without a map, `mode: test` still works, deciding by name only.
+of their base branch. A pull request uses the map of its merge base, or the newest one recorded
+up to `max-map-age` commits before it (finding that one lists the caches, which needs
+`actions: read`). Without a map, `mode: test` still works, deciding by name only.
 
 | Input | Default | |
 |---|---|---|
@@ -106,6 +109,8 @@ of their base branch. Without a map, `mode: test` still works, deciding by name 
 | `parallel` | `1` | record mode: test processes per project (the suite must tolerate several at once) |
 | `no-build` | `false` | record mode: `true` to record the build an earlier step made with the same `configuration` |
 | `dotnet-test-args` | | test mode: extra `dotnet test` arguments |
+| `max-map-age` | `50` | test mode: commits a map may be behind the merge base (0: only an exact map) |
+| `github-token` | `github.token` | test mode: lists the Actions caches to find the newest map |
 | `working-directory` | `.` | any directory inside the repository |
 | `setup-dotnet` | `true` | install the .NET 10 SDK Sift runs on |
 
