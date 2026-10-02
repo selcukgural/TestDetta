@@ -325,7 +325,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             InsertBeforeReturns(body, il, probes.ExitTypeInitializer);
         }
 
-        MarkCacheFills(body, il, probes);
+        MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType));
         body.OptimizeMacros();
     }
 
@@ -356,6 +356,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         target.Name == "Create" && target.DeclaringType.GetElementType().Name is "IPooledObjectPolicy`1" or "PooledObjectPolicy`1";
 
     /// <summary>
+    /// True when a method of <paramref name="type"/> turns a pool policy's <c>Create</c> into a
+    /// delegate: Microsoft.Extensions.ObjectPool's <c>DefaultObjectPool</c> (and copies of it) stores
+    /// <c>policy.Create</c> in a <c>Func&lt;T&gt;</c> field and calls that on a miss.
+    /// </summary>
+    /// <param name="type">Declaring type of the method being instrumented.</param>
+    private static bool BindsPoolPolicyCreate(TypeDefinition type) =>
+        type.Methods.Any(static m => m.HasBody && m.Body.Instructions.Any(static i =>
+            (i.OpCode == OpCodes.Ldftn || i.OpCode == OpCodes.Ldvirtftn) && i.Operand is MethodReference target && IsPoolPolicyCreate(target)));
+
+    /// <summary>
     /// Surrounds every call of <see cref="CacheFills"/> and <see cref="IsPoolPolicyCreate"/> with <see cref="SiftTracker.EnterCache"/> and
     /// <see cref="SiftTracker.ExitCache"/>. The calls take and leave nothing on the stack, so the call
     /// in between keeps its arguments and result. Branches and handler boundaries that pointed at the
@@ -365,13 +375,19 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="body">Method body with short branches already expanded.</param>
     /// <param name="il">Processor of the body.</param>
     /// <param name="probes">Tracker references.</param>
-    private static void MarkCacheFills(MethodBody body, ILProcessor il, Probes probes)
+    /// <param name="createsThroughDelegate">
+    /// True when the method's type binds a pool policy's <c>Create</c> to a delegate (see
+    /// <see cref="BindsPoolPolicyCreate"/>); its <c>Func&lt;T&gt;.Invoke</c> calls are then fills too.
+    /// </param>
+    private static void MarkCacheFills(MethodBody body, ILProcessor il, Probes probes, bool createsThroughDelegate)
     {
         var calls = body.Instructions
-            .Where(static i => (i.OpCode == OpCodes.Call || i.OpCode == OpCodes.Callvirt)
-                               && i.Operand is MethodReference target
-                               && (CacheFills.Contains($"{target.DeclaringType.GetElementType().FullName}::{target.Name}") || IsPoolPolicyCreate(target))
-                               && i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
+            .Where(i => (i.OpCode == OpCodes.Call || i.OpCode == OpCodes.Callvirt)
+                        && i.Operand is MethodReference target
+                        && (CacheFills.Contains($"{target.DeclaringType.GetElementType().FullName}::{target.Name}")
+                            || IsPoolPolicyCreate(target)
+                            || createsThroughDelegate && target.Name == "Invoke" && target.DeclaringType.GetElementType().FullName == "System.Func`1")
+                        && i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
             .ToList();
 
         foreach (var call in calls)

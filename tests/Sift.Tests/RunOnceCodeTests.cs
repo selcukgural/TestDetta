@@ -80,6 +80,23 @@ public sealed class RunOnceCodeTests : IDisposable
                 public T Get() => _items.TryPop(out var item) ? item : policy.Create();
                 public void Return(T item) => _items.Push(item);
             }
+            // Microsoft.Extensions.ObjectPool's DefaultObjectPool binds Create to a delegate in its
+            // constructor and calls the delegate on a miss (Meziantou.Analyzer's copy too).
+            public sealed class WideMaker { public System.Text.StringBuilder Make() => new(32); }
+            public sealed class WidePolicy : PooledObjectPolicy<System.Text.StringBuilder> { public override System.Text.StringBuilder Create() => new WideMaker().Make(); }
+            public sealed class DelegatePool<T> where T : class
+            {
+                private readonly Func<T> _create;
+                private readonly Stack<T> _items = new();
+                public DelegatePool(PooledObjectPolicy<T> policy) => _create = policy.Create;
+                public T Get() => _items.TryPop(out var item) ? item : _create();
+                public void Return(T item) => _items.Push(item);
+            }
+            public static class WideBuffers
+            {
+                private static readonly DelegatePool<System.Text.StringBuilder> Shared = new(new WidePolicy());
+                public static int Capacity() { var b = Shared.Get(); var c = b.Capacity; Shared.Return(b); return c; }
+            }
             public static class Buffers
             {
                 private static readonly Pool<System.Text.StringBuilder> Shared = new(new BufferPolicy());
@@ -108,9 +125,9 @@ public sealed class RunOnceCodeTests : IDisposable
         _repo.Write("tests/Cache.Tests/Tests.cs", """
             using Xunit;
             namespace Cache.Tests;
-            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); } }
-            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); } }
-            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); } }
+            public class AlphaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); Assert.Equal(32, WideBuffers.Capacity()); } }
+            public class BetaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); Assert.Equal(32, WideBuffers.Capacity()); } }
+            public class GammaTests { [Fact] public void Counts() { Assert.Equal(2, Catalog.Count); Assert.Equal(1, LazyCatalog.Count()); Assert.Equal(2, PatternCache.Get("ab")); Assert.Equal(3, LazyValue.Get()); Assert.Equal(4, Features.Shared.Resolver.Size); Assert.Equal(16, Buffers.Capacity()); Assert.Equal(32, WideBuffers.Capacity()); } }
             """);
         _repo.Commit("base");
     }
@@ -132,6 +149,7 @@ public sealed class RunOnceCodeTests : IDisposable
         Assert.Contains(new CoveredMethod("Cache.Computer", "Compute"), map.Initialization.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Sizer", "Measure"), map.Initialization.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.BufferMaker", "Make"), map.Initialization.Select(id => map.Methods[id]));
+        Assert.Contains(new CoveredMethod("Cache.WideMaker", "Make"), map.Initialization.Select(id => map.Methods[id]));
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         string[] all = ["Cache.Tests.AlphaTests", "Cache.Tests.BetaTests", "Cache.Tests.GammaTests"];
@@ -157,6 +175,10 @@ public sealed class RunOnceCodeTests : IDisposable
 
         _repo.Replace("src/Cache/Catalog.cs", "Measure() => 2 + 2;", "Measure() => 4;");
         _repo.Replace("src/Cache/Catalog.cs", "Make() => new(16);", "Make() => new(8 + 8);");
+        AssertSelectsAll(all);
+
+        _repo.Replace("src/Cache/Catalog.cs", "Make() => new(8 + 8);", "Make() => new(16);");
+        _repo.Replace("src/Cache/Catalog.cs", "Make() => new(32);", "Make() => new(16 + 16);");
         AssertSelectsAll(all);
     }
 
