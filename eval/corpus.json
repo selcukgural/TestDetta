@@ -394,7 +394,10 @@
         "linked-files",
         "mtp"
       ],
-      "notes": "per-Roslyn-version csproj sharing sources; content only in Directory.Build.props; custom test SDK"
+      "notes": "per-Roslyn-version csproj sharing sources; content only in Directory.Build.props; custom test SDK. Its CI tests without analyzers (Release, RunAnalyzers=false); since Meziantou.NET.Sdk 1.0.179 (183bc1c) its own analyzer fails the Debug test build (MA0054), so analyzers are off here too.",
+      "environment": {
+        "RunAnalyzers": "false"
+      }
     },
     {
       "name": "swashbuckle",
