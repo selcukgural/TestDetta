@@ -190,7 +190,8 @@ internal sealed class CoverageSelection
     /// </summary>
     /// <param name="change">A changed type or member.</param>
     /// <param name="owner">Project that owns the changed file.</param>
-    public bool TryResolve(SymbolChange change, ProjectNode owner)
+    /// <param name="reached">True for a member the name spread reached rather than a change itself; only the evidence differs.</param>
+    public bool TryResolve(SymbolChange change, ProjectNode owner, bool reached = false)
     {
         if (_maps.Count == 0)
         {
@@ -221,7 +222,8 @@ internal sealed class CoverageSelection
         }
 
         var (answers, resolved) = Answers(change, owner);
-        SelectAll(answers, change.MemberName is null ? $"ran {change.TypeName}, which changed" : $"ran {change.TypeName}.{change.MemberName}, which changed");
+        var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
+        SelectAll(answers, reached ? $"ran {member}, which names the changed code" : $"ran {member}, which changed");
         return resolved && answers.Count > 0;
     }
 

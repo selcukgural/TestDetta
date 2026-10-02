@@ -748,6 +748,25 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void A_class_coverage_selects_through_a_reached_member_says_so()
+    {
+        // The map does not know Tax, so the change is traced by name to Total, which it does know.
+        List<CoveredMethod> methods = [new("Shop.PriceCalculator", "Total"), new("Shop.OrderService", "Checkout")];
+        var path = CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Shop.Tests/Shop.Tests.csproj"));
+        File.WriteAllText(Path.Combine(_repo.Root, ".gitignore"), ".sift/\n");
+        _repo.Commit("ignore maps");
+        var head = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
+        CoverageMapStore.Write(path, Map(head, methods, new Dictionary<string, IReadOnlyList<int>> { ["Shop.Tests.OrderServiceTests"] = [0, 1] }));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var order = Select().Decisions.Single(static d => d.TestClass == "Shop.Tests.OrderServiceTests");
+
+        Assert.Equal(ClassDecisionKind.Coverage, order.Kind);
+        Assert.StartsWith("ran Shop.PriceCalculator.Total", order.Evidence, StringComparison.Ordinal);
+        Assert.Contains("which names the changed code", order.Evidence, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_class_selected_by_name_shows_the_names_that_lead_to_the_change()
     {
         _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
