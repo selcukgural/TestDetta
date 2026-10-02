@@ -1,0 +1,65 @@
+name: Nightly corpus
+
+# A small synthetic evaluation of real repositories every night: Sift must miss no failing test.
+# Kept to about 30-40 minutes on a 2-core runner so the private repository's Actions minutes last;
+# the full corpus runs on a dedicated machine. A miss or an evaluation error fails the run.
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-corpus
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Build the evaluation tool
+        run: dotnet build tools/Sift.Eval -c Release
+
+      # Third-party test suites run here: the job has no secrets and only read access.
+      - name: Evaluate the smoke corpus
+        run: >
+          dotnet tools/Sift.Eval/bin/Release/net10.0/Sift.Eval.dll
+          --corpus eval/corpus.json
+          --only scriban,fluid,carter
+          --synthetic 20
+          --mutant-parallelism 2
+          --parallel 2
+          --out "$RUNNER_TEMP/corpus"
+          | tee "$RUNNER_TEMP/corpus-summary.md"; exit "${PIPESTATUS[0]}"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/corpus-summary.md" ]; then cat "$RUNNER_TEMP/corpus-summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-corpus
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/corpus/*.md
+            ${{ runner.temp }}/corpus/*/stdout.md
+            ${{ runner.temp }}/corpus/*/synthetic.md
+            ${{ runner.temp }}/corpus/*/synthetic.json
+            ${{ runner.temp }}/corpus/*/error.txt
