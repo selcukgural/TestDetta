@@ -164,5 +164,84 @@ public sealed class InjectedServiceTests : IDisposable
             $"{selection.Mode}: {string.Join(", ", selection.TestClasses)}");
     }
 
+    [Fact]
+    public void A_failing_test_ends_its_test_code_and_what_follows_goes_to_the_next_class()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.sift/\n");
+        _repo.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+            </Project>
+            """);
+        _repo.Write("src/App/Formatter.cs", """
+            namespace App;
+            public interface IFormatter { string Format(string text); }
+            public sealed class Prefixer { public string Prefix() => "> "; }
+            public sealed class Formatter : IFormatter
+            {
+                private readonly string _prefix;
+                public Formatter() => _prefix = new Prefixer().Prefix();
+                public string Format(string text) => _prefix + text;
+            }
+            public static class Math2 { public static int Three() => 3; }
+            """);
+        _repo.Write("tests/App.Tests/App.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+                <PackageReference Include="Xunit.DependencyInjection" Version="9.9.0" />
+                <ProjectReference Include="../../src/App/App.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/App.Tests/Startup.cs", """
+            using Microsoft.Extensions.DependencyInjection;
+            namespace App.Tests;
+            public class Startup
+            {
+                public void ConfigureServices(IServiceCollection services) => services.AddTransient<IFormatter, Formatter>();
+            }
+            """);
+        // Classes run in name order: one passing test first (tests have started), then a failing one,
+        // then the user; its formatter is built between the failure and its own test.
+        _repo.Write("tests/App.Tests/Order.cs", """
+            using Xunit;
+            using Xunit.Abstractions;
+            [assembly: TestCollectionOrderer("App.Tests.ByName", "App.Tests")]
+            [assembly: CollectionBehavior(DisableTestParallelization = true)]
+            namespace App.Tests;
+            public sealed class ByName : ITestCollectionOrderer
+            {
+                public IEnumerable<ITestCollection> OrderTestCollections(IEnumerable<ITestCollection> collections) =>
+                    collections.OrderBy(static c => c.DisplayName, StringComparer.Ordinal);
+            }
+            """);
+        _repo.Write("tests/App.Tests/Tests.cs", """
+            using Xunit;
+            namespace App.Tests;
+            public class A_PlainTests { [Fact] public void Three() => Assert.Equal(3, Math2.Three()); }
+            public class B_FailingTests { [Fact] public void Fails() => Assert.Equal(4, Math2.Three()); }
+            public class C_UserTests(IFormatter formatter) { [Fact] public void Formats() => Assert.Equal("> c", formatter.Format("c")); }
+            """);
+        _repo.Commit("base");
+
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var testProject = graph.Projects.Single(p => p.IsTestProject);
+        var (map, passed) = new CoverageRecorder(NullLoggerFactory.Instance)
+            .Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: 1)), TextWriter.Null);
+        Assert.False(passed);
+        Assert.Equal(["App.Tests.B_FailingTests"], map.FailedClasses!.Order(StringComparer.Ordinal));
+
+        // The failing test's exception still ended its test code, so the formatter's construction is
+        // between tests: credited to the user and marked as run-once.
+        var prefix = map.Methods.ToList().IndexOf(new CoveredMethod("App.Prefixer", "Prefix"));
+        Assert.Contains(prefix, map.Classes["App.Tests.C_UserTests"]);
+        Assert.Contains(prefix, map.Initialization);
+    }
+
     public void Dispose() => _repo.Dispose();
 }

@@ -74,7 +74,10 @@ case.
   only for constructors, `ValueTask` and `async void`.
 - `CoverageSelection.TryResolve`: an instance constructor change also selects every class that ran
   a member of the type, also when the constructor itself ran before any test (ambient).
-- Tests: `InjectedServiceTests` (singleton: red before; transient with an async test: the helper the
-  constructor calls is initialization), sabotage-checked (no between detection, no constructor rule:
-  each fails). 286 tests green. Round 2 is the first corpus run with it: watch recording failures
+- Tests: `InjectedServiceTests`, end to end with real recordings instead of the planned tracker unit
+  tests (the tracker is static and configured by environment): singleton (red before), transient
+  with an async test (the helper the constructor calls is initialization), and a failing test
+  followed by a user in a fixed class order (the exception ends the test code; the user gets the
+  construction). Sabotage-checked: without between detection, without the constructor rule, and
+  with exits only on normal returns, one test each fails. 287 tests green. Round 2 is the first corpus run with it: watch recording failures
   (IL wrapping of unusual test methods, F# test assemblies) and the precision change.
