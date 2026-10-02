@@ -98,6 +98,14 @@ Interim fixes that are safe for the common case; come back for the complete solu
   reads of fields that are written once, crediting the code that built the value to every bucket
   that reads it, or an IL pattern match of null check → store. Red test: an instance method
   reached only from a `??=` builder on a shared instance, used by three classes in two processes.
+- **Helpers of another test class** (interim: next commit; OpenTelemetry, 1 class missed). A static
+  method of a test class counted as its entry point whenever it had any attribute, and the
+  compiler adds nullable metadata to ordinary helpers, so a test calling another class's helper
+  (SpanBuilderShimTests → SpanContextShimTests.GetSpanContextShim) credited everything after the
+  call to that class. Compiler and analyzer attributes no longer count. Still: a helper with a real
+  test attribute, or an instance of another test class created by hand, switches the bucket.
+  Complete fix: same as the item below (credit the bucket that was current, and do not switch
+  buckets inside a running test for anything but the framework's own entry points).
 - **Test data credited to both buckets** (interim: 7c33ec6). A data member enters the class that
   uses it and the marker is not undone on return, so lazily built rows stay with that class. A
   test that calls another class's data member directly therefore credits the rest of its own code

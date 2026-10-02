@@ -720,7 +720,18 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// </summary>
     /// <param name="method">Method of a test class.</param>
     private static bool IsTestClassEntryPoint(MethodDefinition method) =>
-        (method.IsConstructor && !method.IsStatic) || method.HasCustomAttributes || LifecycleMethods.Contains(method.Name);
+        (method.IsConstructor && !method.IsStatic) || method.CustomAttributes.Any(static a => !IsCompilerAttribute(a)) || LifecycleMethods.Contains(method.Name);
+
+    /// <summary>
+    /// True for attributes the compiler or analyzers put on any method (nullable metadata, state
+    /// machines, suppressions), which say nothing about a test framework calling it. With them, a
+    /// static helper of a test class that another class's test calls (OpenTelemetry's
+    /// SpanContextShimTests.GetSpanContextShim) became an entry point and took the rest of that
+    /// test's code into its own class.
+    /// </summary>
+    /// <param name="attribute">Attribute of a method.</param>
+    private static bool IsCompilerAttribute(CustomAttribute attribute) =>
+        attribute.AttributeType.Namespace is "System.Runtime.CompilerServices" or "System.Diagnostics" or "System.Diagnostics.CodeAnalysis";
 
     /// <summary>True when the method has a test attribute, directly or through a custom attribute derived from one.</summary>
     /// <param name="method">Method definition.</param>
