@@ -146,8 +146,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
      of Sift's core, coverage and tracker assemblies, so any Sift change records again. Baselines
      are not cached: one or two suite runs per commit, and they also measure the time limits and
      anchor the schema and parallel checks.
-   - **Tiers**: a smoke corpus (fast repositories, ~20 mutants each) on every Sift commit in CI;
-     the full corpus nightly or weekly; results compared with the previous run automatically.
+   - ~~Tiers~~: nightly smoke corpus on GitHub done (6a1a57e; Scriban, Fluid, Carter, 20 mutants each,
+     about 18 minutes on a 2-core runner; first run 0 of 47 missed). User chose nightly over per-commit
+     and kept the repository private (Actions minutes). Still: the full corpus on a schedule on the
+     dedicated machine, and comparing a night with the previous one beyond "no miss".
    - **Hermetic, reproducible runners**: pinned SDK and runtimes per repository, installed
      side-by-side without touching a live dotnet (2026-10-02 incident), an x64 runner for
      x64-only suites, no shared ports or global state between parallel jobs, NuGet cache warmed
