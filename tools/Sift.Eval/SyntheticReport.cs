@@ -145,6 +145,7 @@ internal static class SyntheticReport
                 json.WriteNumber("mutatedMethods", mutant.MutatedMethods);
                 json.WriteBoolean("inconclusive", mutant.Inconclusive);
                 json.WriteBoolean("caughtByCrash", mutant.CaughtByCrash);
+                json.WriteBoolean("reused", mutant.Reused);
                 json.WriteNumber("selectedShare", Math.Round(mutant.SelectedShare, 4));
                 WriteStrings(json, "killed", mutant.KilledClasses);
                 WriteStrings(json, "missed", mutant.MissedClasses);

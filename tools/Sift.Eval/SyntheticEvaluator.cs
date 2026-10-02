@@ -21,6 +21,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <summary>Recording, building and selection checks shared with the history mode.</summary>
     private readonly EvalSteps _steps = new(workspace, settings);
 
+    /// <summary>Test outcomes kept from earlier evaluations of the commit; null when caching is off.</summary>
+    private OutcomeCache? _cache;
+
     /// <summary>Evaluates sampled changes at <paramref name="sha"/>; a build failure is reported, not thrown.</summary>
     /// <param name="sha">Commit to change.</param>
     /// <param name="request">How many members to change.</param>
@@ -30,6 +33,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var mutants = new List<SyntheticMutant>();
         try
         {
+            _cache = OutcomeCache.Open(settings.OutcomeCache, sha);
+            if (_cache is { Count: > 0 } cache)
+            {
+                LogCacheOpened(cache.Count);
+            }
+
             var maps = _steps.RecordAt(sha);
             workspace.Git.Checkout(sha);
             workspace.Executor.Setup();
@@ -96,11 +105,17 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var detected = analysis.Impact.CodeChanges.Any(c =>
             c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
         var share = SelectedShare(analysis, context.Maps);
+        var state = new MutantRun(analysis, context.TestProjects, index, detected, share);
+        if (_cache?.Find(target) is { } stored && FromCache(target, stored, state) is { } reused)
+        {
+            return reused;
+        }
 
         using var mutation = MutationInjector.Inject(context.Assemblies, target.Member, Path.Combine(workspace.MapCache, "..", "mutant-backup"), target.Kind);
         if (mutation.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);
+            _cache?.Store(target, new MutantOutcome(0, [], []));
             return new SyntheticMutant(target, detected, 0, [], [], share, Inconclusive: false);
         }
 
@@ -132,14 +147,86 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             }
         }
 
+        var failedBeforeConfirming = new List<string>(killed);
+        var alone = new Dictionary<string, bool>(StringComparer.Ordinal);
         if (missed.Count > 0)
         {
-            missed = Confirm(missed, new MutantScope(reached, index, mutation), killed);
+            missed = Confirm(missed, new MutantScope(reached, index, mutation), killed, alone);
         }
 
+        _cache?.Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone));
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
         return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false);
     }
+
+    /// <summary>
+    /// The mutant's result from a stored test outcome and the current selection, without running a
+    /// test: the stored failures are checked against what Sift selects now, and the confirmation
+    /// rules of <see cref="Confirm"/> are applied to stored answers. Null when an answer is missing
+    /// (a class missed now was selected when the outcome was stored) or a failing class belongs to a
+    /// project that is no longer evaluated; the mutant is then run.
+    /// </summary>
+    /// <param name="target">The mutant.</param>
+    /// <param name="stored">What the tests did against it.</param>
+    /// <param name="state">The mutant's analysis and the evaluated test projects.</param>
+    private SyntheticMutant? FromCache(SyntheticTarget target, MutantOutcome stored, MutantRun state)
+    {
+        if (stored.MutatedMethods == 0)
+        {
+            LogNotFound(target.Member.TypeName, target.Member.MemberName);
+            return new SyntheticMutant(target, state.Detected, 0, [], [], state.Share, Inconclusive: false) { Reused = true };
+        }
+
+        var projects = state.Reached.ToDictionary(static p => Path.GetFileNameWithoutExtension(p.Path), static p => p.Path, StringComparer.Ordinal);
+        var killed = new List<string>(stored.Failed);
+        var missed = new List<string>();
+        foreach (var failed in stored.Failed)
+        {
+            var separator = failed.IndexOf(": ", StringComparison.Ordinal);
+            if (separator < 0 || !projects.TryGetValue(failed[..separator], out var project))
+            {
+                return null;
+            }
+
+            if (!EvalSteps.IsSelected(state.Analysis, project, failed[(separator + 2)..]))
+            {
+                missed.Add(failed);
+            }
+        }
+
+        if (missed.Exists(m => !stored.FailsAloneWithMutant.ContainsKey(m)))
+        {
+            return null;
+        }
+
+        var confirmed = missed.FindAll(m => stored.FailsAloneWithMutant[m]);
+        if (confirmed.Exists(c => KnownFailsAlone(c) is null))
+        {
+            return null;
+        }
+
+        foreach (var unconfirmed in missed.Where(m => !stored.FailsAloneWithMutant[m]))
+        {
+            LogUnconfirmed(state.Index, unconfirmed);
+            killed.Remove(unconfirmed);
+        }
+
+        foreach (var broken in confirmed.Where(c => KnownFailsAlone(c) == true))
+        {
+            LogFailsWithoutMutant(state.Index, broken);
+            killed.Remove(broken);
+        }
+
+        missed = confirmed.FindAll(c => KnownFailsAlone(c) == false);
+        LogReused(state.Index);
+        LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
+        return new SyntheticMutant(target, state.Detected, stored.MutatedMethods, killed, missed, state.Share, Inconclusive: false) { Reused = true };
+    }
+
+    /// <summary>Whether a class fails alone without any mutant, from this run or the cache; null when unknown.</summary>
+    /// <param name="testClass">Test class (<c>Project: Class</c>).</param>
+    private bool? KnownFailsAlone(string testClass) =>
+        _failsAlone.TryGetValue(testClass, out var fails) ? fails : _cache?.FailsAlone(testClass);
 
     /// <summary>One mutant's state while it is evaluated.</summary>
     /// <param name="Analysis">Sift's analysis of the synthetic change.</param>
@@ -200,7 +287,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         var killed = new List<string>(failed);
-        var missed = Confirm(failed, new MutantScope(state.Reached, state.Index, mutation), killed);
+        var missed = Confirm(failed, new MutantScope(state.Reached, state.Index, mutation), killed, new Dictionary<string, bool>(StringComparer.Ordinal));
         LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
         return new SyntheticMutant(target, state.Detected, mutatedMethods, killed, missed, state.Share, Inconclusive: false)
         {
@@ -233,14 +320,31 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="missed">Missed classes of the first run (<c>Project: Class</c>).</param>
     /// <param name="scope">The mutant and the projects it reaches.</param>
     /// <param name="killed">Killed classes of the first run; unconfirmed ones are removed in place.</param>
-    private List<string> Confirm(List<string> missed, MutantScope scope, List<string> killed)
+    /// <param name="alone">Receives, for a complete run alone, whether each missed class failed again.</param>
+    private List<string> Confirm(List<string> missed, MutantScope scope, List<string> killed, Dictionary<string, bool> alone)
     {
         var again = RunAlone(missed, scope.Reached, $"synthetic-{scope.Index}-confirm");
+        if (again.Complete)
+        {
+            foreach (var testClass in missed)
+            {
+                alone[testClass] = again.Failed.Contains(testClass);
+            }
+        }
+
         var confirmed = missed.FindAll(again.Failed.Contains);
         foreach (var unconfirmed in missed.Where(m => !again.Failed.Contains(m)))
         {
             LogUnconfirmed(scope.Index, unconfirmed);
             killed.Remove(unconfirmed);
+        }
+
+        foreach (var testClass in confirmed)
+        {
+            if (!_failsAlone.ContainsKey(testClass) && _cache?.FailsAlone(testClass) is { } cached)
+            {
+                _failsAlone[testClass] = cached;
+            }
         }
 
         var unknown = confirmed.FindAll(c => !_failsAlone.ContainsKey(c));
@@ -258,6 +362,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 foreach (var testClass in unknown)
                 {
                     _failsAlone[testClass] = control.Failed.Contains(testClass);
+                    _cache?.StoreFailsAlone(testClass, _failsAlone[testClass]);
                 }
             }
         }
@@ -411,4 +516,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Sha} could not be evaluated synthetically")]
     private partial void LogFailed(string sha, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Reusing {Count} stored mutant outcome(s); only the selection is computed for them")]
+    private partial void LogCacheOpened(int count);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {Index}: test outcome reused from the cache")]
+    private partial void LogReused(int index);
 }

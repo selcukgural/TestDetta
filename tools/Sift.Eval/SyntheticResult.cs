@@ -23,6 +23,9 @@ internal sealed record SyntheticMutant(
     /// </summary>
     public bool CaughtByCrash { get; init; }
 
+    /// <summary>True when the test outcome came from the <see cref="OutcomeCache"/> and only the selection was computed now.</summary>
+    public bool Reused { get; init; }
+
     /// <summary>True when the mutant failed at least one test class, so it can prove a miss or its absence.</summary>
     public bool Killing => !Inconclusive && (KilledClasses.Count > 0 || CaughtByCrash);
 }
