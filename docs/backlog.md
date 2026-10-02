@@ -36,7 +36,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
   reused node or compiler server may keep open. Fix: pass `-nodeReuse:false` (and
   `UseSharedCompilation=false` if needed) to the builds Sift starts, with a test that builds two
   projects in parallel and must finish.
-- **Linked files whose path needs evaluation** (interim: next commit; OpenTelemetry, 7 classes
+- **Linked files whose path needs evaluation** (interim: ea5acb7; OpenTelemetry, 7 classes
   missed). `<Compile Include="$(RepoRoot)\test\OpenTelemetry.Tests\Metrics\MetricApiTests.cs" />`
   with `RepoRoot` from a property function now becomes a path pattern, and the project owns every
   file it matches, when enough of the path is literal (two segments or a file name). Paths with
