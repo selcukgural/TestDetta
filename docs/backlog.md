@@ -144,15 +144,15 @@ Interim fixes that are safe for the common case; come back for the complete solu
      reuse, with trends over the last 30 runs). Still: run it from the scheduled full corpus.
 
 1. **Tolerate map drift with a static bridge (priority).** Maps are used only when recorded exactly
-   at the merge base. With AI-assisted teams merging dozens of commits a day, a PR's merge base
-   rarely has a map, so Sift falls back to the full suite in exactly the setting it is for, and
-   recording on every main commit is too expensive. Plan: take the newest map recorded at an
-   ancestor of the merge base and cover the commits in between with static analysis (Roslyn
-   reference graph: changed symbols → callers → test classes), widening wherever static analysis
-   is blind (reflection, DI, source generators). The same bridge covers new code and new tests the
-   map has not seen. Measure first: how many commits behind main a PR's merge base typically is,
-   and how the miss rate and selection change as the map ages (corpus: record at N−k, evaluate at
-   N). Safety rule unchanged: when the bridge is unsure, select more.
+   at the merge base; otherwise the test project falls back to the name-only trace (broad, and
+   blind where the map is not). Measured (docs/design/map-drift-bridge.md): with nightly recording
+   only about half of CI runs find an exact map even at open-source cadence, and none do right
+   after a merge; the newest map is at most 9 commits behind at p90 (38 right after merges).
+   Design: take the newest map at an ancestor of the merge base and add, for every member the
+   drift changed that can reach the PR's change, the classes the map credits to it (name trace
+   where the map cannot answer); project-level drift and large gaps take the no-map path. Next:
+   measurement 2 (record at N−k, evaluate at N: exact / no map / bridge / naive), then the
+   implementation. Safety rule unchanged: when the bridge is unsure, select more.
 2. **Compare with dotnet-tia on the corpus.** dotnet-tia (github.com/SebHenn/dotnet-tia, MIT) is
    an open-source .NET tool doing the same job by static analysis only (method level, mutation
    gate, reports zero misses and 35.5% selection on NodaTime). Run it on the same repositories with
