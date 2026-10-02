@@ -59,6 +59,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --toolchains <dir>     Where toolchains are installed, one directory each, never changed afterwards
           --toolchain-lock <file>  Archive hashes (default: <toolchains>/toolchains.lock.json); read-only with
                                  CI=true, otherwise missing versions are added from Microsoft's release metadata
+          --env <name=value>     Environment variable for every build and test run; repeat for several
           --parallel <n>         Test processes per project when recording (default: 1)
           --mutants <n>          Changed members to mutate per merge (default: 3, 0 turns it off)
           --project <csproj>     Only use this test project (path in the repository); repeat for several
@@ -184,6 +185,16 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
 
                 case "--toolchains":
                     run = run with { ToolchainRoot = Path.GetFullPath(value) };
+                    break;
+
+                case "--env":
+                    if (value.IndexOf('=', StringComparison.Ordinal) is not (> 0 and var equals))
+                    {
+                        error = $"--env needs name=value, not {value}";
+                        return false;
+                    }
+
+                    run = run with { Environment = new Dictionary<string, string>(run.Environment) { [value[..equals]] = value[(equals + 1)..] } };
                     break;
 
                 case "--toolchain-lock":
@@ -320,6 +331,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
 
     /// <summary>Lock file with the archives' hashes; null for <c>toolchains.lock.json</c> in <see cref="ToolchainRoot"/>.</summary>
     public string? ToolchainLock { get; init; }
+
+    /// <summary>
+    /// Environment variables every process of the evaluation gets (builds, test runs, recording),
+    /// for what a repository needs on this machine, such as a larger default thread stack.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Environment { get; init; } = new Dictionary<string, string>();
 }
 
 /// <summary>Shell commands a repository needs besides dotnet.</summary>

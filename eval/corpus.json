@@ -212,6 +212,9 @@
       "url": "https://github.com/protobuf-net/protobuf-net.git",
       "framework": "net8.0",
       "setup": "dotnet tool restore",
+      // DepthTests recurse deeply; macOS gives secondary threads a small stack, so the host overflowed
+      // (exit 134) before any test reported. 0x1000000 = 16 MB.
+      "environment": { "DOTNET_DefaultStackSize": "1000000" },
       "tags": [
         "serialization",
         "dynamic-code",

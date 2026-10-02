@@ -88,4 +88,36 @@ public sealed class EvalOptionsTests
         Assert.True(BatchOptions.TryParse(["--corpus", corpus], out var without, out _));
         Assert.Throws<InvalidDataException>(() => BatchRunner.SettingsFor(entry, without));
     }
+
+    [Fact]
+    public void Environment_variables_come_from_the_command_line_and_the_corpus()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--env", "DOTNET_DefaultStackSize=1000000", "--env", "A=b=c"], out var options, out var error), error);
+        Assert.Equal("1000000", options.Run.Environment["DOTNET_DefaultStackSize"]);
+        Assert.Equal("b=c", options.Run.Environment["A"]);
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--env", "novalue"], out _, out _));
+
+        var entry = new CorpusEntry { Name = "x", Url = "u", Environment = new Dictionary<string, string> { ["X"] = "1" } };
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json"], out var batch, out _));
+        Assert.Equal("1", BatchRunner.SettingsFor(entry, batch).Run.Environment["X"]);
+    }
+}
+
+/// <summary>An environment scope sets its variables and puts the previous values back.</summary>
+[Collection(nameof(ProcessEnvironment))]
+public sealed class EnvironmentScopeTests
+{
+    [Fact]
+    public void Scope_sets_and_restores_variables()
+    {
+        const string name = "SIFT_TEST_ENVIRONMENT_SCOPE";
+        Environment.SetEnvironmentVariable(name, "before");
+        using (new EnvironmentScope(new Dictionary<string, string> { [name] = "during" }))
+        {
+            Assert.Equal("during", Environment.GetEnvironmentVariable(name));
+        }
+
+        Assert.Equal("before", Environment.GetEnvironmentVariable(name));
+        Environment.SetEnvironmentVariable(name, null);
+    }
 }

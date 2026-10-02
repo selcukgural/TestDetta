@@ -43,7 +43,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         {
             workspace.Git.Checkout(sha);
             workspace.Executor.Setup();
-            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
+            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
             var recorder = new CoverageRecorder(workspace.LoggerFactory);
             var temporary = directory + ".partial";
             Directory.CreateDirectory(temporary);
@@ -150,9 +150,20 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             shape += "\n" + toolchain.Description;
         }
 
+        // So may the environment (a larger stack lets a suite run that crashed before).
+        if (settings.Environment.Count > 0)
+        {
+            shape += "\n" + EnvironmentKey(settings);
+        }
+
         hash.AppendData(System.Text.Encoding.UTF8.GetBytes(shape));
         return Convert.ToHexStringLower(hash.GetHashAndReset())[..16];
     }
+
+    /// <summary>The evaluation's environment variables as one stable string, for cache keys.</summary>
+    /// <param name="settings">Evaluation settings.</param>
+    internal static string EnvironmentKey(RunSettings settings) =>
+        string.Join(";", settings.Environment.OrderBy(static e => e.Key, StringComparer.Ordinal).Select(static e => $"{e.Key}={e.Value}"));
 
     /// <summary>Copies a directory's files (one level, as recordings are) to a new directory.</summary>
     /// <param name="source">Directory to copy.</param>

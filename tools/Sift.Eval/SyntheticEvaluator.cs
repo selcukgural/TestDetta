@@ -35,7 +35,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         try
         {
             // What the tests do depends on the SDK and runtime too, so a toolchain has its own outcomes.
-            _cache = OutcomeCache.Open(settings.OutcomeCache, settings.Toolchain is { } toolchain ? $"{sha}-{toolchain.Rid}-{toolchain.DirectoryName}" : sha);
+            var cacheKey = settings.Toolchain is { } toolchain ? $"{sha}-{toolchain.Rid}-{toolchain.DirectoryName}" : sha;
+            if (settings.Environment.Count > 0)
+            {
+                // Variables can change what the tests do, so they get outcomes of their own.
+                cacheKey += "-env" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(EvalSteps.EnvironmentKey(settings))))[..12];
+            }
+
+            _cache = OutcomeCache.Open(settings.OutcomeCache, cacheKey);
             if (_cache is { Count: > 0 } cache)
             {
                 LogCacheOpened(cache.Count);
@@ -44,7 +51,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var maps = _steps.RecordAt(sha);
             workspace.Git.Checkout(sha);
             workspace.Executor.Setup();
-            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
+            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
             var testProjects = _steps.Build(_steps.TestProjects(graph));
             if (testProjects.Count == 0)
             {
@@ -494,8 +501,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             List<string> arguments = mode == DotnetTestMode.TestingPlatform ? ["test", "--project", relative] : ["test", relative];
             if (decision is { Mode: TestRunMode.Filtered, TestClasses.Count: > 0 })
             {
-                var xunitV3 = mode == DotnetTestMode.TestingPlatform && TestFilter.IsXunitV3(project);
-                arguments.AddRange(TestFilter.Arguments(decision.TestClasses, exclude: true, xunitV3));
+                arguments.AddRange(TestFilter.Arguments(decision.TestClasses, exclude: true, TestFilter.SyntaxFor(project, mode)));
             }
 
             invocations.Add(new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "outside the selection"), arguments));
@@ -672,7 +678,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             }
 
             _steps.PlaceMaps(sha);
-            return new AnalysisPipeline(workspace.LoggerFactory).Run(workspace.RepoRoot, sha);
+            return new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator).Run(workspace.RepoRoot, sha);
         }
         finally
         {

@@ -54,6 +54,9 @@ internal sealed record CorpusEntry
     /// </summary>
     public CorpusToolchain? Toolchain { get; init; }
 
+    /// <summary>Environment variables for every build and test run of the repository; see <see cref="RunSettings.Environment"/>.</summary>
+    public IReadOnlyDictionary<string, string>? Environment { get; init; }
+
     /// <summary>Test projects to use (paths in the repository); empty for all.</summary>
     public IReadOnlyList<string>? Projects { get; init; }
 
@@ -161,6 +164,7 @@ internal sealed record Corpus
             Setup = entry.Setup ?? d.Setup,
             Cleanup = entry.Cleanup ?? d.Cleanup,
             Toolchain = entry.Toolchain ?? d.Toolchain,
+            Environment = entry.Environment ?? d.Environment,
         };
     }
 
@@ -203,6 +207,9 @@ internal sealed record Corpus
         /// <summary>See <see cref="CorpusEntry.Toolchain"/>.</summary>
         public CorpusToolchain? Toolchain { get; init; }
 
+        /// <summary>See <see cref="CorpusEntry.Environment"/>.</summary>
+        public IReadOnlyDictionary<string, string>? Environment { get; init; }
+
         /// <summary>As an entry, so <see cref="Resolve"/> can copy from it.</summary>
         public CorpusEntry ToEntry() => new()
         {
@@ -220,6 +227,7 @@ internal sealed record Corpus
             Setup = Setup,
             Cleanup = Cleanup,
             Toolchain = Toolchain,
+            Environment = Environment,
         };
     }
 }

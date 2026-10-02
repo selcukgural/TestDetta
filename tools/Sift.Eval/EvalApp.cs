@@ -46,6 +46,7 @@ internal static partial class EvalApp
         using var loggerFactory = new StderrLoggerFactory(Console.Error, options.LogLevel);
         var logger = loggerFactory.CreateLogger(typeof(EvalApp).FullName!);
         using var toolchain = EnterToolchain(options.Run, loggerFactory);
+        using var environment = new EnvironmentScope(options.Run.Environment);
 
         // An existing clone is reused, so an interrupted evaluation can continue with its cached maps.
         var clone = Path.Combine(options.Output, "repo");

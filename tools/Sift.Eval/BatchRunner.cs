@@ -237,6 +237,7 @@ internal static partial class BatchRunner
             RecordingCache = Path.Combine(options.Output, "map-cache", entry.Name),
             MutantParallelism = options.Overrides.MutantParallelism ?? entry.MutantParallelism ?? 1,
             Toolchain = entry.Toolchain?.ToToolchain(),
+            Environment = entry.Environment ?? new Dictionary<string, string>(),
             ToolchainRoot = options.Toolchains,
             // Committed next to the corpus, so the machine and CI install the same bits.
             ToolchainLock = Path.Combine(Path.GetDirectoryName(options.CorpusPath)!, "toolchains.lock.json"),

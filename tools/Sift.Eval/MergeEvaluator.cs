@@ -10,7 +10,11 @@ namespace Sift.Eval;
 /// <param name="MapCache">Directory holding recorded coverage maps, one subdirectory per commit.</param>
 /// <param name="Executor">Runs tests in the clone.</param>
 /// <param name="LoggerFactory">Creates loggers for Sift's own classes.</param>
-internal sealed record EvalWorkspace(EvalGit Git, string RepoRoot, string MapCache, TestExecutor Executor, ILoggerFactory LoggerFactory);
+internal sealed record EvalWorkspace(EvalGit Git, string RepoRoot, string MapCache, TestExecutor Executor, ILoggerFactory LoggerFactory)
+{
+    /// <summary>Evaluates the projects with MSBuild for every graph the evaluation and Sift load; its cache is shared.</summary>
+    public IProjectEvaluator Evaluator { get; } = new Sift.Coverage.MsBuildProjectEvaluator(LoggerFactory);
+}
 
 /// <summary>
 /// Evaluates one merge: records coverage at its parent, lets Sift select, runs selection and full
@@ -36,7 +40,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
 
             workspace.Git.Checkout(commit.Sha);
             workspace.Executor.Setup();
-            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>()).Load(workspace.RepoRoot);
+            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
             var testProjects = _steps.Build(_steps.TestProjects(graph));
             if (testProjects.Count == 0)
             {
@@ -46,7 +50,7 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             workspace.Executor.Outputs = _steps.OutputDirectories(testProjects);
 
             _steps.PlaceMaps(commit.Parent);
-            var analysis = new AnalysisPipeline(workspace.LoggerFactory).Run(workspace.RepoRoot, commit.Parent);
+            var analysis = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator).Run(workspace.RepoRoot, commit.Parent);
             _steps.ClearMaps();
 
             var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);

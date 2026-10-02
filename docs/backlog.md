@@ -91,8 +91,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
 - ~~Eval: NUnit under the testing platform wrote no test report~~ (interim 871f6aa, completed): such
   runs now ask NUnit's adapter for its own result file through run settings (`TestOutputXml`), and
   reports are read from it, in the evaluation and when recording, without adding a package.
-  NSubstitute can be evaluated. Still left out and named: test hosts that die before running a test
-  (protobuf-net.Test, exit 134).
+  NSubstitute can be evaluated. protobuf-net.Test's host died (exit 134) from a stack overflow in
+  its DepthTests, since macOS gives threads a small stack; corpus entries now take an `environment`
+  (`--env` for one repository), and protobuf-net sets `DOTNET_DefaultStackSize`, with which the
+  class passes. Still left out and named: other hosts that die before running a test.
 - ~~Recording suites that only pass in parallel~~ (completed): when the one-process recording
   crashes too, the project is recorded with the suite's own parallelism (`SIFT_PARALLEL_FLOWS`):
   code inside a test flow counts for its class, code outside every flow counts as ambient instead of
