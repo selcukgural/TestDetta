@@ -1,6 +1,6 @@
 # Mutant schemata and parallel mutants
 
-Status: design, 2026-10-02. Backlog item 0 ("Fast, reliable evaluation environment").
+Status: implemented 2026-10-02 (d7530a9 schema injector, 089a2e0 evaluator, 302abe6 parallel mutants). Backlog item 0 ("Fast, reliable evaluation environment").
 
 ## Problem
 
@@ -90,8 +90,13 @@ schemata are turned off for the commit and the evaluation falls back to one-at-a
 
 ### 5. Afterwards
 
-The rewrite injector stays only as the fallback of section 2. Merge-mode evaluation uses the same
-schemata (its mutants are the changed members of a merge).
+The rewrite injector (the same code without the guard) stays as the fallback of section 2 and for
+`--no-schema`.
+
+Merge-mode evaluation keeps writing its mutants in one at a time, deliberately: it evaluates 2 or 3
+mutants per merge, each against the full suite, and a rewrite costs seconds. A schema would add a
+full-suite check run per merge (and parallel mutants n more) to save those seconds, so it would make
+merge mode slower, not faster. Revisit if merge mode ever samples many mutants per merge.
 
 ## Measurements to report
 
