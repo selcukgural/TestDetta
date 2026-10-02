@@ -30,15 +30,19 @@ internal sealed record SyntheticMutant(
     public bool Killing => !Inconclusive && (KilledClasses.Count > 0 || CaughtByCrash);
 
     /// <summary>
-    /// With <see cref="RunSettings.MapAge"/>: what each drift mode selected and missed, against the same
-    /// confirmed failures as the main result. Empty without a map age, and when the full run crashed (a
-    /// crash proves nothing about which classes a mode left out).
+    /// What each other selector (drift modes with <see cref="RunSettings.MapAge"/>, dotnet-tia with
+    /// <see cref="RunSettings.TiaCli"/>) selected and missed, against the same confirmed failures as the
+    /// main result. Empty without them, and when the full run crashed (a crash proves nothing about
+    /// which classes a selector left out).
     /// </summary>
-    public IReadOnlyDictionary<DriftMode, DriftOutcome> Drift { get; init; } = new Dictionary<DriftMode, DriftOutcome>();
+    public IReadOnlyDictionary<OtherSelector, OtherOutcome> Others { get; init; } = new Dictionary<OtherSelector, OtherOutcome>();
 }
 
-/// <summary>How a selection used maps recorded before the evaluated commit.</summary>
-internal enum DriftMode
+/// <summary>
+/// A selection the evaluation judges next to Sift's own on the same mutants: Sift with maps recorded
+/// before the evaluated commit (the drift modes), or another tool.
+/// </summary>
+internal enum OtherSelector
 {
     /// <summary>The older maps through the drift bridge (what Sift does).</summary>
     Bridge,
@@ -48,12 +52,22 @@ internal enum DriftMode
 
     /// <summary>The older maps as if recorded at the evaluated commit; shows the misses the drift causes unbridged.</summary>
     Naive,
+
+    /// <summary>dotnet-tia's static selection (docs/design/tia-comparison.md).</summary>
+    Tia,
 }
 
-/// <summary>One drift mode's result for a mutant.</summary>
+/// <summary>One other selector's result for a mutant.</summary>
 /// <param name="Missed">Confirmed failing classes the mode did not select (<c>Project: Class</c>).</param>
 /// <param name="SelectedShare">Share of the evaluated commit's recorded classes the mode selected.</param>
-internal sealed record DriftOutcome(IReadOnlyList<string> Missed, double SelectedShare);
+internal sealed record OtherOutcome(IReadOnlyList<string> Missed, double SelectedShare)
+{
+    /// <summary>Why the selector ran everything (dotnet-tia's full-run reason, or its failure); null otherwise.</summary>
+    public string? FullRun { get; init; }
+
+    /// <summary>The selector's own analysis time, when it reports one (dotnet-tia).</summary>
+    public double? Seconds { get; init; }
+}
 
 /// <summary>A synthetic evaluation of one commit.</summary>
 /// <param name="Sha">Commit the changes were made on.</param>

@@ -82,6 +82,7 @@ internal static class SyntheticReport
         }
         text.AppendLine();
         AppendDrift(text, run, killing);
+        AppendTia(text, run, killing);
 
         if (missed.Count > 0)
         {
@@ -134,7 +135,7 @@ internal static class SyntheticReport
         }
 
         // A mutant caught only by a crash has no per-mode result.
-        var judged = killing.Where(static m => m.Drift.Count > 0).ToList();
+        var judged = killing.Where(static m => m.Others.ContainsKey(OtherSelector.Bridge)).ToList();
         text.AppendLine(CultureInfo.InvariantCulture, $"## Map drift: maps from {Short(run.MapCommit)}, {run.MapAge} commit(s) earlier");
         text.AppendLine();
         text.AppendLine(CultureInfo.InvariantCulture, $"{judged.Count} failing mutant(s) judged in every mode.");
@@ -142,11 +143,41 @@ internal static class SyntheticReport
         text.AppendLine("| Maps | Missed mutants | Missed classes | Selected (failing mutants) | Precision |");
         text.AppendLine("|---|---|---|---|---|");
         AppendDriftRow(text, "exact (at the commit)", [.. judged.Select(static m => (m.MissedClasses, m.SelectedShare, m.KilledClasses.Count))], run.TestClasses);
-        foreach (var mode in Enum.GetValues<DriftMode>())
+        foreach (var mode in (OtherSelector[])[OtherSelector.Bridge, OtherSelector.NoMap, OtherSelector.Naive])
         {
-            AppendDriftRow(text, DriftName(mode), [.. judged.Select(m => (m.Drift[mode].Missed, m.Drift[mode].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
+            AppendDriftRow(text, DriftName(mode), [.. judged.Select(m => (m.Others[mode].Missed, m.Others[mode].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
         }
 
+        text.AppendLine();
+    }
+
+    /// <summary>
+    /// With dotnet-tia compared: Sift's and dotnet-tia's misses, selected share and precision on the
+    /// failing mutants both were judged on, how often dotnet-tia ran everything, and its analysis time.
+    /// </summary>
+    /// <param name="text">Report so far.</param>
+    /// <param name="run">The evaluation.</param>
+    /// <param name="killing">Failing mutants.</param>
+    private static void AppendTia(StringBuilder text, SyntheticRun run, List<SyntheticMutant> killing)
+    {
+        var judged = killing.Where(static m => m.Others.ContainsKey(OtherSelector.Tia)).ToList();
+        if (judged.Count == 0)
+        {
+            return;
+        }
+
+        var tia = judged.ConvertAll(static m => m.Others[OtherSelector.Tia]);
+        var seconds = run.Mutants.Select(static m => m.Others.GetValueOrDefault(OtherSelector.Tia)?.Seconds).OfType<double>().Order().ToList();
+        text.AppendLine("## dotnet-tia");
+        text.AppendLine();
+        text.AppendLine(CultureInfo.InvariantCulture,
+            $"{judged.Count} failing mutant(s) judged by both; dotnet-tia ran everything for {tia.Count(static t => t.FullRun is not null)} of them; " +
+            $"median analysis {(seconds.Count == 0 ? "-" : seconds[seconds.Count / 2].ToString("0.0", CultureInfo.InvariantCulture) + " s")}.");
+        text.AppendLine();
+        text.AppendLine("| Selector | Missed mutants | Missed classes | Selected (failing mutants) | Precision |");
+        text.AppendLine("|---|---|---|---|---|");
+        AppendDriftRow(text, "Sift", [.. judged.Select(static m => (m.MissedClasses, m.SelectedShare, m.KilledClasses.Count))], run.TestClasses);
+        AppendDriftRow(text, "dotnet-tia", [.. judged.Select(static m => (m.Others[OtherSelector.Tia].Missed, m.Others[OtherSelector.Tia].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
         text.AppendLine();
     }
 
@@ -166,10 +197,10 @@ internal static class SyntheticReport
 
     /// <summary>Report name of a drift mode.</summary>
     /// <param name="mode">Mode.</param>
-    internal static string DriftName(DriftMode mode) => mode switch
+    internal static string DriftName(OtherSelector mode) => mode switch
     {
-        DriftMode.Bridge => "older, bridged",
-        DriftMode.NoMap => "none (by name)",
+        OtherSelector.Bridge => "older, bridged",
+        OtherSelector.NoMap => "none (by name)",
         _ => "older, as if current",
     };
 
@@ -216,14 +247,23 @@ internal static class SyntheticReport
                 json.WriteNumber("selectedShare", Math.Round(mutant.SelectedShare, 4));
                 WriteStrings(json, "killed", mutant.KilledClasses);
                 WriteStrings(json, "missed", mutant.MissedClasses);
-                if (mutant.Drift.Count > 0)
+                if (mutant.Others.Count > 0)
                 {
-                    json.WriteStartObject("drift");
-                    foreach (var (mode, outcome) in mutant.Drift.OrderBy(static d => d.Key))
+                    json.WriteStartObject("others");
+                    foreach (var (mode, outcome) in mutant.Others.OrderBy(static d => d.Key))
                     {
                         json.WriteStartObject(JsonNamingPolicy.CamelCase.ConvertName(mode.ToString()));
                         json.WriteNumber("selectedShare", Math.Round(outcome.SelectedShare, 4));
                         WriteStrings(json, "missed", outcome.Missed);
+                        if (outcome.FullRun is { } fullRun)
+                        {
+                            json.WriteString("fullRun", fullRun);
+                        }
+
+                        if (outcome.Seconds is { } analysisSeconds)
+                        {
+                            json.WriteNumber("seconds", Math.Round(analysisSeconds, 2));
+                        }
                         json.WriteEndObject();
                     }
 

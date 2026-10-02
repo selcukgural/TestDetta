@@ -27,6 +27,9 @@ internal sealed record CorpusEntry
     /// <summary>Synthetic mutants run at once on the clone; see <see cref="RunSettings.MutantParallelism"/>.</summary>
     public int? MutantParallelism { get; init; }
 
+    /// <summary>Solution dotnet-tia analyses when it is compared; see <see cref="RunSettings.TiaSolution"/>.</summary>
+    public string? TiaSolution { get; init; }
+
     /// <summary>Latest commits to evaluate from history.</summary>
     public int? Merges { get; init; }
 

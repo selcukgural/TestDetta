@@ -25,7 +25,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
                sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
-                         [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
+                         [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--compare-tia <dll>] [--parallel <n>]
                          [--toolchains <dir>] [--compare <dir>] [--history <dir>] [-v]
                sift-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
@@ -45,6 +45,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --map-age <n>          Also select each synthetic change with maps recorded n first-parent commits
                                  earlier: through the drift bridge, without maps, and with the old maps as
                                  if current (docs/design/map-drift-bridge.md, measurement 2); default 0
+          --compare-tia <dll>    Also select each synthetic change with dotnet-tia (path of its Tia.Cli.dll)
+                                 and judge it on the same mutants (docs/design/tia-comparison.md)
+          --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
           --no-schema            Write each synthetic mutant in alone instead of switching it on in a
                                  schema (to compare both, or for a suite that notices the switches)
           --analysis-timeout <span>  Longest Sift may analyse one synthetic change (default 00:10:00); beyond
@@ -213,6 +216,14 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { MutantKinds = kinds };
                     break;
 
+                case "--compare-tia":
+                    run = run with { TiaCli = Path.GetFullPath(value) };
+                    break;
+
+                case "--tia-solution":
+                    run = run with { TiaSolution = value };
+                    break;
+
                 case "--map-age":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var mapAge) || mapAge < 0)
                     {
@@ -329,9 +340,18 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
 
     /// <summary>
     /// When above 0, each synthetic change is also selected with maps recorded this many first-parent
-    /// commits before the evaluated commit, in every <see cref="DriftMode"/>, to measure the drift bridge.
+    /// commits before the evaluated commit, in every <see cref="OtherSelector"/>, to measure the drift bridge.
     /// </summary>
     public int MapAge { get; init; }
+
+    /// <summary>
+    /// Path of dotnet-tia's <c>Tia.Cli.dll</c>: each synthetic change is also selected by
+    /// <c>dotnet tia analyze</c> and judged on the same mutants (docs/design/tia-comparison.md); null for none.
+    /// </summary>
+    public string? TiaCli { get; init; }
+
+    /// <summary>Solution dotnet-tia analyses, relative to the repository root; null to let it discover one.</summary>
+    public string? TiaSolution { get; init; }
 
     /// <summary>
     /// Longest Sift may take to analyse one synthetic change; beyond it the evaluation stops and reports

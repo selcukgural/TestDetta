@@ -318,13 +318,20 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Tests">Sift's decision per affected test project.</param>
     /// <param name="Detected">Whether Sift saw the change.</param>
     /// <param name="Share">Share of recorded classes Sift selected.</param>
-    /// <param name="Drift">What each drift mode selected; empty without <see cref="RunSettings.MapAge"/>.</param>
-    private sealed record Selection(IReadOnlyList<TestProjectSelection> Tests, bool Detected, double Share, IReadOnlyDictionary<DriftMode, DriftSelection> Drift);
+    /// <param name="Others">What each other selector selected; empty without drift modes or dotnet-tia.</param>
+    private sealed record Selection(IReadOnlyList<TestProjectSelection> Tests, bool Detected, double Share, IReadOnlyDictionary<OtherSelector, OtherSelection> Others);
 
     /// <summary>What one drift mode selected.</summary>
     /// <param name="Tests">Decision per affected test project.</param>
     /// <param name="Share">Share of the evaluated commit's recorded classes selected.</param>
-    private sealed record DriftSelection(IReadOnlyList<TestProjectSelection> Tests, double Share);
+    private sealed record OtherSelection(IReadOnlyList<TestProjectSelection> Tests, double Share)
+    {
+        /// <summary>See <see cref="OtherOutcome.FullRun"/>.</summary>
+        public string? FullRun { get; init; }
+
+        /// <summary>See <see cref="OtherOutcome.Seconds"/>.</summary>
+        public double? Seconds { get; init; }
+    }
 
     /// <summary>Lets Sift select for one synthetic change (editing and restoring the sources).</summary>
     /// <param name="sha">Commit the maps were recorded at.</param>
@@ -351,7 +358,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             analysis.Tests,
             detected,
             SelectedShare(analysis, maps),
-            drift.ToDictionary(static d => d.Key, d => new DriftSelection(d.Value.Tests, SelectedShare(d.Value, maps))));
+            drift.ToDictionary(static d => d.Key, d => d.Value with { Share = SelectedShare(d.Value.Tests, maps) }));
     }
 
     /// <summary>
@@ -363,7 +370,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="testClass">Failed test class.</param>
     private static bool SelectedByAll(MutantRun state, string project, string testClass) =>
         EvalSteps.IsSelected(state.Tests, project, testClass)
-        && state.Drift.Values.All(d => EvalSteps.IsSelected(d.Tests, project, testClass));
+        && state.Others.Values.All(d => EvalSteps.IsSelected(d.Tests, project, testClass));
 
     /// <summary>The classes among <paramref name="failed"/> (<c>Project: Class</c>) that <paramref name="tests"/> left out.</summary>
     /// <param name="tests">A selection.</param>
@@ -380,8 +387,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="state">The mutant's selections.</param>
     /// <param name="confirmed">Confirmed failing classes (<c>Project: Class</c>).</param>
     /// <param name="projects">Test project paths by file name.</param>
-    private static Dictionary<DriftMode, DriftOutcome> DriftOutcomes(MutantRun state, List<string> confirmed, Dictionary<string, string> projects) =>
-        state.Drift.ToDictionary(static d => d.Key, d => new DriftOutcome(LeftOut(d.Value.Tests, confirmed, projects), d.Value.Share));
+    private static Dictionary<OtherSelector, OtherOutcome> OtherOutcomes(MutantRun state, List<string> confirmed, Dictionary<string, string> projects) =>
+        state.Others.ToDictionary(static d => d.Key, d => new OtherOutcome(LeftOut(d.Value.Tests, confirmed, projects), d.Value.Share)
+        {
+            FullRun = d.Value.FullRun,
+            Seconds = d.Value.Seconds,
+        });
 
     /// <summary>Test project paths by file name without extension, the <c>Project</c> part of <c>Project: Class</c>.</summary>
     /// <param name="reached">Test projects of the mutant.</param>
@@ -397,7 +408,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     private SyntheticMutant Run(SyntheticTarget target, MutantContext context, int index, Selection selection, TestExecutor executor)
     {
         var (tests, detected, share, drift) = selection;
-        var state = new MutantRun(tests, context.TestProjects, index, detected, share) { Drift = drift };
+        var state = new MutantRun(tests, context.TestProjects, index, detected, share) { Others = drift };
         if (_cache?.Find(target) is { } stored && FromCache(target, stored, state) is { } reused)
         {
             return reused;
@@ -451,7 +462,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
         return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false)
         {
-            Drift = DriftOutcomes(state, unselected, projects),
+            Others = OtherOutcomes(state, unselected, projects),
         };
     }
 
@@ -520,7 +531,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         return new SyntheticMutant(target, state.Detected, stored.MutatedMethods, killed, missed, state.Share, Inconclusive: false)
         {
             Reused = true,
-            Drift = DriftOutcomes(state, unselected, projects),
+            Others = OtherOutcomes(state, unselected, projects),
         };
     }
 
@@ -537,8 +548,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Share">Share of recorded classes Sift selected.</param>
     private sealed record MutantRun(IReadOnlyList<TestProjectSelection> Tests, List<ProjectNode> Reached, int Index, bool Detected, double Share)
     {
-        /// <summary>What each drift mode selected; empty without <see cref="RunSettings.MapAge"/>.</summary>
-        public IReadOnlyDictionary<DriftMode, DriftSelection> Drift { get; init; } = new Dictionary<DriftMode, DriftSelection>();
+        /// <summary>What each other selector selected; empty without drift modes or dotnet-tia.</summary>
+        public IReadOnlyDictionary<OtherSelector, OtherSelection> Others { get; init; } = new Dictionary<OtherSelector, OtherSelection>();
     }
 
     /// <summary>
@@ -726,7 +737,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="sha">Commit the maps were recorded at and the base of the diff.</param>
     /// <param name="target">Member to change.</param>
     /// <param name="mapCommit">Older commit whose maps the drift modes use; null for none.</param>
-    private (AnalysisResult Analysis, Dictionary<DriftMode, AnalysisResult> Drift) Analyze(string sha, SyntheticTarget target, string? mapCommit)
+    private (AnalysisResult Analysis, Dictionary<OtherSelector, OtherSelection> Others) Analyze(string sha, SyntheticTarget target, string? mapCommit)
     {
         // Bytes, not text: a rewrite through File.WriteAllText drops a UTF-8 byte order mark, and the
         // clone would keep a change in that file for every later mutant.
@@ -751,18 +762,24 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var pipeline = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator);
             _steps.PlaceMaps(sha);
             var analysis = pipeline.Run(workspace.RepoRoot, sha);
-            var drift = new Dictionary<DriftMode, AnalysisResult>();
-            if (mapCommit is null)
+            var others = new Dictionary<OtherSelector, OtherSelection>();
+            if (mapCommit is not null)
             {
-                return (analysis, drift);
+                // The measured age may exceed Sift's default limit; the bridge is judged on what it does with it.
+                _steps.PlaceMaps(mapCommit);
+                others[OtherSelector.Bridge] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { MaxMapAge = int.MaxValue }).Tests, 0);
+                others[OtherSelector.Naive] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.AsIfCurrent }).Tests, 0);
+                others[OtherSelector.NoMap] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.None }).Tests, 0);
             }
 
-            // The measured age may exceed Sift's default limit; the bridge is judged on what it does with it.
-            _steps.PlaceMaps(mapCommit);
-            drift[DriftMode.Bridge] = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { MaxMapAge = int.MaxValue });
-            drift[DriftMode.Naive] = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.AsIfCurrent });
-            drift[DriftMode.NoMap] = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.None });
-            return (analysis, drift);
+            if (settings.TiaCli is { } tia)
+            {
+                // Maps are Sift's own data; dotnet-tia sees the same tree Sift saw, without them.
+                _steps.ClearMaps();
+                others[OtherSelector.Tia] = SelectWithTia(tia, sha, analysis.Graph);
+            }
+
+            return (analysis, others);
         }
         finally
         {
@@ -775,19 +792,48 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     }
 
     /// <summary>
+    /// dotnet-tia's selection for the change in the clone. A failure of the tool counts as a full run
+    /// with the failure as its reason, as dotnet-tia itself treats its own errors: never as a miss.
+    /// </summary>
+    /// <param name="tia">Path of <c>Tia.Cli.dll</c>.</param>
+    /// <param name="sha">Commit the change is made on.</param>
+    /// <param name="graph">Sift's project graph of the clone.</param>
+    private OtherSelection SelectWithTia(string tia, string sha, ProjectGraph graph)
+    {
+        using var log = File.AppendText(Path.Combine(workspace.Executor.LogDirectory, "dotnet-tia.log"));
+        try
+        {
+            var result = TiaSelector.Analyze(tia, workspace.RepoRoot, sha, settings.TiaSolution, graph, log);
+            return new OtherSelection(result.Tests, 0) { FullRun = result.Reason ?? (result.FullRun ? "full run" : null), Seconds = result.Seconds };
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine(ex.Message);
+            var all = graph.Projects.Where(static p => p.IsTestProject)
+                .Select(p => new TestProjectSelection(p, TestRunMode.All, [], "dotnet-tia failed")).ToList();
+            return new OtherSelection(all, 0) { FullRun = $"dotnet-tia failed: {ex.Message}" };
+        }
+    }
+
+    /// <summary>
     /// Share of recorded test classes that Sift's selection runs: 1 when every test project runs
     /// completely, 0 when nothing runs. Projects without a map are not counted.
     /// </summary>
     /// <param name="analysis">Sift's analysis.</param>
     /// <param name="maps">Maps by normalized test project path.</param>
-    private static double SelectedShare(AnalysisResult analysis, Dictionary<string, CoverageMap> maps)
+    private static double SelectedShare(AnalysisResult analysis, Dictionary<string, CoverageMap> maps) => SelectedShare(analysis.Tests, maps);
+
+    /// <summary>See <see cref="SelectedShare(AnalysisResult, Dictionary{string, CoverageMap})"/>, for any selector's decisions.</summary>
+    /// <param name="tests">Decisions per test project.</param>
+    /// <param name="maps">Maps by normalized test project path.</param>
+    private static double SelectedShare(IReadOnlyList<TestProjectSelection> tests, Dictionary<string, CoverageMap> maps)
     {
         var total = 0;
         var selected = 0;
         foreach (var (project, map) in maps)
         {
             total += map.Classes.Count;
-            var decision = analysis.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, project, StringComparison.Ordinal));
+            var decision = tests.FirstOrDefault(t => string.Equals(t.Project.Path, project, StringComparison.Ordinal));
             selected += decision?.Mode switch
             {
                 TestRunMode.All => map.Classes.Count,

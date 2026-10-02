@@ -1,6 +1,6 @@
 # Comparing with dotnet-tia on the corpus
 
-Status: design 2026-10-02 (backlog "Next" item 2). Nothing installed or run yet.
+Status: evaluator side implemented 2026-10-02 (see "As built"); dotnet-tia not installed or run yet.
 
 ## Why
 
@@ -76,3 +76,23 @@ more selector:
 - **Cost:** our mutant outcomes are cached, so this is analysis time only. That is a cold graph
   plus up to 100 warm analyses (seconds each), plus confirmation runs for classes only dotnet-tia
   misses.
+
+## As built (evaluator side)
+
+- The drift modes became "other selectors" (`OtherSelector`: Bridge, NoMap, Naive, Tia), each
+  judged on the same confirmed failures. synthetic.json now names them `others` (was `drift`).
+- `TiaSelector`:
+  - runs `dotnet <Tia.Cli.dll> analyze --base <sha> --json --path <clone> --coverage-threshold 1`
+    (filter whenever possible, like Sift), with `--solution` from `tiaSolution`;
+  - excludes `/.tia/` through `.git/info/exclude`, so Sift never sees the cache as an untracked change;
+  - reads the report: a full run selects everything; a listed project runs its tests' classes, or
+    all when unfiltered; an unlisted project runs nothing;
+  - a failure of the tool is recorded as a full run with its reason, never as a miss.
+- Options: `--compare-tia <dll>` (single and corpus runs), `--tia-solution`, corpus field
+  `tiaSolution`.
+- `synthetic.md` gets a "dotnet-tia" table: Sift vs dotnet-tia misses, share and precision, the
+  full-run count and the median analysis time. JSON has `others.tia.{missed, selectedShare,
+  fullRun, seconds}`.
+- Tests: `TiaSelectorTests` (report reading, options); `EvalMapAgeTests` covers the shared machinery.
+- Still to do: build dotnet-tia at `5ad7c6b` (needs the user's go-ahead) and run NodaTime and
+  FluentValidation first.

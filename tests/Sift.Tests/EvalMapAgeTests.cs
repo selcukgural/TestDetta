@@ -67,7 +67,7 @@ public sealed class EvalMapAgeTests : IDisposable
         var tax = run.GetProperty("mutants").EnumerateArray().Single(m => m.GetProperty("target").GetString() == "Shop.Calc.Tax");
         Assert.Contains("Shop.Tests: Shop.Tests.DiscountTests", Strings(tax.GetProperty("killed")));
         Assert.Empty(Strings(tax.GetProperty("missed")));
-        var drift = tax.GetProperty("drift");
+        var drift = tax.GetProperty("others");
         Assert.Empty(Strings(drift.GetProperty("bridge").GetProperty("missed")));
         Assert.Empty(Strings(drift.GetProperty("noMap").GetProperty("missed")));
         Assert.Equal(["Shop.Tests: Shop.Tests.DiscountTests"], Strings(drift.GetProperty("naive").GetProperty("missed")));
