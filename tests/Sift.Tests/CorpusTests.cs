@@ -85,6 +85,12 @@ public sealed class CorpusTests : IDisposable
         Assert.Contains("| b | reflection, pinvoke | failed: clone failed |", summary, StringComparison.Ordinal);
         Assert.Contains("| c |  | not run |", summary, StringComparison.Ordinal);
         Assert.Contains("`A.Miss`", summary, StringComparison.Ordinal);
+
+        // A run of some repositories counts only those: the others are not "not run".
+        var scoped = BatchSummary.Write(_directory, corpus, new HashSet<string>(["a"], StringComparer.OrdinalIgnoreCase));
+        Assert.Contains("Repositories: 1 done, 0 failed, 0 running or not run, of 1", scoped, StringComparison.Ordinal);
+        Assert.Contains("| reflection | 1 | 2 | 1 |", scoped, StringComparison.Ordinal);
+        Assert.DoesNotContain("| c |", scoped, StringComparison.Ordinal);
     }
 
     private string Write(string json)

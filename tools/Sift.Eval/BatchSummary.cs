@@ -37,9 +37,13 @@ internal static class BatchSummary
     /// <summary>Writes <c>summary.md</c> and returns its text.</summary>
     /// <param name="directory">Corpus output directory.</param>
     /// <param name="corpus">The corpus.</param>
-    public static string Write(string directory, Corpus corpus)
+    /// <param name="only">Names of the repositories the run evaluates; empty for all. Others are not counted.</param>
+    public static string Write(string directory, Corpus corpus, IReadOnlySet<string>? only = null)
     {
-        var totals = corpus.Repositories.Select(r => Read(directory, r)).ToList();
+        var totals = corpus.Repositories
+            .Where(r => only is not { Count: > 0 } || only.Contains(r.Name))
+            .Select(r => Read(directory, r))
+            .ToList();
         var text = Markdown(totals);
         File.WriteAllText(Path.Combine(directory, "summary.md"), text);
         return text;

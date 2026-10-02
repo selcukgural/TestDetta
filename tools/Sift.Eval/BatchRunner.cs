@@ -164,11 +164,12 @@ internal static partial class BatchRunner
                 }
 
                 exitCode = Math.Max(exitCode, RunEntry(corpus.Resolve(entry), options, logger));
-                BatchSummary.Write(options.Output, corpus);
+                BatchSummary.Write(options.Output, corpus, options.Only);
             }
         }
 
-        var summary = BatchSummary.Write(options.Output, corpus);
+        // A run of a few repositories (a nightly smoke run) reports on those, not on the whole corpus.
+        var summary = BatchSummary.Write(options.Output, corpus, options.Only);
         Console.Out.Write(summary);
         Console.Out.WriteLine($"\nSummary: {Path.Combine(options.Output, "summary.md")}");
         return exitCode;
