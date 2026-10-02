@@ -79,10 +79,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   discovery now ends the recorded startup time early and adds discovery time to the first data
   class. Complete fix: count time spent in data members during discovery as startup (it is paid
   by every run), so per-class times and the value report stay right.
-- **Files rewritten for other tools match the SDK byte for byte** (interim: 911e519). The patched
-  `deps.json` broke xUnit 2.3's own JSON reader through `+` escaping. Complete fix: a test
-  that patches real SDK-written `deps.json` files and compares them with the original except for
-  the added entries, and the same check for any other file Sift rewrites.
+- ~~Files rewritten for other tools match the SDK byte for byte~~ (interim 911e519, completed):
+  a test rewrites a real SDK-written `deps.json` and gets every byte back; an entry the SDK wrote
+  for the runtime (a project that references it) is now kept instead of replaced. `deps.json` is
+  the only text file Sift rewrites; assemblies go through Cecil.
 - ~~TUnit projects were not recorded or filtered~~ (found 2026-10-02): TUnit ignores the VSTest
   `--filter` and runs no test at all, and runs none either when given a run settings file. Sift now
   uses `--treenode-filter /*/*/(Class)|(Other)/**` (namespace left open, so classes sharing a simple

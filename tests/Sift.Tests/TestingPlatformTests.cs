@@ -42,6 +42,26 @@ public sealed class TestingPlatformTests : IDisposable
     }
 
     [Fact]
+    public void Patched_deps_json_keeps_every_sdk_written_byte()
+    {
+        // A real SDK-written file: this test project's own, with package hashes full of '+' and '/',
+        // which already lists the runtime as a project reference.
+        var original = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Sift.Tests.deps.json")).ReplaceLineEndings("\n").TrimEnd();
+
+        // The writer gives the SDK's bytes back for what it does not change...
+        var rewritten = JsonNode.Parse(original)!.ToJsonString(new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        });
+        Assert.Equal(original, rewritten.ReplaceLineEndings("\n").TrimEnd());
+
+        // ...and an entry the SDK wrote for the runtime is kept as it is.
+        Assert.Equal(original, RuntimeDeployment.AddRuntime(original).ReplaceLineEndings("\n").TrimEnd());
+        Assert.DoesNotContain("\\u002B", RuntimeDeployment.AddRuntime(original), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Runtime_is_added_to_deps_json_as_a_library_of_the_runtime_target()
     {
         const string deps = """

@@ -83,16 +83,18 @@ internal sealed class RuntimeDeployment : IDisposable
         var name = typeof(SiftTracker).Assembly.GetName();
         var key = $"{name.Name}/{name.Version?.ToString(3) ?? "1.0.0"}";
 
-        target[key] = new JsonObject
+        // A project that already references the runtime has it listed, with its own dependencies;
+        // that entry is kept as the SDK wrote it.
+        target.TryAdd(key, new JsonObject
         {
             ["runtime"] = new JsonObject { [RuntimeFileName] = new JsonObject() },
-        };
-        libraries[key] = new JsonObject
+        });
+        libraries.TryAdd(key, new JsonObject
         {
             ["type"] = "project",
             ["serviceable"] = false,
             ["sha512"] = string.Empty,
-        };
+        });
 
         return root.ToJsonString(WriteOptions);
     }
