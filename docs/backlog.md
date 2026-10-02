@@ -143,7 +143,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
    - ~~Mutant schemata~~ and ~~parallel mutants~~: done (docs/design/mutant-schemata.md; d7530a9,
      089a2e0, 302abe6). Default parallelism to be set from the measurements in the design doc.
    - ~~Stable sample + outcome cache~~: done (f12e713, 99347df).
-   - ~~Cache recordings~~: done (next commit), keyed by commit, recording settings and the contents
+   - ~~Cache recordings~~: done (7f38a58), keyed by commit, recording settings and the contents
      of Sift's core, coverage and tracker assemblies, so any Sift change records again. Baselines
      are not cached: one or two suite runs per commit, and they also measure the time limits and
      anchor the schema and parallel checks.
