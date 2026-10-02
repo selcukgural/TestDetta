@@ -15,7 +15,7 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
-- ~~Stable mutant sample across Sift versions~~ (done, next commit): each candidate's place and
+- ~~Stable mutant sample across Sift versions~~ (done, 99347df): each candidate's place and
   kind come from a hash of the member and the seed, so adding or dropping a candidate (a graph
   fix) changes at most that pick and stored outcomes stay usable. Samples differ from round 1's.
 - **x64-only test projects are left out on Apple silicon** (Vogen's SnapshotTests: "Could not find
