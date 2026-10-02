@@ -256,3 +256,8 @@ A bridge miss gets a complete fix and a red test, as with every other miss.
   one; without the permission it notices and falls back to the exact key. Input `max-map-age`
   (default 50) is passed to `sift test`. Checked locally with a stub `gh` (ancestor found, 403
   fallback, age limit).
+- Measurement 2 tooling: `~/sift-corpus/run-measure2.sh` (waits for round 2, then corpus runs with
+  `--map-age 1/3/10/30` on opentelemetry-dotnet, fastendpoints, polly, awesomeassertions, mapperly,
+  nodatime, meziantou-analyzer into `drift-k<k>`, sharing round 2's outcome and map caches) and
+  `eval/drift/measure2.py` (per k and selector: mutants with a miss, missed classes, mean share).
+  Checked on a probe repository: naive missed the class a drift-added call reached; the bridge did not.
