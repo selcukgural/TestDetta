@@ -38,8 +38,7 @@ public static class TestInvocationBuilder
             List<string> arguments = mode == DotnetTestMode.TestingPlatform ? ["test", "--project", project] : ["test", project];
             if (selection.Mode == TestRunMode.Filtered)
             {
-                var xunitV3 = mode == DotnetTestMode.TestingPlatform && TestFilter.IsXunitV3(selection.Project);
-                arguments.AddRange(TestFilter.Arguments(selection.TestClasses, exclude: false, xunitV3));
+                arguments.AddRange(TestFilter.Arguments(selection.TestClasses, exclude: false, TestFilter.SyntaxFor(selection.Project, mode)));
             }
 
             arguments.AddRange(extraArguments);

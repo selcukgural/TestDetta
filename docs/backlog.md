@@ -31,11 +31,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
 - **Fixtures declared by a base class** (interim: 514238e; FastEndpoints, 31 classes missed).
   `IClassFixture<T>`/`ICollectionFixture<T>`/`IAssemblyFixture<T>` implemented by a base class,
   also in another library, with the fixture as a generic argument (FastEndpoints.Testing's
-  `TestBase<TAppFixture>`) now marks the fixture. Still ambient: xUnit v3
-  `[assembly: AssemblyFixture(typeof(X))]` and fixtures created by a custom test framework without
-  such an interface. Complete fix: treat assembly fixtures as a setup scope for the assembly, and
-  credit code that runs before the first test of a class while a fixture type's constructor is on
-  the stack to that fixture.
+  `TestBase<TAppFixture>`) now marks the fixture; xUnit v3 assembly fixtures are an assembly setup
+  scope (see below). Still ambient: fixtures a custom test framework creates without such an
+  interface. Complete fix: credit code that runs before the first test of a class while a fixture
+  type's constructor is on the stack to that fixture.
 - ~~Recording can hang on a lingering MSBuild node~~ (done, 2cbf3bf). The cause was not node
   reuse but how Sift waited: after dotnet exited, it waited for its output to close, and a child
   left behind (MSBuild node, compiler server, a test's background process) kept it open. Sift now
@@ -45,15 +44,13 @@ Interim fixes that are safe for the common case; come back for the complete solu
   stays for imports and for projects MSBuild cannot evaluate.
 - ~~Projects sharing a directory~~: done with MSBuild evaluation (docs/design/msbuild-evaluation.md); the XML reading
   stays for imports and for projects MSBuild cannot evaluate.
-- **Setup that runs before every test of a scope** (interim: 7cd8528; MimeKit, 60 classes
-  missed). NUnit `[SetUpFixture]` setup (constructor, `[OneTimeSetUp]`) and MSTest
-  `[AssemblyInitialize]` now record under a setup scope that selects every class in its namespace
-  (or assembly). Still ambient, so traced by name only: xUnit v3 assembly fixtures,
-  `[ModuleInitializer]` in test assemblies, TUnit `[Before(Assembly)]`/`[Before(TestSession)]`,
-  NUnit `[OneTimeSetUp]` inherited from a base class in another namespace. Complete fix: classify
-  every ambient method by what entered it (discovery data, framework setup, module initializer)
-  and let setup-like ambient code select its whole scope; measure the precision cost first
-  (AutoFixture.NUnit4 has 81 % of its covered code ambient, mostly discovery data).
+- ~~Setup that runs before every test of a scope~~: NUnit `[SetUpFixture]` setup (also inherited
+  from a base class elsewhere), MSTest `[AssemblyInitialize]`, xUnit v3
+  `[assembly: AssemblyFixture(typeof(X))]`, `[ModuleInitializer]` in test assemblies, and TUnit
+  `[Before(Assembly|TestSession|TestDiscovery)]` and `[BeforeEvery(...)]` hooks record under a setup
+  scope that selects every class of the namespace or assembly. Still ambient: discovery-time data
+  and setup of custom frameworks Sift does not know; classify ambient code by what entered it if
+  the corpus shows such cases.
 - ~~Static constructors~~ (interim 7cd8528, completed by field-read probes, docs/design/field-read-probes.md):
   a value a static initializer stores is credited to every bucket that reads the field. Still by
   name only: static state read without a field read of an instrumented assembly.
@@ -86,6 +83,11 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `deps.json` broke xUnit 2.3's own JSON reader through `+` escaping. Complete fix: a test
   that patches real SDK-written `deps.json` files and compares them with the original except for
   the added entries, and the same check for any other file Sift rewrites.
+- ~~TUnit projects were not recorded or filtered~~ (found 2026-10-02): TUnit ignores the VSTest
+  `--filter` and runs no test at all, and runs none either when given a run settings file. Sift now
+  uses `--treenode-filter /*/*/(Class)|(Other)/**` (namespace left open, so classes sharing a simple
+  name across namespaces go together) and `--maximum-parallel-tests 1` while recording. Add a TUnit
+  repository to the corpus.
 - **Eval: test projects without a test report are left out** (interim: 871f6aa). NUnit
   under Microsoft.Testing.Platform has no TRX extension unless the repository adds it
   (NSubstitute: every test project, so no data at all), and some hosts die at start

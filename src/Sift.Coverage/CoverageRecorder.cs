@@ -115,9 +115,13 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework), work);
             LogMode(project, mode);
 
-            var xunitV3OnTestingPlatform = mode == DotnetTestMode.TestingPlatform
-                                           && File.Exists(Path.Combine(Path.GetDirectoryName(targetPath)!, "xunit.v3.core.dll"));
-            var shards = Shards(request, xunitV3OnTestingPlatform);
+            // Told by the runner's assembly in the output, which also catches a framework the project
+            // gets through another package.
+            var binaries = Path.GetDirectoryName(targetPath)!;
+            var syntax = File.Exists(Path.Combine(binaries, "TUnit.Engine.dll")) ? TestFilterSyntax.TUnit
+                : mode == DotnetTestMode.TestingPlatform && File.Exists(Path.Combine(binaries, "xunit.v3.core.dll")) ? TestFilterSyntax.XunitV3
+                : TestFilterSyntax.VSTest;
+            var shards = Shards(request, syntax);
             var synchronizedOutput = TextWriter.Synchronized(output);
             var runs = RunShards(shards, new ShardContext(request, mode, outputDirectory, instrumentation, work), testArguments, synchronizedOutput);
             ThrowIfTimedOut(runs, project, request);
@@ -223,8 +227,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             ? ["test", "--project", project, "--no-build", "-c", run.Request.Configuration]
             : ["test", project, "--no-build", "-c", run.Request.Configuration];
 
-        var isXunitV3 = File.Exists(Path.Combine(Path.GetDirectoryName(run.TargetPath)!, "xunit.v3.core.dll"));
-        if (run.Mode == DotnetTestMode.TestingPlatform && isXunitV3)
+        // One test at a time: code outside every test flow goes to the class entered last. xUnit v3
+        // and TUnit under the testing platform take their own option; TUnit runs no test at all when
+        // given a run settings file.
+        var binaries = Path.GetDirectoryName(run.TargetPath)!;
+        if (File.Exists(Path.Combine(binaries, "TUnit.Engine.dll")))
+        {
+            arguments.AddRange(["--maximum-parallel-tests", "1"]);
+        }
+        else if (run.Mode == DotnetTestMode.TestingPlatform && File.Exists(Path.Combine(binaries, "xunit.v3.core.dll")))
         {
             arguments.AddRange(["--parallel", "none"]);
         }
@@ -255,8 +266,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// classes, so a class the source index misses is still recorded. A single shard runs unfiltered.
     /// </summary>
     /// <param name="request">What to record.</param>
-    /// <param name="xunitV3OnTestingPlatform">True when the filters must use xUnit v3's own options.</param>
-    private List<IReadOnlyList<string>> Shards(RecordRequest request, bool xunitV3OnTestingPlatform)
+    /// <param name="syntax">Filter syntax of the project's runner.</param>
+    private List<IReadOnlyList<string>> Shards(RecordRequest request, TestFilterSyntax syntax)
     {
         if (request.Parallelism <= 1)
         {
@@ -285,10 +296,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var filters = new List<IReadOnlyList<string>>(groupCount + 1);
         foreach (var group in groups)
         {
-            filters.Add(TestFilter.Arguments(group, exclude: false, xunitV3OnTestingPlatform));
+            filters.Add(TestFilter.Arguments(group, exclude: false, syntax));
         }
 
-        filters.Add(TestFilter.Arguments(classes, exclude: true, xunitV3OnTestingPlatform));
+        filters.Add(TestFilter.Arguments(classes, exclude: true, syntax));
         LogShards(request.TestProject.Path, groupCount, classes.Count);
         return filters;
     }

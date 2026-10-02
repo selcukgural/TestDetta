@@ -823,24 +823,58 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     }
 
     /// <summary>
-    /// Setup methods whose failure fails a whole namespace or assembly, with the fixture name they
+    /// Setup methods whose effect reaches a whole namespace or assembly, with the fixture name they
     /// record under: the constructor and <c>[OneTimeSetUp]</c> methods of an NUnit <c>[SetUpFixture]</c>
-    /// (scoped to its namespace; none means the assembly), and MSTest <c>[AssemblyInitialize]</c>
-    /// methods (the assembly). Their code would otherwise count as running outside every test, or for
-    /// the one test class that declares it.
+    /// (scoped to its namespace; none means the assembly); for the assembly, MSTest
+    /// <c>[AssemblyInitialize]</c> methods, the constructors and <c>InitializeAsync</c> of an xUnit v3
+    /// <c>[assembly: AssemblyFixture(typeof(X))]</c>, <c>[ModuleInitializer]</c> methods, and TUnit hooks
+    /// that run for the assembly, the session, discovery, or before every class or test
+    /// (<c>[Before(Assembly)]</c>, <c>[BeforeEvery(...)]</c>). Their code would otherwise count as
+    /// running outside every test, or for the one test class that declares it.
     /// </summary>
     /// <param name="module">Test module.</param>
     private static Dictionary<MethodDefinition, string> SetUpScopes(ModuleDefinition module)
     {
         var scopes = new Dictionary<MethodDefinition, string>();
-        foreach (var type in module.GetTypes())
+        foreach (var attribute in module.Assembly.CustomAttributes.Where(static a => a.AttributeType.FullName == "Xunit.AssemblyFixtureAttribute"))
         {
-            var outer = type;
-            while (outer.DeclaringType is { } declaring)
+            if (attribute.ConstructorArguments is not [{ Value: TypeReference fixture }])
             {
-                outer = declaring;
+                continue;
             }
 
+            for (var type = fixture.Module == module ? TryResolve(fixture) : null;
+                 type is not null;
+                 type = type.BaseType is { } baseType && baseType.Module == module ? TryResolve(baseType) : null)
+            {
+                foreach (var method in type.Methods.Where(static m => m.HasBody && IsFixtureSetup(m)))
+                {
+                    scopes[method] = CoverageMap.SetUpScopePrefix;
+                }
+            }
+        }
+
+        // A [SetUpFixture] may inherit its [OneTimeSetUp] from a base class elsewhere; that code runs
+        // for the fixture's scope. A base shared by fixtures of several namespaces serves all of them,
+        // so it gets the assembly.
+        foreach (var fixture in module.GetTypes().Where(static t => HasAttribute(t.CustomAttributes, "NUnit.Framework.SetUpFixtureAttribute")))
+        {
+            var scope = CoverageMap.SetUpScopePrefix + Outermost(fixture).Namespace;
+            for (var type = fixture.BaseType is { } first && first.Module == module ? TryResolve(first) : null;
+                 type is not null;
+                 type = type.BaseType is { } baseType && baseType.Module == module ? TryResolve(baseType) : null)
+            {
+                foreach (var method in type.Methods.Where(static m => m.HasBody
+                             && ((m.IsConstructor && !m.IsStatic) || HasAttribute(m.CustomAttributes, "NUnit.Framework.OneTimeSetUpAttribute"))))
+                {
+                    scopes[method] = scopes.TryGetValue(method, out var other) && other != scope ? CoverageMap.SetUpScopePrefix : scope;
+                }
+            }
+        }
+
+        foreach (var type in module.GetTypes())
+        {
+            var outer = Outermost(type);
             var isSetUpFixture = HasAttribute(type.CustomAttributes, "NUnit.Framework.SetUpFixtureAttribute");
             foreach (var method in type.Methods.Where(static m => m.HasBody))
             {
@@ -848,7 +882,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 {
                     scopes[method] = CoverageMap.SetUpScopePrefix + outer.Namespace;
                 }
-                else if (HasAttribute(method.CustomAttributes, "Microsoft.VisualStudio.TestTools.UnitTesting.AssemblyInitializeAttribute"))
+                else if (HasAttribute(method.CustomAttributes, "Microsoft.VisualStudio.TestTools.UnitTesting.AssemblyInitializeAttribute")
+                         || HasAttribute(method.CustomAttributes, "System.Runtime.CompilerServices.ModuleInitializerAttribute")
+                         || IsAssemblyWideTUnitHook(method))
                 {
                     scopes[method] = CoverageMap.SetUpScopePrefix;
                 }
@@ -857,6 +893,45 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         return scopes;
     }
+
+    /// <summary>The top-level type <paramref name="type"/> is nested in, or itself.</summary>
+    /// <param name="type">A type.</param>
+    private static TypeDefinition Outermost(TypeDefinition type)
+    {
+        var outer = type;
+        while (outer.DeclaringType is { } declaring)
+        {
+            outer = declaring;
+        }
+
+        return outer;
+    }
+
+    /// <summary>
+    /// True for a TUnit hook that runs for more than its own class: <c>[Before(HookType.Assembly)]</c>,
+    /// <c>TestSession</c> and <c>TestDiscovery</c>, and every <c>[BeforeEvery(...)]</c>, which runs before
+    /// each test or class of the assembly. <c>[Before(Test)]</c> and <c>[Before(Class)]</c> belong to the
+    /// declaring class, which is entered as usual.
+    /// </summary>
+    /// <param name="method">A method of the test module.</param>
+    private static bool IsAssemblyWideTUnitHook(MethodDefinition method)
+    {
+        foreach (var attribute in method.CustomAttributes)
+        {
+            switch (attribute.AttributeType.FullName)
+            {
+                case "TUnit.Core.BeforeEveryAttribute":
+                    return true;
+                case "TUnit.Core.BeforeAttribute" when attribute.ConstructorArguments is [{ Value: int hook }, ..] && hook >= TUnitAssemblyHook:
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Value of TUnit's <c>HookType.Assembly</c>; <c>TestSession</c> and <c>TestDiscovery</c> follow it.</summary>
+    private const int TUnitAssemblyHook = 2;
 
     /// <summary>True when one of <paramref name="attributes"/> is of the type named <paramref name="fullName"/>.</summary>
     /// <param name="attributes">Custom attributes.</param>
