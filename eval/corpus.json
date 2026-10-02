@@ -9,6 +9,8 @@
     "mutantParallelism": 4,
     "synthetic": 100,
     "merges": 0,
+    // Every kind from round 2 on: throws alone missed changes that keep a member running (docs/evaluation.md).
+    "mutantKinds": "all",
     // Installed under --toolchains from archives pinned in toolchains.lock.json (docs/design/hermetic-toolchains.md).
     "toolchain": { "sdk": "10.0.401", "runtimes": ["8.0.31"] }
   },
@@ -502,6 +504,19 @@
         "xunit-v3"
       ],
       "notes": "Liquid templates; fast single test project"
+    },
+    {
+      "name": "refit",
+      "url": "https://github.com/reactiveui/refit.git",
+      "branch": "3717256",
+      "notes": "Pinned to 3717256 (2026-06-18), the last commit before net11.0 targets. TUnit on the testing platform; global.json is under src/.",
+      "tags": [
+        "tunit",
+        "mtp",
+        "source-generator",
+        "snapshots",
+        "cpm"
+      ]
     }
   ]
 }

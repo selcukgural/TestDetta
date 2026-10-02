@@ -38,6 +38,22 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void Corpus_run_can_replace_mutant_kinds_and_rejects_unknown_ones()
+    {
+        var entry = new CorpusEntry { Name = "scriban", Url = "https://example.org/scriban.git", Synthetic = 100, MutantKinds = "all" };
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--mutant-kinds", "throw"], out var options, out var error), error);
+
+        var (_, run) = BatchRunner.SettingsFor(entry, options);
+        Assert.Equal([MutantKind.Throw], run.MutantKinds);
+
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json"], out var plain, out _));
+        Assert.Equal(4, BatchRunner.SettingsFor(entry, plain).Run.MutantKinds.Count);
+
+        Assert.False(BatchOptions.TryParse(["--corpus", "c.json", "--mutant-kinds", "throw,nonsense"], out _, out var unknown));
+        Assert.Contains("nonsense", unknown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Overrides_replace_each_repository_setting_and_leave_the_rest()
     {
         var entry = new CorpusEntry { Name = "scriban", Url = "https://example.org/scriban.git", Parallel = 4, Synthetic = 100, MutantParallelism = 1, Framework = "net10.0" };

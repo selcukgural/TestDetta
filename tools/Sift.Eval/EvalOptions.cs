@@ -25,8 +25,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
                sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
-                         [--mutant-parallelism <n>] [--parallel <n>] [--toolchains <dir>] [--compare <dir>]
-                         [--history <dir>] [-v]
+                         [--mutant-parallelism <n>] [--mutant-kinds <list>] [--parallel <n>] [--toolchains <dir>]
+                         [--compare <dir>] [--history <dir>] [-v]
                sift-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the

@@ -121,6 +121,15 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     };
                     break;
 
+                case "--mutant-kinds":
+                    if (!MutantKinds.TryParse(value, out _, out error))
+                    {
+                        return false;
+                    }
+
+                    overrides = overrides with { MutantKinds = value };
+                    break;
+
                 default:
                     error = $"Unknown option for a corpus run: {arg}";
                     return false;
@@ -143,7 +152,8 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 /// <param name="Synthetic">Synthetic changes per repository.</param>
 /// <param name="MutantParallelism">Mutants run at once.</param>
 /// <param name="Parallel">Test processes per project when recording.</param>
-internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null);
+/// <param name="MutantKinds">Mutant kinds of the synthetic sample, as <c>--mutant-kinds</c> takes them (checked when parsed).</param>
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null);
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -247,7 +257,7 @@ internal static partial class BatchRunner
             throw new InvalidDataException($"{entry.Name} names a toolchain; give the corpus run --toolchains <dir>.");
         }
 
-        if (entry.MutantKinds is { } kindList)
+        if ((options.Overrides.MutantKinds ?? entry.MutantKinds) is { } kindList)
         {
             if (!MutantKinds.TryParse(kindList, out var kinds, out var kindError))
             {
