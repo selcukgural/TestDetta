@@ -387,7 +387,11 @@ public static class SiftTracker
     /// </summary>
     /// <param name="instance">The test class instance (<c>this</c>).</param>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    public static void EnterTestInstance(object instance) => EnterClass(RuntimeName(instance.GetType()), data: false);
+    public static void EnterTestInstance(object instance)
+    {
+        var type = instance.GetType();
+        EnterClass(RuntimeName(type), data: false, type);
+    }
 
     /// <summary>Makes <paramref name="testClass"/> the current bucket.</summary>
     /// <param name="testClass">Runtime class name, nested classes joined with '+'.</param>
@@ -416,16 +420,21 @@ public static class SiftTracker
     /// </summary>
     /// <param name="testClass">Runtime class name, nested classes joined with '+'.</param>
     /// <param name="data">True when entered for a test data member.</param>
-    private static void EnterClass(string testClass, bool data)
+    /// <param name="instanceType">Runtime type of the test instance, when entered through one; tests it inherits run for it.</param>
+    private static void EnterClass(string testClass, bool data, Type? instanceType = null)
     {
         if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
             && !string.Equals(current.Name, testClass, StringComparison.Ordinal)
-            && CalledFromRunningTest(current.Name, testClass))
+            && CalledFromRunningTest(current.Name, testClass, current.InstanceType))
         {
             return;
         }
 
         Enter(Classes, testClass, isFixture: false, data);
+        if (instanceType is not null && Current.Value is { } entered)
+        {
+            entered.InstanceType = instanceType;
+        }
     }
 
     /// <summary>
@@ -441,7 +450,11 @@ public static class SiftTracker
     /// </summary>
     /// <param name="running">Name of the current class bucket.</param>
     /// <param name="entered">Name of the class being entered; null when entering code outside every class.</param>
-    internal static bool CalledFromRunningTest(string running, string? entered)
+    /// <param name="runningType">
+    /// Runtime type of the running test instance, when known: frames of its base classes (a test
+    /// declared on an abstract base, a helper the base declares) are the running class's code too.
+    /// </param>
+    internal static bool CalledFromRunningTest(string running, string? entered, Type? runningType = null)
     {
         var frames = new StackTrace(1, fNeedFileInfo: false).GetFrames();
         string? entryPoint = null;
@@ -459,7 +472,7 @@ public static class SiftTracker
                 continue;
             }
 
-            if (IsOrIsNestedIn(type, running))
+            if (IsOrIsNestedIn(type, running) || runningType is not null && IsOrIsNestedInBaseOf(type, runningType))
             {
                 return true;
             }
@@ -467,6 +480,26 @@ public static class SiftTracker
             if (IsTestFramework(type.Assembly))
             {
                 return false;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True when <paramref name="type"/> or a type it is nested in is a base class of <paramref name="derived"/> (generic definitions compared).</summary>
+    /// <param name="type">Declaring type of a stack frame.</param>
+    /// <param name="derived">Runtime type of the running test instance.</param>
+    private static bool IsOrIsNestedInBaseOf(Type type, Type derived)
+    {
+        for (var frame = type; frame is not null; frame = frame.DeclaringType)
+        {
+            var definition = frame.IsGenericType ? frame.GetGenericTypeDefinition() : frame;
+            for (var baseType = derived.BaseType; baseType is not null && baseType != typeof(object); baseType = baseType.BaseType)
+            {
+                if ((baseType.IsGenericType ? baseType.GetGenericTypeDefinition() : baseType) == definition)
+                {
+                    return true;
+                }
             }
         }
 
@@ -532,7 +565,7 @@ public static class SiftTracker
     {
         // A test that calls a shared data member itself keeps its own bucket, as for any entry point.
         if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
-            && CalledFromRunningTest(current.Name, entered: null))
+            && CalledFromRunningTest(current.Name, entered: null, current.InstanceType))
         {
             return;
         }
@@ -647,6 +680,9 @@ public static class SiftTracker
 
         /// <summary>True for a fixture bucket.</summary>
         public bool IsFixture { get; } = isFixture;
+
+        /// <summary>Runtime type of the test instance last entered for this class; null until one was.</summary>
+        public Type? InstanceType { get; set; }
 
         /// <summary>
         /// <see cref="Stopwatch"/> ticks during which this was the bucket entered last. Because

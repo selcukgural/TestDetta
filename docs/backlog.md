@@ -80,9 +80,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   (never on the hit path) and keeps the bucket when a frame of the running class (its methods,
   lambdas, iterators, async state machines) lies below the entry point before any test-framework
   frame. Frames of the entry point's own class are skipped, so a data member declared on the
-  running class but used by another still switches when the framework calls it. Still the old
-  behaviour, which switches: calls from test methods declared on a base class of the running
-  class (frames of the base type), and between classes nested in one outer class.
+  running class but used by another still switches when the framework calls it. Frames of
+  the running instance's base classes (a test declared on an abstract base, also in another
+  library) count as the running class too (2026-10-02). Still the old behaviour, which switches:
+  calls between classes nested in one outer class.
 - ~~Startup time vs. discovery-time data~~ (interim 7c33ec6, completed): data members enter their
   class through `EnterDataSource`; before the first test, framework discovery, their time stays
   start-up while their code still counts for the class. Data enumerated when its tests run is

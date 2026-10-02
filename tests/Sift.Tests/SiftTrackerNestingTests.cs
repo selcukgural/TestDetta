@@ -41,8 +41,27 @@ public sealed class SiftTrackerNestingTests
     private static bool RowsOfRunning(string running, string entered) => SiftTracker.CalledFromRunningTest(running, entered);
 }
 
+/// <summary>A test declared on a base class runs for the derived class: its frames are the running class's.</summary>
+public abstract class NestingBase
+{
+    [Fact]
+    public void Entry_point_called_by_a_test_declared_on_a_base_class_is_nested() =>
+        Assert.True(Other.HelperFor(GetType(), "Sift.Tests.Other"));
+}
+
+/// <summary>Runs the base class's test.</summary>
+public sealed class DerivedNestingTests : NestingBase
+{
+    [Fact]
+    public void Base_frames_do_not_make_an_unrelated_type_the_runner() =>
+        Assert.False(Other.HelperFor(typeof(Other), "Sift.Tests.Other", running: "Sift.Tests.Unrelated"));
+}
+
 /// <summary>Stands for another test class whose entry point a test calls.</summary>
 internal static class Other
 {
     public static bool Helper(string running, string entered) => SiftTracker.CalledFromRunningTest(running, entered);
+
+    public static bool HelperFor(Type runningType, string entered, string? running = null) =>
+        SiftTracker.CalledFromRunningTest(running ?? runningType.FullName!, entered, runningType);
 }
