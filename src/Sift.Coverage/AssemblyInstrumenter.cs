@@ -11,7 +11,14 @@ namespace Sift.Coverage;
 /// <summary>Result of instrumenting a set of assemblies.</summary>
 /// <param name="Methods">Instrumented methods; the index of each entry is the id passed to <see cref="SiftTracker.Hit"/>.</param>
 /// <param name="Backups">Original file to backup copy, for <see cref="AssemblyInstrumenter.Restore"/>.</param>
-internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Methods, IReadOnlyDictionary<string, string> Backups);
+internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Methods, IReadOnlyDictionary<string, string> Backups)
+{
+    /// <summary>
+    /// Tracked fields (see <c>AssemblyInstrumenter.TrackedFields</c>) by index, as <c>Type::Field</c>;
+    /// field <c>i</c> has the bit <c>Methods.Count + i</c> in the tracker's buckets.
+    /// </summary>
+    public IReadOnlyList<string> Fields { get; init; } = [];
+}
 
 /// <summary>
 /// Rewrites assemblies in place so that every method with a body starts with a call to
@@ -49,10 +56,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         string backupDirectory)
     {
         var methods = new List<CoveredMethod>();
+        var fields = new List<string>();
         var backups = new Dictionary<string, string>(StringComparer.Ordinal);
         Directory.CreateDirectory(backupDirectory);
 
-        var result = new InstrumentationResult(methods, backups);
+        var result = new InstrumentationResult(methods, backups) { Fields = fields };
         try
         {
             foreach (var assembly in assemblies)
@@ -61,7 +69,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 BackUp(Path.ChangeExtension(assembly, ".pdb"), backupDirectory, backups);
 
                 var before = methods.Count;
-                InstrumentOne(assembly, testAssemblies.Contains(assembly), methods);
+                InstrumentOne(assembly, testAssemblies.Contains(assembly), methods, fields);
                 LogInstrumented(assembly, methods.Count - before);
             }
         }
@@ -135,7 +143,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="path">Assembly file.</param>
     /// <param name="containsTests">True for a test assembly, whose test classes get entry markers.</param>
     /// <param name="methods">Method table shared by all assemblies; updated in place.</param>
-    private static void InstrumentOne(string path, bool containsTests, List<CoveredMethod> methods)
+    /// <param name="fields">Tracked field table shared by all assemblies; updated in place.</param>
+    private static void InstrumentOne(string path, bool containsTests, List<CoveredMethod> methods, List<string> fields)
     {
         var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
         using var resolver = new DefaultAssemblyResolver();
@@ -166,7 +175,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterCache))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCache))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterAmbient))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterSetUpScope))!));
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterSetUpScope))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Read))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Stored))!));
+        var tracked = new Dictionary<FieldDefinition, int>();
+        foreach (var field in TrackedFields(module))
+        {
+            tracked[field] = fields.Count;
+            fields.Add($"{field.DeclaringType.FullName}::{field.Name}");
+        }
+
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
@@ -201,6 +219,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                     : isFixture && IsFixtureSetup(method) ? Marker.Fixture
                     : Marker.None;
                 InsertProbes(method, probes, new ProbeSite(id, marker, scope ?? dataUser));
+                InsertFieldProbes(method, probes, id, tracked);
             }
         }
 
@@ -218,6 +237,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="ExitCache"><see cref="SiftTracker.ExitCache"/>.</param>
     /// <param name="EnterAmbient"><see cref="SiftTracker.EnterAmbient"/>.</param>
     /// <param name="EnterSetUpScope"><see cref="SiftTracker.EnterSetUpScope"/>.</param>
+    /// <param name="Read"><see cref="SiftTracker.Read"/>.</param>
+    /// <param name="Stored"><see cref="SiftTracker.Stored"/>.</param>
     private sealed record Probes(
         MethodReference Hit,
         MethodReference EnterTestInstance,
@@ -228,7 +249,141 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         MethodReference EnterCache,
         MethodReference ExitCache,
         MethodReference EnterAmbient,
-        MethodReference EnterSetUpScope);
+        MethodReference EnterSetUpScope,
+        MethodReference Read,
+        MethodReference Stored);
+
+    /// <summary>
+    /// Fields whose value may be built once and read by many tests: reference-typed (or generic)
+    /// fields that are static, or that some method other than a constructor of their type stores
+    /// (<c>_x ??= new X()</c>, a setter of a shared object). Fields only constructors store hold a
+    /// per-object value that the constructor rules already cover, and tracking them would put a probe
+    /// on every object built. Fields of compiler-generated types (closures, state machines) hold a
+    /// flow's locals, and constants have no store.
+    /// </summary>
+    /// <param name="module">Module being instrumented.</param>
+    private static List<FieldDefinition> TrackedFields(ModuleDefinition module)
+    {
+        var storedOutsideConstructors = new HashSet<FieldDefinition>();
+        foreach (var type in module.GetTypes())
+        {
+            foreach (var method in type.Methods)
+            {
+                if (!method.HasBody)
+                {
+                    continue;
+                }
+
+                foreach (var instruction in method.Body.Instructions)
+                {
+                    if (instruction.OpCode.Code is Code.Stfld && instruction.Operand is FieldReference reference
+                        && reference.Resolve() is { } field && field.Module == module
+                        && !(method.IsConstructor && !method.IsStatic && field.DeclaringType == method.DeclaringType))
+                    {
+                        storedOutsideConstructors.Add(field);
+                    }
+                }
+            }
+        }
+
+        var tracked = new List<FieldDefinition>();
+        foreach (var type in module.GetTypes())
+        {
+            if (IsCompilerGenerated(type))
+            {
+                continue;
+            }
+
+            foreach (var field in type.Fields)
+            {
+                if (!field.IsLiteral && MayHoldReference(field.FieldType) && (field.IsStatic || storedOutsideConstructors.Contains(field)))
+                {
+                    tracked.Add(field);
+                }
+            }
+        }
+
+        return tracked;
+    }
+
+    /// <summary>True for a type the compiler made (a closure, a state machine), or one nested in such a type.</summary>
+    /// <param name="type">A type of the module.</param>
+    private static bool IsCompilerGenerated(TypeDefinition type)
+    {
+        for (var t = type; t is not null; t = t.DeclaringType)
+        {
+            if (t.Name.StartsWith('<'))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when a field of this type holds a reference: a class, an array, a generic parameter (which
+    /// may be one). A value type is copied, so storing it builds nothing others share. A type that
+    /// does not resolve counts as a reference, so nothing is lost.
+    /// </summary>
+    /// <param name="type">Field type.</param>
+    private static bool MayHoldReference(TypeReference type) => type switch
+    {
+        GenericParameter => true,
+        ArrayType => true,
+        PointerType or ByReferenceType => false,
+        _ when type.IsPrimitive => false,
+        _ => type.Resolve() is not { IsValueType: true },
+    };
+
+    /// <summary>
+    /// After every read of a tracked field, <c>ldc.i4 field; call Read</c>; after every store,
+    /// <c>ldc.i4 field; ldc.i4 method; call Stored</c>. Both go after the instruction: a branch that
+    /// targets the next instruction did not pass the read or store, and the stored value is complete
+    /// by then. Taking a field's address counts as a read.
+    /// </summary>
+    /// <param name="method">Method already given its entry probes.</param>
+    /// <param name="probes">Tracker references.</param>
+    /// <param name="methodId">Id of the method.</param>
+    /// <param name="tracked">Tracked fields of the module with their index.</param>
+    private static void InsertFieldProbes(MethodDefinition method, Probes probes, int methodId, Dictionary<FieldDefinition, int> tracked)
+    {
+        if (tracked.Count == 0)
+        {
+            return;
+        }
+
+        var body = method.Body;
+        body.SimplifyMacros();
+        var il = body.GetILProcessor();
+        foreach (var instruction in body.Instructions.ToList())
+        {
+            var code = instruction.OpCode.Code;
+            if (code is not (Code.Ldsfld or Code.Ldfld or Code.Ldsflda or Code.Ldflda or Code.Stsfld or Code.Stfld)
+                || instruction.Operand is not FieldReference reference
+                || reference.Resolve() is not { } field
+                || !tracked.TryGetValue(field, out var index))
+            {
+                continue;
+            }
+
+            if (code is Code.Stsfld or Code.Stfld)
+            {
+                var call = il.Create(OpCodes.Call, probes.Stored);
+                il.InsertAfter(instruction, call);
+                il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, index));
+                il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, methodId));
+            }
+            else
+            {
+                var call = il.Create(OpCodes.Call, probes.Read);
+                il.InsertAfter(instruction, call);
+                il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, index));
+            }
+        }
+
+        body.OptimizeMacros();
+    }
 
     /// <summary>What the probes of one method record.</summary>
     /// <param name="Id">Method id.</param>

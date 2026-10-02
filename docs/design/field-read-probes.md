@@ -1,8 +1,8 @@
 # Built-once values: field-read probes
 
-Status: design 2026-10-02. Replaces three interim fixes in "Known gaps behind shipped fixes":
-static constructors (7cd8528), object pools (d462594, 6badd5d), hand-rolled lazy initialisation
-(5d01d7a).
+Status: implemented 2026-10-02. Covers what the interim fixes for static constructors (7cd8528)
+and hand-rolled lazy initialisation (5d01d7a) left open; object pools (d462594, 6badd5d) keep their
+interim rule, see "As built".
 
 ## Problem
 
@@ -85,3 +85,30 @@ add nothing to the bucket).
 - A pool that creates on a miss; a `[ThreadStatic]` buffer.
 - A per-test instance field built in the test's constructor adds no class.
 - Recording time on the three repositories, before and after.
+
+## As built (2026-10-02)
+
+The implementation differs from the design above where measuring and reviewing it showed better:
+
+- **Tracked fields**: reference-typed (or generic) fields of non-compiler-generated types that are
+  static, or that a method other than a constructor of their type stores. Fields only constructors
+  store keep the constructor rules; probing them would put a call on every object built.
+- **Builders without begin/end probes**: every hit also goes into a per-thread ring of the last
+  65,536 method ids. A store probe after `stsfld`/`stfld` takes the ids back to the storing method's
+  latest entry (or its previous store, whichever is later). No `try`/`finally` is injected.
+- **Separate map section**: what built a value a bucket read goes to `builtValues` in the map, not
+  into the bucket's hits. Selection credits those methods to the readers, but the counts that
+  detect run-once code (`BucketsRunning`, shared-in-process) keep seeing only where code ran, so
+  the name-tracing fallback still covers readers the probes do not see (a value handed over through
+  a collection or another object). A builder read outside every test makes its methods unanswerable,
+  as ambient code is.
+- **Object pools are not covered**: a pool keeps what it creates in a collection, not a field, so
+  there is no store to probe. The interim pool rule stays.
+- Values built on one thread and stored on another, and builders longer than the ring, are seen in
+  part; the run-once rules remain for them.
+
+Measured on NodaTime (3 test projects, `--parallel 4`, machine under load): recording 74 s without,
+81 s with probes. NodaTime.Test's map gains 12,965 class credits through values (26,698 from code
+run), from 1,523 builder methods: time-zone data built once and read by most classes, which the
+name-tracing rule covered broadly before. The effect on selection share is to be measured in corpus
+round 2.

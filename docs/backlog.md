@@ -54,12 +54,9 @@ Interim fixes that are safe for the common case; come back for the complete solu
   every ambient method by what entered it (discovery data, framework setup, module initializer)
   and let setup-like ambient code select its whole scope; measure the precision cost first
   (AutoFixture.NUnit4 has 81 % of its covered code ambient, mostly discovery data).
-- **Static constructors** (interim: same commit; MimeKit HtmlAttributeIdExtensions, 12 classes
-  missed). A change to a static constructor now selects every class that ran a member of the type,
-  besides name tracing. Still missed: static field initializers without an explicit static
-  constructor when the field is read only from other types' code, and types whose static state is
-  read without calling any of their methods. Complete fix: probes on static field reads (`ldsfld`)
-  per bucket, so the readers of what a static constructor set up are known.
+- ~~Static constructors~~ (interim 7cd8528, completed by field-read probes, docs/design/field-read-probes.md):
+  a value a static initializer stores is credited to every bucket that reads the field. Still by
+  name only: static state read without a field read of an instrumented assembly.
 - ~~Project graph from MSBuild files read as XML~~: done with MSBuild evaluation (docs/design/msbuild-evaluation.md); the XML reading
   stays for imports and for projects MSBuild cannot evaluate.
 - **Object pools** (interim: d462594, 6badd5d; Meziantou.Analyzer, 5 classes missed). `Create` on
@@ -67,17 +64,11 @@ Interim fixes that are safe for the common case; come back for the complete solu
   copy Microsoft.Extensions.ObjectPool) is now a cache fill, also when the pool binds it to a
   `Func<T>` and calls that on a miss, as `DefaultObjectPool` does. Other pools (`ArrayPool`, hand-rolled
   `Stack<T>` caches, `[ThreadStatic]` buffers) still credit what they build to the first class.
-  Complete fix: same as hand-rolled lazy initialisation below (field-read probes), or detect
-  "create on miss" call sites generally.
-- **Hand-rolled lazy initialisation** (interim: 5d01d7a; Open-XML-SDK, 1 of 80
-  missed). `Interlocked.CompareExchange(ref _x, new X(), null)` is now a cache fill from where its
-  arguments start, when they are straight-line code that constructs or calls something. Still not
-  seen: `_x ??= new X()` and `if (_x == null) _x = new X()` on an instance field, and arguments with
-  branches inside; an instance method that only such a builder runs is credited to the first class
-  (static members and constructors are covered by the run-once rule). Complete fix: probes on
-  reads of fields that are written once, crediting the code that built the value to every bucket
-  that reads it, or an IL pattern match of null check → store. Red test: an instance method
-  reached only from a `??=` builder on a shared instance, used by three classes in two processes.
+  Complete fix: detect "create on miss" call sites generally (a pool keeps its objects in a
+  collection, so field-read probes do not see them).
+- ~~Hand-rolled lazy initialisation~~ (completed by field-read probes): `_x ??= new X()` and
+  `if (_x == null) _x = ...` on any field credit the builder to every reader. Not seen: a value
+  built on another thread and handed over before the store; the run-once rules stay for it.
 - ~~Helpers of another test class~~ and ~~test data credited to both buckets~~: done. An entry point
   of another class (constructor, attributed helper, data member) called while a test of the current
   class runs no longer switches the bucket: the tracker reads the stack when a switch would happen

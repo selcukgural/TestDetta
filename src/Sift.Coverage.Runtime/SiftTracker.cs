@@ -27,14 +27,48 @@ public static class SiftTracker
     /// <summary>Environment variable with the number of instrumented methods, set by <c>sift record</c>.</summary>
     public const string MethodCountVariable = "SIFT_METHOD_COUNT";
 
+    /// <summary>
+    /// Environment variable with the number of tracked fields, set by <c>sift record</c>. Field
+    /// <c>i</c> has the bit <c>method count + i</c> in every bucket.
+    /// </summary>
+    public const string FieldCountVariable = "SIFT_FIELD_COUNT";
+
     /// <summary>Environment variable with the path of the JSON file written at the end of the session.</summary>
     public const string OutputVariable = "SIFT_COVERAGE_OUTPUT";
+
+    /// <summary>Methods remembered per thread for <see cref="Stored"/>; a power of two.</summary>
+    private const int RecentSize = 1 << 16;
+
+    /// <summary>
+    /// The last <see cref="RecentSize"/> methods entered on this thread, as a ring: what a value
+    /// stored into a tracked field was built from is read back from here.
+    /// </summary>
+    [ThreadStatic]
+    private static int[]? _recent;
+
+    /// <summary>Methods entered on this thread so far; the next ring slot.</summary>
+    [ThreadStatic]
+    private static long _recentCount;
+
+    /// <summary>Ring position of the last store on this thread, and the method that made it.</summary>
+    [ThreadStatic]
+    private static long _lastStore;
+
+    /// <summary>Method that made the last store on this thread.</summary>
+    [ThreadStatic]
+    private static int _lastStoreMethod;
+
+    /// <summary>Per tracked field, the methods that built a value stored into it in this process.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, System.Collections.Concurrent.ConcurrentDictionary<int, byte>> Builders = new();
 
     /// <summary>Guards the bucket dictionaries; the hit path never takes it.</summary>
     private static readonly object Gate = new();
 
-    /// <summary>Number of 64-bit words a bit set needs for all method ids.</summary>
-    private static readonly int Words = (ReadMethodCount() + 63) / 64;
+    /// <summary>Number of instrumented methods; field bits follow the method bits. Declared first: <see cref="Words"/> needs it.</summary>
+    private static readonly int MethodCount = ReadCount(MethodCountVariable);
+
+    /// <summary>Number of 64-bit words a bit set needs for all method and field ids.</summary>
+    private static readonly int Words = (MethodCount + ReadCount(FieldCountVariable) + 63) / 64;
 
     /// <summary>Hits per test class, keyed by runtime class name.</summary>
     private static readonly Dictionary<string, Bucket> Classes = new(StringComparer.Ordinal);
@@ -97,6 +131,59 @@ public static class SiftTracker
         }
 
         Mark(BucketForHit().Bits, word, bit);
+        var recent = _recent ??= new int[RecentSize];
+        recent[(int)(_recentCount++ & (RecentSize - 1))] = id;
+    }
+
+    /// <summary>
+    /// Records that tracked field <paramref name="field"/> was read: the current bucket depends on the
+    /// value in it, and so on whatever built that value (see <see cref="Stored"/>), wherever it ran.
+    /// </summary>
+    /// <param name="field">Field index assigned by the instrumenter.</param>
+    public static void Read(int field)
+    {
+        var id = MethodCount + field;
+        Mark(BucketForHit().Bits, id >> 6, 1UL << (id & 63));
+    }
+
+    /// <summary>
+    /// Records what built the value just stored into tracked field <paramref name="field"/> by
+    /// <paramref name="method"/>: the methods entered on this thread since <paramref name="method"/>
+    /// was entered last, or since its previous store, whichever is later. A value built once (a
+    /// static initializer, <c>_x ??= new X()</c>) runs in the bucket of whichever test needed it
+    /// first; with this, every bucket that reads the field depends on that code too. A builder longer
+    /// than the ring is cut to its last part; values built on another thread and handed over are not
+    /// seen, and the selection's run-once rules still cover those.
+    /// </summary>
+    /// <param name="field">Field index assigned by the instrumenter.</param>
+    /// <param name="method">Id of the method that stored the value.</param>
+    public static void Stored(int field, int method)
+    {
+        if (_recent is not { } recent)
+        {
+            return;
+        }
+
+        var end = _recentCount;
+        var stop = Math.Max(0, end - RecentSize);
+        if (_lastStoreMethod == method && _lastStore > stop)
+        {
+            stop = _lastStore;
+        }
+
+        var builders = Builders.GetOrAdd(field, static _ => new());
+        for (var i = end - 1; i >= stop; i--)
+        {
+            var id = recent[(int)(i & (RecentSize - 1))];
+            builders.TryAdd(id, 0);
+            if (id == method)
+            {
+                break;
+            }
+        }
+
+        _lastStore = end;
+        _lastStoreMethod = method;
     }
 
     /// <summary>Sets one bit of a bit set, cheaply when it is already set.</summary>
@@ -385,6 +472,20 @@ public static class SiftTracker
                 WriteBuckets(json, "fixtures", Fixtures);
                 WriteIds(json, "ambient", Startup.Bits);
                 WriteIds(json, "initialization", InitializationBits);
+                json.WriteNumber("methodCount", MethodCount);
+                json.WriteStartObject("fieldBuilders");
+                foreach (var (field, builders) in Builders)
+                {
+                    json.WriteStartArray(field.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    foreach (var id in builders.Keys)
+                    {
+                        json.WriteNumberValue(id);
+                    }
+
+                    json.WriteEndArray();
+                }
+
+                json.WriteEndObject();
                 WriteSeconds(json, "classSeconds", Classes);
                 WriteSeconds(json, "fixtureSeconds", Fixtures);
                 json.WriteNumber("startupSeconds", _startupSeconds);
@@ -551,7 +652,8 @@ public static class SiftTracker
         json.WriteEndArray();
     }
 
-    /// <summary>Reads <see cref="MethodCountVariable"/>; zero (tracking off) when it is missing or invalid.</summary>
-    private static int ReadMethodCount() =>
-        int.TryParse(Environment.GetEnvironmentVariable(MethodCountVariable), out var count) && count > 0 ? count : 0;
+    /// <summary>Reads a count such as <see cref="MethodCountVariable"/>; zero (tracking off) when it is missing or invalid.</summary>
+    /// <param name="variable">Environment variable.</param>
+    private static int ReadCount(string variable) =>
+        int.TryParse(Environment.GetEnvironmentVariable(variable), out var count) && count > 0 ? count : 0;
 }

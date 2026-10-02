@@ -364,6 +364,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var environment = new Dictionary<string, string>
         {
             [SiftTracker.MethodCountVariable] = instrumentation.Methods.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            [SiftTracker.FieldCountVariable] = instrumentation.Fields.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
             [SiftTracker.OutputVariable] = resultsFile,
         };
 
@@ -560,14 +561,20 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var startupSeconds = new List<double>();
         var initialization = new SortedSet<int>();
         var sharedInProcess = new SortedSet<int>();
+        var builtClasses = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
+        var builtFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
+        var builtAmbient = new SortedSet<int>();
 
         foreach (var file in resultsFiles)
         {
             using var document = ReadResults(file);
             var root = document.RootElement;
-            MergeBuckets(root.GetProperty("classes"), merged);
-            MergeBuckets(root.GetProperty("fixtures"), mergedFixtures);
-            AddShared(root, sharedInProcess);
+            // Ids past the methods are tracked fields a bucket read; what built their values in this
+            // process counts for the bucket through the value.
+            var fieldReads = new FieldReads(root.TryGetProperty("methodCount", out var count) ? count.GetInt32() : methods.Count, Builders(root));
+            MergeBuckets(root.GetProperty("classes"), merged, builtClasses, fieldReads);
+            MergeBuckets(root.GetProperty("fixtures"), mergedFixtures, builtFixtures, fieldReads);
+            AddShared(root, sharedInProcess, fieldReads.MethodCount);
             if (root.TryGetProperty("initialization", out var initializing))
             {
                 foreach (var id in initializing.EnumerateArray())
@@ -577,7 +584,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
             foreach (var id in root.GetProperty("ambient").EnumerateArray())
             {
-                ambientIds.Add(id.GetInt32());
+                if (!fieldReads.Add(id.GetInt32(), builtAmbient))
+                {
+                    ambientIds.Add(id.GetInt32());
+                }
             }
 
             // A fixture set up in several shards cost its time in each, so times add up.
@@ -610,7 +620,51 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         {
             Initialization = [.. initialization],
             SharedInProcess = [.. sharedInProcess],
+            BuiltValues = new CoverageHits(Freeze(builtClasses), Freeze(builtFixtures), [.. builtAmbient]),
         };
+    }
+
+    /// <summary>
+    /// The tracked fields of one process's results: ids from <see cref="MethodCount"/> on are fields,
+    /// and what built each field's values in that process.
+    /// </summary>
+    /// <param name="MethodCount">Number of instrumented methods; field <c>i</c> has the id <c>MethodCount + i</c>.</param>
+    /// <param name="Builders">Methods that built the values stored into each field, by field index.</param>
+    private sealed record FieldReads(int MethodCount, Dictionary<int, int[]> Builders)
+    {
+        /// <summary>When <paramref name="id"/> is a field, adds what built its values to <paramref name="built"/> and returns true.</summary>
+        /// <param name="id">Bit id from the results.</param>
+        /// <param name="built">Methods the bucket depends on through values; updated in place.</param>
+        public bool Add(int id, SortedSet<int> built)
+        {
+            if (id < MethodCount)
+            {
+                return false;
+            }
+
+            if (Builders.TryGetValue(id - MethodCount, out var builders))
+            {
+                built.UnionWith(builders.Where(b => b < MethodCount));
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>The <c>fieldBuilders</c> of one process's results; empty for results without them.</summary>
+    /// <param name="root">One process's results.</param>
+    private static Dictionary<int, int[]> Builders(JsonElement root)
+    {
+        var builders = new Dictionary<int, int[]>();
+        if (root.TryGetProperty("fieldBuilders", out var element))
+        {
+            foreach (var field in element.EnumerateObject())
+            {
+                builders[int.Parse(field.Name, System.Globalization.CultureInfo.InvariantCulture)] = [.. field.Value.EnumerateArray().Select(static i => i.GetInt32())];
+            }
+        }
+
+        return builders;
     }
 
     /// <summary>
@@ -620,7 +674,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// </summary>
     /// <param name="root">One process's results.</param>
     /// <param name="shared">Methods shared by buckets of one process; updated in place.</param>
-    private static void AddShared(JsonElement root, SortedSet<int> shared)
+    /// <param name="methodCount">Ids from here on are fields, which are not code that ran.</param>
+    private static void AddShared(JsonElement root, SortedSet<int> shared, int methodCount)
     {
         var seen = new HashSet<int>();
         foreach (var name in (ReadOnlySpan<string>)["classes", "fixtures"])
@@ -629,7 +684,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             {
                 foreach (var id in bucket.Value.EnumerateArray())
                 {
-                    if (!seen.Add(id.GetInt32()))
+                    if (id.GetInt32() < methodCount && !seen.Add(id.GetInt32()))
                     {
                         shared.Add(id.GetInt32());
                     }
@@ -644,7 +699,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// </summary>
     /// <param name="element">JSON object written by <see cref="SiftTracker.WriteResults"/>.</param>
     /// <param name="buckets">Merged buckets; updated in place.</param>
-    private static void MergeBuckets(JsonElement element, Dictionary<string, SortedSet<int>> buckets)
+    /// <param name="built">Per bucket, methods it depends on through values it read; updated in place.</param>
+    /// <param name="fieldReads">Tracked fields of these results.</param>
+    private static void MergeBuckets(JsonElement element, Dictionary<string, SortedSet<int>> buckets, Dictionary<string, SortedSet<int>> built, FieldReads fieldReads)
     {
         foreach (var property in element.EnumerateObject())
         {
@@ -654,9 +711,18 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 buckets[property.Name] = ids;
             }
 
+            if (!built.TryGetValue(property.Name, out var values))
+            {
+                values = [];
+                built[property.Name] = values;
+            }
+
             foreach (var id in property.Value.EnumerateArray())
             {
-                ids.Add(id.GetInt32());
+                if (!fieldReads.Add(id.GetInt32(), values))
+                {
+                    ids.Add(id.GetInt32());
+                }
             }
         }
     }

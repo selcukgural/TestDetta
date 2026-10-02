@@ -85,6 +85,30 @@ internal sealed class CoverageIndex
             _ambient.Add(map.Methods[id]);
         }
 
+        // Code that built a value a bucket read counts for that bucket, without counting as a bucket
+        // that ran it: the run-once rules below still see only where the code ran.
+        if (map.BuiltValues is { } built)
+        {
+            foreach (var (testClass, ids) in built.Classes)
+            {
+                AddUsers(map, ids, [testClass]);
+            }
+
+            foreach (var (fixture, ids) in built.Fixtures)
+            {
+                var users = classesUsingFixture(fixture);
+                if (users.Count == 0)
+                {
+                    _ambient.UnionWith(ids.Select(id => map.Methods[id]));
+                    continue;
+                }
+
+                AddUsers(map, ids, users);
+            }
+
+            _ambient.UnionWith(built.Ambient.Select(id => map.Methods[id]));
+        }
+
         foreach (var id in map.Initialization)
         {
             _initialization.Add(map.Methods[id]);
@@ -97,6 +121,23 @@ internal sealed class CoverageIndex
         if (map.SharedInProcess is { } shared)
         {
             _sharedInProcess = [.. shared.Select(id => map.Methods[id])];
+        }
+    }
+
+    /// <summary>Credits methods to test classes without counting buckets.</summary>
+    /// <param name="map">Recorded map.</param>
+    /// <param name="ids">Method ids.</param>
+    /// <param name="classes">Test classes to credit.</param>
+    private void AddUsers(CoverageMap map, IReadOnlyList<int> ids, IReadOnlyCollection<string> classes)
+    {
+        foreach (var id in ids)
+        {
+            var method = map.Methods[id];
+            _classesByMember[method].UnionWith(classes);
+            foreach (var type in EnclosingTypes(method.TypeName))
+            {
+                _classesByType[type].UnionWith(classes);
+            }
         }
     }
 

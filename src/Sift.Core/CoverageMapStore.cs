@@ -45,6 +45,15 @@ public static class CoverageMapStore
         WriteIds(json, "ambient", map.Ambient);
 
         WriteIds(json, "initialization", map.Initialization);
+        if (map.BuiltValues is { } built)
+        {
+            json.WriteStartObject("builtValues"u8);
+            WriteBuckets(json, "classes", built.Classes);
+            WriteBuckets(json, "fixtures", built.Fixtures);
+            WriteIds(json, "ambient", built.Ambient);
+            json.WriteEndObject();
+        }
+
         if (map.SharedInProcess is { } shared)
         {
             WriteIds(json, "sharedInProcess", shared);
@@ -165,6 +174,9 @@ public static class CoverageMapStore
                 FailedClasses = failed,
                 Initialization = root.TryGetProperty("initialization", out var initialization) ? ReadIds(initialization) : [],
                 SharedInProcess = root.TryGetProperty("sharedInProcess", out var shared) ? ReadIds(shared) : null,
+                BuiltValues = root.TryGetProperty("builtValues", out var built)
+                    ? new CoverageHits(ReadBuckets(built.GetProperty("classes")), ReadBuckets(built.GetProperty("fixtures")), ReadIds(built.GetProperty("ambient")))
+                    : null,
                 Generated = root.TryGetProperty("generated", out var generated) ? ReadGenerated(generated) : [],
             };
         }
