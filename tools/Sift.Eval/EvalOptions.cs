@@ -24,7 +24,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     /// <summary>Help text.</summary>
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
-               sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [-v]
+               sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
+                         [--mutant-parallelism <n>] [--parallel <n>] [-v]
                sift-eval --summarize <dir> --corpus <file>
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the

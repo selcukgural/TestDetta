@@ -11,6 +11,12 @@ namespace Sift.Eval;
 /// <param name="LogLevel">Minimum level of the log on stderr.</param>
 internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only, string Output, bool SummarizeOnly, LogLevel LogLevel)
 {
+    /// <summary>
+    /// Settings that replace every repository's own for this run, such as a nightly smoke run with
+    /// fewer mutants on a small machine; null keeps the corpus value.
+    /// </summary>
+    public BatchOverrides Overrides { get; init; } = new();
+
     /// <summary>True when the command line asks for a corpus run or a summary.</summary>
     /// <param name="args">Raw arguments.</param>
     public static bool IsBatch(ReadOnlySpan<string> args)
@@ -37,6 +43,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         var summarize = false;
         var only = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var logLevel = LogLevel.Information;
+        var overrides = new BatchOverrides();
         options = null!;
         error = null;
 
@@ -75,6 +82,21 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     only.UnionWith(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                     break;
 
+                case "--synthetic" or "--mutant-parallelism" or "--parallel":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 1)
+                    {
+                        error = $"{arg} needs a positive number, not {value}";
+                        return false;
+                    }
+
+                    overrides = arg switch
+                    {
+                        "--synthetic" => overrides with { Synthetic = number },
+                        "--mutant-parallelism" => overrides with { MutantParallelism = number },
+                        _ => overrides with { Parallel = number },
+                    };
+                    break;
+
                 default:
                     error = $"Unknown option for a corpus run: {arg}";
                     return false;
@@ -88,10 +110,16 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         }
 
         output ??= Path.Combine(Path.GetTempPath(), "sift-corpus-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-        options = new BatchOptions(corpus, only, output, summarize, logLevel);
+        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides };
         return true;
     }
 }
+
+/// <summary>Corpus settings a run replaces for every repository; null keeps the corpus value.</summary>
+/// <param name="Synthetic">Synthetic changes per repository.</param>
+/// <param name="MutantParallelism">Mutants run at once.</param>
+/// <param name="Parallel">Test processes per project when recording.</param>
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null);
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -146,6 +174,40 @@ internal static partial class BatchRunner
         return exitCode;
     }
 
+    /// <summary>The evaluation settings of one repository: its corpus entry, with the run's overrides on top.</summary>
+    /// <param name="entry">Repository with defaults applied.</param>
+    /// <param name="options">Corpus run options.</param>
+    internal static (EvalTarget Target, RunSettings Run) SettingsFor(CorpusEntry entry, BatchOptions options)
+    {
+        var synthetic = options.Overrides.Synthetic ?? entry.Synthetic ?? 0;
+        var run = new RunSettings(
+            options.Overrides.Parallel ?? entry.Parallel ?? 1,
+            entry.Mutants ?? 2,
+            entry.Projects ?? [],
+            new RepoCommands(entry.Setup, entry.Cleanup),
+            entry.Framework)
+        {
+            Excluded = entry.Exclude ?? [],
+            // Outside the repository's directory, which is moved aside for a rerun after a fix.
+            OutcomeCache = Path.Combine(options.Output, "outcome-cache", entry.Name),
+            RecordingCache = Path.Combine(options.Output, "map-cache", entry.Name),
+            MutantParallelism = options.Overrides.MutantParallelism ?? entry.MutantParallelism ?? 1,
+        };
+        if (entry.MutantKinds is { } kindList)
+        {
+            if (!MutantKinds.TryParse(kindList, out var kinds, out var kindError))
+            {
+                throw new InvalidDataException($"{entry.Name}: {kindError}");
+            }
+
+            run = run with { MutantKinds = kinds };
+        }
+
+        // Without a branch, the repository's default branch, whatever it is called.
+        var target = new EvalTarget(entry.Url, entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
+        return (target, run);
+    }
+
     /// <summary>Evaluates one repository into its own directory; a failure is written to <c>error.txt</c>.</summary>
     /// <param name="entry">Repository with defaults applied.</param>
     /// <param name="options">Corpus run options.</param>
@@ -157,31 +219,7 @@ internal static partial class BatchRunner
         var errorFile = Path.Combine(directory, "error.txt");
         File.Delete(errorFile);
 
-        var synthetic = entry.Synthetic ?? 0;
-        var run = new RunSettings(
-            entry.Parallel ?? 1,
-            entry.Mutants ?? 2,
-            entry.Projects ?? [],
-            new RepoCommands(entry.Setup, entry.Cleanup),
-            entry.Framework)
-        {
-            Excluded = entry.Exclude ?? [],
-            // Outside the repository's directory, which is moved aside for a rerun after a fix.
-            OutcomeCache = Path.Combine(options.Output, "outcome-cache", entry.Name),
-            RecordingCache = Path.Combine(options.Output, "map-cache", entry.Name),
-            MutantParallelism = entry.MutantParallelism ?? 1,
-        };
-        if (entry.MutantKinds is { } kindList)
-        {
-            if (!MutantKinds.TryParse(kindList, out var kinds, out var kindError))
-            {
-                throw new InvalidDataException($"{entry.Name}: {kindError}");
-            }
-
-            run = run with { MutantKinds = kinds };
-        }
-        // Without a branch, the repository's default branch, whatever it is called.
-        var target = new EvalTarget(entry.Url, entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
+        var (target, run) = SettingsFor(entry, options);
         var evalOptions = new EvalOptions(target, run, directory, options.LogLevel);
 
         LogStarting(logger, entry.Name, entry.Url);
