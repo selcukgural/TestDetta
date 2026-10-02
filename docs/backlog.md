@@ -15,6 +15,12 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- **Stable mutant sample across Sift versions.** The outcome cache (f12e713) keys outcomes by
+  mutant, but `TargetSampler` samples from candidates that depend on Sift's project graph and the
+  recorded maps, so a graph fix (ea5acb7) changed OpenTelemetry's whole sample and nothing was
+  reused. Sample from what does not depend on Sift (members of the repository's compiled
+  assemblies, or source files in a fixed order, filtered by coverage only at the end), so a commit
+  keeps its mutants and results stay comparable between Sift versions.
 - **x64-only test projects are left out on Apple silicon** (Vogen's SnapshotTests: "Could not find
   'dotnet' host for the 'X64' architecture"). The evaluation now leaves out a project whose run
   without mutants aborted before running a test, instead of counting every later abort as a mutant
