@@ -83,6 +83,8 @@ public sealed class MutantKindsTests : IDisposable
         var mutants = run.GetProperty("mutants").EnumerateArray().ToList();
 
         Assert.Equal(0, exitCode);
+        // Every kind runs switched on in a schema; the guards did not change the suite.
+        Assert.True(run.GetProperty("schema").GetBoolean());
         Assert.All(mutants, m => Assert.Empty(m.GetProperty("missed").EnumerateArray()));
         var byTarget = mutants.ToDictionary(m => m.GetProperty("target").GetString()!);
         switch (kinds)

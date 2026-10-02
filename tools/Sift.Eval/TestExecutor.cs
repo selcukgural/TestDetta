@@ -73,7 +73,8 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// <summary>Runs every test of <paramref name="projects"/>, one project after another.</summary>
     /// <param name="projects">Test projects.</param>
     /// <param name="label">Name for log files, such as <c>full</c> or <c>mutant-2</c>.</param>
-    public TestRunOutcome RunAll(IReadOnlyList<ProjectNode> projects, string label)
+    /// <param name="environment">Extra environment variables of the test processes, such as the mutant switch; null for none.</param>
+    public TestRunOutcome RunAll(IReadOnlyList<ProjectNode> projects, string label, IReadOnlyDictionary<string, string>? environment = null)
     {
         var runs = new List<(ProjectNode Project, List<string> Arguments)>(projects.Count);
         foreach (var project in projects)
@@ -83,13 +84,14 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             runs.Add((project, arguments));
         }
 
-        return Run(runs, label);
+        return Run(runs, label, environment);
     }
 
     /// <summary>Runs the invocations Sift selected.</summary>
     /// <param name="invocations">From <see cref="TestInvocationBuilder"/>.</param>
     /// <param name="label">Name for log files.</param>
-    public TestRunOutcome RunSelected(IReadOnlyList<TestInvocation> invocations, string label)
+    /// <param name="environment">Extra environment variables of the test processes; null for none.</param>
+    public TestRunOutcome RunSelected(IReadOnlyList<TestInvocation> invocations, string label, IReadOnlyDictionary<string, string>? environment = null)
     {
         var runs = new List<(ProjectNode Project, List<string> Arguments)>(invocations.Count);
         foreach (var invocation in invocations)
@@ -97,14 +99,16 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             runs.Add((invocation.Selection.Project, [.. invocation.Arguments]));
         }
 
-        return Run(runs, label);
+        return Run(runs, label, environment);
     }
 
     /// <summary>Runs each project with <c>--no-build</c> and a TRX report, and reads the reports.</summary>
     /// <param name="runs">Project and <c>dotnet test</c> arguments per run.</param>
     /// <param name="label">Name for log files.</param>
-    private TestRunOutcome Run(List<(ProjectNode Project, List<string> Arguments)> runs, string label)
+    /// <param name="environment">Extra environment variables of the test processes; null for none.</param>
+    private TestRunOutcome Run(List<(ProjectNode Project, List<string> Arguments)> runs, string label, IReadOnlyDictionary<string, string>? environment)
     {
+        Dictionary<string, string> variables = environment is null ? [] : new(environment);
         var stopwatch = Stopwatch.StartNew();
         var total = 0;
         var unreported = new HashSet<string>(Paths.Comparer);
@@ -145,7 +149,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 var started = Stopwatch.GetTimestamp();
                 using (var log = File.CreateText(logPath))
                 {
-                    exitCode = dotnet.Run(arguments, context.RepoRoot, new Dictionary<string, string>(), log, Timeout(project.Path));
+                    exitCode = dotnet.Run(arguments, context.RepoRoot, variables, log, Timeout(project.Path));
                     LogRun(label, project.Path, exitCode);
                 }
 

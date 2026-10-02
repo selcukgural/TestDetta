@@ -40,6 +40,9 @@ internal sealed record SyntheticRun(string Sha, int TestClasses, double Baseline
 {
     /// <summary>Test projects left out because they wrote no test report, relative to the repository root.</summary>
     public IReadOnlyList<string> Unreported { get; init; } = [];
+
+    /// <summary>True when the mutants were switched on in a schema rather than written in one at a time.</summary>
+    public bool Schema { get; init; }
 }
 
 /// <summary>Confidence bounds for a miss rate measured with mutants.</summary>

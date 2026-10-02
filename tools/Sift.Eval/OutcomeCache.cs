@@ -14,9 +14,9 @@ internal sealed class OutcomeCache
     /// <summary>
     /// Version of everything that decides a stored outcome besides the commit and the mutant:
     /// injection, test runs, baseline and confirmation rules. Raise it with any change there; files
-    /// written with another version are ignored.
+    /// written with another version are ignored. 2: mutants switched on in a schema.
     /// </summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>Serializer settings for the cache file.</summary>
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };

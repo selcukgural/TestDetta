@@ -38,6 +38,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  check each selection against a mutant of that member
           --seed <n>             Seed for sampling the synthetic changes (default: 1)
           --mutant-kinds <list>  throw, return-default, flip-branch, field-value, or all (default: throw)
+          --no-schema            Write each synthetic mutant in alone instead of switching it on in a
+                                 schema (to compare both, or for a suite that notices the switches)
           --outcome-cache <dir>  Keep what the tests did against each synthetic mutant in <dir> and reuse it
                                  next time, so only Sift's selection is computed again (corpus runs use
                                  <out>/outcome-cache/<name>)
@@ -78,6 +80,12 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
             if (arg is "-v" or "--verbose")
             {
                 logLevel = LogLevel.Debug;
+                continue;
+            }
+
+            if (arg == "--no-schema")
+            {
+                run = run with { UseSchema = false };
                 continue;
             }
 
@@ -196,6 +204,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// of the repository (see <see cref="OutcomeCache"/>); null to run every mutant's tests.
     /// </summary>
     public string? OutcomeCache { get; init; }
+
+    /// <summary>
+    /// True (the default) to switch synthetic mutants on in a schema; false to write each one in
+    /// alone, as before schemata, which is also what a schema that changes the suite falls back to.
+    /// </summary>
+    public bool UseSchema { get; init; } = true;
 }
 
 /// <summary>Shell commands a repository needs besides dotnet.</summary>

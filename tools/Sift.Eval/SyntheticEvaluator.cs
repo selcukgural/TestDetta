@@ -68,13 +68,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var assemblies = EvalSteps.RepositoryAssemblies(
                 new ProjectAssemblies(_logger).FileNames(graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
 
+            using var schema = settings.UseSchema ? TrySchema(assemblies, targets, testProjects, baseline) : null;
             foreach (var target in targets)
             {
-                mutants.Add(Run(sha, target, new MutantContext(testProjects, maps, assemblies, baseline), mutants.Count + 1));
-                progress(new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported });
+                mutants.Add(Run(sha, target, new MutantContext(testProjects, maps, assemblies, baseline, schema), mutants.Count + 1));
+                progress(new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported, Schema = schema is not null });
             }
 
-            return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported };
+            return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported, Schema = schema is not null };
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException)
         {
@@ -88,11 +89,105 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Maps">Coverage maps at the commit, by normalized test project path.</param>
     /// <param name="Assemblies">Repository assemblies in the test outputs, where mutants are injected.</param>
     /// <param name="Baseline">Full run without mutants, whose failures are not a mutant's.</param>
+    /// <param name="Schema">Every sampled mutant written in behind a switch; null to write each in alone.</param>
     private sealed record MutantContext(
         List<ProjectNode> TestProjects,
         Dictionary<string, CoverageMap> Maps,
         List<string> Assemblies,
-        TestRunOutcome Baseline);
+        TestRunOutcome Baseline,
+        Schema? Schema);
+
+    /// <summary>
+    /// Writes every target in once behind the switch (see <see cref="MutationInjector.InjectSchema"/>)
+    /// and runs the full suite again with no mutant on. The guards must not change behaviour: when that
+    /// run fails other classes than the baseline, or does not complete, the schema is removed and every
+    /// mutant is written in alone, as before; the report says which way the commit was evaluated.
+    /// </summary>
+    /// <param name="assemblies">Repository assemblies in the test outputs.</param>
+    /// <param name="targets">Sampled mutants; their 1-based position is their id.</param>
+    /// <param name="testProjects">Test projects that reported in the baseline.</param>
+    /// <param name="baseline">Run of those projects without any schema.</param>
+    private Schema? TrySchema(List<string> assemblies, List<SyntheticTarget> targets, List<ProjectNode> testProjects, TestRunOutcome baseline)
+    {
+        var schema = MutationInjector.InjectSchema(
+            assemblies,
+            [.. targets.Select(static (t, i) => new SchemaTarget(i + 1, t.Member, t.Kind))],
+            Path.Combine(workspace.MapCache, "..", "schema-backup"));
+        var check = workspace.Executor.RunAll(testProjects, "baseline-schema");
+        var same = check.Complete && testProjects.All(p =>
+            (baseline.FailedByProject.GetValueOrDefault(p.Path) ?? new HashSet<string>())
+                .SetEquals(check.FailedByProject.GetValueOrDefault(p.Path) ?? new HashSet<string>()));
+        if (same)
+        {
+            LogSchema(schema.Entries.Count);
+            return schema;
+        }
+
+        LogSchemaChangedBehaviour();
+        schema.Dispose();
+        return null;
+    }
+
+    /// <summary>
+    /// The mutant the tests run against: switched on through the environment when the commit has a
+    /// schema, or written into the assemblies alone. Lifting it for a control run is running without
+    /// the switch, or putting the original files back.
+    /// </summary>
+    /// <param name="mutatedMethods">Compiled methods (or field stores) the mutant changes.</param>
+    /// <param name="outputs">Directories holding a copy that contains it.</param>
+    /// <param name="environment">Environment of the test processes that turns it on; null when written in.</param>
+    /// <param name="mutation">The mutant written in alone, or null with a schema.</param>
+    private sealed class ActiveMutant(int mutatedMethods, IReadOnlySet<string> outputs, IReadOnlyDictionary<string, string>? environment, Mutation? mutation) : IDisposable
+    {
+        /// <summary>Compiled methods (or field stores) the mutant changes.</summary>
+        public int MutatedMethods { get; } = mutatedMethods;
+
+        /// <summary>Directories holding a copy that contains it.</summary>
+        public IReadOnlySet<string> Outputs { get; } = outputs;
+
+        /// <summary>Environment of the test processes that turns it on; null when written in.</summary>
+        public IReadOnlyDictionary<string, string>? Environment { get; } = environment;
+
+        /// <summary>Takes the mutant away until the result is disposed (nothing to do with a schema).</summary>
+        public IDisposable Lift() => mutation?.Lift() ?? Nothing.Instance;
+
+        /// <summary>Puts the original files back when the mutant was written in alone.</summary>
+        public void Dispose() => mutation?.Dispose();
+
+        /// <summary>A lift that changes nothing.</summary>
+        private sealed class Nothing : IDisposable
+        {
+            /// <summary>The one instance.</summary>
+            public static readonly Nothing Instance = new();
+
+            /// <summary>Does nothing.</summary>
+            public void Dispose()
+            {
+            }
+        }
+    }
+
+    /// <summary>Applies the mutant of <paramref name="target"/>: switches it on in the schema, or writes it in alone.</summary>
+    /// <param name="target">The mutant.</param>
+    /// <param name="context">What the mutants of the commit share.</param>
+    /// <param name="index">1-based position in the sample, which is its schema id.</param>
+    private ActiveMutant Apply(SyntheticTarget target, MutantContext context, int index)
+    {
+        if (context.Schema is { } schema)
+        {
+            var entry = schema.Entries.GetValueOrDefault(index);
+            var outputs = entry?.Assemblies.Select(static a => Path.GetDirectoryName(a)!).ToHashSet(StringComparer.Ordinal) ?? [];
+            return new ActiveMutant(
+                entry?.MutatedMethods ?? 0,
+                outputs,
+                new Dictionary<string, string> { [Schema.Variable] = index.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+                mutation: null);
+        }
+
+        var mutation = MutationInjector.Inject(context.Assemblies, target.Member, Path.Combine(workspace.MapCache, "..", "mutant-backup"), target.Kind);
+        var directories = mutation.Backups.Keys.Select(static f => Path.GetDirectoryName(f)!).ToHashSet(StringComparer.Ordinal);
+        return new ActiveMutant(mutation.MutatedMethods, directories, environment: null, mutation);
+    }
 
     /// <summary>Selects for one synthetic change and runs the tests against its mutant.</summary>
     /// <param name="sha">Commit the maps were recorded at.</param>
@@ -111,7 +206,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             return reused;
         }
 
-        using var mutation = MutationInjector.Inject(context.Assemblies, target.Member, Path.Combine(workspace.MapCache, "..", "mutant-backup"), target.Kind);
+        using var mutation = Apply(target, context, index);
         if (mutation.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);
@@ -120,12 +215,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         // Only a test project whose output holds a mutated copy can fail because of the mutant.
-        var mutatedDirectories = mutation.Backups.Keys.Select(static f => Path.GetDirectoryName(f)!).ToHashSet(StringComparer.Ordinal);
         var reached = context.TestProjects
-            .Where(p => workspace.Executor.Outputs.TryGetValue(p.Path, out var output) && mutatedDirectories.Contains(output))
+            .Where(p => workspace.Executor.Outputs.TryGetValue(p.Path, out var output) && mutation.Outputs.Contains(output))
             .ToList();
         // A project that wrote no report this time died with the mutant in place, like a crash.
-        var run = workspace.Executor.RunAll(reached, $"synthetic-{index}");
+        var run = workspace.Executor.RunAll(reached, $"synthetic-{index}", mutation.Environment);
         if (!run.Complete)
         {
             return RunOutsideSelection(target, new MutantRun(analysis, reached, index, detected, share), mutation);
@@ -245,7 +339,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="target">The mutated member.</param>
     /// <param name="state">The mutant's state.</param>
     /// <param name="mutation">The applied mutant.</param>
-    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, Mutation mutation)
+    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, ActiveMutant mutation)
     {
         var mutatedMethods = mutation.MutatedMethods;
         var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);
@@ -270,7 +364,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         // No report is no evidence that what Sift left out passed.
-        var outside = workspace.Executor.RunSelected(invocations, $"synthetic-{state.Index}-outside");
+        var outside = workspace.Executor.RunSelected(invocations, $"synthetic-{state.Index}-outside", mutation.Environment);
         if (!outside.Complete)
         {
             return new SyntheticMutant(target, state.Detected, mutatedMethods, [], [], state.Share, Inconclusive: true);
@@ -299,7 +393,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Reached">Test projects the mutant can reach.</param>
     /// <param name="Index">Number of the mutant, for log files.</param>
     /// <param name="Mutation">The applied mutant, lifted for control runs.</param>
-    private sealed record MutantScope(List<ProjectNode> Reached, int Index, Mutation Mutation);
+    private sealed record MutantScope(List<ProjectNode> Reached, int Index, ActiveMutant Mutation);
 
     /// <summary>
     /// Whether a test class fails when it runs alone without any mutant, by <c>Project: Class</c>.
@@ -323,7 +417,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="alone">Receives, for a complete run alone, whether each missed class failed again.</param>
     private List<string> Confirm(List<string> missed, MutantScope scope, List<string> killed, Dictionary<string, bool> alone)
     {
-        var again = RunAlone(missed, scope.Reached, $"synthetic-{scope.Index}-confirm");
+        var again = RunAlone(missed, scope.Reached, $"synthetic-{scope.Index}-confirm", scope.Mutation.Environment);
         if (again.Complete)
         {
             foreach (var testClass in missed)
@@ -353,7 +447,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             RunOutcome control;
             using (scope.Mutation.Lift())
             {
-                control = RunAlone(unknown, scope.Reached, $"synthetic-{scope.Index}-control");
+                control = RunAlone(unknown, scope.Reached, $"synthetic-{scope.Index}-control", environment: null);
             }
 
             // A control run that crashed proves nothing; the miss stands and the class is asked again next time.
@@ -385,7 +479,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="classes">Classes to run.</param>
     /// <param name="reached">Test projects they may belong to.</param>
     /// <param name="label">Name for log files.</param>
-    private RunOutcome RunAlone(List<string> classes, List<ProjectNode> reached, string label)
+    /// <param name="environment">Environment that switches the mutant on; null for none.</param>
+    private RunOutcome RunAlone(List<string> classes, List<ProjectNode> reached, string label, IReadOnlyDictionary<string, string>? environment)
     {
         var selections = new List<TestProjectSelection>();
         foreach (var project in reached)
@@ -399,7 +494,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         var invocations = TestInvocationBuilder.Build(selections, workspace.RepoRoot, [], DotnetTestModeDetector.Detect(workspace.RepoRoot));
-        var run = workspace.Executor.RunSelected(invocations, label);
+        var run = workspace.Executor.RunSelected(invocations, label, environment);
         var failed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (project, classesFailed) in run.FailedByProject)
         {
@@ -522,4 +617,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {Index}: test outcome reused from the cache")]
     private partial void LogReused(int index);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Schema: {Count} mutant(s) written in behind a switch; the full suite behaves the same with it")]
+    private partial void LogSchema(int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Schema: the full suite fails differently with the switches written in; every mutant is written in alone instead")]
+    private partial void LogSchemaChangedBehaviour();
 }
