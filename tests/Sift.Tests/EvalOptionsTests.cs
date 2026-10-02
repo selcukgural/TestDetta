@@ -38,6 +38,21 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void Map_age_is_zero_unless_given_for_one_repository_or_a_corpus_run()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r"], out var plain, out _));
+        Assert.Equal(0, plain.Run.MapAge);
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--map-age", "10"], out var aged, out _));
+        Assert.Equal(10, aged.Run.MapAge);
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--map-age", "-1"], out _, out _));
+
+        var entry = new CorpusEntry { Name = "scriban", Url = "https://example.org/scriban.git", Synthetic = 100 };
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--map-age", "3"], out var batch, out var error), error);
+        Assert.Equal(3, BatchRunner.SettingsFor(entry, batch).Run.MapAge);
+        Assert.False(BatchOptions.TryParse(["--corpus", "c.json", "--map-age", "x"], out _, out _));
+    }
+
+    [Fact]
     public void Corpus_run_can_replace_mutant_kinds_and_rejects_unknown_ones()
     {
         var entry = new CorpusEntry { Name = "scriban", Url = "https://example.org/scriban.git", Synthetic = 100, MutantKinds = "all" };

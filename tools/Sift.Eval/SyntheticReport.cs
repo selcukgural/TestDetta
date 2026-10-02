@@ -81,6 +81,7 @@ internal static class SyntheticReport
             }
         }
         text.AppendLine();
+        AppendDrift(text, run, killing);
 
         if (missed.Count > 0)
         {
@@ -118,6 +119,60 @@ internal static class SyntheticReport
         return text.ToString();
     }
 
+    /// <summary>
+    /// With drift modes: misses and selected share per way of using maps recorded <see cref="SyntheticRun.MapAge"/>
+    /// commits earlier, next to the exact maps, over the failing mutants every mode was judged on.
+    /// </summary>
+    /// <param name="text">Report so far.</param>
+    /// <param name="run">The evaluation.</param>
+    /// <param name="killing">Failing mutants.</param>
+    private static void AppendDrift(StringBuilder text, SyntheticRun run, List<SyntheticMutant> killing)
+    {
+        if (run.MapCommit is null)
+        {
+            return;
+        }
+
+        // A mutant caught only by a crash has no per-mode result.
+        var judged = killing.Where(static m => m.Drift.Count > 0).ToList();
+        text.AppendLine(CultureInfo.InvariantCulture, $"## Map drift: maps from {Short(run.MapCommit)}, {run.MapAge} commit(s) earlier");
+        text.AppendLine();
+        text.AppendLine(CultureInfo.InvariantCulture, $"{judged.Count} failing mutant(s) judged in every mode.");
+        text.AppendLine();
+        text.AppendLine("| Maps | Missed mutants | Missed classes | Selected (failing mutants) | Precision |");
+        text.AppendLine("|---|---|---|---|---|");
+        AppendDriftRow(text, "exact (at the commit)", [.. judged.Select(static m => (m.MissedClasses, m.SelectedShare, m.KilledClasses.Count))], run.TestClasses);
+        foreach (var mode in Enum.GetValues<DriftMode>())
+        {
+            AppendDriftRow(text, DriftName(mode), [.. judged.Select(m => (m.Drift[mode].Missed, m.Drift[mode].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
+        }
+
+        text.AppendLine();
+    }
+
+    /// <summary>One row of the drift table.</summary>
+    /// <param name="text">Report so far.</param>
+    /// <param name="name">Mode name.</param>
+    /// <param name="results">Missed classes, selected share and failed classes per judged mutant.</param>
+    /// <param name="testClasses">Recorded classes the share is taken of.</param>
+    private static void AppendDriftRow(StringBuilder text, string name, List<(IReadOnlyList<string> Missed, double Share, int Failed)> results, int testClasses)
+    {
+        var missedMutants = results.Count(static r => r.Missed.Count > 0);
+        var share = results.Count == 0 ? 0 : results.Average(static r => r.Share);
+        var precision = OverSelection(results.Select(static r => (r.Share, r.Failed)), testClasses);
+        text.AppendLine(CultureInfo.InvariantCulture,
+            $"| {name} | {missedMutants} | {results.Sum(static r => r.Missed.Count)} | {share:P0} | {(precision is { } p ? p.ToString("0.0", CultureInfo.InvariantCulture) : "-")} |");
+    }
+
+    /// <summary>Report name of a drift mode.</summary>
+    /// <param name="mode">Mode.</param>
+    internal static string DriftName(DriftMode mode) => mode switch
+    {
+        DriftMode.Bridge => "older, bridged",
+        DriftMode.NoMap => "none (by name)",
+        _ => "older, as if current",
+    };
+
     /// <summary>The JSON report, one object per mutant.</summary>
     /// <param name="repository">Evaluated repository.</param>
     /// <param name="run">The evaluation.</param>
@@ -137,6 +192,8 @@ internal static class SyntheticReport
             json.WriteString("toolchain", run.Toolchain);
             json.WriteString("siftCommit", EvalBuild.Commit);
             json.WriteNumber("seconds", Math.Round(run.Seconds, 1));
+            json.WriteNumber("mapAge", run.MapAge);
+            json.WriteString("mapCommit", run.MapCommit);
             json.WriteStartArray("unreported");
             foreach (var project in run.Unreported)
             {
@@ -159,6 +216,20 @@ internal static class SyntheticReport
                 json.WriteNumber("selectedShare", Math.Round(mutant.SelectedShare, 4));
                 WriteStrings(json, "killed", mutant.KilledClasses);
                 WriteStrings(json, "missed", mutant.MissedClasses);
+                if (mutant.Drift.Count > 0)
+                {
+                    json.WriteStartObject("drift");
+                    foreach (var (mode, outcome) in mutant.Drift.OrderBy(static d => d.Key))
+                    {
+                        json.WriteStartObject(JsonNamingPolicy.CamelCase.ConvertName(mode.ToString()));
+                        json.WriteNumber("selectedShare", Math.Round(outcome.SelectedShare, 4));
+                        WriteStrings(json, "missed", outcome.Missed);
+                        json.WriteEndObject();
+                    }
+
+                    json.WriteEndObject();
+                }
+
                 json.WriteEndObject();
             }
 

@@ -28,7 +28,32 @@ internal sealed record SyntheticMutant(
 
     /// <summary>True when the mutant failed at least one test class, so it can prove a miss or its absence.</summary>
     public bool Killing => !Inconclusive && (KilledClasses.Count > 0 || CaughtByCrash);
+
+    /// <summary>
+    /// With <see cref="RunSettings.MapAge"/>: what each drift mode selected and missed, against the same
+    /// confirmed failures as the main result. Empty without a map age, and when the full run crashed (a
+    /// crash proves nothing about which classes a mode left out).
+    /// </summary>
+    public IReadOnlyDictionary<DriftMode, DriftOutcome> Drift { get; init; } = new Dictionary<DriftMode, DriftOutcome>();
 }
+
+/// <summary>How a selection used maps recorded before the evaluated commit.</summary>
+internal enum DriftMode
+{
+    /// <summary>The older maps through the drift bridge (what Sift does).</summary>
+    Bridge,
+
+    /// <summary>No maps: every test project decided by name (what Sift did with an older map before the bridge).</summary>
+    NoMap,
+
+    /// <summary>The older maps as if recorded at the evaluated commit; shows the misses the drift causes unbridged.</summary>
+    Naive,
+}
+
+/// <summary>One drift mode's result for a mutant.</summary>
+/// <param name="Missed">Confirmed failing classes the mode did not select (<c>Project: Class</c>).</param>
+/// <param name="SelectedShare">Share of the evaluated commit's recorded classes the mode selected.</param>
+internal sealed record DriftOutcome(IReadOnlyList<string> Missed, double SelectedShare);
 
 /// <summary>A synthetic evaluation of one commit.</summary>
 /// <param name="Sha">Commit the changes were made on.</param>
@@ -52,6 +77,12 @@ internal sealed record SyntheticRun(string Sha, int TestClasses, double Baseline
 
     /// <summary>Wall-clock time of the evaluation so far, recording and building included.</summary>
     public double Seconds { get; init; }
+
+    /// <summary>First-parent commits between the drift modes' map commit and <see cref="Sha"/>; 0 without drift modes.</summary>
+    public int MapAge { get; init; }
+
+    /// <summary>Commit the drift modes' maps were recorded at; null without drift modes.</summary>
+    public string? MapCommit { get; init; }
 }
 
 /// <summary>Confidence bounds for a miss rate measured with mutants.</summary>

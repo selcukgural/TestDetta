@@ -121,6 +121,16 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     };
                     break;
 
+                case "--map-age":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var mapAge) || mapAge < 0)
+                    {
+                        error = $"--map-age needs a number of commits (0 or more), not {value}";
+                        return false;
+                    }
+
+                    overrides = overrides with { MapAge = mapAge };
+                    break;
+
                 case "--mutant-kinds":
                     if (!MutantKinds.TryParse(value, out _, out error))
                     {
@@ -153,7 +163,8 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 /// <param name="MutantParallelism">Mutants run at once.</param>
 /// <param name="Parallel">Test processes per project when recording.</param>
 /// <param name="MutantKinds">Mutant kinds of the synthetic sample, as <c>--mutant-kinds</c> takes them (checked when parsed).</param>
-internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null);
+/// <param name="MapAge">Commits back to record the maps the drift modes select with; see <see cref="RunSettings.MapAge"/>.</param>
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null);
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -246,6 +257,7 @@ internal static partial class BatchRunner
             OutcomeCache = Path.Combine(options.Output, "outcome-cache", entry.Name),
             RecordingCache = Path.Combine(options.Output, "map-cache", entry.Name),
             MutantParallelism = options.Overrides.MutantParallelism ?? entry.MutantParallelism ?? 1,
+            MapAge = options.Overrides.MapAge ?? 0,
             Toolchain = entry.Toolchain?.ToToolchain(),
             Environment = entry.Environment ?? new Dictionary<string, string>(),
             ToolchainRoot = options.Toolchains,

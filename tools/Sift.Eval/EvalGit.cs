@@ -51,6 +51,12 @@ internal sealed class EvalGit(string root)
     /// <param name="branch">Branch name, local or <c>origin/</c>.</param>
     public string Head(string branch) => Run(root, "rev-parse", Reference(branch) + "^{commit}")[0];
 
+    /// <summary>The commit <paramref name="count"/> first parents before <paramref name="sha"/>.</summary>
+    /// <param name="sha">Starting commit.</param>
+    /// <param name="count">First-parent steps back.</param>
+    /// <exception cref="InvalidOperationException">The history is shorter.</exception>
+    public string FirstParentAncestor(string sha, int count) => Run(root, "rev-parse", $"{sha}~{count}^{{commit}}")[0];
+
     /// <summary>The branch itself when it exists locally, otherwise its <c>origin/</c> counterpart.</summary>
     /// <param name="branch">Branch name.</param>
     private string Reference(string branch) =>

@@ -1,7 +1,8 @@
 # Map drift: using an older map through a static bridge
 
-Status: design 2026-10-02; selection side implemented the same day (see "As built"). Still open:
-measurement 2, the size cap, and the action's restore of an ancestor map.
+Status: design 2026-10-02; selection side and the evaluator's drift modes implemented the same day
+(see "As built"). Still open: running measurement 2, the size cap, and the action's restore of an
+ancestor map.
 
 ## Problem
 
@@ -239,3 +240,11 @@ A bridge miss gets a complete fix and a red test, as with every other miss.
   unrelated drift keeps the map's answer, age limit and foreign commit, output, git distance), each
   of the first three also showing that `AsIfCurrent` misses; sabotage-checked (no bridge → 3 red,
   no project-level rule → 1 red).
+- Evaluator: `--map-age <n>` (single run and corpus override). The commit `n` first parents back is
+  recorded first, then the evaluated commit; every synthetic change is selected four times (exact
+  maps, and the older maps bridged / none / as if current). A failing class that any selection left
+  out is confirmed alone once, and every selection is judged on the same confirmed failures; the
+  outcome cache needs answers for all of them, otherwise the mutant runs again. `synthetic.json`
+  has `mapAge`, `mapCommit` and per mutant `drift.{bridge,noMap,naive}.{missed,selectedShare}`;
+  `synthetic.md` a "Map drift" table (missed mutants, missed classes, mean share, precision).
+  With `--map-age 0` nothing changes. `EvalMapAgeTests` (end to end, sabotage-checked).

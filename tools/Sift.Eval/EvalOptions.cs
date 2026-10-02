@@ -25,8 +25,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
                sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
-                         [--mutant-parallelism <n>] [--mutant-kinds <list>] [--parallel <n>] [--toolchains <dir>]
-                         [--compare <dir>] [--history <dir>] [-v]
+                         [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
+                         [--toolchains <dir>] [--compare <dir>] [--history <dir>] [-v]
                sift-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -42,6 +42,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --mutant-kinds <list>  throw, return-default, flip-branch, field-value, or all (default: throw)
           --mutant-parallelism <n>  Run n synthetic mutants at once on the clone (default: 1); needs the
                                  schema, and falls back to 1 when parallel runs of the suite interfere
+          --map-age <n>          Also select each synthetic change with maps recorded n first-parent commits
+                                 earlier: through the drift bridge, without maps, and with the old maps as
+                                 if current (docs/design/map-drift-bridge.md, measurement 2); default 0
           --no-schema            Write each synthetic mutant in alone instead of switching it on in a
                                  schema (to compare both, or for a suite that notices the switches)
           --analysis-timeout <span>  Longest Sift may analyse one synthetic change (default 00:10:00); beyond
@@ -210,6 +213,16 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { MutantKinds = kinds };
                     break;
 
+                case "--map-age":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var mapAge) || mapAge < 0)
+                    {
+                        error = $"--map-age needs a number of commits (0 or more), not {value}";
+                        return false;
+                    }
+
+                    run = run with { MapAge = mapAge };
+                    break;
+
                 case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed" or "--mutant-parallelism":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg is "--parallel" or "--mutant-parallelism"))
                     {
@@ -313,6 +326,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// always runs one). The evaluation lowers it to 1 when parallel runs of the suite interfere.
     /// </summary>
     public int MutantParallelism { get; init; } = 1;
+
+    /// <summary>
+    /// When above 0, each synthetic change is also selected with maps recorded this many first-parent
+    /// commits before the evaluated commit, in every <see cref="DriftMode"/>, to measure the drift bridge.
+    /// </summary>
+    public int MapAge { get; init; }
 
     /// <summary>
     /// Longest Sift may take to analyse one synthetic change; beyond it the evaluation stops and reports

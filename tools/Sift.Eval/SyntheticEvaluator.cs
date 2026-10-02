@@ -48,6 +48,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 LogCacheOpened(cache.Count);
             }
 
+            // Drift modes select with maps from an older commit; recorded first, the evaluated commit's
+            // recording then leaves its own build behind for the mutants.
+            var mapCommit = settings.MapAge > 0 ? workspace.Git.FirstParentAncestor(sha, settings.MapAge) : null;
+            if (mapCommit is not null)
+            {
+                _steps.RecordAt(mapCommit);
+            }
+
             var maps = _steps.RecordAt(sha);
             workspace.Git.Checkout(sha);
             workspace.Executor.Setup();
@@ -79,7 +87,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             // Selecting edits the clone's sources, so it happens one mutant at a time, and before any
             // binary is touched: a hang in Sift's analysis then leaves the clone as it was.
-            var selections = targets.Select(t => Select(sha, t, maps)).ToList();
+            var selections = targets.Select(t => Select(sha, t, maps, mapCommit)).ToList();
 
             using var schema = settings.UseSchema ? TrySchema(assemblies, targets, testProjects, baseline) : null;
             var context = new MutantContext(testProjects, maps, assemblies, baseline, schema);
@@ -115,12 +123,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                     mutants.Clear();
                     mutants.AddRange(results.OfType<SyntheticMutant>());
                     progress(new SyntheticRun(sha, testClasses, baseline.Seconds, [.. mutants], null)
-                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds });
+                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds, MapAge = settings.MapAge, MapCommit = mapCommit });
                 }
             });
 
             return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null)
-                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds };
+                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds, MapAge = settings.MapAge, MapCommit = mapCommit };
         }
         catch (Exception ex) when (Expected(ex))
         {
@@ -310,17 +318,24 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Tests">Sift's decision per affected test project.</param>
     /// <param name="Detected">Whether Sift saw the change.</param>
     /// <param name="Share">Share of recorded classes Sift selected.</param>
-    private sealed record Selection(IReadOnlyList<TestProjectSelection> Tests, bool Detected, double Share);
+    /// <param name="Drift">What each drift mode selected; empty without <see cref="RunSettings.MapAge"/>.</param>
+    private sealed record Selection(IReadOnlyList<TestProjectSelection> Tests, bool Detected, double Share, IReadOnlyDictionary<DriftMode, DriftSelection> Drift);
+
+    /// <summary>What one drift mode selected.</summary>
+    /// <param name="Tests">Decision per affected test project.</param>
+    /// <param name="Share">Share of the evaluated commit's recorded classes selected.</param>
+    private sealed record DriftSelection(IReadOnlyList<TestProjectSelection> Tests, double Share);
 
     /// <summary>Lets Sift select for one synthetic change (editing and restoring the sources).</summary>
     /// <param name="sha">Commit the maps were recorded at.</param>
     /// <param name="target">Member to change.</param>
     /// <param name="maps">Coverage maps at the commit.</param>
-    private Selection Select(string sha, SyntheticTarget target, Dictionary<string, CoverageMap> maps)
+    /// <param name="mapCommit">Older commit whose maps the drift modes use; null for none.</param>
+    private Selection Select(string sha, SyntheticTarget target, Dictionary<string, CoverageMap> maps, string? mapCommit)
     {
         // A hang in Sift (an exponential search, Swashbuckle 2026-10-02) would otherwise stop the
         // evaluation for good without a word; it is reported as what it is, a finding about Sift.
-        var analyzing = Task.Run(() => Analyze(sha, target));
+        var analyzing = Task.Run(() => Analyze(sha, target, mapCommit));
         if (!analyzing.Wait(settings.AnalysisTimeout))
         {
             LogAnalysisHung(target.Member.TypeName, target.Member.MemberName, settings.AnalysisTimeout.TotalMinutes);
@@ -329,11 +344,49 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 $"{settings.AnalysisTimeout.TotalMinutes:0.#} minute(s): a hang or a slowdown in Sift.");
         }
 
-        var analysis = analyzing.Result;
+        var (analysis, drift) = analyzing.Result;
         var detected = analysis.Impact.CodeChanges.Any(c =>
             c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
-        return new Selection(analysis.Tests, detected, SelectedShare(analysis, maps));
+        return new Selection(
+            analysis.Tests,
+            detected,
+            SelectedShare(analysis, maps),
+            drift.ToDictionary(static d => d.Key, d => new DriftSelection(d.Value.Tests, SelectedShare(d.Value, maps))));
     }
+
+    /// <summary>
+    /// True when the main selection and every drift mode selected <paramref name="testClass"/>; a class
+    /// any of them left out is confirmed alone, so all of them are judged on the same failures.
+    /// </summary>
+    /// <param name="state">The mutant's selections.</param>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="testClass">Failed test class.</param>
+    private static bool SelectedByAll(MutantRun state, string project, string testClass) =>
+        EvalSteps.IsSelected(state.Tests, project, testClass)
+        && state.Drift.Values.All(d => EvalSteps.IsSelected(d.Tests, project, testClass));
+
+    /// <summary>The classes among <paramref name="failed"/> (<c>Project: Class</c>) that <paramref name="tests"/> left out.</summary>
+    /// <param name="tests">A selection.</param>
+    /// <param name="failed">Confirmed failing classes.</param>
+    /// <param name="projects">Test project paths by file name, to resolve <c>Project</c>.</param>
+    private static List<string> LeftOut(IReadOnlyList<TestProjectSelection> tests, List<string> failed, Dictionary<string, string> projects) =>
+        failed.FindAll(c =>
+        {
+            var separator = c.IndexOf(": ", StringComparison.Ordinal);
+            return !EvalSteps.IsSelected(tests, projects[c[..separator]], c[(separator + 2)..]);
+        });
+
+    /// <summary>Each drift mode's misses among the confirmed failures some selection left out.</summary>
+    /// <param name="state">The mutant's selections.</param>
+    /// <param name="confirmed">Confirmed failing classes (<c>Project: Class</c>).</param>
+    /// <param name="projects">Test project paths by file name.</param>
+    private static Dictionary<DriftMode, DriftOutcome> DriftOutcomes(MutantRun state, List<string> confirmed, Dictionary<string, string> projects) =>
+        state.Drift.ToDictionary(static d => d.Key, d => new DriftOutcome(LeftOut(d.Value.Tests, confirmed, projects), d.Value.Share));
+
+    /// <summary>Test project paths by file name without extension, the <c>Project</c> part of <c>Project: Class</c>.</summary>
+    /// <param name="reached">Test projects of the mutant.</param>
+    private static Dictionary<string, string> ProjectsByName(List<ProjectNode> reached) =>
+        reached.ToDictionary(static p => Path.GetFileNameWithoutExtension(p.Path), static p => p.Path, StringComparer.Ordinal);
 
     /// <summary>Runs the tests against one mutant and compares the failures with Sift's selection.</summary>
     /// <param name="target">The mutant.</param>
@@ -343,8 +396,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="executor">Runs the tests, in the worker's copy of the clone.</param>
     private SyntheticMutant Run(SyntheticTarget target, MutantContext context, int index, Selection selection, TestExecutor executor)
     {
-        var (tests, detected, share) = selection;
-        var state = new MutantRun(tests, context.TestProjects, index, detected, share);
+        var (tests, detected, share, drift) = selection;
+        var state = new MutantRun(tests, context.TestProjects, index, detected, share) { Drift = drift };
         if (_cache?.Find(target) is { } stored && FromCache(target, stored, state) is { } reused)
         {
             return reused;
@@ -366,11 +419,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var run = executor.RunAll(reached, $"synthetic-{index}", mutation.Environment);
         if (!run.Complete)
         {
-            return RunOutsideSelection(target, new MutantRun(tests, reached, index, detected, share), new MutantScope(reached, index, mutation, executor));
+            return RunOutsideSelection(target, state with { Reached = reached }, new MutantScope(reached, index, mutation, executor));
         }
 
         var killed = new List<string>();
-        var missed = new List<string>();
+        var unselected = new List<string>();
         foreach (var (project, failed) in run.FailedByProject)
         {
             var before = context.Baseline.FailedByProject.GetValueOrDefault(project) ?? new HashSet<string>();
@@ -378,23 +431,28 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             {
                 var name = $"{Path.GetFileNameWithoutExtension(project)}: {testClass}";
                 killed.Add(name);
-                if (!EvalSteps.IsSelected(tests, project, testClass))
+                if (!SelectedByAll(state, project, testClass))
                 {
-                    missed.Add(name);
+                    unselected.Add(name);
                 }
             }
         }
 
         var failedBeforeConfirming = new List<string>(killed);
         var alone = new Dictionary<string, bool>(StringComparer.Ordinal);
-        if (missed.Count > 0)
+        if (unselected.Count > 0)
         {
-            missed = Confirm(missed, new MutantScope(reached, index, mutation, executor), killed, alone);
+            unselected = Confirm(unselected, new MutantScope(reached, index, mutation, executor), killed, alone);
         }
 
         _cache?.Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone));
+        var projects = ProjectsByName(reached);
+        var missed = LeftOut(tests, unselected, projects);
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
-        return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false);
+        return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false)
+        {
+            Drift = DriftOutcomes(state, unselected, projects),
+        };
     }
 
     /// <summary>
@@ -415,7 +473,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             return new SyntheticMutant(target, state.Detected, 0, [], [], state.Share, Inconclusive: false) { Reused = true };
         }
 
-        var projects = state.Reached.ToDictionary(static p => Path.GetFileNameWithoutExtension(p.Path), static p => p.Path, StringComparer.Ordinal);
+        var projects = ProjectsByName(state.Reached);
         var killed = new List<string>(stored.Failed);
         var missed = new List<string>();
         foreach (var failed in stored.Failed)
@@ -426,7 +484,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 return null;
             }
 
-            if (!EvalSteps.IsSelected(state.Tests, project, failed[(separator + 2)..]))
+            if (!SelectedByAll(state, project, failed[(separator + 2)..]))
             {
                 missed.Add(failed);
             }
@@ -455,10 +513,15 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             killed.Remove(broken);
         }
 
-        missed = confirmed.FindAll(c => KnownFailsAlone(c) == false);
+        var unselected = confirmed.FindAll(c => KnownFailsAlone(c) == false);
+        missed = LeftOut(state.Tests, unselected, projects);
         LogReused(state.Index);
         LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
-        return new SyntheticMutant(target, state.Detected, stored.MutatedMethods, killed, missed, state.Share, Inconclusive: false) { Reused = true };
+        return new SyntheticMutant(target, state.Detected, stored.MutatedMethods, killed, missed, state.Share, Inconclusive: false)
+        {
+            Reused = true,
+            Drift = DriftOutcomes(state, unselected, projects),
+        };
     }
 
     /// <summary>Whether a class fails alone without any mutant, from this run or the cache; null when unknown.</summary>
@@ -472,7 +535,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Index">Number of the mutant, for log files.</param>
     /// <param name="Detected">Whether Sift saw the change.</param>
     /// <param name="Share">Share of recorded classes Sift selected.</param>
-    private sealed record MutantRun(IReadOnlyList<TestProjectSelection> Tests, List<ProjectNode> Reached, int Index, bool Detected, double Share);
+    private sealed record MutantRun(IReadOnlyList<TestProjectSelection> Tests, List<ProjectNode> Reached, int Index, bool Detected, double Share)
+    {
+        /// <summary>What each drift mode selected; empty without <see cref="RunSettings.MapAge"/>.</summary>
+        public IReadOnlyDictionary<DriftMode, DriftSelection> Drift { get; init; } = new Dictionary<DriftMode, DriftSelection>();
+    }
 
     /// <summary>
     /// After a full run crashed or hung, runs only what Sift left out, with the mutant in place. A miss
@@ -652,10 +719,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         return new RunOutcome(failed, run.Complete);
     }
 
-    /// <summary>Applies the target's source edits, lets Sift select against the commit's maps, and restores the files.</summary>
+    /// <summary>
+    /// Applies the target's source edits, lets Sift select against the commit's maps (and, with
+    /// <paramref name="mapCommit"/>, against the older maps in every drift mode), and restores the files.
+    /// </summary>
     /// <param name="sha">Commit the maps were recorded at and the base of the diff.</param>
     /// <param name="target">Member to change.</param>
-    private AnalysisResult Analyze(string sha, SyntheticTarget target)
+    /// <param name="mapCommit">Older commit whose maps the drift modes use; null for none.</param>
+    private (AnalysisResult Analysis, Dictionary<DriftMode, AnalysisResult> Drift) Analyze(string sha, SyntheticTarget target, string? mapCommit)
     {
         // Bytes, not text: a rewrite through File.WriteAllText drops a UTF-8 byte order mark, and the
         // clone would keep a change in that file for every later mutant.
@@ -677,8 +748,21 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 File.WriteAllText(group.Key, edited.ToString());
             }
 
+            var pipeline = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator);
             _steps.PlaceMaps(sha);
-            return new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator).Run(workspace.RepoRoot, sha);
+            var analysis = pipeline.Run(workspace.RepoRoot, sha);
+            var drift = new Dictionary<DriftMode, AnalysisResult>();
+            if (mapCommit is null)
+            {
+                return (analysis, drift);
+            }
+
+            // The measured age may exceed Sift's default limit; the bridge is judged on what it does with it.
+            _steps.PlaceMaps(mapCommit);
+            drift[DriftMode.Bridge] = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { MaxMapAge = int.MaxValue });
+            drift[DriftMode.Naive] = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.AsIfCurrent });
+            drift[DriftMode.NoMap] = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.None });
+            return (analysis, drift);
         }
         finally
         {
