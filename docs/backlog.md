@@ -197,6 +197,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
 5. **Method-level selection, measured first**: record buckets per test method as an option and
    compute how much a method-level filter would save over class-level before building it.
 
+- **Licensing independent of the payment provider** (2026-10-02): keys sold through a Merchant of
+  Record (Polar.sh primary, Paddle fallback) and keys from direct sales (Turkish corporate customers
+  with a TL e-Fatura) must work the same way, so the license check cannot depend on one provider's API.
+
 ## Later
 
 - Windows: build, record and select on Windows; path and process differences.
