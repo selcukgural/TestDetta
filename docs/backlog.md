@@ -130,6 +130,33 @@ Interim fixes that are safe for the common case; come back for the complete solu
 
 ## Next
 
+0. **Fast, reliable evaluation environment (top priority, user and Claude agreed 2026-10-02).**
+   Every other item (precision round, static bridge, dotnet-tia comparison) and every release after
+   launch must answer "did this change cost safety?" across many real repositories, in minutes,
+   not the hours a corpus round takes now. Round 1 spent most of its time re-running tests and
+   recovering from environment accidents; the real findings took minutes each. In order of payoff:
+   - **Mutant schemata instead of rewriting assemblies**: compile every sampled mutant into the
+     assembly once behind a switch (an environment variable or a static field set by the tracker),
+     so mutants need no rewrite, no restore and no copy per output folder, and several mutants
+     run at once in separate test processes on the same binaries.
+   - **Parallel mutants**: with schemata (or per-worker copies of the test outputs), run N mutants
+     concurrently on one repository instead of one repository per worker.
+   - **Stable sample + outcome cache** (cache shipped in f12e713; stable sample in "Now"): a Sift
+     change re-evaluates a repository by recording and computing selections only.
+   - **Cache recordings and baselines** per commit and instrumenter version, so a selection-only
+     change does not even re-record.
+   - **Tiers**: a smoke corpus (fast repositories, ~20 mutants each) on every Sift commit in CI;
+     the full corpus nightly or weekly; results compared with the previous run automatically.
+   - **Hermetic, reproducible runners**: pinned SDK and runtimes per repository, installed
+     side-by-side without touching a live dotnet (2026-10-02 incident), an x64 runner for
+     x64-only suites, no shared ports or global state between parallel jobs, NuGet cache warmed
+     once, MSBuild node reuse off.
+   - **Watchdogs and clean failure**: per-mutant adaptive timeouts, the fast-failure guard of the
+     queue (3 quick failures stop a worker), a heartbeat that flags a run with no progress, and an
+     incident log.
+   - **Dashboard**: per repository and Sift commit, misses, selection share, precision, run time
+     and what was reused, so trends and regressions are visible at a glance.
+
 1. **Tolerate map drift with a static bridge (priority).** Maps are used only when recorded exactly
    at the merge base. With AI-assisted teams merging dozens of commits a day, a PR's merge base
    rarely has a map, so Sift falls back to the full suite in exactly the setting it is for, and
