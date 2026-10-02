@@ -64,6 +64,9 @@ internal static class BatchSummary
 
         /// <summary>Killing synthetic mutants project-level selection missed a class of; null for reports without it.</summary>
         public int? ProjectLevelMissed { get; init; }
+
+        /// <summary>Average share dotnet-affected itself ran for the same mutants; null when it was not compared.</summary>
+        public double? DotnetAffectedShare { get; init; }
     }
 
     /// <summary>Writes <c>summary.md</c> and returns its text.</summary>
@@ -117,6 +120,7 @@ internal static class BatchSummary
                 Precision = Optional(r, "precision")?.GetDouble(),
                 ProjectLevelShare = Optional(r, "projectLevelShare")?.GetDouble(),
                 ProjectLevelMissed = Optional(r, "projectLevelMissed")?.GetInt32(),
+                DotnetAffectedShare = Optional(r, "dotnetAffectedShare")?.GetDouble(),
             });
         }
 
@@ -162,6 +166,11 @@ internal static class BatchSummary
                     json.WriteNumber("projectLevelMissed", t.ProjectLevelMissed ?? 0);
                 }
 
+                if (t.DotnetAffectedShare is { } toolShare)
+                {
+                    json.WriteNumber("dotnetAffectedShare", Math.Round(toolShare, 4));
+                }
+
                 json.WriteNumber("commits", t.Commits);
                 json.WriteStartArray("missedMutants");
                 foreach (var name in t.MissedNames)
@@ -197,8 +206,8 @@ internal static class BatchSummary
         string? sha = null, siftCommit = null, toolchain = null;
         double? precision = null;
         var missedNames = new List<string>();
-        double projectLevel = 0;
-        int projectLevelMutants = 0, projectLevelMissed = 0;
+        double projectLevel = 0, dotnetAffected = 0;
+        int projectLevelMutants = 0, projectLevelMissed = 0, dotnetAffectedMutants = 0;
 
         using var syntheticReport = ReadJson(Path.Combine(folder, "synthetic.json"));
         if (syntheticReport is { } synthetic)
@@ -240,6 +249,12 @@ internal static class BatchSummary
                     projectLevelMutants++;
                     projectLevel += level.GetProperty("selectedShare").GetDouble();
                     projectLevelMissed += level.GetProperty("missed").GetArrayLength() > 0 ? 1 : 0;
+                }
+
+                if (Optional(mutant, "others") is { } compared && Optional(compared, "dotnetAffected") is { } tool)
+                {
+                    dotnetAffectedMutants++;
+                    dotnetAffected += tool.GetProperty("selectedShare").GetDouble();
                 }
                 if (mutant.GetProperty("missed").GetArrayLength() > 0)
                 {
@@ -291,6 +306,7 @@ internal static class BatchSummary
             Precision = precision,
             ProjectLevelShare = projectLevelMutants == 0 ? null : projectLevel / projectLevelMutants,
             ProjectLevelMissed = projectLevelMutants == 0 ? null : projectLevelMissed,
+            DotnetAffectedShare = dotnetAffectedMutants == 0 ? null : dotnetAffected / dotnetAffectedMutants,
         };
     }
 
@@ -343,6 +359,13 @@ internal static class BatchSummary
             text.AppendLine(CultureInfo.InvariantCulture,
                 $"- Against project-level selection (whole affected test projects, as dotnet-affected): on {compared.Count} repositories Sift ran " +
                 $"{compared.Average(static t => t.SelectedShare):P0} of the test classes on average, project level {compared.Average(static t => t.ProjectLevelShare!.Value):P0}");
+        }
+
+        var tool = totals.Where(static t => t.DotnetAffectedShare is not null && t.SyntheticKilling > 0).ToList();
+        if (tool.Count > 0)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"- Against dotnet-affected itself: on {tool.Count} repositories Sift ran {tool.Average(static t => t.SelectedShare):P0}, dotnet-affected {tool.Average(static t => t.DotnetAffectedShare!.Value):P0}");
         }
 
         var full = totals.Sum(static t => t.FullSeconds);

@@ -83,6 +83,7 @@ internal static class SyntheticReport
         text.AppendLine();
         AppendDrift(text, run, killing);
         AppendComparison(text, run, killing, OtherSelector.ProjectLevel, "Project level (whole affected test projects, as dotnet-affected selects)");
+        AppendComparison(text, run, killing, OtherSelector.DotnetAffected, "dotnet-affected (the tool itself)");
         AppendTia(text, run, killing);
 
         if (missed.Count > 0)
@@ -171,7 +172,7 @@ internal static class SyntheticReport
         text.AppendLine("| Selector | Missed mutants | Missed classes | Selected (failing mutants) | Precision |");
         text.AppendLine("|---|---|---|---|---|");
         AppendDriftRow(text, "Sift", [.. judged.Select(static m => (m.MissedClasses, m.SelectedShare, m.KilledClasses.Count))], run.TestClasses);
-        AppendDriftRow(text, "project level", [.. judged.Select(m => (m.Others[selector].Missed, m.Others[selector].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
+        AppendDriftRow(text, selector == OtherSelector.DotnetAffected ? "dotnet-affected" : "project level", [.. judged.Select(m => (m.Others[selector].Missed, m.Others[selector].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
         text.AppendLine();
     }
 

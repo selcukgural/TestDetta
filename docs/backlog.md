@@ -162,7 +162,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
    (selected share and time; both should miss nothing). From round 2 every synthetic run measures
    project-level selection (the `ProjectLevel` selector: whole affected test projects, from Sift's
    own MSBuild graph and impact) next to Sift's, per mutant and per repository in summary.md;
-   confirming with the real dotnet-affected tool on a few repositories is the next step. Datadog Test Impact Analysis is the
+   confirming with the real dotnet-affected tool on a few repositories is the next step: built
+   (`--compare-affected <dotnet-affected executable>`, version 6.2.0, run without `--from` so the
+   working tree is compared with HEAD, report written outside the clone since v6 counts files in it
+   as changes); on a two-project probe it matched the ProjectLevel selector exactly (56% vs Sift 33%). Datadog Test Impact Analysis is the
    commercial one (SaaS, needs an account; later). dotnet-tia (3 stars, 541 downloads, created
    2026-07) is not a market player but the best open-source example of the static-analysis
    approach, so it stays as a technical check of "why record coverage", at low priority; the

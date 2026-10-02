@@ -25,8 +25,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
                sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
-                         [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--compare-tia <dll>] [--parallel <n>]
-                         [--toolchains <dir>] [--compare <dir>] [--history <dir>] [-v]
+                         [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
+                         [--compare-tia <dll>] [--compare-affected <exe>] [--toolchains <dir>] [--compare <dir>]
+                         [--history <dir>] [-v]
                sift-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -47,6 +48,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  if current (docs/design/map-drift-bridge.md, measurement 2); default 0
           --compare-tia <dll>    Also select each synthetic change with dotnet-tia (path of its Tia.Cli.dll)
                                  and judge it on the same mutants (docs/design/tia-comparison.md)
+          --compare-affected <exe>  Also select each synthetic change with dotnet-affected (its executable),
+                                 running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
           --no-schema            Write each synthetic mutant in alone instead of switching it on in a
                                  schema (to compare both, or for a suite that notices the switches)
@@ -220,6 +223,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { TiaCli = Path.GetFullPath(value) };
                     break;
 
+                case "--compare-affected":
+                    run = run with { AffectedCli = Path.GetFullPath(value) };
+                    break;
+
                 case "--tia-solution":
                     run = run with { TiaSolution = value };
                     break;
@@ -352,6 +359,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
 
     /// <summary>Solution dotnet-tia analyses, relative to the repository root; null to let it discover one.</summary>
     public string? TiaSolution { get; init; }
+
+    /// <summary>
+    /// The <c>dotnet-affected</c> executable: each synthetic change is also selected by it and judged on
+    /// the same mutants; null for none.
+    /// </summary>
+    public string? AffectedCli { get; init; }
 
     /// <summary>
     /// Longest Sift may take to analyse one synthetic change; beyond it the evaluation stops and reports

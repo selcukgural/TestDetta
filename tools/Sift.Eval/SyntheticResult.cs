@@ -61,6 +61,9 @@ internal enum OtherSelector
     /// and similar tools do it, from Sift's own project graph and impact. Always measured.
     /// </summary>
     ProjectLevel,
+
+    /// <summary>dotnet-affected itself (whole affected test projects), to confirm <see cref="ProjectLevel"/> with the tool teams use.</summary>
+    DotnetAffected,
 }
 
 /// <summary>One other selector's result for a mutant.</summary>

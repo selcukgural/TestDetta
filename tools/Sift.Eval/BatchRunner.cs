@@ -125,6 +125,10 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     overrides = overrides with { TiaCli = Path.GetFullPath(value) };
                     break;
 
+                case "--compare-affected":
+                    overrides = overrides with { AffectedCli = Path.GetFullPath(value) };
+                    break;
+
                 case "--map-age":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var mapAge) || mapAge < 0)
                     {
@@ -169,7 +173,8 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 /// <param name="MutantKinds">Mutant kinds of the synthetic sample, as <c>--mutant-kinds</c> takes them (checked when parsed).</param>
 /// <param name="MapAge">Commits back to record the maps the drift modes select with; see <see cref="RunSettings.MapAge"/>.</param>
 /// <param name="TiaCli">dotnet-tia to compare with; see <see cref="RunSettings.TiaCli"/>.</param>
-internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null);
+/// <param name="AffectedCli">dotnet-affected to compare with; see <see cref="RunSettings.AffectedCli"/>.</param>
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null);
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -264,6 +269,7 @@ internal static partial class BatchRunner
             MutantParallelism = options.Overrides.MutantParallelism ?? entry.MutantParallelism ?? 1,
             MapAge = options.Overrides.MapAge ?? 0,
             TiaCli = options.Overrides.TiaCli,
+            AffectedCli = options.Overrides.AffectedCli,
             TiaSolution = entry.TiaSolution,
             Toolchain = entry.Toolchain?.ToToolchain(),
             Environment = entry.Environment ?? new Dictionary<string, string>(),

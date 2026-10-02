@@ -72,6 +72,23 @@ public sealed class TiaSelectorTests : IDisposable
         Assert.Equal(("/tools/tia/Tia.Cli.dll", "src/X.sln"), (run.TiaCli, run.TiaSolution));
     }
 
+    [Fact]
+    public void Affected_report_runs_listed_test_projects_whole_and_nothing_else()
+    {
+        var a = Path.Combine(_repo.Root, "tests/A.Tests/A.Tests.csproj");
+        var json = $$"""[ { "Name": "Lib", "FilePath": "{{Path.Combine(_repo.Root, "src/Lib/Lib.csproj")}}" }, { "Name": "A.Tests", "FilePath": "{{a}}" } ]""";
+
+        var byProject = AffectedSelector.FromReport(json, Graph()).ToDictionary(static t => Path.GetFileNameWithoutExtension(t.Project.Path));
+
+        Assert.Equal(TestRunMode.All, byProject["A.Tests"].Mode);
+        Assert.Equal(TestRunMode.Skipped, byProject["B.Tests"].Mode);
+        Assert.Equal(TestRunMode.Skipped, byProject["C.Tests"].Mode);
+        Assert.All(AffectedSelector.FromReport("[]", Graph()), static t => Assert.Equal(TestRunMode.Skipped, t.Mode));
+
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--compare-affected", "/tools/dotnet-affected"], out var options, out _));
+        Assert.Equal("/tools/dotnet-affected", options.Run.AffectedCli);
+    }
+
     private ProjectGraph Graph() => new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
 
     public void Dispose() => _repo.Dispose();

@@ -775,11 +775,20 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 others[OtherSelector.NoMap] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.None }).Tests, 0);
             }
 
+            if (settings.TiaCli is not null || settings.AffectedCli is not null)
+            {
+                // Maps are Sift's own data; the other tools see the same tree Sift saw, without them.
+                _steps.ClearMaps();
+            }
+
             if (settings.TiaCli is { } tia)
             {
-                // Maps are Sift's own data; dotnet-tia sees the same tree Sift saw, without them.
-                _steps.ClearMaps();
                 others[OtherSelector.Tia] = SelectWithTia(tia, sha, analysis.Graph);
+            }
+
+            if (settings.AffectedCli is { } affected)
+            {
+                others[OtherSelector.DotnetAffected] = SelectWithAffected(affected, analysis.Graph);
             }
 
             return (analysis, others);
@@ -815,6 +824,25 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var all = graph.Projects.Where(static p => p.IsTestProject)
                 .Select(p => new TestProjectSelection(p, TestRunMode.All, [], "dotnet-tia failed")).ToList();
             return new OtherSelection(all, 0) { FullRun = $"dotnet-tia failed: {ex.Message}" };
+        }
+    }
+
+    /// <summary>dotnet-affected's selection for the change in the clone; a failure counts as a full run, never as a miss.</summary>
+    /// <param name="affected">The <c>dotnet-affected</c> executable.</param>
+    /// <param name="graph">Sift's project graph of the clone.</param>
+    private OtherSelection SelectWithAffected(string affected, ProjectGraph graph)
+    {
+        using var log = File.AppendText(Path.Combine(workspace.Executor.LogDirectory, "dotnet-affected.log"));
+        try
+        {
+            return new OtherSelection(AffectedSelector.Analyze(affected, workspace.RepoRoot, graph, log), 0);
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine(ex.Message);
+            var all = graph.Projects.Where(static p => p.IsTestProject)
+                .Select(p => new TestProjectSelection(p, TestRunMode.All, [], "dotnet-affected failed")).ToList();
+            return new OtherSelection(all, 0) { FullRun = $"dotnet-affected failed: {ex.Message}" };
         }
     }
 
