@@ -92,10 +92,19 @@ internal static class MarkdownSummary
             return;
         }
 
+        // Each selected class with what selected it: the changed code it ran (and the map), or the
+        // chain of names that leads from it to the change.
+        var evidence = test.Decisions.Where(static d => d.Selected).ToDictionary(static d => d.TestClass, static d => d.Evidence, StringComparer.Ordinal);
         writer.WriteLine("  - classes:");
         foreach (var testClass in test.TestClasses)
         {
-            writer.WriteLine($"    - {Code(testClass)}");
+            writer.WriteLine(evidence.TryGetValue(testClass, out var why) ? $"    - {Code(testClass)}: {Code(why)}" : $"    - {Code(testClass)}");
+        }
+
+        var skippedClasses = test.Decisions.Count(static d => !d.Selected);
+        if (skippedClasses > 0)
+        {
+            writer.WriteLine($"  - skipped: {skippedClasses} class(es) that ran none of the changed code and name none of it");
         }
     }
 

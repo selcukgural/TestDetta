@@ -166,7 +166,9 @@ Interim fixes that are safe for the common case; come back for the complete solu
    the extra classes come from and narrow without losing safety (override names scoped to their
    hierarchy, run-once rules, name spreading through common member names like `Initialize`).
 4. **Value reporting: show exactly what Sift saved, and why it was safe.** Not "you saved five
-   minutes" but the breakdown behind it, in formats people and tools use:
+   minutes" but the breakdown behind it, in formats people and tools use. First slice done
+   (2026-10-02, docs/design/value-reporting.md): a decision and its evidence per test class in JSON
+   and the Markdown summary. Still to do:
    - Per run: every test project and class that ran or was skipped, the reason for each decision
      (the changed member, the coverage map and commit it came from, or the fallback rule), and
      time per project measured against the recorded full-suite time.

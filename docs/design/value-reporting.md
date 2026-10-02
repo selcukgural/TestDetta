@@ -1,6 +1,6 @@
 # Value reporting: what Sift saved, and why it was safe
 
-Status: design 2026-10-02 (backlog "Next" item 4). This document covers the first slice, decisions
+Status: first slice implemented 2026-10-02 (backlog "Next" item 4). This document covers the first slice, decisions
 per test class. Measured savings and reports over time follow in later slices.
 
 ## Problem
@@ -69,3 +69,23 @@ proof. The chain is shortest because the spread is a breadth-first search.
   - a name-selected class gives its chain;
   - a skipped class says why.
 - JSON and Markdown output tests for the new fields.
+
+## As built (first slice)
+
+- `TestProjectSelection.Decisions`: `ClassDecision(TestClass, Selected, Kind, Evidence)` for every
+  candidate class, ordered by class; `Kind` is Coverage, Name, FailedWhileRecording, WholeProject
+  or Skipped.
+- Evidence:
+  - coverage: "ran `Type.Member`, which changed (map `<commit>`)", or for the constructor and
+    static-constructor rules "ran a member of `Type`, whose constructor changed";
+  - name: the chain from `ImpactPropagation.Explain`, e.g. "`OrderServiceTests.Adds_tax` names
+    Checkout ← `OrderService.Checkout` names Total ← … ← changed `PriceCalculator.Tax(decimal)`";
+  - skipped: whether a map was asked.
+- The decision rules are unchanged; evidence is recorded alongside them.
+- Output:
+  - JSON `tests[].decisions[]` (`class`, `selected`, `kind`, `evidence`);
+  - the Markdown summary lists each selected class with its evidence in a code span (repository
+    text never renders) and counts the skipped classes.
+- `-v` text output is not done yet.
+- Tests: `TestSelectorTests` (coverage and name evidence, skipped), `MarkdownSummaryTests`
+  (evidence and hostile evidence stay in code spans), `MapDriftTests` (JSON).

@@ -285,6 +285,18 @@ internal static class ResultWriter
                 json.WriteString("mode"u8, test.Mode.ToString());
                 json.WriteString("reason"u8, test.Reason);
                 WriteStringArray(json, "classes"u8, test.TestClasses);
+                json.WriteStartArray("decisions"u8);
+                foreach (var classDecision in test.Decisions)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("class"u8, classDecision.TestClass);
+                    json.WriteBoolean("selected"u8, classDecision.Selected);
+                    json.WriteString("kind"u8, JsonNamingPolicy.CamelCase.ConvertName(classDecision.Kind.ToString()));
+                    json.WriteString("evidence"u8, classDecision.Evidence);
+                    json.WriteEndObject();
+                }
+
+                json.WriteEndArray();
                 if (test.Mode == TestRunMode.Filtered)
                 {
                     json.WriteString("filter"u8, TestFilter.ForClasses(test.TestClasses));

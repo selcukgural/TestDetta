@@ -15,8 +15,8 @@ internal sealed class CoverageSelection
     /// <summary>Affected test projects, by path.</summary>
     private readonly HashSet<string> _affectedTests = new(Paths.Comparer);
 
-    /// <summary>Test classes selected from coverage, per test project.</summary>
-    private readonly Dictionary<string, HashSet<string>> _selected = new(Paths.Comparer);
+    /// <summary>Test classes selected from coverage, per test project, with the evidence of their first selection.</summary>
+    private readonly Dictionary<string, Dictionary<string, string>> _selected = new(Paths.Comparer);
 
     /// <summary>Prepares the maps of the affected test projects.</summary>
     /// <param name="request">Selection input, including the maps.</param>
@@ -170,7 +170,16 @@ internal sealed class CoverageSelection
     /// <summary>True when coverage selected <paramref name="type"/>, a test class.</summary>
     /// <param name="type">Indexed test class.</param>
     public bool Selects(IndexedType type) =>
-        _selected.TryGetValue(type.ProjectPath, out var classes) && classes.Contains(type.RuntimeTypeName);
+        _selected.TryGetValue(type.ProjectPath, out var classes) && classes.ContainsKey(type.RuntimeTypeName);
+
+    /// <summary>Why coverage selected <paramref name="type"/>: the change it ran and the map's commit; null when it did not.</summary>
+    /// <param name="type">Indexed test class.</param>
+    public string? Evidence(IndexedType type) =>
+        _selected.TryGetValue(type.ProjectPath, out var classes) ? classes.GetValueOrDefault(type.RuntimeTypeName) : null;
+
+    /// <summary>The commit the map of <paramref name="testProject"/> was recorded at; null without a map.</summary>
+    /// <param name="testProject">Normalized test project path.</param>
+    public string? MapCommit(string testProject) => _maps.TryGetValue(testProject, out var map) ? map.Map.Commit : null;
 
     /// <summary>
     /// Selects the test classes that ran <paramref name="change"/> in every affected test project with
@@ -194,7 +203,7 @@ internal sealed class CoverageSelection
         // The change is still traced by name for classes that only read its static fields.
         if (change.MemberName?.StartsWith(".cctor", StringComparison.Ordinal) == true)
         {
-            SelectAll(Answers(change with { MemberName = null }, owner).Answers);
+            SelectAll(Answers(change with { MemberName = null }, owner).Answers, $"ran a member of {change.TypeName}, whose static constructor changed");
             return false;
         }
 
@@ -203,7 +212,7 @@ internal sealed class CoverageSelection
         // Every class that ran a member of the type used an instance some constructor built.
         if (change.MemberName?.StartsWith(".ctor", StringComparison.Ordinal) == true)
         {
-            SelectAll(Answers(change with { MemberName = null }, owner).Answers);
+            SelectAll(Answers(change with { MemberName = null }, owner).Answers, $"ran a member of {change.TypeName}, whose constructor changed");
         }
 
         if (!IsAnswerable(change))
@@ -212,7 +221,7 @@ internal sealed class CoverageSelection
         }
 
         var (answers, resolved) = Answers(change, owner);
-        SelectAll(answers);
+        SelectAll(answers, change.MemberName is null ? $"ran {change.TypeName}, which changed" : $"ran {change.TypeName}.{change.MemberName}, which changed");
         return resolved && answers.Count > 0;
     }
 
@@ -249,21 +258,30 @@ internal sealed class CoverageSelection
         return (answers, resolved);
     }
 
-    /// <summary>Adds the classes of every answer to the selection of its project.</summary>
+    /// <summary>Adds the classes of every answer to the selection of its project; a class keeps the evidence of its first selection.</summary>
     /// <param name="answers">Classes per test project.</param>
-    private void SelectAll(List<(string Project, IReadOnlySet<string> Classes)> answers)
+    /// <param name="evidence">What the classes ran, without the map; the map's commit is added.</param>
+    private void SelectAll(List<(string Project, IReadOnlySet<string> Classes)> answers, string evidence)
     {
         foreach (var (project, classes) in answers)
         {
             if (!_selected.TryGetValue(project, out var selected))
             {
-                selected = new HashSet<string>(StringComparer.Ordinal);
+                selected = new Dictionary<string, string>(StringComparer.Ordinal);
                 _selected[project] = selected;
             }
 
-            selected.UnionWith(classes);
+            var withMap = $"{evidence} (map {Short(_maps[project].Map.Commit)})";
+            foreach (var testClass in classes)
+            {
+                selected.TryAdd(testClass, withMap);
+            }
         }
     }
+
+    /// <summary>The first 12 characters of a commit.</summary>
+    /// <param name="commit">Commit hash.</param>
+    internal static string Short(string commit) => commit.Length > 12 ? commit[..12] : commit;
 
     /// <summary>
     /// Changes coverage cannot describe: additions (no test ran them yet), static constructors

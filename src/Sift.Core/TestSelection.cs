@@ -27,7 +27,37 @@ public sealed record TestProjectSelection(
     TestRunMode Mode,
     IReadOnlyList<string> TestClasses,
     string Reason,
-    TimeEstimate? Estimate = null);
+    TimeEstimate? Estimate = null)
+{
+    /// <summary>Every candidate test class of the project with what was decided for it and why, ordered by class.</summary>
+    public IReadOnlyList<ClassDecision> Decisions { get; init; } = [];
+}
+
+/// <summary>Why a test class runs or is skipped.</summary>
+public enum ClassDecisionKind
+{
+    /// <summary>The coverage map says it ran changed code.</summary>
+    Coverage,
+
+    /// <summary>Its code names changed code, directly or through other code.</summary>
+    Name,
+
+    /// <summary>One of its tests failed while the map was recorded, so the map may lack its code.</summary>
+    FailedWhileRecording,
+
+    /// <summary>Its whole project runs: the change cannot be narrowed below the project.</summary>
+    WholeProject,
+
+    /// <summary>Nothing connects it to the change.</summary>
+    Skipped,
+}
+
+/// <summary>The decision for one test class.</summary>
+/// <param name="TestClass">Runtime class name.</param>
+/// <param name="Selected">True when the class runs.</param>
+/// <param name="Kind">Which rule decided.</param>
+/// <param name="Evidence">What the rule found, such as the changed member the class ran and the map's commit.</param>
+public sealed record ClassDecision(string TestClass, bool Selected, ClassDecisionKind Kind, string Evidence);
 
 /// <summary>
 /// Test time according to the timings of a coverage map. The numbers come from a recording, which

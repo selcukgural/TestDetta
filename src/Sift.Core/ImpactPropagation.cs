@@ -24,6 +24,18 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <summary>Lookups still to do.</summary>
     private readonly Queue<NameLookup> _pending = new();
 
+    /// <summary>For each lookup, the member whose names queued it first; absent for lookups a change seeded.</summary>
+    private readonly Dictionary<NameLookup, IndexedMember> _lookupOrigin = [];
+
+    /// <summary>How each reached member was reached: the member it was reached from (null for a change) and the name.</summary>
+    private readonly Dictionary<IndexedMember, (IndexedMember? From, string Name)> _reachedFrom = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>For each affected type, the member that made it affected first, or null when the change itself names the type.</summary>
+    private readonly Dictionary<string, IndexedMember?> _typeReachedBy = new(StringComparer.Ordinal);
+
+    /// <summary>The changes as seeded, by type, for the end of an explanation.</summary>
+    private readonly Dictionary<string, SymbolChange> _seededChanges = new(StringComparer.Ordinal);
+
     /// <summary>Which referencing members a lookup accepts.</summary>
     private enum LookupScope
     {
@@ -61,7 +73,8 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <param name="projectPath">Project that owns the changed file; used when the type no longer exists.</param>
     public void Seed(SymbolChange change, string projectPath)
     {
-        AffectedTypes.Add(change.TypeName);
+        AddAffectedType(change.TypeName, null);
+        _seededChanges.TryAdd(change.TypeName, change);
 
         // A removed member may have been reached through its type (an override, an interface
         // implementation), and nothing is left in the index to say which.
@@ -77,7 +90,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
         if (index.FindMember(change.TypeName, change.MemberName) is { } member)
         {
-            MarkAffected(member, "it changed");
+            MarkAffected(member, "it changed", from: null);
             return;
         }
 
@@ -96,7 +109,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
             {
                 if (Matches(lookup, member))
                 {
-                    MarkAffected(member, lookup.Name);
+                    MarkAffected(member, lookup.Name, _lookupOrigin.GetValueOrDefault(lookup));
                 }
             }
         }
@@ -104,8 +117,9 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
     /// <summary>Records <paramref name="member"/> as affected and queues the names it can be reached by.</summary>
     /// <param name="member">Newly reached member.</param>
-    /// <param name="because">The name that reached it, for the debug log.</param>
-    private void MarkAffected(IndexedMember member, string because)
+    /// <param name="because">The name that reached it, for the debug log and the explanation.</param>
+    /// <param name="from">The member whose names reached it; null for a change itself.</param>
+    private void MarkAffected(IndexedMember member, string because, IndexedMember? from)
     {
         if (!_affected.Add(member))
         {
@@ -113,7 +127,8 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         }
 
         LogAffected(member.TypeName, member.MemberName ?? "(type)", because);
-        AffectedTypes.Add(member.TypeName);
+        _reachedFrom[member] = (from, because);
+        AddAffectedType(member.TypeName, member);
 
         if (resolveByCoverage?.Invoke(member) == true)
         {
@@ -131,7 +146,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
         foreach (var name in member.DeclaredNames)
         {
-            Enqueue(new NameLookup(name, scope == LookupScope.Anywhere ? null : member.TypeName, scope));
+            Enqueue(new NameLookup(name, scope == LookupScope.Anywhere ? null : member.TypeName, scope), member);
             referencedByName |= index.IsReferencedByOthers(name, member);
         }
 
@@ -140,26 +155,86 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         // a test project: test classes inherit fixtures and setup from their base classes.
         if (member.MemberName is null || member.MayBeCalledImplicitly || !referencedByName || member.InTestProject)
         {
-            SeedType(member.TypeName, member.ProjectPath);
+            SeedType(member.TypeName, member.ProjectPath, member);
         }
     }
+
+    /// <summary>Records <paramref name="typeName"/> as affected, remembering what made it so first.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="by">Reached member of the type; null when a change names the type.</param>
+    private void AddAffectedType(string typeName, IndexedMember? by)
+    {
+        if (AffectedTypes.Add(typeName))
+        {
+            _typeReachedBy[typeName] = by;
+        }
+    }
+
+    /// <summary>
+    /// How the spread reached <paramref name="typeName"/>, from the type back to a change, at most
+    /// <paramref name="limit"/> steps: <c>OrdersTests.Places names Checkout ← OrderService.Checkout names Total ← changed PriceCalculator.Total</c>.
+    /// The breadth-first spread makes it a shortest path. Null when the type was not reached.
+    /// </summary>
+    /// <param name="typeName">Qualified name of an affected type, typically a test class.</param>
+    /// <param name="limit">Most steps listed; a longer chain ends with "…".</param>
+    public string? Explain(string typeName, int limit = 8)
+    {
+        if (!_typeReachedBy.TryGetValue(typeName, out var member))
+        {
+            return null;
+        }
+
+        if (member is null)
+        {
+            return _seededChanges.TryGetValue(typeName, out var change) ? $"changed {Describe(change)}" : $"changed {typeName}";
+        }
+
+        var steps = new List<string>();
+        for (var current = member; current is not null; )
+        {
+            if (steps.Count == limit)
+            {
+                steps.Add("…");
+                break;
+            }
+
+            var (from, name) = _reachedFrom.GetValueOrDefault(current);
+            var label = $"{current.TypeName}.{current.MemberName ?? "(type)"}";
+            steps.Add(from is not null ? $"{label} names {name}"
+                : name == "it changed" ? $"changed {label}"
+                : $"{label} names {name}, a changed name");
+            current = from;
+        }
+
+        return string.Join(" ← ", steps);
+    }
+
+    /// <summary><c>Type.Member</c> of a change, or the type alone.</summary>
+    /// <param name="change">A seeded change.</param>
+    private static string Describe(SymbolChange change) => change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
 
     /// <summary>Queues the simple name of <paramref name="typeName"/> and remembers where the type lives.</summary>
     /// <param name="typeName">Qualified type name.</param>
     /// <param name="projectPath">Project that declares the type.</param>
-    private void SeedType(string typeName, string projectPath)
+    /// <param name="by">The member whose spread seeded the type name; null for a change.</param>
+    private void SeedType(string typeName, string projectPath, IndexedMember? by = null)
     {
         SeededTypes.TryAdd(typeName, projectPath);
-        Enqueue(new NameLookup(DeclarationWalker.SimpleTypeName(typeName), null, LookupScope.Anywhere));
+        Enqueue(new NameLookup(DeclarationWalker.SimpleTypeName(typeName), null, LookupScope.Anywhere), by);
     }
 
     /// <summary>Queues <paramref name="lookup"/> unless the same lookup was queued before.</summary>
     /// <param name="lookup">Name and scope.</param>
-    private void Enqueue(NameLookup lookup)
+    /// <param name="origin">The member whose names queue it; null for a change.</param>
+    private void Enqueue(NameLookup lookup, IndexedMember? origin = null)
     {
         if (_seen.Add(lookup))
         {
             _pending.Enqueue(lookup);
+            if (origin is not null)
+            {
+                _lookupOrigin[lookup] = origin;
+            }
         }
     }
 

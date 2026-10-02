@@ -156,6 +156,11 @@ public sealed class MapDriftTests : IDisposable
             new Sift.Cli.ResultReport(options, analysis.RepoRoot, new Sift.Cli.RunStats(1, 2), analysis.Impact, analysis.Plan) { Drifts = analysis.Drifts },
             output);
         using var json = System.Text.Json.JsonDocument.Parse(output.ToString());
+        var decisions = json.RootElement.GetProperty("tests")[0].GetProperty("decisions").EnumerateArray().ToList();
+        var tax = decisions.Single(d => d.GetProperty("class").GetString() == "Shop.Tests.TaxTests");
+        Assert.True(tax.GetProperty("selected").GetBoolean());
+        Assert.Equal("coverage", tax.GetProperty("kind").GetString());
+        Assert.Contains(_mapCommit[..12], tax.GetProperty("evidence").GetString(), StringComparison.Ordinal);
         var older = Assert.Single(json.RootElement.GetProperty("olderCoverageMaps").EnumerateArray().ToList());
         Assert.Equal(_mapCommit, older.GetProperty("commit").GetString());
         Assert.Equal(1, older.GetProperty("commitsBehind").GetInt32());

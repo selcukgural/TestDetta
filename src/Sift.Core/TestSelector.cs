@@ -353,6 +353,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         var runAllWithCoverage = RunAll(graph, withCoverage.Fallbacks);
         var classesByProject = new Dictionary<string, List<string>>(Paths.Comparer);
         var candidatesByProject = new Dictionary<string, int>(Paths.Comparer);
+        var decisionsByProject = new Dictionary<string, List<ClassDecision>>(Paths.Comparer);
         foreach (var type in index.Types)
         {
             // A class the coverage map recorded ran tests, whatever attributes the index recognised.
@@ -363,7 +364,15 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
             candidatesByProject[type.ProjectPath] = candidatesByProject.GetValueOrDefault(type.ProjectPath) + 1;
             var trace = coverage.HasMap(type.ProjectPath) ? withCoverage : byName;
-            if (!trace.Propagation.AffectedTypes.Contains(type.TypeName) && !coverage.Selects(type) && !coverage.FailedWhileRecording(type))
+            var classDecision = DecideClass(type, trace, coverage);
+            if (!decisionsByProject.TryGetValue(type.ProjectPath, out var decisions))
+            {
+                decisions = [];
+                decisionsByProject[type.ProjectPath] = decisions;
+            }
+
+            decisions.Add(classDecision);
+            if (!classDecision.Selected)
             {
                 continue;
             }
@@ -381,10 +390,13 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         foreach (var test in affectedTests)
         {
             var project = test.Project;
+            var classDecisions = decisionsByProject.GetValueOrDefault(project.Path) ?? [];
+            classDecisions.Sort(static (a, b) => string.CompareOrdinal(a.TestClass, b.TestClass));
             var runAll = coverage.HasMap(project.Path) ? runAllWithCoverage : runAllByName;
             if (decision.DriftRunAll.TryGetValue(project.Path, out var reason) || runAll.TryGetValue(project.Path, out reason))
             {
-                result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], reason)));
+                var whole = classDecisions.ConvertAll(d => d with { Selected = true, Kind = ClassDecisionKind.WholeProject, Evidence = reason });
+                result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], reason) { Decisions = whole }));
                 continue;
             }
 
@@ -393,13 +405,13 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 var skipReason = coverage.HasMap(project.Path)
                     ? "no test class runs or references the changed code"
                     : "no test class references the changed code";
-                result.Add(Log(new TestProjectSelection(project, TestRunMode.Skipped, [], skipReason)));
+                result.Add(Log(new TestProjectSelection(project, TestRunMode.Skipped, [], skipReason) { Decisions = classDecisions }));
                 continue;
             }
 
             if (classes.Count == candidatesByProject[project.Path])
             {
-                result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], "every test class references the changed code")));
+                result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], "every test class references the changed code") { Decisions = classDecisions }));
                 continue;
             }
 
@@ -409,10 +421,42 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 project,
                 TestRunMode.Filtered,
                 classes,
-                $"{classes.Count} of {candidatesByProject[project.Path]} test class(es) {source} the changed code")));
+                $"{classes.Count} of {candidatesByProject[project.Path]} test class(es) {source} the changed code") { Decisions = classDecisions }));
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// What is decided for one candidate test class and why: coverage first (the most direct
+    /// evidence), then the name spread, then a failure while recording; otherwise skipped, saying
+    /// whether a map was there to ask.
+    /// </summary>
+    /// <param name="type">Candidate test class.</param>
+    /// <param name="trace">The spread that decides its project.</param>
+    /// <param name="coverage">Classes selected from coverage maps.</param>
+    private static ClassDecision DecideClass(IndexedType type, TraceResult trace, CoverageSelection coverage)
+    {
+        var name = type.RuntimeTypeName;
+        if (coverage.Evidence(type) is { } ran)
+        {
+            return new ClassDecision(name, Selected: true, ClassDecisionKind.Coverage, ran);
+        }
+
+        if (trace.Propagation.AffectedTypes.Contains(type.TypeName))
+        {
+            return new ClassDecision(name, Selected: true, ClassDecisionKind.Name, trace.Propagation.Explain(type.TypeName) ?? "names the changed code");
+        }
+
+        if (coverage.FailedWhileRecording(type))
+        {
+            return new ClassDecision(name, Selected: true, ClassDecisionKind.FailedWhileRecording,
+                $"a test of it failed while the map was recorded (map {CoverageSelection.Short(coverage.MapCommit(type.ProjectPath)!)})");
+        }
+
+        return coverage.MapCommit(type.ProjectPath) is { } commit
+            ? new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, $"ran none of the changed code and names none of it (map {CoverageSelection.Short(commit)})")
+            : new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, "names none of the changed code (no coverage map)");
     }
 
     /// <summary>Every project downstream of a fallback, with the first reason that reaches it.</summary>

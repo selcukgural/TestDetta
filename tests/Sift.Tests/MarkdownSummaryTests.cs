@@ -21,7 +21,10 @@ public sealed class MarkdownSummaryTests
         // A pull request can name a file or class anything; none of it may render as Markdown or HTML.
         const string hostile = "[x](https://evil.example) <img src=x> @org/team `";
         var project = new ProjectNode($"/repo/tests/{hostile}/T.csproj", "/repo/tests", true, []);
-        var selection = new TestProjectSelection(project, TestRunMode.Filtered, [hostile], hostile);
+        var selection = new TestProjectSelection(project, TestRunMode.Filtered, [hostile], hostile)
+        {
+            Decisions = [new ClassDecision(hostile, Selected: true, ClassDecisionKind.Coverage, hostile)],
+        };
         var analysis = new AnalysisResult("/repo", ["f.cs"], null!, null!, new TestPlan([selection], null, 0));
 
         var writer = new StringWriter();
@@ -34,6 +37,28 @@ public sealed class MarkdownSummaryTests
         Assert.DoesNotContain("[x]", outside);
         Assert.DoesNotContain("<img", outside);
         Assert.DoesNotContain("@org", outside);
+    }
+
+    [Fact]
+    public void Selected_classes_show_their_evidence_and_skipped_ones_are_counted()
+    {
+        var project = new ProjectNode("/repo/tests/A.Tests/A.Tests.csproj", "/repo/tests/A.Tests", true, []);
+        var selection = new TestProjectSelection(project, TestRunMode.Filtered, ["A.Tests.OrderTests"], "1 of 3 test class(es) run or reference the changed code")
+        {
+            Decisions =
+            [
+                new ClassDecision("A.Tests.OrderTests", Selected: true, ClassDecisionKind.Coverage, "ran A.Order.Total, which changed (map abc123)"),
+                new ClassDecision("A.Tests.SlugTests", Selected: false, ClassDecisionKind.Skipped, "ran none of the changed code and names none of it (map abc123)"),
+                new ClassDecision("A.Tests.TaxTests", Selected: false, ClassDecisionKind.Skipped, "ran none of the changed code and names none of it (map abc123)"),
+            ],
+        };
+        var analysis = new AnalysisResult("/repo", ["f.cs"], null!, null!, new TestPlan([selection], null, 0));
+
+        var writer = new StringWriter();
+        MarkdownSummary.Write(new SummaryInput(analysis, "origin/main", null), writer);
+
+        Assert.Contains("    - `A.Tests.OrderTests`: `ran A.Order.Total, which changed (map abc123)`", writer.ToString(), StringComparison.Ordinal);
+        Assert.Contains("  - skipped: 2 class(es)", writer.ToString(), StringComparison.Ordinal);
     }
 
     [Theory]

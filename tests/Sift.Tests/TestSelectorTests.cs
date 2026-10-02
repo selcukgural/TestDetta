@@ -726,6 +726,44 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Each_class_decision_names_the_change_it_ran_and_the_map()
+    {
+        WriteMap(
+            ("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+            ("Shop.Tests.OrderServiceTests", [("Shop.OrderService", "Checkout"), ("Shop.PriceCalculator", "Total"), ("Shop.PriceCalculator", "Tax")]),
+            ("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var selection = Select();
+        var decisions = selection.Decisions.ToDictionary(static d => d.TestClass);
+        var commit = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root)[..12];
+
+        Assert.Equal(ClassDecisionKind.Coverage, decisions["Shop.Tests.TaxTests"].Kind);
+        Assert.Equal($"ran Shop.PriceCalculator.Tax(decimal), which changed (map {commit})", decisions["Shop.Tests.TaxTests"].Evidence);
+        Assert.True(decisions["Shop.Tests.OrderServiceTests"].Selected);
+        Assert.False(decisions["Shop.Tests.SlugTests"].Selected);
+        Assert.Equal(ClassDecisionKind.Skipped, decisions["Shop.Tests.SlugTests"].Kind);
+        Assert.Contains($"map {commit}", decisions["Shop.Tests.SlugTests"].Evidence, StringComparison.Ordinal);
+        Assert.Equal(selection.TestClasses, selection.Decisions.Where(static d => d.Selected).Select(static d => d.TestClass));
+    }
+
+    [Fact]
+    public void A_class_selected_by_name_shows_the_names_that_lead_to_the_change()
+    {
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var decisions = Select().Decisions.ToDictionary(static d => d.TestClass);
+
+        var order = decisions["Shop.Tests.OrderServiceTests"];
+        Assert.Equal(ClassDecisionKind.Name, order.Kind);
+        // OrderServiceTests names Checkout, which names Total, which names the changed Tax.
+        Assert.StartsWith("Shop.Tests.OrderServiceTests.", order.Evidence, StringComparison.Ordinal);
+        Assert.Contains("names Checkout ← Shop.OrderService.Checkout", order.Evidence, StringComparison.Ordinal);
+        Assert.EndsWith("← changed Shop.PriceCalculator.Tax(decimal)", order.Evidence, StringComparison.Ordinal);
+        Assert.Equal("names none of the changed code (no coverage map)", decisions["Shop.Tests.SlugTests"].Evidence);
+    }
+
+    [Fact]
     public void Excluding_filter_matches_everything_outside_the_classes()
     {
         Assert.Equal("FullyQualifiedName!~A.B.&FullyQualifiedName!~A.C\\(1\\).", TestFilter.ExcludingClasses(["A.B", "A.C(1)"]));
