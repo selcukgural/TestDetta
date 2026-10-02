@@ -156,7 +156,15 @@ Interim fixes that are safe for the common case; come back for the complete solu
    where the map cannot answer); project-level drift and large gaps take the no-map path. Next:
    measurement 2 (record at N−k, evaluate at N: exact / no map / bridge / naive), then the
    implementation. Safety rule unchanged: when the bridge is unsure, select more.
-2. **Compare with dotnet-tia on the corpus.** dotnet-tia (github.com/SebHenn/dotnet-tia, MIT) is
+2. **Compare with the tools teams actually use, then with dotnet-tia.** Market check 2026-10-02:
+   dotnet-affected (project-level, 408 stars, 4.15 M NuGet downloads) is the free tool .NET teams
+   use today, so the first comparison is Sift vs dotnet-affected on the same synthetic changes
+   (selected share and time; both should miss nothing). Datadog Test Impact Analysis is the
+   commercial one (SaaS, needs an account; later). dotnet-tia (3 stars, 541 downloads, created
+   2026-07) is not a market player but the best open-source example of the static-analysis
+   approach, so it stays as a technical check of "why record coverage", at low priority; the
+   evaluator side is built (docs/design/tia-comparison.md).
+   Earlier text: **Compare with dotnet-tia on the corpus.** dotnet-tia (github.com/SebHenn/dotnet-tia, MIT) is
    an open-source .NET tool doing the same job by static analysis only (method level, mutation
    gate, reports zero misses and 35.5% selection on NodaTime). Run it on the same repositories with
    the same mutants and report misses, selection share, precision and analysis time side by side,
