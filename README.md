@@ -44,9 +44,12 @@ A filter that matches no test is treated as a Sift bug: the project is run again
 
 Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `-v` for debug logs on stderr.
 
-Coverage maps are used only when they were recorded exactly at the merge base of your branch;
-code that changed in between could have created calls the map does not know. Add `.sift/` to
-`.gitignore`.
+Coverage maps are best recorded at the merge base of your branch. A map recorded up to 50 commits
+earlier (`--max-map-age`) is still used: code changed in between could have created calls the map
+does not know, so Sift also selects the classes that ran any changed-since member that can reach
+your change, and traces new code by name. When something in between cannot be described by members
+(a build file, `appsettings.json`), the affected test projects are decided by name, as without a map.
+Add `.sift/` to `.gitignore`.
 
 ## GitHub Actions
 

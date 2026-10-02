@@ -1,7 +1,7 @@
 # Map drift: using an older map through a static bridge
 
-Status: design, 2026-10-02. Backlog "Next" item 1. Measurement 1 is done (below); measurement 2
-and the implementation follow this document.
+Status: design 2026-10-02; selection side implemented the same day (see "As built"). Still open:
+measurement 2, the size cap, and the action's restore of an ancestor map.
 
 ## Problem
 
@@ -142,9 +142,9 @@ equals today's behaviour. Revisit with measurement 2.
 - **Size cap**: when the drift changes more than a set number of members, propagating each one
   costs more than the name trace saves. The test projects then take the no-map path. The number
   is set from measurement 2; a bulk edit should not be bridged member by member.
-- **One map commit per run**: maps are restored together, so all maps in `.sift/coverage` come from
-  the same `A`. Maps with different commits are each bridged from their own commit (the drift is
-  computed once per distinct commit).
+- **One map commit per run**: maps are restored together, so all maps in `.sift/coverage` normally
+  come from the same `A`. Maps with different commits each get their own drift (computed once per
+  distinct commit); bridged members are resolved against every map, which only adds classes.
 - **Timings**: map timings at `A` stay valid for estimates; new classes have none, as today.
 - **Failed classes**: classes that failed while recording at `A` keep running when their project is
   affected, as today.
@@ -219,3 +219,23 @@ A bridge miss gets a complete fix and a red test, as with every other miss.
 4. Action restore of the newest ancestor map; README "Coverage maps are used only when…"
    rewritten; backlog text corrected.
 5. dotnet-tia comparison (backlog item 2) uses the same synthetic samples.
+
+## As built (2026-10-02)
+
+- `GitClient.FirstParentDistance` (ancestry via `merge-base`, distance via `rev-list --count
+  --first-parent`; null for a commit outside the clone) and `GitClient.ChangedBetween`;
+  `CodeChangeReader.ReadBetween` compares two commits.
+- `AnalysisPipeline.Run(repo, base, AnalysisOptions)`: `MaxMapAge` (default 50, CLI
+  `--max-map-age`, 0 = exact maps only) and an internal `MapUse` (`Bridge`; `None` and
+  `AsIfCurrent` for the evaluator). One `MapDrift` per older map commit: changed files, code changes
+  and project-level impact of `A..B`, package changes included. `AnalysisResult.Drifts` is reported
+  in text, JSON (`olderCoverageMaps`) and the Markdown summary.
+- `TestSelector`: `WithoutDriftedMaps` drops the map of every test project downstream of a
+  project-level drift change (the same rules that make a PR change "run all"); `Bridge` takes the
+  drift's added and modified members that the uncut name spread of the PR's changes reached
+  (`ImpactPropagation.Reached`; for a type-level change, any member of the type) and resolves each
+  like a change: coverage where the map answers, name trace otherwise.
+- Tests: `MapDriftTests` (new call, new test class, new implementation, project-level drift,
+  unrelated drift keeps the map's answer, age limit and foreign commit, output, git distance), each
+  of the first three also showing that `AsIfCurrent` misses; sabotage-checked (no bridge → 3 red,
+  no project-level rule → 1 red).

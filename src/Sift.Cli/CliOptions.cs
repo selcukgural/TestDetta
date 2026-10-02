@@ -19,7 +19,11 @@ internal enum CliCommand
 /// <param name="BaseRef">Git ref to compare against.</param>
 /// <param name="RepoPath">Any path inside the repository.</param>
 /// <param name="LogLevel">Minimum level of the diagnostic log written to stderr.</param>
-internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLevel LogLevel);
+internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLevel LogLevel)
+{
+    /// <summary>How many commits a coverage map may be behind the merge base and still be used through the drift bridge.</summary>
+    public int MaxMapAge { get; init; } = Sift.Core.AnalysisOptions.DefaultMaxMapAge;
+}
 
 /// <summary>Options of <c>sift affected</c>.</summary>
 /// <param name="TestsOnly">Print only test projects.</param>
@@ -68,6 +72,8 @@ internal sealed record CliOptions(
           --repo <path>        Any path inside the repository (default: current directory)
           -v, --verbose        Write debug logs to stderr
           --log-level <level>  trace, debug, information, warning (default), error or none
+          --max-map-age <n>    Use coverage maps recorded up to n commits before the merge base,
+                               bridging the changes in between (default: 50; 0 = only exact maps)
 
         sift affected:
           --tests-only         Only list affected test projects
@@ -185,7 +191,7 @@ internal sealed record CliOptions(
                 options = options with { Record = options.Record with { NoBuild = true } };
                 return true;
 
-            case "--base" or "--repo" or "--log-level":
+            case "--base" or "--repo" or "--log-level" or "--max-map-age":
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
             case "--summary-file" when options.Command == CliCommand.Test:
@@ -211,6 +217,16 @@ internal sealed record CliOptions(
 
             case "--repo":
                 options = options with { Analysis = options.Analysis with { RepoPath = value } };
+                return true;
+
+            case "--max-map-age":
+                if (!int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var maxMapAge) || maxMapAge < 0)
+                {
+                    error = $"--max-map-age needs a number of commits (0 or more), not {value}";
+                    return false;
+                }
+
+                options = options with { Analysis = options.Analysis with { MaxMapAge = maxMapAge } };
                 return true;
 
             case "-c" or "--configuration":

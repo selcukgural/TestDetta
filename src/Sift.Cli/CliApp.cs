@@ -48,7 +48,10 @@ internal static partial class CliApp
         AnalysisResult analysis;
         try
         {
-            analysis = new AnalysisPipeline(loggerFactory, new Sift.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(options.Analysis.RepoPath, options.Analysis.BaseRef);
+            analysis = new AnalysisPipeline(loggerFactory, new Sift.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(
+                options.Analysis.RepoPath,
+                options.Analysis.BaseRef,
+                new AnalysisOptions { MaxMapAge = options.Analysis.MaxMapAge });
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException
                                        or UnauthorizedAccessException)
@@ -64,7 +67,7 @@ internal static partial class CliApp
         }
 
         var stats = new RunStats(analysis.ChangedFiles.Count, analysis.Graph.Projects.Count);
-        ResultWriter.Write(new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Plan), stdout);
+        ResultWriter.Write(new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Plan) { Drifts = analysis.Drifts }, stdout);
         return Success;
     }
 

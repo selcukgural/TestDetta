@@ -29,6 +29,11 @@ internal static class MarkdownSummary
         writer.WriteLine();
         writer.WriteLine($"{analysis.ChangedFiles.Count} changed file(s) compared with {Code(input.BaseRef)}.");
         writer.WriteLine();
+        foreach (var drift in analysis.Drifts)
+        {
+            writer.WriteLine(ResultWriter.DriftLine(drift));
+            writer.WriteLine();
+        }
 
         if (tests.Count == 0)
         {

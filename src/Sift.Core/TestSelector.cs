@@ -21,7 +21,8 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             return [];
         }
 
-        var projectLevel = FindProjectLevelChanges(request);
+        request = WithoutDriftedMaps(request);
+        var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)
         {
@@ -34,8 +35,10 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
         // Test projects without a coverage map are decided by name alone; those with one use a second
         // spread that stops wherever the maps know which tests run the reached code.
-        var byName = Trace(request, index, projectLevel, coverage: null);
-        var withCoverage = coverage.HasAnyMap ? Trace(request, index, projectLevel, coverage) : byName;
+        var byName = Trace(request, index, projectLevel, coverage: null, bridged: []);
+        var withCoverage = coverage.HasAnyMap
+            ? Trace(request, index, projectLevel, coverage, Bridge(request, index, byName))
+            : byName;
 
         var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage));
         for (var i = 0; i < decisions.Count; i++)
@@ -52,6 +55,86 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     private sealed record TraceResult(ImpactPropagation Propagation, Dictionary<string, string> Fallbacks);
 
     /// <summary>
+    /// Drops the maps whose drift changed something no member describes (build files, non-C# files,
+    /// global usings) in a project the test project depends on: the map's view of that project may be
+    /// wrong anywhere, so the test project is decided by name, as without a map.
+    /// </summary>
+    /// <param name="request">Selection input with every usable map.</param>
+    private TestSelectionRequest WithoutDriftedMaps(TestSelectionRequest request)
+    {
+        if (request.Drifts.Count == 0)
+        {
+            return request;
+        }
+
+        var maps = new Dictionary<string, CoverageMap>(request.CoverageMaps, Paths.Comparer);
+        foreach (var drift in request.Drifts)
+        {
+            var fallbacks = FindProjectLevelChanges(request.Graph, request.RepoRoot, drift.ChangedFiles, drift.Impact);
+            foreach (var (project, reason) in RunAll(request.Graph, fallbacks))
+            {
+                if (maps.TryGetValue(project, out var map) && string.Equals(map.Commit, drift.FromCommit, StringComparison.OrdinalIgnoreCase))
+                {
+                    maps.Remove(project);
+                    LogDriftedMap(project, drift.FromCommit, reason);
+                }
+            }
+        }
+
+        return request with { CoverageMaps = maps };
+    }
+
+    /// <summary>
+    /// The drift bridge: every member the drift added or changed that can reach one of the changes by
+    /// name. A test class that reaches a change only through code changed since the map was recorded
+    /// ran one of these members at the map's commit (or is new and found by name), so selecting the
+    /// classes the map credits to them, or tracing them by name where it cannot answer, covers what the
+    /// map does not know (docs/design/map-drift-bridge.md).
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="index">Indexed source code.</param>
+    /// <param name="byName">The uncut name spread of the changes.</param>
+    private List<(SymbolChange Change, ProjectNode Owner)> Bridge(TestSelectionRequest request, SourceIndex index, TraceResult byName)
+    {
+        var bridged = new List<(SymbolChange, ProjectNode)>();
+        var root = Paths.Normalize(request.RepoRoot);
+        foreach (var drift in request.Drifts)
+        {
+            foreach (var change in drift.Impact.CodeChanges)
+            {
+                foreach (var owner in request.Graph.ResolveFile(Paths.Normalize(Path.Combine(root, change.Path))))
+                {
+                    if (owner.Role != FileRole.Source)
+                    {
+                        continue;
+                    }
+
+                    foreach (var symbol in change.Symbols)
+                    {
+                        // Code removed before the base is on no path at the base.
+                        if (symbol.Kind != SymbolChangeKind.Removed && ReachesChange(index, byName.Propagation, symbol))
+                        {
+                            LogBridged(symbol.TypeName, symbol.MemberName ?? "(type)", drift.FromCommit);
+                            bridged.Add((symbol, owner.Project));
+                        }
+                    }
+                }
+            }
+        }
+
+        return bridged;
+    }
+
+    /// <summary>True when the name spread of the changes reached <paramref name="symbol"/>, or for a type, any of its members.</summary>
+    /// <param name="index">Indexed source code.</param>
+    /// <param name="propagation">Finished name spread.</param>
+    /// <param name="symbol">A member or type changed by the drift.</param>
+    private static bool ReachesChange(SourceIndex index, ImpactPropagation propagation, SymbolChange symbol) =>
+        symbol.MemberName is null
+            ? propagation.AffectedTypes.Contains(symbol.TypeName)
+            : index.FindMember(symbol.TypeName, symbol.MemberName) is { } member && propagation.Reached(member);
+
+    /// <summary>
     /// Seeds the detected changes and spreads them by name. With <paramref name="coverage"/>, a change or
     /// reached member that the maps can answer is taken from coverage and not spread further.
     /// </summary>
@@ -59,11 +142,13 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     /// <param name="index">Indexed source code.</param>
     /// <param name="projectLevel">Project-level fallbacks from non-C# and build changes.</param>
     /// <param name="coverage">Coverage maps to stop at, or null for a pure name spread.</param>
+    /// <param name="bridged">Drift members to resolve like changes (<see cref="Bridge"/>); empty without drift.</param>
     private TraceResult Trace(
         TestSelectionRequest request,
         SourceIndex index,
         Dictionary<string, string> projectLevel,
-        CoverageSelection? coverage)
+        CoverageSelection? coverage,
+        List<(SymbolChange Change, ProjectNode Owner)> bridged)
     {
         var fallbacks = new Dictionary<string, string>(projectLevel, Paths.Comparer);
         var propagation = new ImpactPropagation(
@@ -99,6 +184,16 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             }
         }
 
+        foreach (var (symbol, owner) in bridged)
+        {
+            if (fallbacks.ContainsKey(owner.Path) || coverage?.TryResolve(symbol, owner) == true)
+            {
+                continue;
+            }
+
+            propagation.Seed(symbol, owner.Path);
+        }
+
         propagation.Run();
         AddUnreferencedTypes(request.Graph, index, propagation, fallbacks);
         return new TraceResult(propagation, fallbacks);
@@ -108,27 +203,30 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     /// Projects whose change cannot be described by symbols, with the reason: build configuration,
     /// non-C# files, C# files without a detected change, and global usings or assembly attributes.
     /// </summary>
-    /// <param name="request">Changes and project-level impact.</param>
-    private Dictionary<string, string> FindProjectLevelChanges(TestSelectionRequest request)
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="changedFiles">Changed paths relative to <paramref name="repoRoot"/>.</param>
+    /// <param name="impact">Project-level impact of the same changes.</param>
+    private Dictionary<string, string> FindProjectLevelChanges(ProjectGraph graph, string repoRoot, IReadOnlyList<string> changedFiles, ImpactResult impact)
     {
         var fallbacks = new Dictionary<string, string>(Paths.Comparer);
         var codeChanges = new Dictionary<string, CodeChange>(StringComparer.Ordinal);
-        foreach (var change in request.Impact.CodeChanges)
+        foreach (var change in impact.CodeChanges)
         {
             codeChanges[change.Path] = change;
         }
 
-        var cosmetic = new HashSet<string>(request.Impact.CosmeticFiles, StringComparer.Ordinal);
-        var root = Paths.Normalize(request.RepoRoot);
+        var cosmetic = new HashSet<string>(impact.CosmeticFiles, StringComparer.Ordinal);
+        var root = Paths.Normalize(repoRoot);
 
-        foreach (var file in request.ChangedFiles)
+        foreach (var file in changedFiles)
         {
             if (cosmetic.Contains(file))
             {
                 continue;
             }
 
-            foreach (var owner in request.Graph.ResolveFile(Paths.Normalize(Path.Combine(root, file))))
+            foreach (var owner in graph.ResolveFile(Paths.Normalize(Path.Combine(root, file))))
             {
                 var project = owner.Project.Path;
                 if (owner.Role == FileRole.BuildInput)
@@ -157,7 +255,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         }
 
         // After the file loop, so the file that caused a fallback is what its reason names.
-        foreach (var affected in request.Impact.Affected)
+        foreach (var affected in impact.Affected)
         {
             if (affected.Reason == ImpactReason.BuildConfiguration)
             {
@@ -343,6 +441,13 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         LogDecision(selection.Project.Path, selection.Mode, selection.Reason);
         return selection;
     }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Not using the coverage map of {Project} from {MapCommit}: since then, {Reason}")]
+    private partial void LogDriftedMap(string project, string mapCommit, string reason);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName} changed since {MapCommit} and can reach the change; bridged")]
+    private partial void LogBridged(string typeName, string memberName, string mapCommit);
 
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{TypeName} is named by nothing and has no base list or attributes; treated as unused")]

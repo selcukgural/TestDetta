@@ -44,6 +44,44 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
     /// <exception cref="InvalidOperationException">git failed or the two histories share no commit.</exception>
     public string MergeBase(string repoRoot, string baseRef) => Run(repoRoot, "merge-base", baseRef, "HEAD").Single();
 
+    /// <summary>Files that differ between two commits; renames count as a delete and an add.</summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="from">Older commit.</param>
+    /// <param name="to">Newer commit.</param>
+    /// <returns>Paths relative to <paramref name="repoRoot"/> with '/' separators, sorted.</returns>
+    /// <exception cref="InvalidOperationException">git failed, for example because a commit does not exist.</exception>
+    public IReadOnlyList<string> ChangedBetween(string repoRoot, string from, string to) =>
+        [.. new SortedSet<string>(Run(repoRoot, "diff", "--name-only", "--no-renames", from, to), StringComparer.Ordinal)];
+
+    /// <summary>
+    /// How many first-parent commits <paramref name="descendant"/> is ahead of <paramref name="ancestor"/>;
+    /// null when <paramref name="ancestor"/> is not an ancestor of it or is not in the clone (a shallow
+    /// checkout, a commit from another history).
+    /// </summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="ancestor">Commit expected to be an ancestor, such as the commit a coverage map was recorded at.</param>
+    /// <param name="descendant">Newer commit, such as the merge base.</param>
+    public int? FirstParentDistance(string repoRoot, string ancestor, string descendant)
+    {
+        List<string> mergeBase;
+        try
+        {
+            mergeBase = Run(repoRoot, "merge-base", ancestor, descendant);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+
+        var resolved = Run(repoRoot, "rev-parse", "--verify", "--quiet", ancestor + "^{commit}").Single();
+        if (mergeBase is not [var commit] || !string.Equals(commit, resolved, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return int.Parse(Run(repoRoot, "rev-list", "--count", "--first-parent", $"{ancestor}..{descendant}").Single(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     /// <summary>
     /// Reads the content of <paramref name="paths"/> as of <paramref name="revision"/> through a single
     /// <c>git cat-file --batch</c> process, instead of starting one <c>git show</c> per file.

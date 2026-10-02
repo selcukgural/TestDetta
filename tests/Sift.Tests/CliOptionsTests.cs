@@ -39,6 +39,17 @@ public sealed class CliOptionsTests
         Assert.Equal("Release", options.Record.Configuration);
     }
 
+    [Fact]
+    public void Max_map_age_takes_zero_or_more_commits()
+    {
+        Assert.True(CliOptions.TryParse(["affected"], "/repo", out var defaults, out _));
+        Assert.Equal(Sift.Core.AnalysisOptions.DefaultMaxMapAge, defaults.Analysis.MaxMapAge);
+
+        Assert.True(CliOptions.TryParse(["test", "--max-map-age", "0"], "/repo", out var exact, out _));
+        Assert.Equal(0, exact.Analysis.MaxMapAge);
+        Assert.False(CliOptions.TryParse(["affected", "--max-map-age", "-1"], "/repo", out _, out _));
+    }
+
     [Theory]
     [InlineData("affected", "--no-build")]
     [InlineData("affected", "--dry-run")]

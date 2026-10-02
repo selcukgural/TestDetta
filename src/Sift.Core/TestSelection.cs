@@ -59,12 +59,19 @@ public sealed record TestPlan(IReadOnlyList<TestProjectSelection> Projects, Time
 /// <param name="ChangedFiles">Changed paths relative to <paramref name="RepoRoot"/>.</param>
 /// <param name="Impact">Project-level result of <see cref="ImpactAnalyzer"/> for the same changes.</param>
 /// <param name="CoverageMaps">
-/// Coverage maps recorded at the comparison base, keyed by normalized test project path. Test
-/// projects without a map are selected by name only.
+/// Coverage maps recorded at the comparison base or bridged from an ancestor (<see cref="Drifts"/>),
+/// keyed by normalized test project path. Test projects without a map are selected by name only.
 /// </param>
 public sealed record TestSelectionRequest(
     ProjectGraph Graph,
     string RepoRoot,
     IReadOnlyList<string> ChangedFiles,
     ImpactResult Impact,
-    IReadOnlyDictionary<string, CoverageMap> CoverageMaps);
+    IReadOnlyDictionary<string, CoverageMap> CoverageMaps)
+{
+    /// <summary>
+    /// Changes since the commit of every map in <see cref="CoverageMaps"/> that was recorded before the
+    /// comparison base, matched by <see cref="MapDrift.FromCommit"/>; empty when all maps are current.
+    /// </summary>
+    public IReadOnlyList<MapDrift> Drifts { get; init; } = [];
+}

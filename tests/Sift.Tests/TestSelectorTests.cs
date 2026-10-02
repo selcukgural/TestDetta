@@ -618,15 +618,19 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
-    public void Map_recorded_at_another_commit_is_ignored()
+    public void Map_recorded_at_an_older_commit_is_bridged_or_ignored_when_bridging_is_off()
     {
         WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
         _repo.Write("README.md", "moved on");
         _repo.Commit("later");
         _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
 
-        // The name-based answer includes OrderServiceTests, which the stale map would have left out.
-        Assert.Contains("Shop.Tests.OrderServiceTests", Select().TestClasses);
+        // Nothing in between touched code, so the older map answers as it would at the base.
+        Assert.Equal(["Shop.Tests.TaxTests"], Select().TestClasses);
+
+        // Without the bridge the map is ignored; the name-based answer includes OrderServiceTests.
+        var exactOnly = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main", new AnalysisOptions { MaxMapAge = 0 }).Tests.Single();
+        Assert.Contains("Shop.Tests.OrderServiceTests", exactOnly.TestClasses);
     }
 
     [Fact]

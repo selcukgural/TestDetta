@@ -52,6 +52,10 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <summary>Qualified names of every type that changed or contains an affected member.</summary>
     public HashSet<string> AffectedTypes { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>True when the spread reached <paramref name="member"/>: its code can lead to a seeded change.</summary>
+    /// <param name="member">Indexed member.</param>
+    public bool Reached(IndexedMember member) => _affected.Contains(member);
+
     /// <summary>Starts from one detected change.</summary>
     /// <param name="change">A changed type or member.</param>
     /// <param name="projectPath">Project that owns the changed file; used when the type no longer exists.</param>

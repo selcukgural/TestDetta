@@ -39,16 +39,40 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
 
         foreach (var file in csharpFiles)
         {
-            var oldText = oldContents.TryGetValue(file, out var bytes)
-                ? SourceText.From(bytes, bytes.Length)
-                : null;
-
-            changes.Add(detector.Detect(file, oldText, ReadWorkingTree(Path.Combine(repoRoot, file))));
+            changes.Add(detector.Detect(file, Text(oldContents, file), ReadWorkingTree(Path.Combine(repoRoot, file))));
         }
 
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
         return changes;
     }
+
+    /// <summary>Detects code changes in the C# files among <paramref name="changedFiles"/> between two commits.</summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="from">Older commit.</param>
+    /// <param name="to">Newer commit.</param>
+    /// <param name="changedFiles">Paths changed between the two, relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
+    /// <returns>One entry per changed .cs file, in the order of <paramref name="changedFiles"/>.</returns>
+    public IReadOnlyList<CodeChange> ReadBetween(string repoRoot, string from, string to, IReadOnlyList<string> changedFiles)
+    {
+        var csharpFiles = changedFiles.Where(static f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (csharpFiles.Count == 0)
+        {
+            return [];
+        }
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var oldContents = git.ReadFiles(repoRoot, from, csharpFiles);
+        var newContents = git.ReadFiles(repoRoot, to, csharpFiles);
+        var changes = csharpFiles.ConvertAll(file => detector.Detect(file, Text(oldContents, file), Text(newContents, file)));
+        LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
+        return changes;
+    }
+
+    /// <summary>The text of <paramref name="file"/> among files read from git; null when it did not exist.</summary>
+    /// <param name="contents">Raw bytes by path.</param>
+    /// <param name="file">Relative path.</param>
+    private static SourceText? Text(IReadOnlyDictionary<string, byte[]> contents, string file) =>
+        contents.TryGetValue(file, out var bytes) ? SourceText.From(bytes, bytes.Length) : null;
 
     /// <summary>Reads a file from the working tree; null when it was deleted.</summary>
     /// <param name="path">Absolute file path.</param>

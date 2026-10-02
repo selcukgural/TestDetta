@@ -25,6 +25,9 @@ internal sealed record ResultReport(
 {
     /// <summary>Test-level decision for every affected test project.</summary>
     public IReadOnlyList<TestProjectSelection> Tests => Plan.Projects;
+
+    /// <summary>Older coverage maps in use and what changed since they were recorded.</summary>
+    public IReadOnlyList<MapDrift> Drifts { get; init; } = [];
 }
 
 /// <summary>Prints an analysis result on stdout in the format chosen on the command line.</summary>
@@ -94,6 +97,12 @@ internal static class ResultWriter
         }
     }
 
+    /// <summary>One line on an older coverage map in use, for text output and the Markdown summary.</summary>
+    /// <param name="drift">The map's commit and the changes since.</param>
+    internal static string DriftLine(MapDrift drift) =>
+        $"Coverage maps from {drift.FromCommit[..Math.Min(12, drift.FromCommit.Length)]} are {drift.Commits} commit(s) behind the base; "
+        + $"{drift.ChangedFiles.Count} file(s) changed since then were bridged.";
+
     /// <summary>Human readable summary: affected projects with reasons, then what to run per test project.</summary>
     /// <param name="report">What to print.</param>
     /// <param name="stdout">Destination.</param>
@@ -119,6 +128,11 @@ internal static class ResultWriter
         if (report.Result.UnmappedFiles.Count > 0)
         {
             stdout.WriteLine($"{report.Result.UnmappedFiles.Count} changed file(s) outside any project (ignored).");
+        }
+
+        foreach (var drift in report.Drifts)
+        {
+            stdout.WriteLine(DriftLine(drift));
         }
 
         if (report.Tests.Count == 0)
@@ -285,6 +299,17 @@ internal static class ResultWriter
             WriteEstimateFields(json, report.Plan.Estimate);
             json.WriteNumber("projectsWithoutTimings"u8, report.Plan.ProjectsWithoutTimings);
             json.WriteEndObject();
+
+            json.WriteStartArray("olderCoverageMaps"u8);
+            foreach (var drift in report.Drifts)
+            {
+                json.WriteStartObject();
+                json.WriteString("commit"u8, drift.FromCommit);
+                json.WriteNumber("commitsBehind"u8, drift.Commits);
+                json.WriteNumber("changedFiles"u8, drift.ChangedFiles.Count);
+                json.WriteEndObject();
+            }
+            json.WriteEndArray();
 
             WriteStringArray(json, "unmappedFiles"u8, report.Result.UnmappedFiles);
             WriteStringArray(json, "cosmeticFiles"u8, report.Result.CosmeticFiles);
