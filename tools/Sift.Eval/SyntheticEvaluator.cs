@@ -68,11 +68,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var assemblies = EvalSteps.RepositoryAssemblies(
                 new ProjectAssemblies(_logger).FileNames(graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
 
+            // Selecting edits the clone's sources, so it happens one mutant at a time, and before any
+            // binary is touched: a hang in Sift's analysis then leaves the clone as it was.
+            var selections = targets.Select(t => Select(sha, t, maps)).ToList();
+
             using var schema = settings.UseSchema ? TrySchema(assemblies, targets, testProjects, baseline) : null;
             var context = new MutantContext(testProjects, maps, assemblies, baseline, schema);
-
-            // Selecting edits the clone's sources, so it happens one mutant at a time, before any test runs.
-            var selections = targets.Select(t => Select(sha, t, maps)).ToList();
             var parallelism = Parallelism(schema, testProjects, baseline);
             workspace.Executor.Concurrency = parallelism;
 
@@ -265,7 +266,18 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="maps">Coverage maps at the commit.</param>
     private Selection Select(string sha, SyntheticTarget target, Dictionary<string, CoverageMap> maps)
     {
-        var analysis = Analyze(sha, target);
+        // A hang in Sift (an exponential search, Swashbuckle 2026-10-02) would otherwise stop the
+        // evaluation for good without a word; it is reported as what it is, a finding about Sift.
+        var analyzing = Task.Run(() => Analyze(sha, target));
+        if (!analyzing.Wait(settings.AnalysisTimeout))
+        {
+            LogAnalysisHung(target.Member.TypeName, target.Member.MemberName, settings.AnalysisTimeout.TotalMinutes);
+            throw new InvalidOperationException(
+                $"Sift's analysis of a change to {target.Member.TypeName}.{target.Member.MemberName} did not finish within " +
+                $"{settings.AnalysisTimeout.TotalMinutes:0.#} minute(s): a hang or a slowdown in Sift.");
+        }
+
+        var analysis = analyzing.Result;
         var detected = analysis.Impact.CodeChanges.Any(c =>
             c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
         return new Selection(analysis.Tests, detected, SelectedShare(analysis, maps));
@@ -702,6 +714,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Schema: the full suite fails differently with the switches written in; every mutant is written in alone instead")]
     private partial void LogSchemaChangedBehaviour();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Sift's analysis of a change to {TypeName}.{MemberName} did not finish within {Minutes} minute(s)")]
+    private partial void LogAnalysisHung(string typeName, string memberName, double minutes);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Count} mutants run at once: that many runs of the full suite at the same time fail as the baseline does")]
     private partial void LogParallel(int count);

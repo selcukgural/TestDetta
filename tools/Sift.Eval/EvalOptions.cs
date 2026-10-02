@@ -42,6 +42,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  schema, and falls back to 1 when parallel runs of the suite interfere
           --no-schema            Write each synthetic mutant in alone instead of switching it on in a
                                  schema (to compare both, or for a suite that notices the switches)
+          --analysis-timeout <span>  Longest Sift may analyse one synthetic change (default 00:10:00); beyond
+                                 it the evaluation stops and reports a hang in Sift
           --recording-cache <dir>  Keep recorded coverage maps in <dir> and reuse them while the commit, the
                                  recording settings and Sift's recording code are the same (corpus runs
                                  use <out>/map-cache/<name>)
@@ -139,6 +141,16 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { OutcomeCache = Path.GetFullPath(value) };
                     break;
 
+                case "--analysis-timeout":
+                    if (!TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var limit) || limit <= TimeSpan.Zero)
+                    {
+                        error = $"--analysis-timeout needs a positive time span such as 00:10:00, not {value}";
+                        return false;
+                    }
+
+                    run = run with { AnalysisTimeout = limit };
+                    break;
+
                 case "--recording-cache":
                     run = run with { RecordingCache = Path.GetFullPath(value) };
                     break;
@@ -232,6 +244,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// always runs one). The evaluation lowers it to 1 when parallel runs of the suite interfere.
     /// </summary>
     public int MutantParallelism { get; init; } = 1;
+
+    /// <summary>
+    /// Longest Sift may take to analyse one synthetic change; beyond it the evaluation stops and reports
+    /// a hang in Sift instead of waiting for ever. Analyses take seconds; the default leaves wide room.
+    /// </summary>
+    public TimeSpan AnalysisTimeout { get; init; } = TimeSpan.FromMinutes(10);
 }
 
 /// <summary>Shell commands a repository needs besides dotnet.</summary>
