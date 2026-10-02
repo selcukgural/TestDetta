@@ -93,13 +93,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   reports are read from it, in the evaluation and when recording, without adding a package.
   NSubstitute can be evaluated. Still left out and named: test hosts that die before running a test
   (protobuf-net.Test, exit 134).
-- **Recording suites that only pass in parallel** (interim: this commit records a project again in
-  one process when a shard crashes). NLog.UnitTests takes its own test host down ("Out of memory")
-  whenever its classes run one at a time, without Sift too; recording requires that, so NLog gets
-  no map and falls back to name tracing. Complete fix: when the sequential recording crashes,
-  record with the suite's own parallelism, credit code inside a test flow (AsyncLocal) as now, and
-  treat code outside every flow as ambient (selected for any change) instead of crediting the
-  class entered last. Add a test with a suite that crashes when run sequentially.
+- ~~Recording suites that only pass in parallel~~ (completed): when the one-process recording
+  crashes too, the project is recorded with the suite's own parallelism (`SIFT_PARALLEL_FLOWS`):
+  code inside a test flow counts for its class, code outside every flow counts as ambient instead of
+  for the class entered last, and the map has no class times. To be checked on NLog in round 2.
 
 ## Next
 

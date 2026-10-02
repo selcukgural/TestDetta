@@ -138,6 +138,22 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 ThrowIfTimedOut(runs, project, request);
             }
 
+            // Some suites only pass with their tests in parallel (NLog's host runs out of memory when its
+            // classes run one at a time). They are recorded the way they normally run: code inside a test
+            // flow still counts for its class, code outside every flow counts as ambient, and class times
+            // mean nothing, so the map has none.
+            var suiteParallelism = false;
+            if (runs.Any(static r => r.Result.ResultsFiles.Count == 0))
+            {
+                LogSequentialCrashed(project);
+                var parallel = Path.Combine(work, "parallel");
+                Directory.CreateDirectory(parallel);
+                var parallelArguments = TestArguments(new TestRun(request, mode, targetPath, framework, SuiteParallelism: true), parallel);
+                runs = RunShards([[]], new ShardContext(request, mode, outputDirectory, instrumentation, parallel, SuiteParallelism: true), parallelArguments, synchronizedOutput);
+                ThrowIfTimedOut(runs, project, request);
+                suiteParallelism = true;
+            }
+
             var resultsFiles = new List<string>(runs.Length);
             foreach (var run in runs)
             {
@@ -157,7 +173,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
 
             var map = BuildMap(request, instrumentation.Methods, resultsFiles);
-            map = map with { FailedClasses = Untrusted(runs, map), Generated = generated };
+            map = map with { FailedClasses = Untrusted(runs, map), Generated = generated, Timings = suiteParallelism ? null : map.Timings };
             LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
             return (map, runs.All(static r => r.Result.ExitCode == 0));
         }
@@ -212,7 +228,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="Mode">Runner <c>dotnet test</c> uses.</param>
     /// <param name="TargetPath">Compiled test assembly.</param>
     /// <param name="Framework">Target framework to pass, for a multi-targeted project; otherwise null.</param>
-    private sealed record TestRun(RecordRequest Request, DotnetTestMode Mode, string TargetPath, string? Framework);
+    /// <param name="SuiteParallelism">True to let the suite run its tests in parallel, as it normally does.</param>
+    private sealed record TestRun(RecordRequest Request, DotnetTestMode Mode, string TargetPath, string? Framework, bool SuiteParallelism = false);
 
     /// <summary>
     /// <c>dotnet test</c> arguments shared by all shards. Tests must run one at a time: VSTest and the
@@ -231,7 +248,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         // and TUnit under the testing platform take their own option; TUnit runs no test at all when
         // given a run settings file.
         var binaries = Path.GetDirectoryName(run.TargetPath)!;
-        if (File.Exists(Path.Combine(binaries, "TUnit.Engine.dll")))
+        if (run.SuiteParallelism)
+        {
+            // Only VSTest needs settings then, for the collector.
+            if (run.Mode == DotnetTestMode.VSTest)
+            {
+                arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: true, sequential: false)]);
+            }
+        }
+        else if (File.Exists(Path.Combine(binaries, "TUnit.Engine.dll")))
         {
             arguments.AddRange(["--maximum-parallel-tests", "1"]);
         }
@@ -241,7 +266,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
         else
         {
-            arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: run.Mode == DotnetTestMode.VSTest)]);
+            arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: run.Mode == DotnetTestMode.VSTest, sequential: true)]);
         }
 
         if (run.Framework is not null)
@@ -310,12 +335,14 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="OutputDirectory">Output directory of the test project.</param>
     /// <param name="Instrumentation">Instrumentation result, for the method count.</param>
     /// <param name="Work">Work directory.</param>
+    /// <param name="SuiteParallelism">True when the tests run with the suite's own parallelism.</param>
     private sealed record ShardContext(
         RecordRequest Request,
         DotnetTestMode Mode,
         string OutputDirectory,
         InstrumentationResult Instrumentation,
-        string Work);
+        string Work,
+        bool SuiteParallelism = false);
 
     /// <summary>What one shard left behind.</summary>
     /// <param name="ExitCode">Exit code of <c>dotnet test</c>.</param>
@@ -402,6 +429,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             [SiftTracker.FieldCountVariable] = instrumentation.Fields.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
             [SiftTracker.OutputVariable] = resultsFile,
         };
+        if (context.SuiteParallelism)
+        {
+            environment[SiftTracker.ParallelFlowsVariable] = "1";
+        }
 
         var writer = shard.Count == 1 ? output : new PrefixWriter(output, $"[shard {shard.Index + 1}/{shard.Count}] ");
         var exitCode = shard.Dotnet.Run(arguments, request.RepoRoot, environment, writer, request.Options.Timeout);
@@ -550,17 +581,22 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// be killed. The runtime is in the test output as well; both are the same assembly, so the host
     /// loads it once. Microsoft.Testing.Platform has no collectors.
     /// </param>
-    private static string WriteRunSettings(string directory, bool withCollector)
+    /// <param name="sequential">True to make the tests run one at a time.</param>
+    private static string WriteRunSettings(string directory, bool withCollector, bool sequential)
     {
         // Tests run one at a time while recording: code outside every test flow is credited to the
         // test class entered last, which is only right when one class runs at a time.
-        var root = new XElement("RunSettings",
-            new XElement("RunConfiguration", new XElement("DisableParallelization", "true")),
-            new XElement("xUnit",
-                new XElement("ParallelizeTestCollections", "false"),
-                new XElement("MaxParallelThreads", "1")),
-            new XElement("NUnit", new XElement("NumberOfTestWorkers", "0")),
-            new XElement("MSTest", new XElement("Parallelize", new XElement("Workers", "1"))));
+        var root = new XElement("RunSettings");
+        if (sequential)
+        {
+            root.Add(
+                new XElement("RunConfiguration", new XElement("DisableParallelization", "true")),
+                new XElement("xUnit",
+                    new XElement("ParallelizeTestCollections", "false"),
+                    new XElement("MaxParallelThreads", "1")),
+                new XElement("NUnit", new XElement("NumberOfTestWorkers", "0")),
+                new XElement("MSTest", new XElement("Parallelize", new XElement("Workers", "1"))));
+        }
 
         if (withCollector)
         {
@@ -813,6 +849,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Recording {Project} in {ShardCount} process(es) for {ClassCount} known test class(es), plus a catch-all process")]
     private partial void LogShards(string project, int shardCount, int classCount);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "The tests of {Project} crashed when run one at a time; recording them with their own parallelism, so code outside every test counts as ambient")]
+    private partial void LogSequentialCrashed(string project);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "A test process of {Project} crashed before writing coverage; recording it again in one process")]
     private partial void LogShardCrashed(string project);

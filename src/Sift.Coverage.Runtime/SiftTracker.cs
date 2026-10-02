@@ -33,6 +33,13 @@ public static class SiftTracker
     /// </summary>
     public const string FieldCountVariable = "SIFT_FIELD_COUNT";
 
+    /// <summary>
+    /// Environment variable that is <c>1</c> when the tests run with the suite's own parallelism (a
+    /// suite that crashes when its tests run one at a time). Code outside every test flow then counts
+    /// as ambient instead of for the class entered last, which is meaningless with classes running at once.
+    /// </summary>
+    public const string ParallelFlowsVariable = "SIFT_PARALLEL_FLOWS";
+
     /// <summary>Environment variable with the path of the JSON file written at the end of the session.</summary>
     public const string OutputVariable = "SIFT_COVERAGE_OUTPUT";
 
@@ -66,6 +73,9 @@ public static class SiftTracker
 
     /// <summary>Number of instrumented methods; field bits follow the method bits. Declared first: <see cref="Words"/> needs it.</summary>
     private static readonly int MethodCount = ReadCount(MethodCountVariable);
+
+    /// <summary>True when tests run in parallel; see <see cref="ParallelFlowsVariable"/>.</summary>
+    private static readonly bool ParallelFlows = Environment.GetEnvironmentVariable(ParallelFlowsVariable) == "1";
 
     /// <summary>Number of 64-bit words a bit set needs for all method and field ids.</summary>
     private static readonly int Words = (MethodCount + ReadCount(FieldCountVariable) + 63) / 64;
@@ -255,6 +265,11 @@ public static class SiftTracker
     /// </summary>
     private static Bucket BucketForHit()
     {
+        if (ParallelFlows)
+        {
+            return Current.Value ?? Startup;
+        }
+
         var lastEntered = Volatile.Read(ref _lastEntered);
         var current = Current.Value;
         if (current is { IsFixture: true } && lastEntered is { IsFixture: false })
