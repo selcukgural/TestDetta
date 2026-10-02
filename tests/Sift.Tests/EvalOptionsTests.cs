@@ -56,4 +56,36 @@ public sealed class EvalOptionsTests
         Assert.Equal(4, plainRun.Parallelism);
         Assert.Equal(1, plainRun.MutantParallelism);
     }
+
+    [Fact]
+    public void A_pinned_toolchain_needs_an_sdk_and_a_directory_to_install_in()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--sdk", "10.0.401", "--runtime", "8.0.31", "--runtime", "9.0.12", "--architecture", "x64", "--toolchains", "t"], out var options, out var error), error);
+        Assert.Equal(new Toolchain("10.0.401", ["8.0.31", "9.0.12"], "x64").DirectoryName, options.Run.Toolchain?.DirectoryName);
+        Assert.Equal(Path.GetFullPath("t"), options.Run.ToolchainRoot);
+
+        Assert.True(EvalOptions.TryParse(["--repo", "r"], out var ambient, out _));
+        Assert.Null(ambient.Run.Toolchain);
+
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--sdk", "10.0.401"], out _, out _));
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--runtime", "8.0.31", "--toolchains", "t"], out _, out _));
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--sdk", "../10", "--toolchains", "t"], out _, out _));
+    }
+
+    [Fact]
+    public void Corpus_toolchain_is_installed_under_the_run_directory_with_the_lock_next_to_the_corpus()
+    {
+        var entry = new CorpusEntry { Name = "x", Url = "https://example.org/x.git", Toolchain = new CorpusToolchain { Sdk = "10.0.401", Runtimes = ["8.0.31"] } };
+        var corpus = Path.GetFullPath(Path.Combine("eval", "corpus.json"));
+        Assert.True(BatchOptions.TryParse(["--corpus", corpus, "--toolchains", "t"], out var options, out var error), error);
+
+        var (_, run) = BatchRunner.SettingsFor(entry, options);
+
+        Assert.Equal("sdk-10.0.401+8.0.31", run.Toolchain?.DirectoryName);
+        Assert.Equal(Path.GetFullPath("t"), run.ToolchainRoot);
+        Assert.Equal(Path.Combine(Path.GetDirectoryName(corpus)!, "toolchains.lock.json"), run.ToolchainLock);
+
+        Assert.True(BatchOptions.TryParse(["--corpus", corpus], out var without, out _));
+        Assert.Throws<InvalidDataException>(() => BatchRunner.SettingsFor(entry, without));
+    }
 }

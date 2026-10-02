@@ -38,10 +38,10 @@ internal sealed class OutcomeCache
         _file = Read(path) is { Version: Version } file ? file : new OutcomeFile { Version = Version };
     }
 
-    /// <summary>The cache of <paramref name="sha"/> in <paramref name="directory"/>; null when caching is off.</summary>
+    /// <summary>The cache named <paramref name="key"/> in <paramref name="directory"/>; null when caching is off.</summary>
     /// <param name="directory">Cache directory of the repository, or null.</param>
-    /// <param name="sha">Commit the mutants are applied to.</param>
-    public static OutcomeCache? Open(string? directory, string sha)
+    /// <param name="key">The commit the mutants are applied to, with the toolchain when one is pinned.</param>
+    public static OutcomeCache? Open(string? directory, string key)
     {
         if (directory is null)
         {
@@ -49,7 +49,7 @@ internal sealed class OutcomeCache
         }
 
         Directory.CreateDirectory(directory);
-        return new OutcomeCache(Path.Combine(directory, sha + ".json"));
+        return new OutcomeCache(Path.Combine(directory, key + ".json"));
     }
 
     /// <summary>Number of stored mutant outcomes.</summary>

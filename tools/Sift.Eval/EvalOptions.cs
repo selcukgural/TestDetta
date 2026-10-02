@@ -25,7 +25,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     public const string Usage = """
         Usage: sift-eval --repo <path-or-url> [options]
                sift-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
-                         [--mutant-parallelism <n>] [--parallel <n>] [-v]
+                         [--mutant-parallelism <n>] [--parallel <n>] [--toolchains <dir>] [-v]
                sift-eval --summarize <dir> --corpus <file>
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -51,6 +51,13 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --outcome-cache <dir>  Keep what the tests did against each synthetic mutant in <dir> and reuse it
                                  next time, so only Sift's selection is computed again (corpus runs use
                                  <out>/outcome-cache/<name>)
+          --sdk <version>        Build, record and test with this exact .NET SDK, installed under --toolchains
+                                 from archives whose SHA-512 is in the toolchain lock (default: dotnet on PATH)
+          --runtime <version>    Add this ASP.NET Core runtime to the toolchain; repeat for several
+          --architecture <arch>  arm64 or x64 (x64 runs under Rosetta on Apple silicon); default the machine's
+          --toolchains <dir>     Where toolchains are installed, one directory each, never changed afterwards
+          --toolchain-lock <file>  Archive hashes (default: <toolchains>/toolchains.lock.json); read-only with
+                                 CI=true, otherwise missing versions are added from Microsoft's release metadata
           --parallel <n>         Test processes per project when recording (default: 1)
           --mutants <n>          Changed members to mutate per merge (default: 3, 0 turns it off)
           --project <csproj>     Only use this test project (path in the repository); repeat for several
@@ -62,7 +69,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           -v, --verbose          Debug logs on stderr
 
         With --corpus, every repository of the corpus file is evaluated with its own settings into
-        <out>/<name>, and <out>/summary.md adds them up. --summarize only rebuilds the summary.
+        <out>/<name>, and <out>/summary.md adds them up. --summarize only rebuilds the summary. A corpus
+        whose entries name a toolchain needs --toolchains; the lock is toolchains.lock.json next to it.
         """;
 
     /// <summary>Parses the command line.</summary>
@@ -78,6 +86,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
         var seed = 1;
         var run = new RunSettings(Parallelism: 1, Mutants: 3, Projects: [], new RepoCommands(Setup: null, Cleanup: null), Framework: null);
         var logLevel = LogLevel.Information;
+        string? sdk = null;
+        var runtimes = new List<string>();
+        string? architecture = null;
         var output = Path.Combine(Path.GetTempPath(), "sift-eval-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
         options = null!;
         error = null;
@@ -156,6 +167,26 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { RecordingCache = Path.GetFullPath(value) };
                     break;
 
+                case "--sdk":
+                    sdk = value;
+                    break;
+
+                case "--runtime":
+                    runtimes.Add(value);
+                    break;
+
+                case "--architecture":
+                    architecture = value;
+                    break;
+
+                case "--toolchains":
+                    run = run with { ToolchainRoot = Path.GetFullPath(value) };
+                    break;
+
+                case "--toolchain-lock":
+                    run = run with { ToolchainLock = Path.GetFullPath(value) };
+                    break;
+
                 case "--mutant-kinds":
                     if (!Eval.MutantKinds.TryParse(value, out var kinds, out error))
                     {
@@ -194,6 +225,29 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
         {
             error = "--repo is required";
             return false;
+        }
+
+        if (sdk is null && (runtimes.Count > 0 || architecture is not null))
+        {
+            error = "--runtime and --architecture belong to a toolchain: give --sdk too";
+            return false;
+        }
+
+        if (sdk is not null)
+        {
+            var toolchain = new Toolchain(sdk, runtimes, architecture);
+            if (!toolchain.IsValid(out error))
+            {
+                return false;
+            }
+
+            if (run.ToolchainRoot is null)
+            {
+                error = "--sdk needs --toolchains <dir> to install the toolchain in";
+                return false;
+            }
+
+            run = run with { Toolchain = toolchain };
         }
 
         var target = new EvalTarget(repository, branch, merges ?? (synthetic > 0 ? 0 : 8), synthetic, seed);
@@ -251,6 +305,18 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// a hang in Sift instead of waiting for ever. Analyses take seconds; the default leaves wide room.
     /// </summary>
     public TimeSpan AnalysisTimeout { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// The .NET the repository is built, recorded and tested with, installed under
+    /// <see cref="ToolchainRoot"/> (docs/design/hermetic-toolchains.md); null for the <c>dotnet</c> on PATH.
+    /// </summary>
+    public Toolchain? Toolchain { get; init; }
+
+    /// <summary>Directory toolchains are installed in; needed with <see cref="Toolchain"/>.</summary>
+    public string? ToolchainRoot { get; init; }
+
+    /// <summary>Lock file with the archives' hashes; null for <c>toolchains.lock.json</c> in <see cref="ToolchainRoot"/>.</summary>
+    public string? ToolchainLock { get; init; }
 }
 
 /// <summary>Shell commands a repository needs besides dotnet.</summary>

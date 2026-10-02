@@ -33,7 +33,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var mutants = new List<SyntheticMutant>();
         try
         {
-            _cache = OutcomeCache.Open(settings.OutcomeCache, sha);
+            // What the tests do depends on the SDK and runtime too, so a toolchain has its own outcomes.
+            _cache = OutcomeCache.Open(settings.OutcomeCache, settings.Toolchain is { } toolchain ? $"{sha}-{toolchain.Rid}-{toolchain.DirectoryName}" : sha);
             if (_cache is { Count: > 0 } cache)
             {
                 LogCacheOpened(cache.Count);
@@ -106,18 +107,18 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                     mutants.Clear();
                     mutants.AddRange(results.OfType<SyntheticMutant>());
                     progress(new SyntheticRun(sha, testClasses, baseline.Seconds, [.. mutants], null)
-                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism });
+                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description });
                 }
             });
 
             return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null)
-                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism };
+                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description };
         }
         catch (Exception ex) when (Expected(ex))
         {
             var cause = ex is AggregateException aggregate ? aggregate.InnerExceptions[0] : ex;
             LogFailed(sha, cause);
-            return new SyntheticRun(sha, 0, 0, mutants, cause.Message);
+            return new SyntheticRun(sha, 0, 0, mutants, cause.Message) { Toolchain = settings.Toolchain?.Description };
         }
     }
 

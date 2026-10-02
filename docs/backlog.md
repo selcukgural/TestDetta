@@ -152,10 +152,13 @@ Interim fixes that are safe for the common case; come back for the complete solu
      about 18 minutes on a 2-core runner; first run 0 of 47 missed). User chose nightly over per-commit
      and kept the repository private (Actions minutes). Still: the full corpus on a schedule on the
      dedicated machine, and comparing a night with the previous one beyond "no miss".
-   - **Hermetic, reproducible runners**: pinned SDK and runtimes per repository, installed
-     side-by-side without touching a live dotnet (2026-10-02 incident), an x64 runner for
-     x64-only suites, no shared ports or global state between parallel jobs, NuGet cache warmed
-     once, MSBuild node reuse off.
+   - ~~Hermetic, reproducible runners~~: done for toolchains (docs/design/hermetic-toolchains.md):
+     SDK and runtimes pinned per corpus entry, installed side by side into directories never
+     changed afterwards, archives checked against `eval/toolchains.lock.json` (read-only in CI),
+     `architecture: x64` for x64-only suites, MSBuild node reuse off; parallel mutant workers get
+     their own clone copy and temporary directory. Still: try `x64` on a real x64-only suite, warm
+     the NuGet cache of the nightly run (actions/cache keyed by the corpus), and fixed ports, which
+     only the parallel check catches.
    - **Watchdogs and clean failure**: done for the evaluation: time limits on builds (30 min), test
      runs (adaptive, scaled with parallel mutants), recording, and each analysis (bb5b676, reports a
      hang in Sift); no wait on a child's output (2cbf3bf); the queue's fast-failure guard. Still:

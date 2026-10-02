@@ -47,6 +47,11 @@ internal static class SyntheticReport
             text.AppendLine();
         }
 
+        if (run.Toolchain is not null)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture, $"- Toolchain: {run.Toolchain}");
+        }
+
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Members changed: {mutants.Count} ({mutants.Count(static m => m.Target.Covered)} covered by a recorded test)");
         text.AppendLine(CultureInfo.InvariantCulture,
@@ -129,6 +134,7 @@ internal static class SyntheticReport
             json.WriteNumber("baselineSeconds", Math.Round(run.BaselineSeconds, 1));
             json.WriteBoolean("schema", run.Schema);
             json.WriteNumber("mutantParallelism", run.MutantParallelism);
+            json.WriteString("toolchain", run.Toolchain);
             json.WriteStartArray("unreported");
             foreach (var project in run.Unreported)
             {

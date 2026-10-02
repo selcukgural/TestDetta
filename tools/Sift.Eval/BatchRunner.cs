@@ -17,6 +17,9 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
     /// </summary>
     public BatchOverrides Overrides { get; init; } = new();
 
+    /// <summary>Where toolchains are installed (<c>--toolchains</c>); needed when an entry names a toolchain.</summary>
+    public string? Toolchains { get; init; }
+
     /// <summary>True when the command line asks for a corpus run or a summary.</summary>
     /// <param name="args">Raw arguments.</param>
     public static bool IsBatch(ReadOnlySpan<string> args)
@@ -44,6 +47,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         var only = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var logLevel = LogLevel.Information;
         var overrides = new BatchOverrides();
+        string? toolchains = null;
         options = null!;
         error = null;
 
@@ -78,6 +82,10 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     output = Path.GetFullPath(value);
                     break;
 
+                case "--toolchains":
+                    toolchains = Path.GetFullPath(value);
+                    break;
+
                 case "--only":
                     only.UnionWith(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                     break;
@@ -110,7 +118,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         }
 
         output ??= Path.Combine(Path.GetTempPath(), "sift-corpus-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides };
+        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains };
         return true;
     }
 }
@@ -146,6 +154,15 @@ internal static partial class BatchRunner
         if (unknown.Count > 0)
         {
             Console.Error.WriteLine($"Not in the corpus: {string.Join(", ", unknown)}");
+            return 2;
+        }
+
+        var pinned = corpus.Repositories
+            .Where(r => options.Only.Count == 0 || options.Only.Contains(r.Name))
+            .FirstOrDefault(r => corpus.Resolve(r).Toolchain is not null);
+        if (!options.SummarizeOnly && pinned is not null && options.Toolchains is null)
+        {
+            Console.Error.WriteLine($"{pinned.Name} names a toolchain; give the corpus run --toolchains <dir>.");
             return 2;
         }
 
@@ -193,7 +210,16 @@ internal static partial class BatchRunner
             OutcomeCache = Path.Combine(options.Output, "outcome-cache", entry.Name),
             RecordingCache = Path.Combine(options.Output, "map-cache", entry.Name),
             MutantParallelism = options.Overrides.MutantParallelism ?? entry.MutantParallelism ?? 1,
+            Toolchain = entry.Toolchain?.ToToolchain(),
+            ToolchainRoot = options.Toolchains,
+            // Committed next to the corpus, so the machine and CI install the same bits.
+            ToolchainLock = Path.Combine(Path.GetDirectoryName(options.CorpusPath)!, "toolchains.lock.json"),
         };
+        if (run.Toolchain is not null && run.ToolchainRoot is null)
+        {
+            throw new InvalidDataException($"{entry.Name} names a toolchain; give the corpus run --toolchains <dir>.");
+        }
+
         if (entry.MutantKinds is { } kindList)
         {
             if (!MutantKinds.TryParse(kindList, out var kinds, out var kindError))

@@ -30,8 +30,31 @@ public sealed class CorpusTests : IDisposable
         Assert.Equal(["fsharp"], a.Tags);
     }
 
+    [Fact]
+    public void An_entry_toolchain_replaces_the_default_one_as_a_whole()
+    {
+        var corpus = Corpus.Load(Write("""
+            {
+              "defaults": { "toolchain": { "sdk": "10.0.401", "runtimes": ["8.0.31"] } },
+              "repositories": [
+                { "name": "a", "url": "https://example.org/a.git", "toolchain": { "sdk": "10.0.401", "architecture": "x64" } },
+                { "name": "b", "url": "https://example.org/b.git" },
+              ],
+            }
+            """));
+
+        var a = corpus.Resolve(corpus.Repositories[0]).Toolchain!.ToToolchain();
+        var b = corpus.Resolve(corpus.Repositories[1]).Toolchain!.ToToolchain();
+
+        Assert.Equal(("sdk-10.0.401", "x64"), (a.DirectoryName, a.Architecture));
+        Assert.Equal(("sdk-10.0.401+8.0.31", null), (b.DirectoryName, b.Architecture));
+    }
+
     [Theory]
     [InlineData("""{ "repositories": [] }""")]
+    [InlineData("""{ "repositories": [ { "name": "a", "url": "x", "toolchain": { "sdk": "../../x" } } ] }""")]
+    [InlineData("""{ "repositories": [ { "name": "a", "url": "x", "toolchain": { "sdk": "10.0.401", "architecture": "x86" } } ] }""")]
+    [InlineData("""{ "repositories": [ { "name": "a", "url": "x", "toolchain": { "runtimes": ["8.0.31"] } } ] }""")]
     [InlineData("""{ "repositories": [ { "name": "a", "url": "x" }, { "name": "A", "url": "y" } ] }""")]
     [InlineData("""{ "repositories": [ { "name": "a", "url": "x", "typo": 1 } ] }""")]
     [InlineData("""{ "repositories": [ { "url": "x" } ] }""")]

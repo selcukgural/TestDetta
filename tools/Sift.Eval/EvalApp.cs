@@ -45,6 +45,7 @@ internal static partial class EvalApp
         Directory.CreateDirectory(options.Output);
         using var loggerFactory = new StderrLoggerFactory(Console.Error, options.LogLevel);
         var logger = loggerFactory.CreateLogger(typeof(EvalApp).FullName!);
+        using var toolchain = EnterToolchain(options.Run, loggerFactory);
 
         // An existing clone is reused, so an interrupted evaluation can continue with its cached maps.
         var clone = Path.Combine(options.Output, "repo");
@@ -101,6 +102,37 @@ internal static partial class EvalApp
 
         return passed ? 0 : 3;
     }
+
+    /// <summary>
+    /// Installs the pinned toolchain if needed and points this process's environment at it until the
+    /// result is disposed; null when no toolchain is pinned and the <c>dotnet</c> on PATH is used.
+    /// </summary>
+    /// <param name="run">Evaluation settings.</param>
+    /// <param name="loggerFactory">Creates the installer's logger.</param>
+    /// <exception cref="InvalidOperationException">The toolchain cannot be installed here or its archives do not match the lock.</exception>
+    private static ToolchainScope? EnterToolchain(RunSettings run, ILoggerFactory loggerFactory)
+    {
+        if (run.Toolchain is not { } toolchain)
+        {
+            return null;
+        }
+
+        if (OperatingSystem.IsWindows() || run.ToolchainRoot is not { } root)
+        {
+            throw new InvalidOperationException("A pinned toolchain needs a toolchain directory, on macOS or Linux.");
+        }
+
+        var locked = string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase);
+        var lockFile = new ToolchainLock(run.ToolchainLock ?? Path.Combine(root, "toolchains.lock.json"), locked);
+        using var source = new MicrosoftReleaseSource();
+        var logger = loggerFactory.CreateLogger<ToolchainInstaller>();
+        var directory = new ToolchainInstaller(root, lockFile, source, logger).Install(toolchain);
+        LogToolchain(logger, toolchain.Description, directory);
+        return new ToolchainScope(directory, toolchain.EffectiveArchitecture);
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Using {Toolchain} from {Directory}")]
+    private static partial void LogToolchain(ILogger logger, string toolchain, string directory);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Changing {Count} sampled member(s) at {Sha}")]
     private static partial void LogSynthetic(ILogger logger, int count, string sha);

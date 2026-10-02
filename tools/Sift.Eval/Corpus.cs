@@ -48,6 +48,12 @@ internal sealed record CorpusEntry
     /// <summary>Shell command after every test run.</summary>
     public string? Cleanup { get; init; }
 
+    /// <summary>
+    /// The .NET to evaluate with (see <see cref="Eval.Toolchain"/>); replaces the default one as a whole.
+    /// A corpus run then needs <c>--toolchains</c>.
+    /// </summary>
+    public CorpusToolchain? Toolchain { get; init; }
+
     /// <summary>Test projects to use (paths in the repository); empty for all.</summary>
     public IReadOnlyList<string>? Projects { get; init; }
 
@@ -115,6 +121,14 @@ internal sealed record Corpus
             throw new InvalidDataException($"{path} lists no repositories.");
         }
 
+        foreach (var entry in corpus.Repositories)
+        {
+            if (corpus.Resolve(entry).Toolchain?.ToToolchain() is { } toolchain && !toolchain.IsValid(out var error))
+            {
+                throw new InvalidDataException($"{path}: toolchain of {entry.Name}: {error}");
+            }
+        }
+
         var duplicate = corpus.Repositories.GroupBy(static r => r.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(static g => g.Count() > 1);
         if (duplicate is not null)
         {
@@ -146,6 +160,7 @@ internal sealed record Corpus
             MutantKinds = entry.MutantKinds ?? d.MutantKinds,
             Setup = entry.Setup ?? d.Setup,
             Cleanup = entry.Cleanup ?? d.Cleanup,
+            Toolchain = entry.Toolchain ?? d.Toolchain,
         };
     }
 
@@ -185,6 +200,9 @@ internal sealed record Corpus
         /// <summary>See <see cref="CorpusEntry.Cleanup"/>.</summary>
         public string? Cleanup { get; init; }
 
+        /// <summary>See <see cref="CorpusEntry.Toolchain"/>.</summary>
+        public CorpusToolchain? Toolchain { get; init; }
+
         /// <summary>As an entry, so <see cref="Resolve"/> can copy from it.</summary>
         public CorpusEntry ToEntry() => new()
         {
@@ -201,6 +219,23 @@ internal sealed record Corpus
             MutantKinds = MutantKinds,
             Setup = Setup,
             Cleanup = Cleanup,
+            Toolchain = Toolchain,
         };
     }
+}
+
+/// <summary>A toolchain as the corpus file writes it.</summary>
+internal sealed record CorpusToolchain
+{
+    /// <summary>See <see cref="Eval.Toolchain.Sdk"/>.</summary>
+    public required string Sdk { get; init; }
+
+    /// <summary>See <see cref="Eval.Toolchain.Runtimes"/>.</summary>
+    public IReadOnlyList<string>? Runtimes { get; init; }
+
+    /// <summary>See <see cref="Eval.Toolchain.Architecture"/>.</summary>
+    public string? Architecture { get; init; }
+
+    /// <summary>The toolchain to install.</summary>
+    public Toolchain ToToolchain() => new(Sdk, Runtimes ?? [], Architecture);
 }

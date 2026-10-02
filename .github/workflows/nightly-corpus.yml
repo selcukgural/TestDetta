@@ -33,7 +33,9 @@ jobs:
       - name: Build the evaluation tool
         run: dotnet build tools/Sift.Eval -c Release
 
-      # Third-party test suites run here: the job has no secrets and only read access.
+      # Third-party test suites run here: the job has no secrets and only read access. They build and
+      # run with the corpus toolchain, installed from archives pinned in eval/toolchains.lock.json
+      # (read-only here, since GitHub sets CI=true).
       - name: Evaluate the smoke corpus
         run: >
           dotnet tools/Sift.Eval/bin/Release/net10.0/Sift.Eval.dll
@@ -42,6 +44,7 @@ jobs:
           --synthetic 20
           --mutant-parallelism 2
           --parallel 2
+          --toolchains "$RUNNER_TEMP/toolchains"
           --out "$RUNNER_TEMP/corpus"
           | tee "$RUNNER_TEMP/corpus-summary.md"; exit "${PIPESTATUS[0]}"
 

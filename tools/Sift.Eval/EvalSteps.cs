@@ -143,6 +143,13 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             settings.Commands.Setup,
             string.Join(";", settings.Projects.Order(StringComparer.Ordinal)),
             string.Join(";", settings.Excluded.Order(StringComparer.Ordinal)));
+
+        // Another SDK or runtime may record differently; without a toolchain the key stays as before.
+        if (settings.Toolchain is { } toolchain)
+        {
+            shape += "\n" + toolchain.Description;
+        }
+
         hash.AppendData(System.Text.Encoding.UTF8.GetBytes(shape));
         return Convert.ToHexStringLower(hash.GetHashAndReset())[..16];
     }
