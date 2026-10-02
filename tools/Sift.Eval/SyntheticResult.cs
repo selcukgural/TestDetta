@@ -55,6 +55,12 @@ internal enum OtherSelector
 
     /// <summary>dotnet-tia's static selection (docs/design/tia-comparison.md).</summary>
     Tia,
+
+    /// <summary>
+    /// Every test project the change affects, run whole: project-level selection as dotnet-affected
+    /// and similar tools do it, from Sift's own project graph and impact. Always measured.
+    /// </summary>
+    ProjectLevel,
 }
 
 /// <summary>One other selector's result for a mutant.</summary>

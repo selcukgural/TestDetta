@@ -82,6 +82,7 @@ internal static class SyntheticReport
         }
         text.AppendLine();
         AppendDrift(text, run, killing);
+        AppendComparison(text, run, killing, OtherSelector.ProjectLevel, "Project level (whole affected test projects, as dotnet-affected selects)");
         AppendTia(text, run, killing);
 
         if (missed.Count > 0)
@@ -148,6 +149,29 @@ internal static class SyntheticReport
             AppendDriftRow(text, DriftName(mode), [.. judged.Select(m => (m.Others[mode].Missed, m.Others[mode].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
         }
 
+        text.AppendLine();
+    }
+
+    /// <summary>Sift next to another selector on the failing mutants both were judged on.</summary>
+    /// <param name="text">Report so far.</param>
+    /// <param name="run">The evaluation.</param>
+    /// <param name="killing">Failing mutants.</param>
+    /// <param name="selector">The other selector.</param>
+    /// <param name="title">Section heading.</param>
+    private static void AppendComparison(StringBuilder text, SyntheticRun run, List<SyntheticMutant> killing, OtherSelector selector, string title)
+    {
+        var judged = killing.Where(m => m.Others.ContainsKey(selector)).ToList();
+        if (judged.Count == 0)
+        {
+            return;
+        }
+
+        text.AppendLine(CultureInfo.InvariantCulture, $"## {title}");
+        text.AppendLine();
+        text.AppendLine("| Selector | Missed mutants | Missed classes | Selected (failing mutants) | Precision |");
+        text.AppendLine("|---|---|---|---|---|");
+        AppendDriftRow(text, "Sift", [.. judged.Select(static m => (m.MissedClasses, m.SelectedShare, m.KilledClasses.Count))], run.TestClasses);
+        AppendDriftRow(text, "project level", [.. judged.Select(m => (m.Others[selector].Missed, m.Others[selector].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
         text.AppendLine();
     }
 

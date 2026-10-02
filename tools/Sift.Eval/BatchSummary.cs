@@ -55,6 +55,15 @@ internal static class BatchSummary
 
         /// <summary>Average share of recorded test classes Sift selected for a killing synthetic mutant.</summary>
         public double SelectedShare => SyntheticKilling == 0 ? 0 : Selected / SyntheticKilling;
+
+        /// <summary>
+        /// Average share project-level selection (whole affected test projects, as dotnet-affected) ran
+        /// for the same killing synthetic mutants; null for reports without it.
+        /// </summary>
+        public double? ProjectLevelShare { get; init; }
+
+        /// <summary>Killing synthetic mutants project-level selection missed a class of; null for reports without it.</summary>
+        public int? ProjectLevelMissed { get; init; }
     }
 
     /// <summary>Writes <c>summary.md</c> and returns its text.</summary>
@@ -106,6 +115,8 @@ internal static class BatchSummary
                 Seconds = r.GetProperty("seconds").GetDouble(),
                 Reused = r.GetProperty("reused").GetInt32(),
                 Precision = Optional(r, "precision")?.GetDouble(),
+                ProjectLevelShare = Optional(r, "projectLevelShare")?.GetDouble(),
+                ProjectLevelMissed = Optional(r, "projectLevelMissed")?.GetInt32(),
             });
         }
 
@@ -145,6 +156,12 @@ internal static class BatchSummary
                     json.WriteNull("precision");
                 }
 
+                if (t.ProjectLevelShare is { } levelShare)
+                {
+                    json.WriteNumber("projectLevelShare", Math.Round(levelShare, 4));
+                    json.WriteNumber("projectLevelMissed", t.ProjectLevelMissed ?? 0);
+                }
+
                 json.WriteNumber("commits", t.Commits);
                 json.WriteStartArray("missedMutants");
                 foreach (var name in t.MissedNames)
@@ -180,6 +197,8 @@ internal static class BatchSummary
         string? sha = null, siftCommit = null, toolchain = null;
         double? precision = null;
         var missedNames = new List<string>();
+        double projectLevel = 0;
+        int projectLevelMutants = 0, projectLevelMissed = 0;
 
         using var syntheticReport = ReadJson(Path.Combine(folder, "synthetic.json"));
         if (syntheticReport is { } synthetic)
@@ -216,6 +235,12 @@ internal static class BatchSummary
                 syntheticKilling++;
                 selected += mutant.GetProperty("selectedShare").GetDouble();
                 failing.Add((mutant.GetProperty("selectedShare").GetDouble(), mutant.GetProperty("killed").GetArrayLength()));
+                if (Optional(mutant, "others") is { } others && Optional(others, "projectLevel") is { } level)
+                {
+                    projectLevelMutants++;
+                    projectLevel += level.GetProperty("selectedShare").GetDouble();
+                    projectLevelMissed += level.GetProperty("missed").GetArrayLength() > 0 ? 1 : 0;
+                }
                 if (mutant.GetProperty("missed").GetArrayLength() > 0)
                 {
                     missed++;
@@ -264,6 +289,8 @@ internal static class BatchSummary
             Seconds = seconds,
             Reused = reused,
             Precision = precision,
+            ProjectLevelShare = projectLevelMutants == 0 ? null : projectLevel / projectLevelMutants,
+            ProjectLevelMissed = projectLevelMutants == 0 ? null : projectLevelMissed,
         };
     }
 
@@ -309,6 +336,15 @@ internal static class BatchSummary
             $"- **Missed: {missed} of {killing} failing mutants**; 95% upper bound of the miss rate: {MissRate.UpperBound(missed, killing):P2}");
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Synthetic changes selected {Average(totals.Sum(static t => t.Selected), totals.Sum(static t => t.SyntheticKilling)):P0} of the recorded test classes on average");
+        var compared = totals.Where(static t => t.ProjectLevelShare is not null && t.SyntheticKilling > 0).ToList();
+        if (compared.Count > 0)
+        {
+            // Mean over repositories, each weighing as one: a repository is one kind of codebase.
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"- Against project-level selection (whole affected test projects, as dotnet-affected): on {compared.Count} repositories Sift ran " +
+                $"{compared.Average(static t => t.SelectedShare):P0} of the test classes on average, project level {compared.Average(static t => t.ProjectLevelShare!.Value):P0}");
+        }
+
         var full = totals.Sum(static t => t.FullSeconds);
         var selected = totals.Sum(static t => t.SelectedSeconds);
         if (full > 0)
@@ -334,14 +370,14 @@ internal static class BatchSummary
         text.AppendLine();
         text.AppendLine("## By repository");
         text.AppendLine();
-        text.AppendLine("| Repository | Tags | Status | Failing mutants | Missed | Selected | History commits | History saved |");
-        text.AppendLine("|---|---|---|---|---|---|---|---|");
+        text.AppendLine("| Repository | Tags | Status | Failing mutants | Missed | Selected | Project level | History commits | History saved |");
+        text.AppendLine("|---|---|---|---|---|---|---|---|---|");
         foreach (var t in totals)
         {
             var saved = t.FullSeconds > 0 ? (1 - (t.SelectedSeconds / t.FullSeconds)).ToString("P0", CultureInfo.InvariantCulture) : "–";
             var share = t.SyntheticKilling > 0 ? Average(t.Selected, t.SyntheticKilling).ToString("P0", CultureInfo.InvariantCulture) : "–";
             text.AppendLine(CultureInfo.InvariantCulture,
-                $"| {Cell(t.Entry.Name)} | {Cell(string.Join(", ", t.Entry.Tags ?? []))} | {Cell(t.Status)} | {t.Killing} | {t.Missed} | {share} | {t.Commits} | {saved} |");
+                $"| {Cell(t.Entry.Name)} | {Cell(string.Join(", ", t.Entry.Tags ?? []))} | {Cell(t.Status)} | {t.Killing} | {t.Missed} | {share} | {(t.ProjectLevelShare is { } level ? level.ToString("P0", CultureInfo.InvariantCulture) : "–")} | {t.Commits} | {saved} |");
         }
 
         var misses = totals.Where(static t => t.MissedNames.Count > 0).ToList();

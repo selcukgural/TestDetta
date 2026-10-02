@@ -159,7 +159,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
 2. **Compare with the tools teams actually use, then with dotnet-tia.** Market check 2026-10-02:
    dotnet-affected (project-level, 408 stars, 4.15 M NuGet downloads) is the free tool .NET teams
    use today, so the first comparison is Sift vs dotnet-affected on the same synthetic changes
-   (selected share and time; both should miss nothing). Datadog Test Impact Analysis is the
+   (selected share and time; both should miss nothing). From round 2 every synthetic run measures
+   project-level selection (the `ProjectLevel` selector: whole affected test projects, from Sift's
+   own MSBuild graph and impact) next to Sift's, per mutant and per repository in summary.md;
+   confirming with the real dotnet-affected tool on a few repositories is the next step. Datadog Test Impact Analysis is the
    commercial one (SaaS, needs an account; later). dotnet-tia (3 stars, 541 downloads, created
    2026-07) is not a market player but the best open-source example of the static-analysis
    approach, so it stays as a technical check of "why record coverage", at low priority; the

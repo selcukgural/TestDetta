@@ -71,6 +71,11 @@ public sealed class EvalMapAgeTests : IDisposable
         Assert.Empty(Strings(drift.GetProperty("bridge").GetProperty("missed")));
         Assert.Empty(Strings(drift.GetProperty("noMap").GetProperty("missed")));
         Assert.Equal(["Shop.Tests: Shop.Tests.DiscountTests"], Strings(drift.GetProperty("naive").GetProperty("missed")));
+
+        // Project level runs the one affected test project whole: everything, and misses nothing.
+        Assert.Equal(1.0, drift.GetProperty("projectLevel").GetProperty("selectedShare").GetDouble());
+        Assert.Empty(Strings(drift.GetProperty("projectLevel").GetProperty("missed")));
+        Assert.Contains("## Project level", File.ReadAllText(Path.Combine(_output, "synthetic.md")), StringComparison.Ordinal);
         Assert.Contains("## Map drift", File.ReadAllText(Path.Combine(_output, "synthetic.md")), StringComparison.Ordinal);
     }
 

@@ -762,7 +762,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var pipeline = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator);
             _steps.PlaceMaps(sha);
             var analysis = pipeline.Run(workspace.RepoRoot, sha);
-            var others = new Dictionary<OtherSelector, OtherSelection>();
+            var others = new Dictionary<OtherSelector, OtherSelection>
+            {
+                [OtherSelector.ProjectLevel] = new([.. analysis.Impact.Tests.Select(static t => new TestProjectSelection(t.Project, TestRunMode.All, [], "affected test project"))], 0),
+            };
             if (mapCommit is not null)
             {
                 // The measured age may exceed Sift's default limit; the bridge is judged on what it does with it.

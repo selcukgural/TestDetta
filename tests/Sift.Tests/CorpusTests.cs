@@ -116,6 +116,35 @@ public sealed class CorpusTests : IDisposable
         Assert.DoesNotContain("| c |", scoped, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Summary_sets_Sift_next_to_project_level_selection()
+    {
+        var corpus = Corpus.Load(Write("""{ "repositories": [ { "name": "a", "url": "x" }, { "name": "old", "url": "y" } ] }"""));
+        Directory.CreateDirectory(Path.Combine(_directory, "a"));
+        File.WriteAllText(Path.Combine(_directory, "a", "stdout.md"), "done");
+        File.WriteAllText(Path.Combine(_directory, "a", "synthetic.json"), """
+            { "error": null, "mutants": [
+              { "target": "A.One", "inconclusive": false, "selectedShare": 0.1, "killed": ["T: X"], "missed": [],
+                "others": { "projectLevel": { "selectedShare": 1.0, "missed": [] } } },
+              { "target": "A.Two", "inconclusive": false, "selectedShare": 0.3, "killed": ["T: Y"], "missed": [],
+                "others": { "projectLevel": { "selectedShare": 0.6, "missed": [] } } } ] }
+            """);
+        // A report from before the comparison existed shows no project-level figure.
+        Directory.CreateDirectory(Path.Combine(_directory, "old"));
+        File.WriteAllText(Path.Combine(_directory, "old", "stdout.md"), "done");
+        File.WriteAllText(Path.Combine(_directory, "old", "synthetic.json"), """
+            { "error": null, "mutants": [ { "target": "B.One", "inconclusive": false, "selectedShare": 0.5, "killed": ["T: Z"], "missed": [] } ] }
+            """);
+
+        var summary = BatchSummary.Write(_directory, corpus);
+
+        Assert.Contains("on 1 repositories Sift ran 20 % of the test classes on average, project level 80 %", summary, StringComparison.Ordinal);
+        Assert.Contains("| a |  | done | 2 | 0 | 20 % | 80 % |", summary, StringComparison.Ordinal);
+        Assert.Contains("| old |  | done | 1 | 0 | 50 % | – |", summary, StringComparison.Ordinal);
+        var totals = BatchSummary.ReadSummary(_directory)!;
+        Assert.Equal(0.8, totals.Single(static t => t.Entry.Name == "a").ProjectLevelShare!.Value, 4);
+    }
+
     private string Write(string json)
     {
         var path = Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".json");
