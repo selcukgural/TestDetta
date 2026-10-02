@@ -43,6 +43,9 @@ internal sealed record SyntheticRun(string Sha, int TestClasses, double Baseline
 
     /// <summary>True when the mutants were switched on in a schema rather than written in one at a time.</summary>
     public bool Schema { get; init; }
+
+    /// <summary>Mutants that ran at once; 1 when one at a time.</summary>
+    public int MutantParallelism { get; init; } = 1;
 }
 
 /// <summary>Confidence bounds for a miss rate measured with mutants.</summary>

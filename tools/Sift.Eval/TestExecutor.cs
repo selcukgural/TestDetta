@@ -56,7 +56,13 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// minutes) before it counts as hung: a mutant can make a test wait forever, for a retry that never
     /// succeeds or a task that never completes.
     /// </summary>
-    private readonly Dictionary<string, double> _longest = new(Paths.Comparer);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, double> _longest = new(Paths.Comparer);
+
+    /// <summary>
+    /// Test runs that may happen at once (mutants run in parallel); a run's time limit grows with it,
+    /// since the runs share the machine.
+    /// </summary>
+    public int Concurrency { get; set; } = 1;
 
     /// <summary>Shortest time limit of a run, however fast the project ran before; tests lower it.</summary>
     internal static TimeSpan MinimumTimeout { get; set; } = TimeSpan.FromMinutes(2);
@@ -164,7 +170,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 }
 
                 var seconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
-                _longest[project.Path] = Math.Max(_longest.GetValueOrDefault(project.Path), seconds);
+                _longest.AddOrUpdate(project.Path, seconds, (_, longest) => Math.Max(longest, seconds));
                 crashed = File.ReadLines(logPath).Any(static l =>
                     l.Contains("Test host process crashed", StringComparison.Ordinal) || l.Contains("Test Run Aborted", StringComparison.Ordinal));
                 if (!crashed)
@@ -200,7 +206,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// <param name="project">Normalized test project path.</param>
     private TimeSpan? Timeout(string project) =>
         _longest.TryGetValue(project, out var seconds)
-            ? TimeSpan.FromSeconds(Math.Max(MinimumTimeout.TotalSeconds, seconds * 5))
+            ? TimeSpan.FromSeconds(Math.Max(MinimumTimeout.TotalSeconds, seconds * 5 * Math.Max(1, Concurrency)))
             : FirstRunTimeout;
 
     /// <summary>Limit of a project's first run, before its usual duration is known.</summary>

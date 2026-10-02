@@ -374,9 +374,16 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     /// <param name="analysis">Sift's analysis.</param>
     /// <param name="project">Normalized test project path.</param>
     /// <param name="testClass">Runtime class name.</param>
-    public static bool IsSelected(AnalysisResult analysis, string project, string testClass)
+    public static bool IsSelected(AnalysisResult analysis, string project, string testClass) =>
+        IsSelected(analysis.Tests, project, testClass);
+
+    /// <summary>True when the decisions run <paramref name="testClass"/> of <paramref name="project"/>.</summary>
+    /// <param name="tests">Sift's decision per affected test project.</param>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="testClass">Runtime test class name.</param>
+    public static bool IsSelected(IReadOnlyList<TestProjectSelection> tests, string project, string testClass)
     {
-        var selection = analysis.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, project, StringComparison.Ordinal));
+        var selection = tests.FirstOrDefault(t => string.Equals(t.Project.Path, project, StringComparison.Ordinal));
         return selection?.Mode switch
         {
             TestRunMode.All => true,

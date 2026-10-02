@@ -38,6 +38,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  check each selection against a mutant of that member
           --seed <n>             Seed for sampling the synthetic changes (default: 1)
           --mutant-kinds <list>  throw, return-default, flip-branch, field-value, or all (default: throw)
+          --mutant-parallelism <n>  Run n synthetic mutants at once on the clone (default: 1); needs the
+                                 schema, and falls back to 1 when parallel runs of the suite interfere
           --no-schema            Write each synthetic mutant in alone instead of switching it on in a
                                  schema (to compare both, or for a suite that notices the switches)
           --outcome-cache <dir>  Keep what the tests did against each synthetic mutant in <dir> and reuse it
@@ -143,8 +145,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { MutantKinds = kinds };
                     break;
 
-                case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed":
-                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg == "--parallel"))
+                case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed" or "--mutant-parallelism":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg is "--parallel" or "--mutant-parallelism"))
                     {
                         error = $"{arg} needs a positive number, not {value}";
                         return false;
@@ -157,6 +159,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     {
                         "--parallel" => run with { Parallelism = number },
                         "--mutants" => run with { Mutants = number },
+                        "--mutant-parallelism" => run with { MutantParallelism = number },
                         _ => run,
                     };
                     break;
@@ -210,6 +213,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// alone, as before schemata, which is also what a schema that changes the suite falls back to.
     /// </summary>
     public bool UseSchema { get; init; } = true;
+
+    /// <summary>
+    /// Synthetic mutants run at once on one clone (needs a schema; a repository with a cleanup command
+    /// always runs one). The evaluation lowers it to 1 when parallel runs of the suite interfere.
+    /// </summary>
+    public int MutantParallelism { get; init; } = 1;
 }
 
 /// <summary>Shell commands a repository needs besides dotnet.</summary>

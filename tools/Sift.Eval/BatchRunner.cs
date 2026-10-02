@@ -168,6 +168,7 @@ internal static partial class BatchRunner
             Excluded = entry.Exclude ?? [],
             // Outside the repository's directory, which is moved aside for a rerun after a fix.
             OutcomeCache = Path.Combine(options.Output, "outcome-cache", entry.Name),
+            MutantParallelism = entry.MutantParallelism ?? 1,
         };
         if (entry.MutantKinds is { } kindList)
         {

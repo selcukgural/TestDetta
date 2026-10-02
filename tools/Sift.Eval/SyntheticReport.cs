@@ -128,6 +128,7 @@ internal static class SyntheticReport
             json.WriteNumber("testClasses", run.TestClasses);
             json.WriteNumber("baselineSeconds", Math.Round(run.BaselineSeconds, 1));
             json.WriteBoolean("schema", run.Schema);
+            json.WriteNumber("mutantParallelism", run.MutantParallelism);
             json.WriteStartArray("unreported");
             foreach (var project in run.Unreported)
             {

@@ -27,6 +27,9 @@ internal sealed class OutcomeCache
     /// <summary>Contents of the cache file.</summary>
     private readonly OutcomeFile _file;
 
+    /// <summary>Guards the file's contents: mutants of one commit may run at once.</summary>
+    private readonly Lock _gate = new();
+
     /// <summary>Reads the cache file of a commit, or starts an empty one.</summary>
     /// <param name="path">Cache file.</param>
     private OutcomeCache(string path)
@@ -50,34 +53,59 @@ internal sealed class OutcomeCache
     }
 
     /// <summary>Number of stored mutant outcomes.</summary>
-    public int Count => _file.Mutants.Count;
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _file.Mutants.Count;
+            }
+        }
+    }
 
     /// <summary>The stored outcome of <paramref name="target"/>, or null.</summary>
     /// <param name="target">Mutant to look up.</param>
-    public MutantOutcome? Find(SyntheticTarget target) =>
-        _file.Mutants.GetValueOrDefault(Key(target));
+    public MutantOutcome? Find(SyntheticTarget target)
+    {
+        lock (_gate)
+        {
+            return _file.Mutants.GetValueOrDefault(Key(target));
+        }
+    }
 
     /// <summary>Stores the outcome of <paramref name="target"/> and writes the file.</summary>
     /// <param name="target">The mutant.</param>
     /// <param name="outcome">What the tests did.</param>
     public void Store(SyntheticTarget target, MutantOutcome outcome)
     {
-        _file.Mutants[Key(target)] = outcome;
-        Save();
+        lock (_gate)
+        {
+            _file.Mutants[Key(target)] = outcome;
+            Save();
+        }
     }
 
     /// <summary>Whether a class (<c>Project: Class</c>) fails alone without any mutant; null when unknown.</summary>
     /// <param name="testClass">Test class.</param>
-    public bool? FailsAlone(string testClass) =>
-        _file.FailsAlone.TryGetValue(testClass, out var fails) ? fails : null;
+    public bool? FailsAlone(string testClass)
+    {
+        lock (_gate)
+        {
+            return _file.FailsAlone.TryGetValue(testClass, out var fails) ? fails : null;
+        }
+    }
 
     /// <summary>Stores whether a class fails alone without any mutant and writes the file.</summary>
     /// <param name="testClass">Test class (<c>Project: Class</c>).</param>
     /// <param name="fails">True when it failed.</param>
     public void StoreFailsAlone(string testClass, bool fails)
     {
-        _file.FailsAlone[testClass] = fails;
-        Save();
+        lock (_gate)
+        {
+            _file.FailsAlone[testClass] = fails;
+            Save();
+        }
     }
 
     /// <summary>Key of a mutant: member and kind.</summary>

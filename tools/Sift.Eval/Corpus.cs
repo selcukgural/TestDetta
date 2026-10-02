@@ -24,6 +24,9 @@ internal sealed record CorpusEntry
     /// <summary>Test processes per project when recording.</summary>
     public int? Parallel { get; init; }
 
+    /// <summary>Synthetic mutants run at once on the clone; see <see cref="RunSettings.MutantParallelism"/>.</summary>
+    public int? MutantParallelism { get; init; }
+
     /// <summary>Latest commits to evaluate from history.</summary>
     public int? Merges { get; init; }
 
@@ -135,6 +138,7 @@ internal sealed record Corpus
             Branch = entry.Branch ?? d.Branch,
             Framework = entry.Framework ?? d.Framework,
             Parallel = entry.Parallel ?? d.Parallel,
+            MutantParallelism = entry.MutantParallelism ?? d.MutantParallelism,
             Merges = entry.Merges ?? d.Merges,
             Mutants = entry.Mutants ?? d.Mutants,
             Synthetic = entry.Synthetic ?? d.Synthetic,
@@ -156,6 +160,9 @@ internal sealed record Corpus
 
         /// <summary>See <see cref="CorpusEntry.Parallel"/>.</summary>
         public int? Parallel { get; init; }
+
+        /// <summary>See <see cref="CorpusEntry.MutantParallelism"/>.</summary>
+        public int? MutantParallelism { get; init; }
 
         /// <summary>See <see cref="CorpusEntry.Merges"/>.</summary>
         public int? Merges { get; init; }
@@ -186,6 +193,7 @@ internal sealed record Corpus
             Branch = Branch,
             Framework = Framework,
             Parallel = Parallel,
+            MutantParallelism = MutantParallelism,
             Merges = Merges,
             Mutants = Mutants,
             Synthetic = Synthetic,

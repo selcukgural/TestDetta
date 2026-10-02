@@ -69,20 +69,49 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 new ProjectAssemblies(_logger).FileNames(graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
 
             using var schema = settings.UseSchema ? TrySchema(assemblies, targets, testProjects, baseline) : null;
-            foreach (var target in targets)
-            {
-                mutants.Add(Run(sha, target, new MutantContext(testProjects, maps, assemblies, baseline, schema), mutants.Count + 1));
-                progress(new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported, Schema = schema is not null });
-            }
+            var context = new MutantContext(testProjects, maps, assemblies, baseline, schema);
 
-            return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null) { Unreported = unreported, Schema = schema is not null };
+            // Selecting edits the clone's sources, so it happens one mutant at a time, before any test runs.
+            var selections = targets.Select(t => Select(sha, t, maps)).ToList();
+            var parallelism = Parallelism(schema, testProjects, baseline);
+            workspace.Executor.Concurrency = parallelism;
+
+            var results = new SyntheticMutant?[targets.Count];
+            var gate = new object();
+            Parallel.For(0, targets.Count, new ParallelOptions { MaxDegreeOfParallelism = parallelism }, i =>
+            {
+                var result = Run(targets[i], context, i + 1, selections[i]);
+                lock (gate)
+                {
+                    results[i] = result;
+                    mutants.Clear();
+                    mutants.AddRange(results.OfType<SyntheticMutant>());
+                    progress(new SyntheticRun(sha, testClasses, baseline.Seconds, [.. mutants], null)
+                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism });
+                }
+            });
+
+            return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null)
+                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism };
         }
-        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException)
+        catch (Exception ex) when (Expected(ex))
         {
-            LogFailed(sha, ex);
-            return new SyntheticRun(sha, 0, 0, mutants, ex.Message);
+            var cause = ex is AggregateException aggregate ? aggregate.InnerExceptions[0] : ex;
+            LogFailed(sha, cause);
+            return new SyntheticRun(sha, 0, 0, mutants, cause.Message);
         }
     }
+
+    /// <summary>
+    /// True for the failures an evaluation reports instead of crashing on: a build, a run or a file
+    /// that went wrong, also when they come out of mutants running in parallel.
+    /// </summary>
+    /// <param name="exception">The failure.</param>
+    private static bool Expected(Exception exception) => exception switch
+    {
+        AggregateException aggregate => aggregate.Flatten().InnerExceptions.All(Expected),
+        _ => exception is InvalidOperationException or InvalidDataException or IOException,
+    };
 
     /// <summary>What every mutant of one commit shares.</summary>
     /// <param name="TestProjects">Built test projects.</param>
@@ -126,6 +155,41 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         LogSchemaChangedBehaviour();
         schema.Dispose();
         return null;
+    }
+
+    /// <summary>
+    /// How many mutants run at once: <see cref="RunSettings.MutantParallelism"/> when the commit has a
+    /// schema, the repository has no cleanup command (which would run between other mutants' tests)
+    /// and that many runs of the full suite at the same time, with no mutant on, each fail exactly the
+    /// baseline's classes; otherwise 1. Suites that write fixed files next to their binaries or bind
+    /// fixed ports interfere with themselves, and their mutants are then run one at a time.
+    /// </summary>
+    /// <param name="schema">The commit's schema, or null.</param>
+    /// <param name="testProjects">Test projects that reported in the baseline.</param>
+    /// <param name="baseline">Run of those projects without any mutant.</param>
+    private int Parallelism(Schema? schema, List<ProjectNode> testProjects, TestRunOutcome baseline)
+    {
+        var wanted = settings.MutantParallelism;
+        if (wanted <= 1 || schema is null || settings.Commands.Cleanup is not null)
+        {
+            return 1;
+        }
+
+        var checks = new TestRunOutcome[wanted];
+        workspace.Executor.Concurrency = wanted;
+        Parallel.For(0, wanted, new ParallelOptions { MaxDegreeOfParallelism = wanted }, i =>
+            checks[i] = workspace.Executor.RunAll(testProjects, $"parallel-check-{i + 1}"));
+        var same = checks.All(check => check.Complete && testProjects.All(p =>
+            (baseline.FailedByProject.GetValueOrDefault(p.Path) ?? new HashSet<string>())
+                .SetEquals(check.FailedByProject.GetValueOrDefault(p.Path) ?? new HashSet<string>())));
+        if (same)
+        {
+            LogParallel(wanted);
+            return wanted;
+        }
+
+        LogParallelInterferes(wanted);
+        return 1;
     }
 
     /// <summary>
@@ -189,18 +253,33 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         return new ActiveMutant(mutation.MutatedMethods, directories, environment: null, mutation);
     }
 
-    /// <summary>Selects for one synthetic change and runs the tests against its mutant.</summary>
+    /// <summary>What Sift selected for one synthetic change; all a mutant's evaluation needs of the analysis.</summary>
+    /// <param name="Tests">Sift's decision per affected test project.</param>
+    /// <param name="Detected">Whether Sift saw the change.</param>
+    /// <param name="Share">Share of recorded classes Sift selected.</param>
+    private sealed record Selection(IReadOnlyList<TestProjectSelection> Tests, bool Detected, double Share);
+
+    /// <summary>Lets Sift select for one synthetic change (editing and restoring the sources).</summary>
     /// <param name="sha">Commit the maps were recorded at.</param>
     /// <param name="target">Member to change.</param>
-    /// <param name="context">What the mutants of the commit share.</param>
-    /// <param name="index">1-based number of the mutant, for log files.</param>
-    private SyntheticMutant Run(string sha, SyntheticTarget target, MutantContext context, int index)
+    /// <param name="maps">Coverage maps at the commit.</param>
+    private Selection Select(string sha, SyntheticTarget target, Dictionary<string, CoverageMap> maps)
     {
         var analysis = Analyze(sha, target);
         var detected = analysis.Impact.CodeChanges.Any(c =>
             c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
-        var share = SelectedShare(analysis, context.Maps);
-        var state = new MutantRun(analysis, context.TestProjects, index, detected, share);
+        return new Selection(analysis.Tests, detected, SelectedShare(analysis, maps));
+    }
+
+    /// <summary>Runs the tests against one mutant and compares the failures with Sift's selection.</summary>
+    /// <param name="target">The mutant.</param>
+    /// <param name="context">What the mutants of the commit share.</param>
+    /// <param name="index">1-based number of the mutant, for log files and the schema switch.</param>
+    /// <param name="selection">What Sift selected for the change.</param>
+    private SyntheticMutant Run(SyntheticTarget target, MutantContext context, int index, Selection selection)
+    {
+        var (tests, detected, share) = selection;
+        var state = new MutantRun(tests, context.TestProjects, index, detected, share);
         if (_cache?.Find(target) is { } stored && FromCache(target, stored, state) is { } reused)
         {
             return reused;
@@ -222,7 +301,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var run = workspace.Executor.RunAll(reached, $"synthetic-{index}", mutation.Environment);
         if (!run.Complete)
         {
-            return RunOutsideSelection(target, new MutantRun(analysis, reached, index, detected, share), mutation);
+            return RunOutsideSelection(target, new MutantRun(tests, reached, index, detected, share), mutation);
         }
 
         var killed = new List<string>();
@@ -234,7 +313,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             {
                 var name = $"{Path.GetFileNameWithoutExtension(project)}: {testClass}";
                 killed.Add(name);
-                if (!EvalSteps.IsSelected(analysis, project, testClass))
+                if (!EvalSteps.IsSelected(tests, project, testClass))
                 {
                     missed.Add(name);
                 }
@@ -282,7 +361,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 return null;
             }
 
-            if (!EvalSteps.IsSelected(state.Analysis, project, failed[(separator + 2)..]))
+            if (!EvalSteps.IsSelected(state.Tests, project, failed[(separator + 2)..]))
             {
                 missed.Add(failed);
             }
@@ -323,12 +402,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         _failsAlone.TryGetValue(testClass, out var fails) ? fails : _cache?.FailsAlone(testClass);
 
     /// <summary>One mutant's state while it is evaluated.</summary>
-    /// <param name="Analysis">Sift's analysis of the synthetic change.</param>
+    /// <param name="Tests">Sift's decision per affected test project.</param>
     /// <param name="Reached">Test projects the mutant can reach.</param>
     /// <param name="Index">Number of the mutant, for log files.</param>
     /// <param name="Detected">Whether Sift saw the change.</param>
     /// <param name="Share">Share of recorded classes Sift selected.</param>
-    private sealed record MutantRun(AnalysisResult Analysis, List<ProjectNode> Reached, int Index, bool Detected, double Share);
+    private sealed record MutantRun(IReadOnlyList<TestProjectSelection> Tests, List<ProjectNode> Reached, int Index, bool Detected, double Share);
 
     /// <summary>
     /// After a full run crashed or hung, runs only what Sift left out, with the mutant in place. A miss
@@ -346,7 +425,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var invocations = new List<TestInvocation>();
         foreach (var project in state.Reached)
         {
-            var decision = state.Analysis.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, project.Path, StringComparison.Ordinal));
+            var decision = state.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, project.Path, StringComparison.Ordinal));
             if (decision?.Mode == TestRunMode.All)
             {
                 continue;
@@ -399,7 +478,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// Whether a test class fails when it runs alone without any mutant, by <c>Project: Class</c>.
     /// Every mutant of a commit shares the same build, so the answer holds for all of them.
     /// </summary>
-    private readonly Dictionary<string, bool> _failsAlone = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _failsAlone = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Runs the missed classes again, alone, with the mutant still in place, and keeps only those that
@@ -623,4 +702,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Schema: the full suite fails differently with the switches written in; every mutant is written in alone instead")]
     private partial void LogSchemaChangedBehaviour();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Count} mutants run at once: that many runs of the full suite at the same time fail as the baseline does")]
+    private partial void LogParallel(int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Count} runs of the full suite at the same time fail differently from the baseline; mutants run one at a time")]
+    private partial void LogParallelInterferes(int count);
 }
