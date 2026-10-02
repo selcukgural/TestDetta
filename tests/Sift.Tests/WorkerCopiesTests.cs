@@ -37,6 +37,9 @@ public sealed class WorkerCopiesTests : IDisposable
             Assert.Equal(3, temporary.Distinct().Count());
             Assert.All(temporary, static t => Assert.True(Directory.Exists(t)));
             Assert.Equal(temporary[1] + Path.DirectorySeparatorChar, copies.Environment(1)["TMPDIR"]);
+            // Tests compare temporary paths with their ToUpper(); a Turkish culture must not change them.
+            var turkish = new System.Globalization.CultureInfo("tr-TR");
+            Assert.All(temporary, t => Assert.Equal(t.ToUpperInvariant(), t.ToUpper(turkish)));
 
             // A write in one copy stays there.
             File.WriteAllText(Path.Combine(roots[1], "bin", "Tests.dll"), "changed");

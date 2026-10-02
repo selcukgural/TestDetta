@@ -43,7 +43,10 @@ internal sealed partial class WorkerCopies : IDisposable
     /// <summary>
     /// Temporary directory of each worker, in the order of <see cref="Roots"/>. Short paths under
     /// <c>/tmp</c> on Unix: .NET puts Unix domain sockets (named pipes of MSBuild and the test
-    /// platform) there, and a socket path may not exceed 104 bytes on macOS.
+    /// platform) there, and a socket path may not exceed 104 bytes on macOS. The name has no letter
+    /// <c>i</c>: tests compare a temporary path with its <c>ToUpper()</c>, which under a Turkish culture
+    /// turns <c>i</c> into <c>İ</c> (Fluid's IncludeTag_Caches_HandleFileSystemCasing then decides the file
+    /// system is case-sensitive, unlike in the baseline, whose temporary path had no <c>i</c>).
     /// </summary>
     public IReadOnlyList<string> Temporary { get; }
 
@@ -78,7 +81,7 @@ internal sealed partial class WorkerCopies : IDisposable
         var temporaryRoot = OperatingSystem.IsWindows() ? Path.GetTempPath() : "/tmp";
         var made = new WorkerCopies(
             [repoRoot, .. Enumerable.Range(2, workers - 1).Select(k => $"{root}.worker-{k}")],
-            [.. Enumerable.Range(1, workers).Select(k => Path.Combine(temporaryRoot, $"sift-{System.Environment.ProcessId}-w{k}"))],
+            [.. Enumerable.Range(1, workers).Select(k => Path.Combine(temporaryRoot, $"sft-{System.Environment.ProcessId}-w{k}"))],
             copies,
             logger);
         try

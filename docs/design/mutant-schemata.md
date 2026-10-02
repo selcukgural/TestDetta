@@ -93,7 +93,8 @@ snapshot `.received` files, local databases) then stays per worker. The measurem
 at once (2 of 100 mutants differed); at 8 the check happened to catch it and fell back to 1.
 When a test output lies outside the clone, a copy would share it, so the evaluation runs one mutant
 at a time; when copying fails, too. Each worker also gets its own temporary directory (`TMPDIR`, `TMP`, `TEMP`
-under a short `/tmp/sift-<pid>-w<k>`, since Unix sockets live there), because suites often write fixed
+under a short `/tmp/sft-<pid>-w<k>`, since Unix sockets live there; no letter `i`, which a
+Turkish-culture `ToUpper()` turns into `İ`, and Fluid's casing test then failed in the workers only), because suites often write fixed
 names under the system's one. With copies, Scriban at 2 and 4 at once matched 1 at a time on all 100
 mutants. The interference check stays as a
 second guard for what copies cannot isolate (fixed ports, global temp files, machine-wide state).
