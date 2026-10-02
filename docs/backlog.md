@@ -98,7 +98,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
   reads of fields that are written once, crediting the code that built the value to every bucket
   that reads it, or an IL pattern match of null check → store. Red test: an instance method
   reached only from a `??=` builder on a shared instance, used by three classes in two processes.
-- **Helpers of another test class** (interim: next commit; OpenTelemetry, 1 class missed). A static
+- **Helpers of another test class** (interim: 00668d2; OpenTelemetry, 1 class missed). A static
   method of a test class counted as its entry point whenever it had any attribute, and the
   compiler adds nullable metadata to ordinary helpers, so a test calling another class's helper
   (SpanBuilderShimTests → SpanContextShimTests.GetSpanContextShim) credited everything after the
