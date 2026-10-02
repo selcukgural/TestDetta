@@ -5,6 +5,8 @@
   "defaults": {
     "framework": "net10.0",
     "parallel": 4,
+    // Mutants run at once, each in its own clone copy; measured identical to one at a time (docs/design/mutant-schemata.md).
+    "mutantParallelism": 4,
     "synthetic": 100,
     "merges": 0,
     // Installed under --toolchains from archives pinned in toolchains.lock.json (docs/design/hermetic-toolchains.md).

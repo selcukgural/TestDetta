@@ -122,6 +122,20 @@ mutants per merge, each against the full suite, and a rewrite costs seconds. A s
 full-suite check run per merge (and parallel mutants n more) to save those seconds, so it would make
 merge mode slower, not faster. Revisit if merge mode ever samples many mutants per merge.
 
+## Measurements (2026-10-02, worker copies and temporary directories, machine shared with a corpus run)
+
+Mutant phase of 100 mutants (seed 1), and whether every mutant's result equals one at a time:
+
+| Repository | 1 | 2 | 4 | 8 |
+|---|---|---|---|---|
+| Scriban | 727 s | 176 s, same | 94 s, same | 78 s, same |
+| Fluid | 608 s | 218 s, same | 124 s, same | fell back to 1 (a timing test fails under that load), same |
+| Mediator | 2589 s | 1113 s, same | 695 s, same | 401 s, same |
+
+Before worker copies, Scriban at 2 and 4 differed on 1 and 2 mutants (TestAot's publish folder);
+before the temporary directories had no `i`, Fluid fell back at every level (Turkish `ToUpper`).
+Default: 4 in the corpus (8 is not reliably faster on a shared machine), 2 on the nightly runner.
+
 ## Measurements to report
 
 Per repository: wall-clock time of a full synthetic evaluation with rewrite, schemata at 1, and
