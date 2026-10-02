@@ -50,6 +50,9 @@ internal static class BatchSummary
         /// <summary>Synthetic mutants whose test outcome came from the outcome cache.</summary>
         public int Reused { get; init; }
 
+        /// <summary>Median test classes Sift ran per class that failed (1.0 is exact); null without data.</summary>
+        public double? Precision { get; init; }
+
         /// <summary>Average share of recorded test classes Sift selected for a killing synthetic mutant.</summary>
         public double SelectedShare => SyntheticKilling == 0 ? 0 : Selected / SyntheticKilling;
     }
@@ -102,6 +105,7 @@ internal static class BatchSummary
                 Toolchain = r.GetProperty("toolchain").GetString(),
                 Seconds = r.GetProperty("seconds").GetDouble(),
                 Reused = r.GetProperty("reused").GetInt32(),
+                Precision = Optional(r, "precision")?.GetDouble(),
             });
         }
 
@@ -132,6 +136,15 @@ internal static class BatchSummary
                 json.WriteNumber("missed", t.Missed);
                 json.WriteNumber("selectedShare", Math.Round(t.SelectedShare, 4));
                 json.WriteNumber("reused", t.Reused);
+                if (t.Precision is { } precision)
+                {
+                    json.WriteNumber("precision", Math.Round(precision, 2));
+                }
+                else
+                {
+                    json.WriteNull("precision");
+                }
+
                 json.WriteNumber("commits", t.Commits);
                 json.WriteStartArray("missedMutants");
                 foreach (var name in t.MissedNames)
@@ -165,6 +178,7 @@ internal static class BatchSummary
         int killing = 0, missed = 0, syntheticKilling = 0, commits = 0, reused = 0;
         double selected = 0, fullSeconds = 0, selectedSeconds = 0, seconds = 0;
         string? sha = null, siftCommit = null, toolchain = null;
+        double? precision = null;
         var missedNames = new List<string>();
 
         using var syntheticReport = ReadJson(Path.Combine(folder, "synthetic.json"));
@@ -174,6 +188,7 @@ internal static class BatchSummary
             siftCommit = Optional(synthetic.RootElement, "siftCommit")?.GetString();
             toolchain = Optional(synthetic.RootElement, "toolchain")?.GetString();
             seconds = Optional(synthetic.RootElement, "seconds")?.GetDouble() ?? 0;
+            var failing = new List<(double, int)>();
             if (synthetic.RootElement.GetProperty("error").GetString() is { } syntheticError)
             {
                 status = "failed: " + syntheticError;
@@ -200,12 +215,15 @@ internal static class BatchSummary
                 killing++;
                 syntheticKilling++;
                 selected += mutant.GetProperty("selectedShare").GetDouble();
+                failing.Add((mutant.GetProperty("selectedShare").GetDouble(), mutant.GetProperty("killed").GetArrayLength()));
                 if (mutant.GetProperty("missed").GetArrayLength() > 0)
                 {
                     missed++;
                     missedNames.Add(mutant.GetProperty("target").GetString()!);
                 }
             }
+
+            precision = SyntheticReport.OverSelection(failing, Optional(synthetic.RootElement, "testClasses")?.GetInt32() ?? 0);
         }
 
         using var historyReport = ReadJson(Path.Combine(folder, "results.json"));
@@ -245,6 +263,7 @@ internal static class BatchSummary
             Toolchain = toolchain,
             Seconds = seconds,
             Reused = reused,
+            Precision = precision,
         };
     }
 

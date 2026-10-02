@@ -165,8 +165,9 @@ Interim fixes that are safe for the common case; come back for the complete solu
      runs (adaptive, scaled with parallel mutants), recording, and each analysis (bb5b676, reports a
      hang in Sift); no wait on a child's output (2cbf3bf); the queue's fast-failure guard. Still:
      a heartbeat over the queue and an incident log, with the runner work below.
-   - **Dashboard**: per repository and Sift commit, misses, selection share, precision, run time
-     and what was reused, so trends and regressions are visible at a glance.
+   - ~~Dashboard~~: done. `--history <dir>` keeps every corpus run's summary.json and redraws a static
+     `dashboard.html` (per repository: status, commit, misses, selected share, precision, time,
+     reuse, with trends over the last 30 runs). Still: run it from the scheduled full corpus.
 
 1. **Tolerate map drift with a static bridge (priority).** Maps are used only when recorded exactly
    at the merge base. With AI-assisted teams merging dozens of commits a day, a PR's merge base

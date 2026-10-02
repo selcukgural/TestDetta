@@ -23,6 +23,9 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
     /// <summary>Directory or <c>summary.json</c> of an earlier run to compare with (<c>--compare</c>); null for none.</summary>
     public string? Compare { get; init; }
 
+    /// <summary>History directory that keeps every run's summary and the dashboard (<c>--history</c>); null for none.</summary>
+    public string? History { get; init; }
+
     /// <summary>True when the command line asks for a corpus run or a summary.</summary>
     /// <param name="args">Raw arguments.</param>
     public static bool IsBatch(ReadOnlySpan<string> args)
@@ -52,6 +55,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         var overrides = new BatchOverrides();
         string? toolchains = null;
         string? compare = null;
+        string? history = null;
         options = null!;
         error = null;
 
@@ -84,6 +88,10 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 
                 case "--out":
                     output = Path.GetFullPath(value);
+                    break;
+
+                case "--history":
+                    history = Path.GetFullPath(value);
                     break;
 
                 case "--compare":
@@ -126,7 +134,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         }
 
         output ??= Path.Combine(Path.GetTempPath(), "sift-corpus-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains, Compare = compare };
+        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains, Compare = compare, History = history };
         return true;
     }
 }
@@ -203,6 +211,10 @@ internal static partial class BatchRunner
         }
 
         Console.Out.WriteLine($"\nSummary: {Path.Combine(options.Output, "summary.md")}");
+        if (options.History is { } historyDirectory)
+        {
+            Console.Out.WriteLine($"Dashboard: {BatchHistory.Record(options.Output, historyDirectory, DateTimeOffset.UtcNow)}");
+        }
         return exitCode;
     }
 

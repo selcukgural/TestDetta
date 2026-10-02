@@ -192,19 +192,25 @@ internal static class SyntheticReport
     /// </summary>
     /// <param name="killing">Mutants that failed at least one class.</param>
     /// <param name="testClasses">Recorded test classes the selected share is taken of.</param>
-    private static double? OverSelection(List<SyntheticMutant> killing, int testClasses)
+    private static double? OverSelection(List<SyntheticMutant> killing, int testClasses) =>
+        OverSelection(killing.Select(static m => (m.SelectedShare, m.KilledClasses.Count)), testClasses);
+
+    /// <summary>See <see cref="OverSelection(List{SyntheticMutant}, int)"/>; from selected shares and failed class counts, as the reports hold them.</summary>
+    /// <param name="killing">Selected share and number of failed classes of each failing mutant.</param>
+    /// <param name="testClasses">Recorded test classes the selected share is taken of.</param>
+    internal static double? OverSelection(IEnumerable<(double Share, int Failed)> killing, int testClasses)
     {
         // A mutant caught only by a crash has no failed class to divide by.
-        var classified = killing.Where(static m => m.KilledClasses.Count > 0).ToList();
-        if (classified.Count == 0 || testClasses == 0)
+        var ratios = killing
+            .Where(static m => m.Failed > 0)
+            .Select(m => Math.Max(m.Share * testClasses, m.Failed) / m.Failed)
+            .Order()
+            .ToList();
+        if (ratios.Count == 0 || testClasses == 0)
         {
             return null;
         }
 
-        var ratios = classified
-            .Select(m => Math.Max(m.SelectedShare * testClasses, m.KilledClasses.Count) / m.KilledClasses.Count)
-            .Order()
-            .ToList();
         return ratios.Count % 2 == 1 ? ratios[ratios.Count / 2] : (ratios[(ratios.Count / 2) - 1] + ratios[ratios.Count / 2]) / 2;
     }
 
