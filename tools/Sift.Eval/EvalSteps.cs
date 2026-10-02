@@ -32,6 +32,13 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     public Dictionary<string, CoverageMap> RecordAt(string sha)
     {
         var directory = Path.Combine(workspace.MapCache, sha);
+        var cached = settings.RecordingCache is { } cache ? Path.Combine(cache, $"{sha}-{RecordingKey(settings)}") : null;
+        if (!Directory.Exists(directory) && cached is not null && Directory.Exists(cached))
+        {
+            CopyDirectory(cached, directory);
+            LogRecordingReused(sha, cached);
+        }
+
         if (!Directory.Exists(directory))
         {
             workspace.Git.Checkout(sha);
@@ -71,6 +78,18 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             File.WriteAllLines(Path.Combine(temporary, HungFile), _hung.Select(p => Path.GetRelativePath(workspace.RepoRoot, p)));
             Directory.Move(temporary, directory);
             LogRecorded(sha);
+            if (cached is not null)
+            {
+                // Copied in full before it is renamed into place, so a killed run never leaves half a recording.
+                var partial = cached + ".partial";
+                if (Directory.Exists(partial))
+                {
+                    Directory.Delete(partial, recursive: true);
+                }
+
+                CopyDirectory(directory, partial);
+                Directory.Move(partial, cached);
+            }
         }
 
         // Cached maps say nothing about projects that hung while recording; the list next to them does.
@@ -91,6 +110,50 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         }
 
         return maps;
+    }
+
+    /// <summary>
+    /// Version of the evaluation's own recording logic (<see cref="RecordAt"/>, <see cref="TestProjects"/>,
+    /// the recording options it passes); raise it with any change there, since cached recordings are
+    /// keyed by it.
+    /// </summary>
+    private const int RecordingVersion = 1;
+
+    /// <summary>
+    /// What decides a recording besides the commit: Sift's recording code (the contents of the core,
+    /// coverage and tracker assemblies, so any change to Sift records again), the evaluation's recording
+    /// logic (<see cref="RecordingVersion"/>) and the settings that shape it. A hash, as a file name part.
+    /// </summary>
+    /// <param name="settings">Evaluation settings.</param>
+    internal static string RecordingKey(RunSettings settings)
+    {
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        foreach (var assembly in new[] { typeof(ProjectGraphLoader).Assembly, typeof(CoverageRecorder).Assembly, typeof(Sift.Coverage.Runtime.SiftTracker).Assembly })
+        {
+            hash.AppendData(File.ReadAllBytes(assembly.Location));
+        }
+
+        var shape = string.Join("\n",
+            RecordingVersion,
+            settings.Framework,
+            settings.Parallelism,
+            settings.Commands.Setup,
+            string.Join(";", settings.Projects.Order(StringComparer.Ordinal)),
+            string.Join(";", settings.Excluded.Order(StringComparer.Ordinal)));
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(shape));
+        return Convert.ToHexStringLower(hash.GetHashAndReset())[..16];
+    }
+
+    /// <summary>Copies a directory's files (one level, as recordings are) to a new directory.</summary>
+    /// <param name="source">Directory to copy.</param>
+    /// <param name="target">Directory to create.</param>
+    private static void CopyDirectory(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
+        }
     }
 
     /// <summary>
@@ -391,6 +454,9 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             _ => false,
         };
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Recording of {Sha} reused from {Cache}")]
+    private partial void LogRecordingReused(string sha, string cache);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} does not build here and is left out: {Errors}")]
     private partial void LogBuildFailed(string project, string errors);

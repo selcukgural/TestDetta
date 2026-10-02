@@ -42,6 +42,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  schema, and falls back to 1 when parallel runs of the suite interfere
           --no-schema            Write each synthetic mutant in alone instead of switching it on in a
                                  schema (to compare both, or for a suite that notices the switches)
+          --recording-cache <dir>  Keep recorded coverage maps in <dir> and reuse them while the commit, the
+                                 recording settings and Sift's recording code are the same (corpus runs
+                                 use <out>/map-cache/<name>)
           --outcome-cache <dir>  Keep what the tests did against each synthetic mutant in <dir> and reuse it
                                  next time, so only Sift's selection is computed again (corpus runs use
                                  <out>/outcome-cache/<name>)
@@ -136,6 +139,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { OutcomeCache = Path.GetFullPath(value) };
                     break;
 
+                case "--recording-cache":
+                    run = run with { RecordingCache = Path.GetFullPath(value) };
+                    break;
+
                 case "--mutant-kinds":
                     if (!Eval.MutantKinds.TryParse(value, out var kinds, out error))
                     {
@@ -207,6 +214,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// of the repository (see <see cref="OutcomeCache"/>); null to run every mutant's tests.
     /// </summary>
     public string? OutcomeCache { get; init; }
+
+    /// <summary>
+    /// Directory where recorded coverage maps are kept between evaluations, keyed by commit and by
+    /// everything that decides a recording (see <c>EvalSteps.RecordingKey</c>); null to record every time.
+    /// </summary>
+    public string? RecordingCache { get; init; }
 
     /// <summary>
     /// True (the default) to switch synthetic mutants on in a schema; false to write each one in

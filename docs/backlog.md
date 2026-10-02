@@ -140,16 +140,13 @@ Interim fixes that are safe for the common case; come back for the complete solu
    launch must answer "did this change cost safety?" across many real repositories, in minutes,
    not the hours a corpus round takes now. Round 1 spent most of its time re-running tests and
    recovering from environment accidents; the real findings took minutes each. In order of payoff:
-   - **Mutant schemata instead of rewriting assemblies**: compile every sampled mutant into the
-     assembly once behind a switch (an environment variable or a static field set by the tracker),
-     so mutants need no rewrite, no restore and no copy per output folder, and several mutants
-     run at once in separate test processes on the same binaries.
-   - **Parallel mutants**: with schemata (or per-worker copies of the test outputs), run N mutants
-     concurrently on one repository instead of one repository per worker.
-   - **Stable sample + outcome cache** (cache f12e713, stable sample done): a Sift
-     change re-evaluates a repository by recording and computing selections only.
-   - **Cache recordings and baselines** per commit and instrumenter version, so a selection-only
-     change does not even re-record.
+   - ~~Mutant schemata~~ and ~~parallel mutants~~: done (docs/design/mutant-schemata.md; d7530a9,
+     089a2e0, 302abe6). Default parallelism to be set from the measurements in the design doc.
+   - ~~Stable sample + outcome cache~~: done (f12e713, 99347df).
+   - ~~Cache recordings~~: done (next commit), keyed by commit, recording settings and the contents
+     of Sift's core, coverage and tracker assemblies, so any Sift change records again. Baselines
+     are not cached: one or two suite runs per commit, and they also measure the time limits and
+     anchor the schema and parallel checks.
    - **Tiers**: a smoke corpus (fast repositories, ~20 mutants each) on every Sift commit in CI;
      the full corpus nightly or weekly; results compared with the previous run automatically.
    - **Hermetic, reproducible runners**: pinned SDK and runtimes per repository, installed
