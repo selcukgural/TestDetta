@@ -81,3 +81,27 @@ case.
   construction). Sabotage-checked: without between detection, without the constructor rule, and
   with exits only on normal returns, one test each fails. 287 tests green. Round 2 is the first corpus run with it: watch recording failures
   (IL wrapping of unusual test methods, F# test assemblies) and the precision change.
+
+## Pools and caches in collections (2026-10-02)
+
+The same "built for one, reused by others" shape without a framework: a hand-rolled pool keeps
+objects in a `Stack<T>`/`ConcurrentBag<T>`, a cache in a `Dictionary`; the first test that misses
+builds the object, later tests take it out without running that code. Field-read probes do not see
+it (the collection field is stored once; items go in through method calls). Proven by
+`PooledObjectTests` (stack + factory, dictionary cache, generic `Pool<T>` over a `Func<T>`): the
+factory's code was credited to the first renter only.
+
+- Instrumenter, per module: a field holding a known collection (`Stack`, `Queue`, `List`,
+  `LinkedList`, `HashSet`, `Dictionary`, `SortedDictionary` and the concurrent ones) that some
+  method takes an object back out of (`Pop`, `TryPop`, `Dequeue`, `TryDequeue`, `TryTake`,
+  `TryGetValue`, `TryRemove` on a receiver loaded from the field) is a reused collection, with
+  its item type.
+- In every method that loads a reused collection field, each call or `newobj` producing the item
+  type (the same type, a derived or implementing one; for a generic item type any generic
+  parameter or `object`) is surrounded by `EnterCache`/`ExitCache`, from where its arguments start
+  when they are built by calls. Everything that runs inside is initialization: the selection
+  traces it by name too, which reaches the renting method, run by every renter.
+- `Peek` and `RemoveAt` do not count: parsers use them on stacks of objects built and used within
+  one parse. Precision cost to watch in round 2: parsers that `Pop` (Markdig, Scriban, Fluid) and
+  dictionary caches in libraries (Newtonsoft, NodaTime).
+- Sabotage-checked: without the marking, all three shapes fail.

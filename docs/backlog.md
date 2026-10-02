@@ -67,9 +67,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `Func<T>` and calls that on a miss, as `DefaultObjectPool` does. Other pools (`ArrayPool`, hand-rolled
   `Stack<T>` caches, `[ThreadStatic]` buffers) still credit what they build to the first class.
   `[ThreadStatic]` buffers stored in fields are covered by field-read probes now.
-  Complete fix: detect "create on miss" call sites generally (a pool keeps its objects in a
-  collection, so field-read probes do not see them); a hand-rolled `Stack<T>` cache still relies on
-  the run-once constructor rule (traced by name).
+  ~~Complete fix: detect "create on miss" call sites generally~~ (done 2026-10-02,
+  docs/design/between-tests-code.md "Pools and caches in collections": code that builds an item of
+  a collection objects are taken back out of is a cache fill). `ArrayPool` and pools in other
+  assemblies build nothing instrumented.
 - ~~Hand-rolled lazy initialisation~~ (completed by field-read probes): `_x ??= new X()` and
   `if (_x == null) _x = ...` on any field credit the builder to every reader. Not seen: a value
   built on another thread and handed over before the store; the run-once rules stay for it.

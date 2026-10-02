@@ -195,6 +195,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
+        probes = probes with { ReusedCollections = ReusedCollections(module) };
 
         foreach (var type in module.GetTypes())
         {
@@ -273,6 +274,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary><see cref="SiftTracker.PrepareTestInstance"/>.</summary>
         public required MethodReference PrepareTestInstance { get; init; }
+
+        /// <summary>Collection fields of the module that objects are taken back out of, with their element type; see <see cref="ReusedCollections"/>.</summary>
+        public Dictionary<FieldDefinition, TypeReference> ReusedCollections { get; init; } = [];
     }
 
     /// <summary>
@@ -510,6 +514,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType));
+        MarkPoolFills(body, il, probes);
         if (testCodeEnd is TestCodeEnd.Return or TestCodeEnd.Task)
         {
             TrackTestCode(method, il, probes, first);
@@ -707,6 +712,196 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             il.InsertAfter(exchange, il.Create(OpCodes.Call, probes.ExitCache));
             Retarget(body, start, enter);
         }
+    }
+
+    /// <summary>Collections whose items a pool or hand-rolled cache takes back out, by generic definition; the value is the index of the item type argument.</summary>
+    private static readonly FrozenDictionary<string, int> ReusableCollections = new Dictionary<string, int>(StringComparer.Ordinal)
+    {
+        ["System.Collections.Generic.Stack`1"] = 0,
+        ["System.Collections.Generic.Queue`1"] = 0,
+        ["System.Collections.Generic.List`1"] = 0,
+        ["System.Collections.Generic.LinkedList`1"] = 0,
+        ["System.Collections.Generic.HashSet`1"] = 0,
+        ["System.Collections.Generic.Dictionary`2"] = 1,
+        ["System.Collections.Generic.SortedDictionary`2"] = 1,
+        ["System.Collections.Concurrent.ConcurrentBag`1"] = 0,
+        ["System.Collections.Concurrent.ConcurrentStack`1"] = 0,
+        ["System.Collections.Concurrent.ConcurrentQueue`1"] = 0,
+        ["System.Collections.Concurrent.ConcurrentDictionary`2"] = 1,
+    }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Calls that take an object back out of a collection for reuse (a pool's rent, a cache's hit).
+    /// <c>Peek</c> and <c>RemoveAt</c> are left out: parsers use them on stacks of objects built and
+    /// consumed within one parse, and marking those as run-once would only cost precision.
+    /// </summary>
+    private static readonly FrozenSet<string> Retrievals = FrozenSet.Create(
+        StringComparer.Ordinal, "Pop", "TryPop", "Dequeue", "TryDequeue", "TryTake", "TryGetValue", "TryRemove");
+
+    /// <summary>
+    /// Fields of the module holding a collection that some method takes an object back out of
+    /// (<see cref="Retrievals"/>), with the type of the collection's items: hand-rolled pools
+    /// (<c>Stack&lt;T&gt;</c> rented with <c>TryPop</c>) and caches (<c>Dictionary</c> read with
+    /// <c>TryGetValue</c>). The objects in them were built for whichever test first missed, and every
+    /// later test reuses them without running that code (docs/design/between-tests-code.md, pools).
+    /// </summary>
+    /// <param name="module">Module being instrumented.</param>
+    private static Dictionary<FieldDefinition, TypeReference> ReusedCollections(ModuleDefinition module)
+    {
+        var reused = new Dictionary<FieldDefinition, TypeReference>();
+        foreach (var method in module.GetTypes().SelectMany(static t => t.Methods).Where(static m => m.HasBody))
+        {
+            foreach (var call in method.Body.Instructions)
+            {
+                if ((call.OpCode != OpCodes.Call && call.OpCode != OpCodes.Callvirt) || call.Operand is not MethodReference target
+                    || !Retrievals.Contains(target.Name) || !ReusableCollections.ContainsKey(target.DeclaringType.GetElementType().FullName)
+                    || ReceiverField(call) is not { } field || field.Module != module)
+                {
+                    continue;
+                }
+
+                if (field.FieldType is GenericInstanceType collection
+                    && ReusableCollections.TryGetValue(collection.ElementType.FullName, out var item)
+                    && item < collection.GenericArguments.Count)
+                {
+                    reused.TryAdd(field, collection.GenericArguments[item]);
+                }
+            }
+        }
+
+        return reused;
+    }
+
+    /// <summary>
+    /// The field <paramref name="call"/>'s receiver was loaded from, for the usual shapes:
+    /// <c>ldsfld F</c>, or a load (<c>ldarg</c>, <c>ldsfld</c>, <c>ldloc</c>) followed by <c>ldfld</c>s ending in <c>F</c>,
+    /// right where the call's arguments start. Null for anything else.
+    /// </summary>
+    /// <param name="call">A call on an instance.</param>
+    private static FieldDefinition? ReceiverField(Instruction call)
+    {
+        if (call.Operand is not MethodReference { HasThis: true } target)
+        {
+            return null;
+        }
+
+        // Walk back over the other arguments to the instruction that finished pushing the receiver.
+        var needed = target.Parameters.Count;
+        var instruction = call.Previous;
+        for (var steps = 0; instruction is not null && needed > 0 && steps < 32; steps++)
+        {
+            if (instruction.OpCode.FlowControl is not (FlowControl.Next or FlowControl.Call) || Pops(instruction) is not { } pops || Pushes(instruction) is not { } pushes)
+            {
+                return null;
+            }
+
+            needed -= pushes - pops;
+            instruction = instruction.Previous;
+        }
+
+        if (needed != 0 || instruction is null)
+        {
+            return null;
+        }
+
+        return instruction.OpCode == OpCodes.Ldfld || instruction.OpCode == OpCodes.Ldsfld || instruction.OpCode == OpCodes.Ldflda || instruction.OpCode == OpCodes.Ldsflda
+            ? (instruction.Operand as FieldReference)?.Resolve()
+            : null;
+    }
+
+    /// <summary>
+    /// In a method that loads a reused collection field (<see cref="ReusedCollections"/>), surrounds
+    /// every call or <c>newobj</c> that produces the collection's item type with <see cref="SiftTracker.EnterCache"/>
+    /// and <see cref="SiftTracker.ExitCache"/>: on a miss the pool or cache builds its item there, and
+    /// what that runs serves every later user, so it is run-once evidence. The mark starts where the
+    /// arguments start when they are built by calls (<c>new Buffer(Build())</c>).
+    /// </summary>
+    /// <param name="body">Method body with short branches already expanded.</param>
+    /// <param name="il">Processor of the body.</param>
+    /// <param name="probes">Tracker references with the module's reused collections.</param>
+    private static void MarkPoolFills(MethodBody body, ILProcessor il, Probes probes)
+    {
+        if (probes.ReusedCollections.Count == 0)
+        {
+            return;
+        }
+
+        var items = body.Instructions
+            .Where(static i => i.OpCode == OpCodes.Ldfld || i.OpCode == OpCodes.Ldsfld || i.OpCode == OpCodes.Ldflda || i.OpCode == OpCodes.Ldsflda)
+            .Select(i => (i.Operand as FieldReference)?.Resolve())
+            .Where(f => f is not null && probes.ReusedCollections.ContainsKey(f))
+            .Select(f => probes.ReusedCollections[f!])
+            .ToList();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        var builds = body.Instructions
+            .Where(i => i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix && Produced(i) is { } produced
+                        && items.Exists(item => Produces(produced, item)))
+            .ToList();
+        foreach (var build in builds)
+        {
+            var start = ArgumentStart(body, build) ?? build;
+            var enter = il.Create(OpCodes.Call, probes.EnterCache);
+            il.InsertBefore(start, enter);
+            il.InsertAfter(build, il.Create(OpCodes.Call, probes.ExitCache));
+            Retarget(body, start, enter);
+        }
+    }
+
+    /// <summary>The type a call or <c>newobj</c> produces; null for other instructions, for calls on a collection itself, and for void.</summary>
+    /// <param name="instruction">Instruction.</param>
+    private static TypeReference? Produced(Instruction instruction)
+    {
+        if (instruction.Operand is not MethodReference target)
+        {
+            return null;
+        }
+
+        if (instruction.OpCode == OpCodes.Newobj)
+        {
+            return target.DeclaringType;
+        }
+
+        if ((instruction.OpCode != OpCodes.Call && instruction.OpCode != OpCodes.Callvirt)
+            || ReusableCollections.ContainsKey(target.DeclaringType.GetElementType().FullName)
+            || target.ReturnType.MetadataType == MetadataType.Void)
+        {
+            return null;
+        }
+
+        return target.ReturnType;
+    }
+
+    /// <summary>
+    /// True when a value of type <paramref name="produced"/> can be an item of type <paramref name="item"/>:
+    /// the same type, a type derived from it or implementing it, or, for an item type that is a generic
+    /// parameter (<c>Pool&lt;T&gt;</c>), any generic parameter or <c>object</c>.
+    /// </summary>
+    /// <param name="produced">Type a call or constructor produces.</param>
+    /// <param name="item">Item type of the collection.</param>
+    private static bool Produces(TypeReference produced, TypeReference item)
+    {
+        if (item.IsGenericParameter)
+        {
+            return produced.IsGenericParameter || produced.MetadataType == MetadataType.Object;
+        }
+
+        var wanted = item.GetElementType().FullName;
+        var type = TryResolve(produced);
+        for (var depth = 0; type is not null && depth < 16; depth++)
+        {
+            if (type.FullName == wanted || type.Interfaces.Any(i => i.InterfaceType.GetElementType().FullName == wanted))
+            {
+                return true;
+            }
+
+            type = type.BaseType is { } baseType ? TryResolve(baseType) : null;
+        }
+
+        return produced.GetElementType().FullName == wanted;
     }
 
     /// <summary>
