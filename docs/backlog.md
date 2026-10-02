@@ -75,10 +75,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   running class but used by another still switches when the framework calls it. Still the old
   behaviour, which switches: calls from test methods declared on a base class of the running
   class (frames of the base type), and between classes nested in one outer class.
-- **Startup time vs. discovery-time data** (interim: 7c33ec6). Theory data enumerated during
-  discovery now ends the recorded startup time early and adds discovery time to the first data
-  class. Complete fix: count time spent in data members during discovery as startup (it is paid
-  by every run), so per-class times and the value report stay right.
+- ~~Startup time vs. discovery-time data~~ (interim 7c33ec6, completed): data members enter their
+  class through `EnterDataSource`; before the first test, framework discovery, their time stays
+  start-up while their code still counts for the class. Data enumerated when its tests run is
+  that class's time, as before.
 - ~~Files rewritten for other tools match the SDK byte for byte~~ (interim 911e519, completed):
   a test rewrites a real SDK-written `deps.json` and gets every byte back; an entry the SDK wrote
   for the runtime (a project that references it) is now kept instead of replaced. `deps.json` is

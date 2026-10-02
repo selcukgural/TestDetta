@@ -114,6 +114,13 @@ public static class SiftTracker
     private static double _startupSeconds;
 
     /// <summary>
+    /// True once a test class, fixture or setup scope was entered. Test data the framework enumerates
+    /// during discovery enters its class too, for the hits, but its time is start-up: every run pays
+    /// it, whatever it selects.
+    /// </summary>
+    private static bool _testsStarted;
+
+    /// <summary>
     /// Writes the results when the process ends. Under Microsoft.Testing.Platform the tests run in
     /// their own executable, where no VSTest collector exists to say the session is over.
     /// </summary>
@@ -265,12 +272,21 @@ public static class SiftTracker
     /// </summary>
     /// <param name="instance">The test class instance (<c>this</c>).</param>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    public static void EnterTestInstance(object instance) => EnterClass(RuntimeName(instance.GetType()));
+    public static void EnterTestInstance(object instance) => EnterClass(RuntimeName(instance.GetType()), data: false);
 
     /// <summary>Makes <paramref name="testClass"/> the current bucket.</summary>
     /// <param name="testClass">Runtime class name, nested classes joined with '+'.</param>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    public static void EnterTestClass(string testClass) => EnterClass(testClass);
+    public static void EnterTestClass(string testClass) => EnterClass(testClass, data: false);
+
+    /// <summary>
+    /// Makes <paramref name="testClass"/> the current bucket for the code of a test data member it
+    /// alone uses. Before the first test the framework is discovering tests, and the time spent counts
+    /// as start-up rather than as the class's.
+    /// </summary>
+    /// <param name="testClass">Runtime name of the class using the data.</param>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static void EnterDataSource(string testClass) => EnterClass(testClass, data: true);
 
     /// <summary>
     /// Makes <paramref name="testClass"/> the current bucket, unless a test of the current class is
@@ -279,7 +295,8 @@ public static class SiftTracker
     /// crediting it to the other class would hide it from the calling class's map.
     /// </summary>
     /// <param name="testClass">Runtime class name, nested classes joined with '+'.</param>
-    private static void EnterClass(string testClass)
+    /// <param name="data">True when entered for a test data member.</param>
+    private static void EnterClass(string testClass, bool data)
     {
         if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
             && !string.Equals(current.Name, testClass, StringComparison.Ordinal)
@@ -288,7 +305,7 @@ public static class SiftTracker
             return;
         }
 
-        Enter(Classes, testClass, isFixture: false);
+        Enter(Classes, testClass, isFixture: false, data);
     }
 
     /// <summary>
@@ -454,7 +471,7 @@ public static class SiftTracker
             // Close the time of the bucket still current; a later call (process exit after the
             // collector's session end) then only adds what ran in between.
             var now = Stopwatch.GetTimestamp();
-            if (_lastEntered is { } current)
+            if (_testsStarted && _lastEntered is { } current)
             {
                 current.ElapsedTicks += now - _lastSwitch;
                 _lastSwitch = now;
@@ -522,14 +539,16 @@ public static class SiftTracker
     /// <param name="buckets">Class or fixture buckets.</param>
     /// <param name="name">Bucket name.</param>
     /// <param name="isFixture">True when <paramref name="buckets"/> holds fixtures.</param>
-    private static void Enter(Dictionary<string, Bucket> buckets, string name, bool isFixture)
+    /// <param name="data">True when entered for a test data member, which before the first test is discovery.</param>
+    private static void Enter(Dictionary<string, Bucket> buckets, string name, bool isFixture, bool data = false)
     {
         // A cache fill or static constructor that threw left its depth up; a new test starts clean.
         _cacheDepth = 0;
         _typeInitializerDepth = 0;
 
+        // The first test entry must get through even into the bucket its discovery data entered.
         if (Current.Value is { } current && ReferenceEquals(current, Volatile.Read(ref _lastEntered))
-            && string.Equals(current.Name, name, StringComparison.Ordinal))
+            && string.Equals(current.Name, name, StringComparison.Ordinal) && (_testsStarted || data))
         {
             return;
         }
@@ -545,15 +564,20 @@ public static class SiftTracker
 
             // The time since the last switch belongs to the bucket that was current until now.
             var now = Stopwatch.GetTimestamp();
-            if (_lastEntered is { } previous && !ReferenceEquals(previous, bucket))
+            if (!_testsStarted)
+            {
+                // Discovery data leaves the clock on start-up; the first test entry stops it.
+                if (!data)
+                {
+                    _testsStarted = true;
+                    _lastSwitch = now;
+                    _startupSeconds = SecondsSinceProcessStart();
+                }
+            }
+            else if (_lastEntered is { } previous && !ReferenceEquals(previous, bucket))
             {
                 previous.ElapsedTicks += now - _lastSwitch;
                 _lastSwitch = now;
-            }
-            else if (_lastEntered is null)
-            {
-                _lastSwitch = now;
-                _startupSeconds = SecondsSinceProcessStart();
             }
 
             Volatile.Write(ref _lastEntered, bucket);

@@ -176,6 +176,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCache))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterAmbient))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterSetUpScope))!),
+            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterDataSource))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Read))!),
             module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Stored))!));
         var tracked = new Dictionary<FieldDefinition, int>();
@@ -237,6 +238,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="ExitCache"><see cref="SiftTracker.ExitCache"/>.</param>
     /// <param name="EnterAmbient"><see cref="SiftTracker.EnterAmbient"/>.</param>
     /// <param name="EnterSetUpScope"><see cref="SiftTracker.EnterSetUpScope"/>.</param>
+    /// <param name="EnterDataSource"><see cref="SiftTracker.EnterDataSource"/>.</param>
     /// <param name="Read"><see cref="SiftTracker.Read"/>.</param>
     /// <param name="Stored"><see cref="SiftTracker.Stored"/>.</param>
     private sealed record Probes(
@@ -250,6 +252,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         MethodReference ExitCache,
         MethodReference EnterAmbient,
         MethodReference EnterSetUpScope,
+        MethodReference EnterDataSource,
         MethodReference Read,
         MethodReference Stored);
 
@@ -438,7 +441,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         {
             case Marker.DataSource when site.DataUser is { } user:
                 il.InsertBefore(first, il.Create(OpCodes.Ldstr, user));
-                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTestClass));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterDataSource));
                 break;
 
             case Marker.DataSource:
