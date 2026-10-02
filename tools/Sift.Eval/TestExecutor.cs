@@ -48,21 +48,18 @@ internal sealed record ExecutionContext(string RepoRoot, DotnetTestMode Mode, Ru
 /// <param name="logger">Receives every run.</param>
 internal sealed partial class TestExecutor(ExecutionContext context, ILogger logger)
 {
-    /// <summary>Counter for unique results directories and log files.</summary>
-    private int _runs;
-
-    /// <summary>
-    /// Longest run seen per test project, in seconds. A run may take five times as long (at least two
-    /// minutes) before it counts as hung: a mutant can make a test wait forever, for a retry that never
-    /// succeeds or a task that never completes.
-    /// </summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, double> _longest = new(Paths.Comparer);
+    /// <summary>What the executors of one clone and its worker copies share; see <see cref="In"/>.</summary>
+    private RunState _state = new();
 
     /// <summary>
     /// Test runs that may happen at once (mutants run in parallel); a run's time limit grows with it,
     /// since the runs share the machine.
     /// </summary>
-    public int Concurrency { get; set; } = 1;
+    public int Concurrency
+    {
+        get => _state.Concurrency;
+        set => _state.Concurrency = value;
+    }
 
     /// <summary>Shortest time limit of a run, however fast the project ran before; tests lower it.</summary>
     internal static TimeSpan MinimumTimeout { get; set; } = TimeSpan.FromMinutes(2);
@@ -76,6 +73,19 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// </summary>
     public IReadOnlyDictionary<string, string> Outputs { get; set; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// An executor that runs the same test projects in a copy of the clone (see <see cref="WorkerCopies"/>).
+    /// Project paths keep naming the clone's projects; the runs start in <paramref name="root"/>, where
+    /// the relative project paths find the copies. Run numbers, the time limits learnt so far and the
+    /// output directories are shared, so log names stay unique and a hang is judged the same everywhere.
+    /// </summary>
+    /// <param name="root">Root of the copy.</param>
+    public TestExecutor In(string root)
+    {
+        _state.Clone ??= context.RepoRoot;
+        return new TestExecutor(context with { RepoRoot = root }, logger) { _state = _state, Outputs = Outputs };
+    }
+
     /// <summary>Runs every test of <paramref name="projects"/>, one project after another.</summary>
     /// <param name="projects">Test projects.</param>
     /// <param name="label">Name for log files, such as <c>full</c> or <c>mutant-2</c>.</param>
@@ -85,7 +95,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         var runs = new List<(ProjectNode Project, List<string> Arguments)>(projects.Count);
         foreach (var project in projects)
         {
-            var relative = Path.GetRelativePath(context.RepoRoot, project.Path).Replace('\\', '/');
+            var relative = Path.GetRelativePath(_state.Clone ?? context.RepoRoot, project.Path).Replace('\\', '/');
             List<string> arguments = context.Mode == DotnetTestMode.TestingPlatform ? ["test", "--project", relative] : ["test", relative];
             runs.Add((project, arguments));
         }
@@ -137,7 +147,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             var crashed = false;
             for (var attempt = 0; attempt < 2; attempt++)
             {
-                var id = Interlocked.Increment(ref _runs);
+                var id = Interlocked.Increment(ref _state.Runs);
                 var results = Path.Combine(context.LogDirectory, "trx", $"{id:000}-{label}");
 
                 // A rerun in the same output directory reuses run numbers; an old report would add its
@@ -170,7 +180,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 }
 
                 var seconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
-                _longest.AddOrUpdate(project.Path, seconds, (_, longest) => Math.Max(longest, seconds));
+                _state.Longest.AddOrUpdate(project.Path, seconds, (_, longest) => Math.Max(longest, seconds));
                 crashed = File.ReadLines(logPath).Any(static l =>
                     l.Contains("Test host process crashed", StringComparison.Ordinal) || l.Contains("Test Run Aborted", StringComparison.Ordinal));
                 if (!crashed)
@@ -205,7 +215,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// <summary>Time limit of a run of <paramref name="project"/>; a generous fixed one before the project ran once.</summary>
     /// <param name="project">Normalized test project path.</param>
     private TimeSpan? Timeout(string project) =>
-        _longest.TryGetValue(project, out var seconds)
+        _state.Longest.TryGetValue(project, out var seconds)
             ? TimeSpan.FromSeconds(Math.Max(MinimumTimeout.TotalSeconds, seconds * 5 * Math.Max(1, Concurrency)))
             : FirstRunTimeout;
 
@@ -249,4 +259,24 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "The {Label} command exited with {ExitCode}")]
     private partial void LogShell(string label, int exitCode);
+
+    /// <summary>State the executors of one clone and its worker copies share.</summary>
+    private sealed class RunState
+    {
+        /// <summary>Counter for unique results directories and log files.</summary>
+        public int Runs;
+
+        /// <summary>See <see cref="TestExecutor.Concurrency"/>.</summary>
+        public int Concurrency { get; set; } = 1;
+
+        /// <summary>
+        /// Longest run seen per test project, in seconds. A run may take five times as long (at least two
+        /// minutes) before it counts as hung: a mutant can make a test wait forever, for a retry that never
+        /// succeeds or a task that never completes.
+        /// </summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<string, double> Longest { get; } = new(Paths.Comparer);
+
+        /// <summary>The clone the project paths point into, once a copy exists; copies run them relative to their own root.</summary>
+        public string? Clone { get; set; }
+    }
 }

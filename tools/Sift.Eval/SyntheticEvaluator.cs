@@ -74,14 +74,32 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             using var schema = settings.UseSchema ? TrySchema(assemblies, targets, testProjects, baseline) : null;
             var context = new MutantContext(testProjects, maps, assemblies, baseline, schema);
-            var parallelism = Parallelism(schema, testProjects, baseline);
+            var (parallelism, copies) = Parallelism(schema, testProjects, baseline);
+            using var workerCopies = copies;
             workspace.Executor.Concurrency = parallelism;
 
+            // Each worker runs in its own copy of the clone; a mutant takes a free one for all its runs.
+            var free = new System.Collections.Concurrent.ConcurrentBag<TestExecutor>(
+                copies?.Roots.Select(workspace.Executor.In) ?? [workspace.Executor]);
             var results = new SyntheticMutant?[targets.Count];
             var gate = new object();
             Parallel.For(0, targets.Count, new ParallelOptions { MaxDegreeOfParallelism = parallelism }, i =>
             {
-                var result = Run(targets[i], context, i + 1, selections[i]);
+                if (!free.TryTake(out var executor))
+                {
+                    throw new InvalidOperationException("More mutants ran at once than there are worker copies.");
+                }
+
+                SyntheticMutant result;
+                try
+                {
+                    result = Run(targets[i], context, i + 1, selections[i], executor);
+                }
+                finally
+                {
+                    free.Add(executor);
+                }
+
                 lock (gate)
                 {
                     results[i] = result;
@@ -159,38 +177,58 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     }
 
     /// <summary>
-    /// How many mutants run at once: <see cref="RunSettings.MutantParallelism"/> when the commit has a
-    /// schema, the repository has no cleanup command (which would run between other mutants' tests)
-    /// and that many runs of the full suite at the same time, with no mutant on, each fail exactly the
-    /// baseline's classes; otherwise 1. Suites that write fixed files next to their binaries or bind
-    /// fixed ports interfere with themselves, and their mutants are then run one at a time.
+    /// How many mutants run at once, and the worker copies they run in: <see cref="RunSettings.MutantParallelism"/>
+    /// when the commit has a schema, the repository has no cleanup command (which would run between
+    /// other mutants' tests), every test output lies in the clone, so each worker can get its own copy
+    /// (<see cref="WorkerCopies"/>), and that many runs of the full suite at the same time, one per
+    /// copy and with no mutant on, each fail exactly the baseline's classes; otherwise 1 and no copies.
+    /// The copies keep apart what tests write into the repository; the check catches what they cannot,
+    /// such as a fixed port or a file outside the repository.
     /// </summary>
     /// <param name="schema">The commit's schema, or null.</param>
     /// <param name="testProjects">Test projects that reported in the baseline.</param>
     /// <param name="baseline">Run of those projects without any mutant.</param>
-    private int Parallelism(Schema? schema, List<ProjectNode> testProjects, TestRunOutcome baseline)
+    private (int Count, WorkerCopies? Copies) Parallelism(Schema? schema, List<ProjectNode> testProjects, TestRunOutcome baseline)
     {
         var wanted = settings.MutantParallelism;
         if (wanted <= 1 || schema is null || settings.Commands.Cleanup is not null)
         {
-            return 1;
+            return (1, null);
         }
 
+        WorkerCopies? copies;
+        try
+        {
+            copies = WorkerCopies.Create(workspace.RepoRoot, wanted, workspace.Executor.Outputs.Values, _logger);
+        }
+        catch (IOException ex)
+        {
+            LogNoCopies(ex);
+            return (1, null);
+        }
+
+        if (copies is null)
+        {
+            return (1, null);
+        }
+
+        var executors = copies.Roots.Select(workspace.Executor.In).ToList();
         var checks = new TestRunOutcome[wanted];
         workspace.Executor.Concurrency = wanted;
         Parallel.For(0, wanted, new ParallelOptions { MaxDegreeOfParallelism = wanted }, i =>
-            checks[i] = workspace.Executor.RunAll(testProjects, $"parallel-check-{i + 1}"));
+            checks[i] = executors[i].RunAll(testProjects, $"parallel-check-{i + 1}"));
         var same = checks.All(check => check.Complete && testProjects.All(p =>
             (baseline.FailedByProject.GetValueOrDefault(p.Path) ?? new HashSet<string>())
                 .SetEquals(check.FailedByProject.GetValueOrDefault(p.Path) ?? new HashSet<string>())));
         if (same)
         {
             LogParallel(wanted);
-            return wanted;
+            return (wanted, copies);
         }
 
         LogParallelInterferes(wanted);
-        return 1;
+        copies.Dispose();
+        return (1, null);
     }
 
     /// <summary>
@@ -288,7 +326,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="context">What the mutants of the commit share.</param>
     /// <param name="index">1-based number of the mutant, for log files and the schema switch.</param>
     /// <param name="selection">What Sift selected for the change.</param>
-    private SyntheticMutant Run(SyntheticTarget target, MutantContext context, int index, Selection selection)
+    /// <param name="executor">Runs the tests, in the worker's copy of the clone.</param>
+    private SyntheticMutant Run(SyntheticTarget target, MutantContext context, int index, Selection selection, TestExecutor executor)
     {
         var (tests, detected, share) = selection;
         var state = new MutantRun(tests, context.TestProjects, index, detected, share);
@@ -310,10 +349,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             .Where(p => workspace.Executor.Outputs.TryGetValue(p.Path, out var output) && mutation.Outputs.Contains(output))
             .ToList();
         // A project that wrote no report this time died with the mutant in place, like a crash.
-        var run = workspace.Executor.RunAll(reached, $"synthetic-{index}", mutation.Environment);
+        var run = executor.RunAll(reached, $"synthetic-{index}", mutation.Environment);
         if (!run.Complete)
         {
-            return RunOutsideSelection(target, new MutantRun(tests, reached, index, detected, share), mutation);
+            return RunOutsideSelection(target, new MutantRun(tests, reached, index, detected, share), new MutantScope(reached, index, mutation, executor));
         }
 
         var killed = new List<string>();
@@ -336,7 +375,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var alone = new Dictionary<string, bool>(StringComparer.Ordinal);
         if (missed.Count > 0)
         {
-            missed = Confirm(missed, new MutantScope(reached, index, mutation), killed, alone);
+            missed = Confirm(missed, new MutantScope(reached, index, mutation, executor), killed, alone);
         }
 
         _cache?.Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone));
@@ -429,9 +468,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// </summary>
     /// <param name="target">The mutated member.</param>
     /// <param name="state">The mutant's state.</param>
-    /// <param name="mutation">The applied mutant.</param>
-    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, ActiveMutant mutation)
+    /// <param name="scope">The applied mutant and the worker it runs in.</param>
+    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, MutantScope scope)
     {
+        var mutation = scope.Mutation;
         var mutatedMethods = mutation.MutatedMethods;
         var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);
         var invocations = new List<TestInvocation>();
@@ -455,7 +495,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         // No report is no evidence that what Sift left out passed.
-        var outside = workspace.Executor.RunSelected(invocations, $"synthetic-{state.Index}-outside", mutation.Environment);
+        var outside = scope.Executor.RunSelected(invocations, $"synthetic-{state.Index}-outside", mutation.Environment);
         if (!outside.Complete)
         {
             return new SyntheticMutant(target, state.Detected, mutatedMethods, [], [], state.Share, Inconclusive: true);
@@ -472,7 +512,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         var killed = new List<string>(failed);
-        var missed = Confirm(failed, new MutantScope(state.Reached, state.Index, mutation), killed, new Dictionary<string, bool>(StringComparer.Ordinal));
+        var missed = Confirm(failed, scope, killed, new Dictionary<string, bool>(StringComparer.Ordinal));
         LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
         return new SyntheticMutant(target, state.Detected, mutatedMethods, killed, missed, state.Share, Inconclusive: false)
         {
@@ -484,7 +524,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Reached">Test projects the mutant can reach.</param>
     /// <param name="Index">Number of the mutant, for log files.</param>
     /// <param name="Mutation">The applied mutant, lifted for control runs.</param>
-    private sealed record MutantScope(List<ProjectNode> Reached, int Index, ActiveMutant Mutation);
+    /// <param name="Executor">Runs the tests, in the worker's copy of the clone.</param>
+    private sealed record MutantScope(List<ProjectNode> Reached, int Index, ActiveMutant Mutation, TestExecutor Executor);
 
     /// <summary>
     /// Whether a test class fails when it runs alone without any mutant, by <c>Project: Class</c>.
@@ -508,7 +549,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="alone">Receives, for a complete run alone, whether each missed class failed again.</param>
     private List<string> Confirm(List<string> missed, MutantScope scope, List<string> killed, Dictionary<string, bool> alone)
     {
-        var again = RunAlone(missed, scope.Reached, $"synthetic-{scope.Index}-confirm", scope.Mutation.Environment);
+        var again = RunAlone(missed, scope, $"synthetic-{scope.Index}-confirm", scope.Mutation.Environment);
         if (again.Complete)
         {
             foreach (var testClass in missed)
@@ -538,7 +579,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             RunOutcome control;
             using (scope.Mutation.Lift())
             {
-                control = RunAlone(unknown, scope.Reached, $"synthetic-{scope.Index}-control", environment: null);
+                control = RunAlone(unknown, scope, $"synthetic-{scope.Index}-control", environment: null);
             }
 
             // A control run that crashed proves nothing; the miss stands and the class is asked again next time.
@@ -568,13 +609,13 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     /// <summary>Runs <paramref name="classes"/> (<c>Project: Class</c>) alone, each project filtered to its own.</summary>
     /// <param name="classes">Classes to run.</param>
-    /// <param name="reached">Test projects they may belong to.</param>
+    /// <param name="scope">The mutant: the test projects the classes may belong to and the worker that runs them.</param>
     /// <param name="label">Name for log files.</param>
     /// <param name="environment">Environment that switches the mutant on; null for none.</param>
-    private RunOutcome RunAlone(List<string> classes, List<ProjectNode> reached, string label, IReadOnlyDictionary<string, string>? environment)
+    private RunOutcome RunAlone(List<string> classes, MutantScope scope, string label, IReadOnlyDictionary<string, string>? environment)
     {
         var selections = new List<TestProjectSelection>();
-        foreach (var project in reached)
+        foreach (var project in scope.Reached)
         {
             var prefix = Path.GetFileNameWithoutExtension(project.Path) + ": ";
             var own = classes.Where(m => m.StartsWith(prefix, StringComparison.Ordinal)).Select(m => m[prefix.Length..]).ToList();
@@ -585,7 +626,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         var invocations = TestInvocationBuilder.Build(selections, workspace.RepoRoot, [], DotnetTestModeDetector.Detect(workspace.RepoRoot));
-        var run = workspace.Executor.RunSelected(invocations, label, environment);
+        var run = scope.Executor.RunSelected(invocations, label, environment);
         var failed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (project, classesFailed) in run.FailedByProject)
         {
@@ -720,6 +761,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Count} mutants run at once: that many runs of the full suite at the same time fail as the baseline does")]
     private partial void LogParallel(int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The clone could not be copied for each worker; mutants run one at a time")]
+    private partial void LogNoCopies(Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Count} runs of the full suite at the same time fail differently from the baseline; mutants run one at a time")]
     private partial void LogParallelInterferes(int count);

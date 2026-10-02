@@ -5,9 +5,9 @@ namespace Sift.Tests;
 
 /// <summary>
 /// Mutants switched on in a schema can run at once on one clone. The results must equal those of one
-/// mutant at a time, and a suite whose parallel runs interfere with each other (here tests that claim
-/// a fixed file next to their binaries) must be evaluated one mutant at a time. Slow: builds, records
-/// and runs several times.
+/// mutant at a time. Each worker runs in its own copy of the clone, so tests that claim a fixed file in
+/// the repository do not meet; a suite whose parallel runs still interfere (a fixed file outside the
+/// repository) must be evaluated one mutant at a time. Slow: builds, records and runs several times.
 /// </summary>
 [Trait("Category", "Slow")]
 public sealed class EvalParallelMutantsTests : IDisposable
@@ -18,7 +18,7 @@ public sealed class EvalParallelMutantsTests : IDisposable
     [Fact]
     public void Mutants_run_at_once_give_the_results_of_one_at_a_time()
     {
-        WriteRepository(sharedFile: false);
+        WriteRepository(SharedFile.None);
 
         var sequential = Evaluate(Path.Combine(_root, "one"), parallelism: 1);
         var parallel = Evaluate(Path.Combine(_root, "three"), parallelism: 3);
@@ -30,9 +30,22 @@ public sealed class EvalParallelMutantsTests : IDisposable
     }
 
     [Fact]
+    public void Tests_claiming_a_file_in_the_repository_run_apart_in_worker_copies()
+    {
+        WriteRepository(SharedFile.InRepository);
+
+        var sequential = Evaluate(Path.Combine(_root, "one"), parallelism: 1);
+        var parallel = Evaluate(Path.Combine(_root, "three"), parallelism: 3);
+
+        Assert.Equal(3, parallel.Parallelism);
+        Assert.Equal(sequential.Results, parallel.Results);
+        Assert.Empty(Directory.GetDirectories(Path.Combine(_root, "three"), "*.worker-*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public void Suite_whose_parallel_runs_interfere_runs_one_mutant_at_a_time()
     {
-        WriteRepository(sharedFile: true);
+        WriteRepository(SharedFile.OutsideRepository);
 
         var run = Evaluate(Path.Combine(_root, "interfering"), parallelism: 3);
 
@@ -40,12 +53,27 @@ public sealed class EvalParallelMutantsTests : IDisposable
         Assert.Contains(run.Results, static r => r.Contains("killed=Calc.Tests: Calc.Tests.AddTests", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// A small repository with three members and a test class each; with <paramref name="sharedFile"/>
-    /// one test class holds a file next to the binaries exclusively for a while, as some suites do.
-    /// </summary>
-    private void WriteRepository(bool sharedFile)
+    /// <summary>Where a test class holds a fixed file exclusively for a while, as some suites do.</summary>
+    public enum SharedFile
     {
+        /// <summary>No such class.</summary>
+        None,
+
+        /// <summary>Next to the test binaries, inside the repository.</summary>
+        InRepository,
+
+        /// <summary>In the temporary directory, which every copy of the repository shares.</summary>
+        OutsideRepository,
+    }
+
+    /// <summary>A small repository with three members and a test class each, and maybe a class holding a fixed file.</summary>
+    /// <param name="sharedFile">Where that class's file is.</param>
+    private void WriteRepository(SharedFile sharedFile)
+    {
+        var lockDirectory = sharedFile == SharedFile.OutsideRepository
+            ? $"\"{_root.Replace("\\", "\\\\", StringComparison.Ordinal)}\""
+            : "System.AppContext.BaseDirectory";
+        Directory.CreateDirectory(_root);
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write(".gitignore", "bin/\nobj/\n.sift/\n");
         _repo.Write("src/Calc/Calc.csproj", """
@@ -71,14 +99,14 @@ public sealed class EvalParallelMutantsTests : IDisposable
               </ItemGroup>
             </Project>
             """);
-        var claim = sharedFile
-            ? """
+        var claim = sharedFile != SharedFile.None
+            ? $$"""
               public class ClaimTests
               {
                   [Fact]
                   public void Holds_the_lock_file()
                   {
-                      using var file = new System.IO.FileStream(System.IO.Path.Combine(System.AppContext.BaseDirectory, "suite.lock"), System.IO.FileMode.CreateNew, System.IO.FileAccess.Write, System.IO.FileShare.None, 1, System.IO.FileOptions.DeleteOnClose);
+                      using var file = new System.IO.FileStream(System.IO.Path.Combine({{lockDirectory}}, "suite.lock"), System.IO.FileMode.CreateNew, System.IO.FileAccess.Write, System.IO.FileShare.None, 1, System.IO.FileOptions.DeleteOnClose);
                       System.Threading.Thread.Sleep(3000);
                   }
               }

@@ -76,7 +76,7 @@ schemata are turned off for the commit and the evaluation falls back to one-at-a
   already rejects failures that do not repeat; and the evaluation records, per repository, whether a
   parallel run's baseline-equivalent check (below) passed, falling back to 1 if it did not.
 
-### 3b. Finding: parallel runs must not share the clone (2026-10-02)
+### 3b. Finding: parallel runs must not share the clone (2026-10-02, implemented in `WorkerCopies`)
 
 Measuring Scriban at 2 mutants at once gave one result different from 1 at a time: its `TestAot`
 runs `dotnet publish` into a fixed folder inside the repository, two mutants' runs removed and wrote
@@ -89,7 +89,10 @@ its build outputs and the schema written in), made once per commit after the sch
 copy-on-write where the file system has it (`cp -c` on APFS, `cp --reflink=auto` on Linux), a plain
 copy otherwise. Test runs of worker k use copy k as working directory and output folders; project
 paths are mapped from the clone to the copy. What tests write into the repository (publish folders,
-snapshot `.received` files, local databases) then stays per worker. The interference check stays as a
+snapshot `.received` files, local databases) then stays per worker. The measurement showed it twice more at 4
+at once (2 of 100 mutants differed); at 8 the check happened to catch it and fell back to 1.
+When a test output lies outside the clone, a copy would share it, so the evaluation runs one mutant
+at a time; when copying fails, too. The interference check stays as a
 second guard for what copies cannot isolate (fixed ports, global temp files, machine-wide state).
 Copies are removed at the end of the commit.
 
