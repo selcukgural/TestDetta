@@ -85,8 +85,13 @@ internal sealed partial class DotnetProcess(ILogger logger)
         }
 
         var sample = TimeSpan.FromTicks(Math.Max(TimeSpan.TicksPerSecond / 4, Math.Min(idle.Ticks / 10, TimeSpan.FromSeconds(30).Ticks)));
-        var idleSince = Stopwatch.GetTimestamp();
-        var cpuAtIdleStart = ProcessTreeWatch.TreeCpuSeconds(process.Id) ?? 0;
+        var started = Stopwatch.GetTimestamp();
+        var detector = new IdleDetector(idle);
+        if (ProcessTreeWatch.TreeCpuSeconds(process.Id) is { } initial)
+        {
+            detector.Observe(TimeSpan.Zero, initial);
+        }
+
         while (!process.WaitForExit(sample))
         {
             var now = Stopwatch.GetTimestamp();
@@ -96,21 +101,9 @@ internal sealed partial class DotnetProcess(ILogger logger)
                 return false;
             }
 
-            if (ProcessTreeWatch.TreeCpuSeconds(process.Id) is not { } cpu)
+            if (ProcessTreeWatch.TreeCpuSeconds(process.Id) is { } cpu && detector.Observe(Stopwatch.GetElapsedTime(started, now), cpu))
             {
-                continue;
-            }
-
-            if (cpu - cpuAtIdleStart > ProcessTreeWatch.IdleCpuSeconds)
-            {
-                idleSince = now;
-                cpuAtIdleStart = cpu;
-                continue;
-            }
-
-            if (Stopwatch.GetElapsedTime(idleSince, now) >= idle)
-            {
-                LogIdle(idle.TotalSeconds, cpu - cpuAtIdleStart);
+                LogIdle(idle.TotalSeconds, IdleDetector.IdleCpuShare * 100);
                 return false;
             }
         }
@@ -271,8 +264,8 @@ internal sealed partial class DotnetProcess(ILogger logger)
     [LoggerMessage(Level = LogLevel.Debug, Message = "dotnet exited with {ExitCode}")]
     private partial void LogFinished(int exitCode);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet and its children used {Cpu:0.00} s of CPU in {Seconds:0} s and were killed as stuck")]
-    private partial void LogIdle(double seconds, double cpu);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet and its children used less than {Percent:0.#} % of a core for {Seconds:0} s and were killed as stuck")]
+    private partial void LogIdle(double seconds, double percent);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet did not finish within {Seconds:0} s and was killed")]
     private partial void LogTimedOut(double seconds);
@@ -284,7 +277,7 @@ internal sealed partial class DotnetProcess(ILogger logger)
 /// <summary>Limits of one <see cref="DotnetProcess"/> run.</summary>
 /// <param name="Timeout">Longest the process may run; null for no limit.</param>
 /// <param name="Idle">
-/// Longest its process tree may use almost no CPU (<see cref="ProcessTreeWatch.IdleCpuSeconds"/>)
+/// Longest its process tree may use almost no CPU (<see cref="IdleDetector.IdleCpuShare"/> of a core)
 /// before it is killed as stuck; null to wait for the timeout only.
 /// </param>
 internal sealed record RunLimits(TimeSpan? Timeout, TimeSpan? Idle = null);
