@@ -38,6 +38,22 @@ public sealed class LinkedInitializationTests : IDisposable
                 return Cache.GetOrAdd(country, Build);
             }
             """,
+        // A fill longer than the tracker's ring of recent hits (NodaTime parses all of TZDB in one):
+        // the rate is built first, then overwritten in the ring by the rest of the work.
+        "long" => """
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
+            private static void Step() { }
+            public decimal For(string country) => Cache.GetOrAdd(country, c =>
+            {
+                var rate = Build(c);
+                for (var i = 0; i < 70_000; i++)
+                {
+                    Step();
+                }
+
+                return rate;
+            });
+            """,
         // A hand-rolled cache: looked up with TryGetValue, filled through the indexer (NodaTime's
         // DateTimeZoneCache). The value built on a miss is linked to the dictionary's field.
         "pool" => """
@@ -86,6 +102,7 @@ public sealed class LinkedInitializationTests : IDisposable
     [InlineData("getoradd", true)]
     [InlineData("lazy", true)]
     [InlineData("pool", true)]
+    [InlineData("long", true)]
     [InlineData("unlinked", false)]
     [InlineData("mixed", false)]
     public void A_cache_kept_in_a_field_is_answered_through_its_readers_and_starts_no_name_trace(string cache, bool linked)

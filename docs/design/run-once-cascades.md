@@ -161,6 +161,16 @@ Recording (`SiftTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
   zones while `TzdbDateTimeZoneSourceTest` was current. Once the TZDB loading was linked, a change
   to it missed them.
 
+- **Hand-rolled caches** (2b57cec). A build on a `TryGetValue`/`Pop` miss of a reused collection
+  (`MarkPoolFills`) ends with `ExitCacheInto` for that collection when exactly one collection field
+  the method loads holds the item type (NodaTime's `DateTimeZoneCache`).
+- **Scopes longer than the ring.** The ring keeps the last 65,536 hits per thread; a scope longer
+  than that (all of TZDB parsed in one static constructor, all zones built for a data source) was
+  unlinked, as its builders were incomplete. Before each lap of the ring, the part of every open
+  scope it would overwrite now goes into that scope's own bit set (`SpillScopes`), so a scope's
+  contents are complete however long it runs. Short scopes pay nothing; recording time on NodaTime
+  did not change measurably.
+
 Selection: `CoverageIndex` leaves linked methods out of the run-once set. Their users are the
 classes that ran them plus the readers of what they built (`builtValues`).
 
@@ -175,7 +185,7 @@ Measured with fresh recordings, 100 mutants each, no missed mutant:
 
 | Repository | Before | A | C |
 |---|---|---|---|
-| NodaTime | 42.6% | 41.0% | 27.6% |
+| NodaTime | 42.6% | 41.0% | 27.6%; 25.8% with hand-rolled caches; 22.5% with long scopes |
 | protobuf-net | 89.5% | 87.6% | 92.3%, of it 4.6 points from a file the recording's tests leave in the tree (below) |
 | CommunityToolkit | 17.1% | 16.8% | 17.1% |
 | MimeKit | 21.9% | 21.9% | 22.1% |

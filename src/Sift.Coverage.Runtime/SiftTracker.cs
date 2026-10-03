@@ -76,6 +76,16 @@ public static class SiftTracker
 
         /// <summary>True once what the scope built was stored into a tracked field, so its readers are known.</summary>
         public bool Linked;
+
+        /// <summary>
+        /// What ran in the scope before <see cref="SpilledTo"/>, as a bit set; null while the scope fits in
+        /// the ring. A scope longer than the ring (NodaTime parses all of TZDB in one static constructor)
+        /// keeps its full contents this way instead of losing its start.
+        /// </summary>
+        public ulong[]? Spilled;
+
+        /// <summary>Ring position up to which the scope's hits are in <see cref="Spilled"/>.</summary>
+        public long SpilledTo;
     }
 
     /// <summary>Initialization scopes open on this thread, innermost last.</summary>
@@ -204,8 +214,7 @@ public static class SiftTracker
             Mark(InitializationBits, word, bit);
         }
 
-        var recent = _recent ??= new int[RecentSize];
-        recent[(int)(_recentCount++ & (RecentSize - 1))] = id;
+        Remember(id);
     }
 
     /// <summary>
@@ -225,8 +234,53 @@ public static class SiftTracker
 
         // Into the ring as well: a value stored later on this thread was built from this one, so it
         // depends on what built this one (the recorder follows such field builders transitively).
+        Remember(id);
+    }
+
+    /// <summary>
+    /// Appends <paramref name="id"/> to the thread's ring. Before the ring starts a new lap, the part of
+    /// every open scope it would overwrite goes into that scope's bit set (<see cref="SpillScopes"/>).
+    /// </summary>
+    /// <param name="id">Method id, or <see cref="MethodCount"/> plus a field index.</param>
+    private static void Remember(int id)
+    {
         var recent = _recent ??= new int[RecentSize];
         recent[(int)(_recentCount++ & (RecentSize - 1))] = id;
+        if ((_recentCount & (RecentSize - 1)) == 0 && _scopeCount > 0)
+        {
+            SpillScopes();
+        }
+    }
+
+    /// <summary>
+    /// Copies what the ring holds of each open scope, and has not copied yet, into the scope's bit set.
+    /// Runs once per lap of the ring, when it holds exactly the last <see cref="RecentSize"/> entries.
+    /// </summary>
+    private static void SpillScopes()
+    {
+        var recent = _recent!;
+        var end = _recentCount;
+        for (var s = 0; s < _scopeCount; s++)
+        {
+            ref var scope = ref _scopes![s];
+            var from = Math.Max(scope.Start, scope.SpilledTo);
+            if (from >= end)
+            {
+                continue;
+            }
+
+            var spilled = scope.Spilled ??= new ulong[Words];
+            for (var i = from; i < end; i++)
+            {
+                var id = recent[(int)(i & (RecentSize - 1))];
+                if ((uint)(id >> 6) < (uint)spilled.Length)
+                {
+                    spilled[id >> 6] |= 1UL << (id & 63);
+                }
+            }
+
+            scope.SpilledTo = end;
+        }
     }
 
     /// <summary>
@@ -337,10 +391,15 @@ public static class SiftTracker
         _lastStore = end;
         _lastStoreMethod = method;
 
-        // A static constructor storing its own fields hands its result to their readers.
+        // A static constructor storing its own fields hands its result to their readers, all of it:
+        // the walk above stops where the ring ends, the scope does not.
         if (_scopeCount > 0 && _scopes![_scopeCount - 1].Owner == method)
         {
             _scopes[_scopeCount - 1].Linked = true;
+            if (_scopes[_scopeCount - 1].Spilled is not null)
+            {
+                AddScopeContents(in _scopes[_scopeCount - 1], builders);
+            }
         }
     }
 
@@ -404,20 +463,11 @@ public static class SiftTracker
             _cacheDepth--;
         }
 
-        if (_scopeCount > 0 && _recent is { } recent)
+        if (_scopeCount > 0)
         {
-            var start = _scopes![_scopeCount - 1].Start;
-            var end = _recentCount;
-            if (end - start <= RecentSize)
-            {
-                var builders = Builders.GetOrAdd(field, static _ => new());
-                for (var i = start; i < end; i++)
-                {
-                    builders.TryAdd(recent[(int)(i & (RecentSize - 1))], 0);
-                }
-
-                builders.TryAdd(method, 0);
-            }
+            var builders = Builders.GetOrAdd(field, static _ => new());
+            AddScopeContents(in _scopes![_scopeCount - 1], builders);
+            builders.TryAdd(method, 0);
         }
 
         PopScope(link: true);
@@ -472,32 +522,64 @@ public static class SiftTracker
             return;
         }
 
-        var scope = _scopes![--_scopeCount];
-        MarkScope(scope.Start, scope.Linked || link);
+        ref var scope = ref _scopes![--_scopeCount];
+        MarkScope(in scope, scope.Linked || link);
+        scope.Spilled = null;
     }
 
-    /// <summary>Marks the methods hit on this thread since <paramref name="start"/>.</summary>
-    /// <param name="start">Ring position where the scope started.</param>
+    /// <summary>Marks what ran in <paramref name="scope"/> as linked or unlinked.</summary>
+    /// <param name="scope">A scope being closed.</param>
     /// <param name="linked">True for a linked scope.</param>
-    private static void MarkScope(long start, bool linked)
+    private static void MarkScope(in Scope scope, bool linked)
     {
+        var bits = linked ? LinkedBits : UnlinkedBits;
+        if (scope.Spilled is { } spilled)
+        {
+            for (var word = 0; word < spilled.Length; word++)
+            {
+                if (spilled[word] != 0)
+                {
+                    Mark(bits, word, spilled[word]);
+                }
+            }
+        }
+
         if (_recent is not { } recent)
         {
             return;
         }
 
-        var end = _recentCount;
-        if (end - start > RecentSize)
-        {
-            start = end - RecentSize;
-            linked = false;
-        }
-
-        var bits = linked ? LinkedBits : UnlinkedBits;
-        for (var i = start; i < end; i++)
+        for (var i = Math.Max(scope.Start, scope.SpilledTo); i < _recentCount; i++)
         {
             var id = recent[(int)(i & (RecentSize - 1))];
             Mark(bits, id >> 6, 1UL << (id & 63));
+        }
+    }
+
+    /// <summary>Adds everything that ran in <paramref name="scope"/> so far to <paramref name="builders"/>.</summary>
+    /// <param name="scope">An open scope.</param>
+    /// <param name="builders">Builders of a tracked field.</param>
+    private static void AddScopeContents(in Scope scope, System.Collections.Concurrent.ConcurrentDictionary<int, byte> builders)
+    {
+        if (scope.Spilled is { } spilled)
+        {
+            for (var word = 0; word < spilled.Length; word++)
+            {
+                for (var bits = spilled[word]; bits != 0; bits &= bits - 1)
+                {
+                    builders.TryAdd((word << 6) + System.Numerics.BitOperations.TrailingZeroCount(bits), 0);
+                }
+            }
+        }
+
+        if (_recent is not { } recent)
+        {
+            return;
+        }
+
+        for (var i = Math.Max(scope.Start, scope.SpilledTo); i < _recentCount; i++)
+        {
+            builders.TryAdd(recent[(int)(i & (RecentSize - 1))], 0);
         }
     }
 
@@ -506,7 +588,9 @@ public static class SiftTracker
     {
         while (_scopeCount > 0)
         {
-            MarkScope(_scopes![--_scopeCount].Start, linked: false);
+            ref var scope = ref _scopes![--_scopeCount];
+            MarkScope(in scope, linked: false);
+            scope.Spilled = null;
         }
     }
 
