@@ -16,8 +16,13 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="baseRevision">Commit the working tree is compared with, normally the merge base.</param>
     /// <param name="changedFiles">All changed paths relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
+    /// <param name="symbolSets">The symbol sets the compiler uses for a file (relative path), from its projects; null when unknown.</param>
     /// <returns>One entry per changed .cs file, in the order of <paramref name="changedFiles"/>.</returns>
-    public IReadOnlyList<CodeChange> Read(string repoRoot, string baseRevision, IReadOnlyList<string> changedFiles)
+    public IReadOnlyList<CodeChange> Read(
+        string repoRoot,
+        string baseRevision,
+        IReadOnlyList<string> changedFiles,
+        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null)
     {
         var csharpFiles = new List<string>();
         foreach (var file in changedFiles)
@@ -39,7 +44,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
 
         foreach (var file in csharpFiles)
         {
-            changes.Add(detector.Detect(file, Text(oldContents, file), ReadWorkingTree(Path.Combine(repoRoot, file))));
+            changes.Add(detector.Detect(file, Text(oldContents, file), ReadWorkingTree(Path.Combine(repoRoot, file)), symbolSets?.Invoke(file) ?? []));
         }
 
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
@@ -51,8 +56,14 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     /// <param name="from">Older commit.</param>
     /// <param name="to">Newer commit.</param>
     /// <param name="changedFiles">Paths changed between the two, relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
+    /// <param name="symbolSets">The symbol sets the compiler uses for a file (relative path); null when unknown.</param>
     /// <returns>One entry per changed .cs file, in the order of <paramref name="changedFiles"/>.</returns>
-    public IReadOnlyList<CodeChange> ReadBetween(string repoRoot, string from, string to, IReadOnlyList<string> changedFiles)
+    public IReadOnlyList<CodeChange> ReadBetween(
+        string repoRoot,
+        string from,
+        string to,
+        IReadOnlyList<string> changedFiles,
+        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null)
     {
         var csharpFiles = changedFiles.Where(static f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToList();
         if (csharpFiles.Count == 0)
@@ -63,7 +74,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var oldContents = git.ReadFiles(repoRoot, from, csharpFiles);
         var newContents = git.ReadFiles(repoRoot, to, csharpFiles);
-        var changes = csharpFiles.ConvertAll(file => detector.Detect(file, Text(oldContents, file), Text(newContents, file)));
+        var changes = csharpFiles.ConvertAll(file => detector.Detect(file, Text(oldContents, file), Text(newContents, file), symbolSets?.Invoke(file) ?? []));
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
         return changes;
     }

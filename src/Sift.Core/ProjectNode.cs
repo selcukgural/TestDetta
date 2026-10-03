@@ -94,4 +94,11 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     /// was not evaluated and its files are known only by directory and the XML reading.
     /// </summary>
     public IReadOnlySet<string>? EvaluatedItems { get; init; }
+
+    /// <summary>
+    /// The preprocessor symbols each of its target frameworks compiles with, from MSBuild evaluation;
+    /// empty when unknown. Code under a mix of symbols (<c>#if A &amp;&amp; !B</c>) is only seen by
+    /// parsing with these.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>> SymbolSets { get; init; } = [];
 }

@@ -95,11 +95,54 @@ internal static class DeclarationWalker
     /// symbols of <see cref="ConditionalSymbols"/> defined. See there for why both are needed.
     /// </summary>
     /// <param name="text">File content, or null.</param>
-    public static List<CompilationUnitSyntax> ParseVariants(SourceText? text)
+    public static List<CompilationUnitSyntax> ParseVariants(SourceText? text) => ParseVariants(text, []);
+
+    /// <summary>
+    /// <see cref="ParseVariants(SourceText?)"/>, plus one parse per symbol set the compiler really uses
+    /// (each target framework's <c>DefineConstants</c>), which also enters code under a mix of symbols.
+    /// Only the symbols the file's conditions name matter, so sets that agree on those parse once.
+    /// </summary>
+    /// <param name="text">File content, or null.</param>
+    /// <param name="symbolSets">Symbol sets of the projects compiling the file; empty when unknown.</param>
+    public static List<CompilationUnitSyntax> ParseVariants(SourceText? text, IReadOnlyCollection<IReadOnlyList<string>> symbolSets)
     {
         var root = Parse(text);
-        var symbols = ConditionalSymbols(root);
-        return symbols.Count == 0 ? [root] : [root, Parse(text, symbols)];
+        var named = ConditionalSymbols(root);
+        if (named.Count == 0)
+        {
+            return [root];
+        }
+
+        var roots = new List<CompilationUnitSyntax> { root, Parse(text, named) };
+        foreach (var relevant in RelevantSets(named, symbolSets))
+        {
+            roots.Add(Parse(text, relevant));
+        }
+
+        return roots;
+    }
+
+    /// <summary>
+    /// Each set reduced to the symbols in <paramref name="named"/>, without duplicates, and without the
+    /// two sets every caller parses anyway: none, and all of <paramref name="named"/>.
+    /// </summary>
+    /// <param name="named">Symbols the file's conditions name.</param>
+    /// <param name="symbolSets">Symbol sets the compiler uses.</param>
+    public static List<List<string>> RelevantSets(IReadOnlyList<string> named, IReadOnlyCollection<IReadOnlyList<string>> symbolSets)
+    {
+        var namedSet = new HashSet<string>(named, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal) { string.Empty, string.Join(';', named) };
+        var result = new List<List<string>>();
+        foreach (var set in symbolSets)
+        {
+            var relevant = set.Where(namedSet.Contains).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+            if (seen.Add(string.Join(';', relevant)))
+            {
+                result.Add(relevant);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>Collects every type, delegate and member declaration of a file, keyed by identity.</summary>

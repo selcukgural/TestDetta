@@ -30,4 +30,11 @@ public sealed record EvaluatedProject(
     string? AssemblyName,
     IReadOnlyList<string> References,
     IReadOnlySet<string> Items,
-    IReadOnlySet<string> Packages);
+    IReadOnlySet<string> Packages)
+{
+    /// <summary>
+    /// The preprocessor symbols the compiler defines, one set per target framework: <c>DefineConstants</c>
+    /// with the SDK's implicit framework symbols (<c>NET8_0_OR_GREATER</c>). Empty when unknown.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>> SymbolSets { get; init; } = [];
+}

@@ -121,3 +121,13 @@ the driver evaluates one by one after such a failure.
 - Cache key: content edit keeps it, file added or project edited changes it.
 - Corpus: Meziantou, OpenTelemetry and every repository of round 1 with no new miss; precision on
   Meziantou is expected to improve.
+
+## Preprocessor symbols (2026-10-03)
+
+The injected target also reports `DefineConstants` per target framework. In an inner build of an
+SDK project it first depends on `AddImplicitDefineConstants`, so the SDK's framework symbols
+(`NET8_0_OR_GREATER`, `NETSTANDARD2_0`) are included. Distinct sets land in
+`EvaluatedProject.SymbolSets` and `ProjectNode.SymbolSets` (evaluator version 2).
+`DeclarationWalker.ParseVariants` and `CodeChangeDetector` add one parse per set, reduced to the
+symbols a file's conditions name, next to the no-symbol and all-symbols parses. That way code under
+a mix of symbols (`#if A && !B`) is indexed and its changes are attributed.

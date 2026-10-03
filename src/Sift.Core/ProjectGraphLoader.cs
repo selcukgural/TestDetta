@@ -135,6 +135,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 AssemblyName = project.AssemblyName ?? node.AssemblyName,
                 AssemblyNameUnresolved = project.AssemblyName is null && node.AssemblyNameUnresolved,
                 EvaluatedItems = project.Items,
+                SymbolSets = project.SymbolSets,
             };
         }
 

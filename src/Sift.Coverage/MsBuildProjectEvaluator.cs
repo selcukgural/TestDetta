@@ -20,7 +20,7 @@ namespace Sift.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 1;
+    private const int EvaluatorVersion = 2;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -42,7 +42,11 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
     /// <summary>The target injected into every project, and the item types whose files it reports.</summary>
     private const string Targets = """
         <Project>
-          <Target Name="SiftEvaluate" Returns="@(SiftEvaluated)">
+          <PropertyGroup>
+            <!-- An inner build of an SDK project adds the implicit framework symbols to DefineConstants in a target. -->
+            <_SiftDefineConstantsDependsOn Condition="'$(UsingMicrosoftNETSdk)' == 'true' and '$(TargetFramework)' != ''">AddImplicitDefineConstants</_SiftDefineConstantsDependsOn>
+          </PropertyGroup>
+          <Target Name="SiftEvaluate" Returns="@(SiftEvaluated)" DependsOnTargets="$(_SiftDefineConstantsDependsOn)">
             <ItemGroup>
               <_SiftFramework Include="$(TargetFrameworks)" Condition="'$(TargetFramework)' == ''" />
               <SiftEvaluated Include="$(MSBuildProjectFullPath)" Kind="Project" Project="$(MSBuildProjectFullPath)" IsTestProject="$(IsTestProject)" AssemblyName="$(AssemblyName)" />
@@ -51,6 +55,8 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
               <SiftEvaluated Include="@(ProjectReference->'%(FullPath)')" Kind="Reference" Project="$(MSBuildProjectFullPath)" />
               <SiftEvaluated Include="@(PackageReference)" Kind="Package" Project="$(MSBuildProjectFullPath)" />
               <SiftEvaluated Include="@(Compile->'%(FullPath)');@(EmbeddedResource->'%(FullPath)');@(Content->'%(FullPath)');@(None->'%(FullPath)');@(AdditionalFiles->'%(FullPath)')" Kind="Item" Project="$(MSBuildProjectFullPath)" />
+              <SiftEvaluated Include="$(DefineConstants)" Kind="Define" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />
+              <SiftEvaluated Include="$(MSBuildProjectFullPath)" Kind="Framework" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />
             </ItemGroup>
             <MSBuild Condition="'@(_SiftFramework)' != ''" Projects="$(MSBuildProjectFullPath)" Targets="SiftEvaluate" Properties="TargetFramework=%(_SiftFramework.Identity)">
               <Output TaskParameter="TargetOutputs" ItemName="SiftEvaluated" />
@@ -244,7 +250,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     new XElement("Output", new XAttribute("TaskParameter", "TargetOutputs"), new XAttribute("ItemName", "SiftEvaluated"))),
                 new XElement("WriteLinesToFile",
                     new XAttribute("File", Escape(output)),
-                    new XAttribute("Lines", "@(SiftEvaluated->'%(Kind)%09%(Project)%09%(Identity)%09%(IsTestProject)%09%(AssemblyName)')"),
+                    new XAttribute("Lines", "@(SiftEvaluated->'%(Kind)%09%(Project)%09%(Identity)%09%(IsTestProject)%09%(AssemblyName)%09%(Framework)')"),
                     new XAttribute("Overwrite", "true")))));
         return document.ToString();
     }
@@ -290,14 +296,38 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 case "Item":
                     builder.Items.Add(Paths.Normalize(fields[2]));
                     break;
+                case "Define" or "Framework":
+                    // A framework without any symbol still compiles: its (empty) set is kept too.
+                    var framework = fields.Length > 5 ? fields[5] : string.Empty;
+                    if (!builder.Symbols.TryGetValue(framework, out var symbols))
+                    {
+                        symbols = new SortedSet<string>(StringComparer.Ordinal);
+                        builder.Symbols[framework] = symbols;
+                    }
+
+                    if (fields[0] == "Define" && fields[2].Trim() is { Length: > 0 } symbol)
+                    {
+                        symbols.Add(symbol);
+                    }
+
+                    break;
             }
         }
 
         return builders.ToDictionary(
             static b => b.Key,
-            static b => new EvaluatedProject(b.Value.IsTestProject, b.Value.AssemblyName, [.. b.Value.References.Order(StringComparer.Ordinal)], b.Value.Items, b.Value.Packages),
+            static b => new EvaluatedProject(b.Value.IsTestProject, b.Value.AssemblyName, [.. b.Value.References.Order(StringComparer.Ordinal)], b.Value.Items, b.Value.Packages)
+            {
+                SymbolSets = SymbolSets(b.Value.Symbols.Values),
+            },
             Paths.Comparer);
     }
+
+    /// <summary>Distinct symbol sets, each sorted, in a fixed order.</summary>
+    /// <param name="sets">Symbols per target framework.</param>
+    private static IReadOnlyList<IReadOnlyList<string>> SymbolSets(IEnumerable<IEnumerable<string>> sets) =>
+        [.. sets.Select(static s => string.Join(';', s.Order(StringComparer.Ordinal))).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)
+            .Select(static joined => (IReadOnlyList<string>)(joined.Length == 0 ? [] : joined.Split(';')))];
 
     /// <summary>Reads a cached evaluation, its paths relative to the repository; null when missing or unreadable.</summary>
     /// <param name="file">Cache file.</param>
@@ -319,7 +349,10 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     c.Value.AssemblyName,
                     [.. c.Value.References.Select(Full)],
                     c.Value.Items.Select(Full).ToHashSet(Paths.Comparer),
-                    c.Value.Packages.ToHashSet(StringComparer.OrdinalIgnoreCase)),
+                    c.Value.Packages.ToHashSet(StringComparer.OrdinalIgnoreCase))
+                {
+                    SymbolSets = SymbolSets(c.Value.SymbolSets ?? []),
+                },
                 Paths.Comparer);
         }
         catch (Exception ex) when (ex is JsonException or IOException)
@@ -340,7 +373,10 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
         string Relative(string path) => Path.GetRelativePath(repoRoot, path).Replace('\\', '/');
         var cached = evaluated.ToDictionary(
             p => Relative(p.Key),
-            p => new CachedProject(p.Value.IsTestProject, p.Value.AssemblyName, [.. p.Value.References.Select(Relative)], [.. p.Value.Items.Select(Relative)], [.. p.Value.Packages]));
+            p => new CachedProject(p.Value.IsTestProject, p.Value.AssemblyName, [.. p.Value.References.Select(Relative)], [.. p.Value.Items.Select(Relative)], [.. p.Value.Packages])
+            {
+                SymbolSets = [.. p.Value.SymbolSets.Select(static s => s.ToList())],
+            });
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
@@ -371,6 +407,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 
         /// <summary>See <see cref="EvaluatedProject.Packages"/>.</summary>
         public HashSet<string> Packages { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Preprocessor symbols by target framework; see <see cref="EvaluatedProject.SymbolSets"/>.</summary>
+        public Dictionary<string, SortedSet<string>> Symbols { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>One project in the cache file, its paths relative to the repository.</summary>
@@ -379,7 +418,11 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
     /// <param name="References">See <see cref="EvaluatedProject.References"/>.</param>
     /// <param name="Items">See <see cref="EvaluatedProject.Items"/>.</param>
     /// <param name="Packages">See <see cref="EvaluatedProject.Packages"/>.</param>
-    private sealed record CachedProject(bool IsTestProject, string? AssemblyName, List<string> References, List<string> Items, List<string> Packages);
+    private sealed record CachedProject(bool IsTestProject, string? AssemblyName, List<string> References, List<string> Items, List<string> Packages)
+    {
+        /// <summary>See <see cref="EvaluatedProject.SymbolSets"/>; null in caches written before symbols were read.</summary>
+        public List<List<string>>? SymbolSets { get; init; }
+    }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "MSBuild evaluated {Evaluated} of {Count} project(s) in {Seconds:0.0} s")]
     private partial void LogEvaluated(int evaluated, int count, double seconds);

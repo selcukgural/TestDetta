@@ -56,10 +56,11 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
             .ToList();
         var mergeBase = git.MergeBase(root, baseRef);
 
-        var reader = new CodeChangeReader(git, new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()), loggerFactory.CreateLogger<CodeChangeReader>());
-        var codeChanges = reader.Read(root, mergeBase, changed);
-
+        // The graph first: its evaluation says which preprocessor symbols each project compiles with.
         var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), evaluator).Load(root);
+        var symbolSets = SymbolSetsOf(graph, root);
+        var reader = new CodeChangeReader(git, new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()), loggerFactory.CreateLogger<CodeChangeReader>());
+        var codeChanges = reader.Read(root, mergeBase, changed, symbolSets);
         var packageChanges = PackageChanges(git, root, mergeBase, null, changed);
         var impactAnalyzer = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>());
         var impact = impactAnalyzer.Analyze(graph, root, changed, codeChanges, packageChanges);
@@ -80,7 +81,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
                 graph,
                 root,
                 driftFiles,
-                reader.ReadBetween(root, commit, mergeBase, driftFiles),
+                reader.ReadBetween(root, commit, mergeBase, driftFiles, symbolSets),
                 PackageChanges(git, root, commit, mergeBase, driftFiles));
             drifts.Add(new MapDrift(commit, distance, driftFiles, driftImpact));
             LogDrift(commit, distance, driftFiles.Count);
@@ -91,6 +92,14 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
 
         return new AnalysisResult(root, changed, graph, impact, Plan(graph, tests, maps)) { Drifts = drifts };
     }
+
+    /// <summary>The symbol sets of every project that compiles a file, by repository-relative path.</summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="root">Repository root.</param>
+    private static Func<string, IReadOnlyCollection<IReadOnlyList<string>>> SymbolSetsOf(ProjectGraph graph, string root) =>
+        file => [.. graph.ResolveFile(Paths.Normalize(Path.Combine(root, file)))
+            .Where(static o => o.Role == FileRole.Source)
+            .SelectMany(static o => o.Project.SymbolSets)];
 
     /// <summary>
     /// Adds up the estimate over every test project with timings. An unaffected test project runs no

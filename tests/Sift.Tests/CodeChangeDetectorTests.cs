@@ -219,6 +219,25 @@ public sealed class CodeChangeDetectorTests
         Assert.True(change.AffectsWholeProject);
     }
 
+    [Fact]
+    public void Change_under_a_mix_of_symbols_is_seen_with_the_frameworks_real_symbols()
+    {
+        const string before = """
+            namespace Shop;
+            #if NET6_0_OR_GREATER && !NETSTANDARD2_0
+            public static class DateParts { public static int Year() => 2026; }
+            #endif
+            """;
+        var after = before.Replace("=> 2026;", "=> 2027;", StringComparison.Ordinal);
+
+        // Neither the bare parse nor the all-symbols one enters the region: the change cannot be named.
+        Assert.True(Detect(before, after).AffectsWholeProject);
+
+        var change = _detector.Detect("DateParts.cs", SourceText.From(before), SourceText.From(after), [["NET", "NET6_0_OR_GREATER", "NET8_0_OR_GREATER"]]);
+        Assert.False(change.AffectsWholeProject);
+        Assert.Equal(new SymbolChange("Shop.DateParts", "Year()", SymbolChangeKind.Modified), Assert.Single(change.Symbols));
+    }
+
     private CodeChange Detect(string? before, string? after) =>
         _detector.Detect("File.cs", before is null ? null : SourceText.From(before), after is null ? null : SourceText.From(after));
 }

@@ -171,6 +171,57 @@ public sealed class ProjectEvaluationTests : IDisposable
     }
 
     [Fact]
+    public void Each_target_framework_reports_its_preprocessor_symbols_once()
+    {
+        var evaluated = MsBuildProjectEvaluator.Parse(
+        [
+            "Project\t/r/Lib.csproj\t/r/Lib.csproj\tfalse\tLib\t",
+            "Framework\t/r/Lib.csproj\t/r/Lib.csproj\t\t\tnet8.0",
+            "Define\t/r/Lib.csproj\tNET8_0_OR_GREATER\t\t\tnet8.0",
+            "Define\t/r/Lib.csproj\tNET\t\t\tnet8.0",
+            "Framework\t/r/Lib.csproj\t/r/Lib.csproj\t\t\tnetstandard2.0",
+            "Define\t/r/Lib.csproj\tNETSTANDARD2_0\t\t\tnetstandard2.0",
+            "Framework\t/r/Lib.csproj\t/r/Lib.csproj\t\t\tnet9.0",
+            "Define\t/r/Lib.csproj\tNET\t\t\tnet9.0",
+            "Define\t/r/Lib.csproj\tNET8_0_OR_GREATER\t\t\tnet9.0",
+        ]);
+
+        // net9.0 compiles with the same symbols as net8.0 here: one set.
+        Assert.Equal(["NET;NET8_0_OR_GREATER", "NETSTANDARD2_0"], evaluated["/r/Lib.csproj"].SymbolSets.Select(static s => string.Join(';', s)));
+    }
+
+    [Fact]
+    [Trait("Category", "Slow")]
+    public void A_test_class_under_a_mix_of_symbols_is_traced_with_the_frameworks_real_symbols()
+    {
+        // Newtonsoft.Json's DateOnlyTests: #if NET6_0_OR_GREATER && !NETSTANDARD2_0 is entered neither
+        // with no symbols nor with every named one, only with what net10.0 really defines.
+        _repo.Write("src/Lib/Lib.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+        _repo.Write("src/Lib/Calc.cs", "namespace Lib; public static class Calc { public static int Tax() => 2; }");
+        _repo.Write("tests/Lib.Tests/Lib.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup><PackageReference Include="xunit.v3" /><ProjectReference Include="../../src/Lib/Lib.csproj" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Lib.Tests/ModernTests.cs", """
+            #if NET6_0_OR_GREATER && !NETSTANDARD2_0
+            namespace Lib.Tests;
+            public class ModernTests { [Xunit.Fact] public void Taxes() => Xunit.Assert.Equal(2, Lib.Calc.Tax()); }
+            #endif
+            """);
+        _repo.Write("tests/Lib.Tests/OtherTests.cs", "namespace Lib.Tests; public class OtherTests { [Xunit.Fact] public void Two() => Xunit.Assert.Equal(2, 1 + 1); }");
+        _repo.Commit("base");
+        _repo.Replace("src/Lib/Calc.cs", "=> 2;", "=> 1 + 1;");
+
+        var selection = new AnalysisPipeline(NullLoggerFactory.Instance, new MsBuildProjectEvaluator(NullLoggerFactory.Instance, diskCache: false))
+            .Run(_repo.Root, "main").Tests.Single();
+
+        Assert.Equal(TestRunMode.Filtered, selection.Mode);
+        Assert.Equal(["Lib.Tests.ModernTests"], selection.TestClasses);
+    }
+
+    [Fact]
     public void Driver_escapes_msbuild_characters_in_paths() =>
         Assert.Contains("a%25b%40c%24d", MsBuildProjectEvaluator.Driver(["/repo/a%b@c$d/P.csproj"], "/t/x.targets", "/t/out.txt"), StringComparison.Ordinal);
 

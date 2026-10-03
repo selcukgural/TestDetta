@@ -227,7 +227,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
         // Conditional code is indexed as if its symbols were both undefined and defined; types seen in
         // both are merged like partial types, and a member seen twice only widens its references.
-        foreach (var root in DeclarationWalker.ParseVariants(text))
+        foreach (var root in DeclarationWalker.ParseVariants(text, owner.SymbolSets))
         {
             IndexRoot(root, owner, members, types);
         }

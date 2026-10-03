@@ -206,7 +206,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   are now killed as stuck when their process tree uses under 0.2 s of CPU for `--idle-timeout`
   (default 5 minutes; `ps`, so not on Windows). Same outcome as a timeout, much sooner.
 
-- **Parse sources with each target framework's real symbols (priority)** (round 2, 2026-10-03):
+- ~~**Parse sources with each target framework's real symbols (priority)**~~ (done 2026-10-03: the
+  MSBuild evaluation reports DefineConstants per target framework, after the SDK's implicit
+  framework symbols; the index and the change detector parse once more per distinct relevant set)
+  (round 2, 2026-10-03):
   files are parsed twice, with no symbols and with every symbol their conditions name. Code under a
   mix (`#if NET6_0_OR_GREATER && !NETSTANDARD2_0`, Newtonsoft.Json's DateOnlyTests) is entered by
   neither, so the name trace never sees it. Shipped: classes the map recorded are candidates even

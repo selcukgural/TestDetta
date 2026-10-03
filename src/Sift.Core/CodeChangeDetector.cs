@@ -18,7 +18,17 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
     /// <param name="path">File path relative to the repository root; only used in the result and logs.</param>
     /// <param name="oldText">Content at the base revision, or null when the file was added.</param>
     /// <param name="newText">Content in the working tree, or null when the file was deleted.</param>
-    public CodeChange Detect(string path, SourceText? oldText, SourceText? newText)
+    public CodeChange Detect(string path, SourceText? oldText, SourceText? newText) => Detect(path, oldText, newText, []);
+
+    /// <summary>
+    /// Compares the two versions of <paramref name="path"/>, also under each symbol set the compiler
+    /// really uses for it (its projects' target frameworks), so code under a mix of symbols counts.
+    /// </summary>
+    /// <param name="path">File path relative to the repository root; only used in the result and logs.</param>
+    /// <param name="oldText">Content at the base revision, or null when the file was added.</param>
+    /// <param name="newText">Content in the working tree, or null when the file was deleted.</param>
+    /// <param name="symbolSets">Symbol sets of the projects compiling the file; empty when unknown.</param>
+    public CodeChange Detect(string path, SourceText? oldText, SourceText? newText, IReadOnlyCollection<IReadOnlyList<string>> symbolSets)
     {
         var oldRoot = DeclarationWalker.Parse(oldText);
         var newRoot = DeclarationWalker.Parse(newText);
@@ -36,15 +46,20 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
         var conditionalSymbols = DeclarationWalker.ConditionalSymbols(oldRoot, newRoot);
         if (conditionalSymbols.Count > 0)
         {
-            var (definedAffects, definedSymbols) = Compare(
-                DeclarationWalker.Parse(oldText, conditionalSymbols),
-                DeclarationWalker.Parse(newText, conditionalSymbols));
-            affectsWholeProject |= definedAffects;
-            foreach (var symbol in definedSymbols)
+            // All named symbols, then each set the compiler uses, which enters code under a mix.
+            List<IReadOnlyList<string>> views = [conditionalSymbols, .. DeclarationWalker.RelevantSets(conditionalSymbols, symbolSets)];
+            foreach (var defined in views)
             {
-                if (!symbols.Contains(symbol))
+                var (definedAffects, definedSymbols) = Compare(
+                    DeclarationWalker.Parse(oldText, defined),
+                    DeclarationWalker.Parse(newText, defined));
+                affectsWholeProject |= definedAffects;
+                foreach (var symbol in definedSymbols)
                 {
-                    symbols.Add(symbol);
+                    if (!symbols.Contains(symbol))
+                    {
+                        symbols.Add(symbol);
+                    }
                 }
             }
         }
