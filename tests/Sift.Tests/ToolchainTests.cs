@@ -65,7 +65,8 @@ public sealed class ToolchainTests : IDisposable
     [Fact]
     public void An_archive_whose_hash_differs_from_the_lock_is_not_installed()
     {
-        Installer(locked: false).Install(new Toolchain("10.0.401", []));
+        // The same architecture as Pinned: the machine's may differ (x64 on CI, arm64 on this Mac).
+        Installer(locked: false).Install(Pinned with { Runtimes = [] });
         File.WriteAllText(LockPath, File.ReadAllText(LockPath).Replace(_releases.Hash($"dotnet-sdk-{Pinned.Rid}.tar.gz"), new string('0', 128), StringComparison.Ordinal));
         Directory.Delete(Path.Combine(_root, Pinned.Rid), recursive: true);
 
@@ -93,7 +94,7 @@ public sealed class ToolchainTests : IDisposable
             { "version": 1, "archives": { "sdk/10.0.401/{{Pinned.Rid}}": { "url": "https://example.org/dotnet-sdk.tar.gz", "sha512": "{{new string('0', 128)}}" } } }
             """);
 
-        var error = Assert.Throws<InvalidOperationException>(() => Installer(locked: true).Install(new Toolchain("10.0.401", [], "arm64")));
+        var error = Assert.Throws<InvalidOperationException>(() => Installer(locked: true).Install(Pinned with { Runtimes = [] }));
 
         Assert.Contains("builds.dotnet.microsoft.com", error.Message, StringComparison.Ordinal);
         Assert.Equal(0, _releases.Downloads);
