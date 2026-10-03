@@ -18,6 +18,9 @@ internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Method
     /// field <c>i</c> has the bit <c>Methods.Count + i</c> in the tracker's buckets.
     /// </summary>
     public IReadOnlyList<string> Fields { get; init; } = [];
+
+    /// <summary>Ids of the methods that implement or override a member of a third-party library; see <see cref="CoverageMap.ExternalCallbacks"/>.</summary>
+    public IReadOnlyList<int> ExternalCallbacks { get; init; } = [];
 }
 
 /// <summary>
@@ -57,10 +60,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     {
         var methods = new List<CoveredMethod>();
         var fields = new List<string>();
+        var callbacks = new List<int>();
         var backups = new Dictionary<string, string>(StringComparer.Ordinal);
         Directory.CreateDirectory(backupDirectory);
+        var ownAssemblies = assemblies.Select(static a => Path.GetFileNameWithoutExtension(a)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var result = new InstrumentationResult(methods, backups) { Fields = fields };
+        var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks };
         try
         {
             foreach (var assembly in assemblies)
@@ -69,7 +74,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 BackUp(Path.ChangeExtension(assembly, ".pdb"), backupDirectory, backups);
 
                 var before = methods.Count;
-                InstrumentOne(assembly, testAssemblies.Contains(assembly), methods, fields);
+                InstrumentOne(assembly, testAssemblies.Contains(assembly), new MethodTables(methods, fields, callbacks, ownAssemblies));
                 LogInstrumented(assembly, methods.Count - before);
             }
         }
@@ -139,13 +144,20 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         backups[file] = backup;
     }
 
-    /// <summary>Rewrites one assembly, appending its methods to <paramref name="methods"/>.</summary>
+    /// <summary>The tables <see cref="Instrument"/> fills across all assemblies.</summary>
+    /// <param name="Methods">Method table; the index is the method's id.</param>
+    /// <param name="Fields">Tracked field table.</param>
+    /// <param name="Callbacks">Ids of methods a third-party library may call; see <see cref="InstrumentationResult.ExternalCallbacks"/>.</param>
+    /// <param name="OwnAssemblies">Names of the assemblies being instrumented: the repository's code.</param>
+    private sealed record MethodTables(List<CoveredMethod> Methods, List<string> Fields, List<int> Callbacks, IReadOnlySet<string> OwnAssemblies);
+
+    /// <summary>Rewrites one assembly, appending its methods to the shared tables.</summary>
     /// <param name="path">Assembly file.</param>
     /// <param name="containsTests">True for a test assembly, whose test classes get entry markers.</param>
-    /// <param name="methods">Method table shared by all assemblies; updated in place.</param>
-    /// <param name="fields">Tracked field table shared by all assemblies; updated in place.</param>
-    private static void InstrumentOne(string path, bool containsTests, List<CoveredMethod> methods, List<string> fields)
+    /// <param name="tables">Tables shared by all assemblies; updated in place.</param>
+    private static void InstrumentOne(string path, bool containsTests, MethodTables tables)
     {
+        var (methods, fields, callbacks, ownAssemblies) = tables;
         var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
         using var resolver = new DefaultAssemblyResolver();
         resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
@@ -218,6 +230,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
                 var id = methods.Count;
                 methods.Add(MethodNames.Map(method));
+                var isCallback = ExternalContracts.IsCallback(method, ownAssemblies);
+                if (isCallback)
+                {
+                    callbacks.Add(id);
+                }
+
                 var dataUser = dataSources.GetValueOrDefault(method);
                 // A data source serves the classes that name it, whatever class declares it.
                 var scope = scopes.GetValueOrDefault(method);
@@ -226,7 +244,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                     : isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
                     : isFixture && IsFixtureSetup(method) ? Marker.Fixture
                     : Marker.None;
-                InsertProbes(method, probes, new ProbeSite(id, marker, scope ?? dataUser));
+                InsertProbes(method, probes, new ProbeSite(id, marker, scope ?? dataUser) { ExternalCallback = isCallback });
                 InsertFieldProbes(method, probes, id, tracked);
             }
         }
@@ -418,7 +436,14 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// For a data source, the runtime name of the test class it serves; null when it serves several,
     /// and its code then counts as running outside every test. For a setup scope, its fixture name.
     /// </param>
-    private readonly record struct ProbeSite(int Id, Marker Marker, string? DataUser);
+    private readonly record struct ProbeSite(int Id, Marker Marker, string? DataUser)
+    {
+        /// <summary>
+        /// True for a method a third-party library calls back (<see cref="ExternalContracts"/>): it and
+        /// everything it runs count as a cache fill, since the library may keep what they produce.
+        /// </summary>
+        public bool ExternalCallback { get; init; }
+    }
 
     /// <summary>Which bucket marker, if any, a method starts with.</summary>
     private enum Marker
@@ -498,6 +523,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTypeInitializer));
         }
 
+        // Before the hit, so the callback itself counts as run inside the fill. A callback that
+        // throws keeps the scope open until the next bucket: more code run-once, never less.
+        if (site.ExternalCallback)
+        {
+            il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterCache));
+        }
+
         // Before the hit, so the entry point's own hit already counts as test code.
         var testCodeEnd = site.Marker == Marker.TestClass && !isTypeInitializer ? EndOf(method) : (TestCodeEnd?)null;
         if (testCodeEnd is { } beginning)
@@ -511,6 +543,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         if (isTypeInitializer)
         {
             InsertBeforeReturns(body, il, probes.ExitTypeInitializer);
+        }
+
+        if (site.ExternalCallback)
+        {
+            InsertBeforeReturns(body, il, probes.ExitCache);
         }
 
         MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType));

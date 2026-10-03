@@ -643,6 +643,23 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Member_a_third_party_library_calls_back_is_traced_by_name_too()
+    {
+        _repo.Write("tests/Shop.Tests/PlainTests.cs", """
+            namespace Shop.Tests;
+            public class PlainTests { [Fact] public void Holds() => Assert.True(true); }
+            """);
+        _repo.Commit("plain tests");
+        _externalCallbacks.Add(("Shop.PriceCalculator", "Tax"));
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.SlugTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.OrderServiceTests", [("Shop.OrderService", "Checkout"), ("Shop.PriceCalculator", "Total")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.SlugTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
     public void Coverage_map_round_trips_through_the_store()
     {
         var map = new CoverageMap(
@@ -657,6 +674,7 @@ public sealed class TestSelectorTests : IDisposable
                 new Dictionary<string, double> { ["A.Tests.Host`1"] = 0.25 }))
         {
             Generated = [new GeneratedType("tests/A.Tests/A.Tests.csproj", "A.Tests.BTests", ["Register", "Run"])],
+            ExternalCallbacks = [1],
         };
         var path = Path.Combine(_repo.Root, "map.json");
 
@@ -670,6 +688,7 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(1.5, read.Timings!.ClassSeconds["A.Tests.BTests"]);
         Assert.Equal(0.25, read.Timings.FixtureSeconds["A.Tests.Host`1"]);
         Assert.Equal(map.Commit, read.Commit);
+        Assert.Equal([1], read.ExternalCallbacks);
         var generated = Assert.Single(read.Generated);
         Assert.Equal(("tests/A.Tests/A.Tests.csproj", "A.Tests.BTests"), (generated.Project, generated.TypeName));
         Assert.Equal(["Register", "Run"], generated.References);
@@ -683,7 +702,11 @@ public sealed class TestSelectorTests : IDisposable
         {
             FailedClasses = _failed,
             Generated = _generated,
+            ExternalCallbacks = [.. _externalCallbacks.Select(m => methods.IndexOf(new CoveredMethod(m.Type, m.Member)))],
         };
+
+    /// <summary>Members the next <see cref="WriteMap"/> says a third-party library calls back.</summary>
+    private readonly List<(string Type, string Member)> _externalCallbacks = [];
 
     /// <summary>Generated code the next <see cref="WriteMap"/> includes.</summary>
     private List<GeneratedType> _generated = [];

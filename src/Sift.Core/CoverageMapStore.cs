@@ -59,6 +59,11 @@ public static class CoverageMapStore
             WriteIds(json, "sharedInProcess", shared);
         }
 
+        if (map.ExternalCallbacks is { } callbacks)
+        {
+            WriteIds(json, "externalCallbacks", callbacks);
+        }
+
         json.WriteStartArray("generated"u8);
         foreach (var type in map.Generated)
         {
@@ -174,6 +179,7 @@ public static class CoverageMapStore
                 FailedClasses = failed,
                 Initialization = root.TryGetProperty("initialization", out var initialization) ? ReadIds(initialization) : [],
                 SharedInProcess = root.TryGetProperty("sharedInProcess", out var shared) ? ReadIds(shared) : null,
+                ExternalCallbacks = root.TryGetProperty("externalCallbacks", out var callbacks) ? ReadIds(callbacks) : null,
                 BuiltValues = root.TryGetProperty("builtValues", out var built)
                     ? new CoverageHits(ReadBuckets(built.GetProperty("classes")), ReadBuckets(built.GetProperty("fixtures")), ReadIds(built.GetProperty("ambient")))
                     : null,

@@ -27,6 +27,12 @@ internal sealed class CoverageIndex
     /// <summary>Members that some process ran in two or more buckets; null when the map does not say.</summary>
     private readonly HashSet<CoveredMethod>? _sharedInProcess;
 
+    /// <summary>Members a third-party library calls back (<see cref="CoverageMap.ExternalCallbacks"/>).</summary>
+    private readonly HashSet<CoveredMethod> _externalCallbacks = [];
+
+    /// <summary>Types (and the types they are nested in) with a member in <see cref="_externalCallbacks"/>.</summary>
+    private readonly HashSet<string> _externalCallbackTypes = new(StringComparer.Ordinal);
+
     /// <summary>Builds the lookups; members that no test ran are still known, with no classes.</summary>
     /// <param name="map">Recorded map.</param>
     /// <param name="classesUsingFixture">
@@ -122,7 +128,25 @@ internal sealed class CoverageIndex
         {
             _sharedInProcess = [.. shared.Select(id => map.Methods[id])];
         }
+
+        foreach (var id in map.ExternalCallbacks ?? [])
+        {
+            _externalCallbacks.Add(map.Methods[id]);
+            _externalCallbackTypes.UnionWith(EnclosingTypes(map.Methods[id].TypeName));
+        }
     }
+
+    /// <summary>
+    /// True when an overload of the member is called back by a third-party library, which may keep
+    /// what it produced for every later caller (see <see cref="CoverageMap.ExternalCallbacks"/>).
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name.</param>
+    public bool IsExternalCallback(string typeName, string member) => _externalCallbacks.Contains(new CoveredMethod(typeName, member));
+
+    /// <summary>True when a member of <paramref name="typeName"/> or a type nested in it is called back by a third-party library.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public bool TypeHasExternalCallback(string typeName) => _externalCallbackTypes.Contains(typeName);
 
     /// <summary>Credits methods to test classes without counting buckets.</summary>
     /// <param name="map">Recorded map.</param>
