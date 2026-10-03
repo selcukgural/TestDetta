@@ -201,9 +201,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   Record (Polar.sh primary, Paddle fallback) and keys from direct sales (Turkish corporate customers
   with a TL e-Fatura) must work the same way, so the license check cannot depend on one provider's API.
 
-- **Hang detection by idleness** (round 2, 2026-10-03): a mutant that deadlocks the test host (0% CPU)
-  is only killed after the run timeout, longest run × 5 × mutant parallelism, which was 80+ minutes
-  on Newtonsoft.Json. Kill a run whose process tree stays idle for a few minutes instead.
+- ~~**Hang detection by idleness**~~ (done 2026-10-03): a mutant that deadlocked the test host (0% CPU)
+  was only killed after the run timeout (80+ minutes on Newtonsoft.Json). Test runs of the evaluation
+  are now killed as stuck when their process tree uses under 0.2 s of CPU for `--idle-timeout`
+  (default 5 minutes; `ps`, so not on Windows). Same outcome as a timeout, much sooner.
 
 - **Parse sources with each target framework's real symbols (priority)** (round 2, 2026-10-03):
   files are parsed twice, with no symbols and with every symbol their conditions name. Code under a

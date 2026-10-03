@@ -48,6 +48,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  if current (docs/design/map-drift-bridge.md, measurement 2); default 0
           --compare-tia <dll>    Also select each synthetic change with dotnet-tia (path of its Tia.Cli.dll)
                                  and judge it on the same mutants (docs/design/tia-comparison.md)
+          --idle-timeout <span>  Kill a test run whose processes use almost no CPU for this long, as stuck
+                                 (default 00:05:00; 00:00:00 waits for the run's timeout only)
           --compare-affected <exe>  Also select each synthetic change with dotnet-affected (its executable),
                                  running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
@@ -223,6 +225,16 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { TiaCli = Path.GetFullPath(value) };
                     break;
 
+                case "--idle-timeout":
+                    if (!TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var idle) || idle < TimeSpan.Zero)
+                    {
+                        error = $"--idle-timeout needs a time span such as 00:05:00 (00:00:00 turns it off), not {value}";
+                        return false;
+                    }
+
+                    run = run with { IdleTimeout = idle == TimeSpan.Zero ? null : idle };
+                    break;
+
                 case "--compare-affected":
                     run = run with { AffectedCli = Path.GetFullPath(value) };
                     break;
@@ -371,6 +383,13 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// a hang in Sift instead of waiting for ever. Analyses take seconds; the default leaves wide room.
     /// </summary>
     public TimeSpan AnalysisTimeout { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// How long a test run's process tree may use almost no CPU before it is killed as stuck (a mutant
+    /// that deadlocks the host), instead of waiting for the run's timeout; null to wait for the timeout.
+    /// The outcome is the same as a timeout: the run hung.
+    /// </summary>
+    public TimeSpan? IdleTimeout { get; init; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// The .NET the repository is built, recorded and tested with, installed under

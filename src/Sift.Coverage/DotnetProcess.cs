@@ -32,16 +32,30 @@ internal sealed partial class DotnetProcess(ILogger logger)
         string workingDirectory,
         IReadOnlyDictionary<string, string> environment,
         TextWriter output,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null) =>
+        Run(arguments, workingDirectory, environment, output, new RunLimits(timeout));
+
+    /// <summary>Runs dotnet within <paramref name="limits"/> and forwards its output line by line.</summary>
+    /// <param name="arguments">Arguments for the dotnet executable.</param>
+    /// <param name="workingDirectory">Directory the process runs in.</param>
+    /// <param name="environment">Extra environment variables for the process.</param>
+    /// <param name="output">Receives stdout and stderr of the process.</param>
+    /// <param name="limits">How long it may run, and how long its process tree may sit idle.</param>
+    /// <returns>The exit code, or <see cref="TimedOut"/> when it was killed for either limit.</returns>
+    public int Run(
+        IReadOnlyList<string> arguments,
+        string workingDirectory,
+        IReadOnlyDictionary<string, string> environment,
+        TextWriter output,
+        RunLimits limits)
     {
         using var process = Start(arguments, workingDirectory, environment);
         var reader = new LineReader(process, output.WriteLine);
-        if (!process.WaitForExit(timeout ?? Forever))
+        if (!WaitWithin(process, limits))
         {
             process.Kill(entireProcessTree: true);
             process.WaitForExit(Forever);
             Drain(reader);
-            LogTimedOut((timeout ?? Forever).TotalSeconds);
             return TimedOut;
         }
 
@@ -50,7 +64,61 @@ internal sealed partial class DotnetProcess(ILogger logger)
         return process.ExitCode;
     }
 
-    /// <summary>What <see cref="Run"/> returns for a process it killed after its timeout; no real exit code is negative on Unix.</summary>
+    /// <summary>
+    /// Waits for <paramref name="process"/> to exit; false when it ran past the timeout, or when its
+    /// whole process tree used almost no CPU for the idle limit (a deadlock: waiting longer changes nothing).
+    /// </summary>
+    /// <param name="process">Started process.</param>
+    /// <param name="limits">Timeout and idle limit.</param>
+    internal bool WaitWithin(Process process, RunLimits limits)
+    {
+        var deadline = limits.Timeout is { } timeout ? Stopwatch.GetTimestamp() + (long)(timeout.TotalSeconds * Stopwatch.Frequency) : long.MaxValue;
+        if (limits.Idle is not { } idle || !ProcessTreeWatch.IsSupported)
+        {
+            if (process.WaitForExit(limits.Timeout ?? Forever))
+            {
+                return true;
+            }
+
+            LogTimedOut((limits.Timeout ?? Forever).TotalSeconds);
+            return false;
+        }
+
+        var sample = TimeSpan.FromTicks(Math.Max(TimeSpan.TicksPerSecond / 4, Math.Min(idle.Ticks / 10, TimeSpan.FromSeconds(30).Ticks)));
+        var idleSince = Stopwatch.GetTimestamp();
+        var cpuAtIdleStart = ProcessTreeWatch.TreeCpuSeconds(process.Id) ?? 0;
+        while (!process.WaitForExit(sample))
+        {
+            var now = Stopwatch.GetTimestamp();
+            if (now >= deadline)
+            {
+                LogTimedOut(limits.Timeout!.Value.TotalSeconds);
+                return false;
+            }
+
+            if (ProcessTreeWatch.TreeCpuSeconds(process.Id) is not { } cpu)
+            {
+                continue;
+            }
+
+            if (cpu - cpuAtIdleStart > ProcessTreeWatch.IdleCpuSeconds)
+            {
+                idleSince = now;
+                cpuAtIdleStart = cpu;
+                continue;
+            }
+
+            if (Stopwatch.GetElapsedTime(idleSince, now) >= idle)
+            {
+                LogIdle(idle.TotalSeconds, cpu - cpuAtIdleStart);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>What <see cref="Run(IReadOnlyList{string}, string, IReadOnlyDictionary{string, string}, TextWriter, TimeSpan?)"/> returns for a process it killed after its timeout or idle limit; no real exit code is negative on Unix.</summary>
     public const int TimedOut = -1;
 
     /// <summary>Runs dotnet and returns its stdout.</summary>
@@ -203,9 +271,20 @@ internal sealed partial class DotnetProcess(ILogger logger)
     [LoggerMessage(Level = LogLevel.Debug, Message = "dotnet exited with {ExitCode}")]
     private partial void LogFinished(int exitCode);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet and its children used {Cpu:0.00} s of CPU in {Seconds:0} s and were killed as stuck")]
+    private partial void LogIdle(double seconds, double cpu);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet did not finish within {Seconds:0} s and was killed")]
     private partial void LogTimedOut(double seconds);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "dotnet exited but its output stayed open for {Seconds:0} s (a child process kept it); reading stopped")]
     private partial void LogOutputLeftOpen(double seconds);
 }
+
+/// <summary>Limits of one <see cref="DotnetProcess"/> run.</summary>
+/// <param name="Timeout">Longest the process may run; null for no limit.</param>
+/// <param name="Idle">
+/// Longest its process tree may use almost no CPU (<see cref="ProcessTreeWatch.IdleCpuSeconds"/>)
+/// before it is killed as stuck; null to wait for the timeout only.
+/// </param>
+internal sealed record RunLimits(TimeSpan? Timeout, TimeSpan? Idle = null);
