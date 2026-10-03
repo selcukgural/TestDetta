@@ -64,6 +64,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var backups = new Dictionary<string, string>(StringComparer.Ordinal);
         Directory.CreateDirectory(backupDirectory);
         var ownAssemblies = assemblies.Select(static a => Path.GetFileNameWithoutExtension(a)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var coreLibrary = TestHostCoreLibrary(testAssemblies);
 
         var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks };
         try
@@ -74,7 +75,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 BackUp(Path.ChangeExtension(assembly, ".pdb"), backupDirectory, backups);
 
                 var before = methods.Count;
-                InstrumentOne(assembly, testAssemblies.Contains(assembly), new MethodTables(methods, fields, callbacks, ownAssemblies));
+                InstrumentOne(assembly, testAssemblies.Contains(assembly), new MethodTables(methods, fields, callbacks, ownAssemblies) { CoreLibrary = coreLibrary });
                 LogInstrumented(assembly, methods.Count - before);
             }
         }
@@ -149,7 +150,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="Fields">Tracked field table.</param>
     /// <param name="Callbacks">Ids of methods a third-party library may call; see <see cref="InstrumentationResult.ExternalCallbacks"/>.</param>
     /// <param name="OwnAssemblies">Names of the assemblies being instrumented: the repository's code.</param>
-    private sealed record MethodTables(List<CoveredMethod> Methods, List<string> Fields, List<int> Callbacks, IReadOnlySet<string> OwnAssemblies);
+    private sealed record MethodTables(List<CoveredMethod> Methods, List<string> Fields, List<int> Callbacks, IReadOnlySet<string> OwnAssemblies)
+    {
+        /// <summary>Version of the test host's System.Private.CoreLib (<see cref="TestHostCoreLibrary"/>); null when unknown.</summary>
+        public Version? CoreLibrary { get; init; }
+    }
 
     /// <summary>Rewrites one assembly, appending its methods to the shared tables.</summary>
     /// <param name="path">Assembly file.</param>
@@ -178,6 +183,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         });
 
         var tracker = module.ImportReference(typeof(SiftTracker));
+        AddCoreLibraryReference(module, tables.CoreLibrary);
         var probes = new Probes(
             Probe(tracker, nameof(SiftTracker.Hit)),
             Probe(tracker, nameof(SiftTracker.EnterTestInstance)),
@@ -294,6 +300,54 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             : type == typeof(string) ? types.String
             : type == typeof(object) ? types.Object
             : throw new NotSupportedException($"Tracker method {name} uses {type}; probes take only int, string and object.");
+    }
+
+    /// <summary>
+    /// Gives a module that lacks one a reference to System.Private.CoreLib at the test host's version
+    /// (<see cref="TestHostCoreLibrary"/>). Microsoft's code coverage profiler, which some repositories run
+    /// in every test run (Polly), adds references of its own while the module loads, and corrupts the
+    /// metadata of a module Cecil wrote unless that reference is there already ("The metadata is
+    /// corrupt"). The version must be exactly the one the test host runs: tests that compile code with
+    /// Roslyn against the repository's assemblies reference the running core library, and Roslyn
+    /// reports any other version (CS1705 for a higher one, CS1701 for a lower one; protobuf-net's
+    /// BuildTools tests). A test host rolled forward to a newer runtime still sees a lower one.
+    /// </summary>
+    /// <param name="module">Module being instrumented.</param>
+    /// <param name="version">Version of the test host's core library; null leaves the module alone.</param>
+    private static void AddCoreLibraryReference(ModuleDefinition module, Version? version)
+    {
+        if (version is null || module.AssemblyReferences.Any(static r => r.Name == "System.Private.CoreLib"))
+        {
+            return;
+        }
+
+        module.AssemblyReferences.Add(new AssemblyNameReference("System.Private.CoreLib", version)
+        {
+            PublicKeyToken = [0x7c, 0xec, 0x85, 0xd7, 0xbe, 0xa7, 0x79, 0x8e],
+        });
+    }
+
+    /// <summary>
+    /// The version of System.Private.CoreLib the tests run on: the major version of the test assembly's
+    /// .NET target framework (8.0.0.0 for net8.0). Null for .NET Framework, which has no
+    /// System.Private.CoreLib, and when no test assembly says.
+    /// </summary>
+    /// <param name="testAssemblies">Test assemblies being instrumented.</param>
+    private static Version? TestHostCoreLibrary(IReadOnlySet<string> testAssemblies)
+    {
+        foreach (var path in testAssemblies)
+        {
+            using var module = ModuleDefinition.ReadModule(path);
+            if (module.Assembly?.CustomAttributes.FirstOrDefault(static a => a.AttributeType.FullName == "System.Runtime.Versioning.TargetFrameworkAttribute")
+                    is { ConstructorArguments: [{ Value: string framework }, ..] }
+                && framework.StartsWith(".NETCoreApp,Version=v", StringComparison.Ordinal)
+                && Version.TryParse(framework[".NETCoreApp,Version=v".Length..], out var version) && version.Major >= 5)
+            {
+                return new Version(version.Major, 0, 0, 0);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Imported references to the tracker methods the probes call.</summary>

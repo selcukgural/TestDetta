@@ -73,10 +73,22 @@ that report numbers (value reporting) only once the numbers are proven right.
   with CS1705 in `CompileWithModelGenerator`: the probes were imported through reflection, which gave
   every instrumented assembly a reference to the instrumenting process's System.Private.CoreLib
   10.0, and Roslyn refuses such an assembly as a metadata reference for a net8.0 compilation. Probe
-  references are now built with the module's own core types (`AssemblyInstrumenter.Probe`); the only
-  reference instrumentation adds is Sift.Coverage.Runtime. 13 of the 15 now record; the other 2
+  references are now built with the module's own core types (`AssemblyInstrumenter.Probe`). That
+  alone broke Polly, which runs Microsoft's code coverage in every test run: the profiler corrupts a
+  Cecil-written module that has no System.Private.CoreLib reference ("The metadata is corrupt", no
+  map for Polly.Core.Tests). Each instrumented module now gets that reference at the test host's
+  version, read from the test assembly's target framework: Roslyn accepts exactly that version (any
+  other gives CS1705 or CS1701). 13 of the 15 protobuf-net classes now record; the other 2
   (`Should*DefaultCodeFixProviderTests`) fail without Sift too on a Turkish-locale machine (a code
   fix formats `2.2m` as "2,2") and pass under en-US.
+- **Microsoft code coverage next to Sift's recording** (Polly, 2026-10-04): with the fix above
+  Polly.Core.Tests records fully (124 classes, none failed), but with some builds of
+  Sift.Coverage.Runtime one of five shards still crashes at start ("Index not found", 0x80131124)
+  and is rerun by the fallback. Two builds of the same source (same methods, IL sizes and references,
+  different MVID) behaved differently in four runs each, so it lies in the profiler's handling of
+  the loaded modules. Running two coverage tools at once is waste anyway: find a way to keep
+  Microsoft's collector off during recording (the repository adds `--coverage` in
+  `_TestingPlatformCommandLineArguments`), or measure how often it costs a shard.
 - ~~**Direct changes to a member's metadata**~~ (done 2026-10-03,
   docs/design/reflection-types-with-coverage.md "Direct metadata changes"): the change detector
   reports `MetadataChanged` when a declaration's attributes or parameter defaults changed (or a

@@ -41,17 +41,31 @@ public sealed class AssemblyInstrumenterTests : IDisposable
     }
 
     [Fact]
-    public void Instrumenting_adds_no_assembly_reference_but_the_tracker()
+    public void Instrumenting_adds_the_tracker_and_the_test_hosts_core_library_only()
     {
-        // A reference to the instrumenting process's own core library (System.Private.CoreLib 10.0)
-        // makes Roslyn refuse the assembly as a metadata reference for an older target (CS1705), as
-        // protobuf-net's BuildTools tests do when they compile code against it.
-        var assembly = Copy(typeof(GitClient).Assembly.Location);
-        var before = References(assembly);
+        // The library targets netstandard2.0, the "test assembly" net10.0. A core library reference at
+        // the instrumenting process's version, or at any version but the test host's, makes Roslyn
+        // report the assembly when tests compile against it (CS1705, CS1701; protobuf-net's BuildTools
+        // tests). One at the test host's version is what Microsoft's coverage profiler needs (Polly).
+        var library = Copy(Path.Combine(AppContext.BaseDirectory, "Mono.Cecil.dll"));
+        var tests = Copy(typeof(GitClient).Assembly.Location);
+        var (libraryBefore, testsBefore) = (References(library), References(tests));
 
-        new AssemblyInstrumenter(NullLogger.Instance).Instrument([assembly], new HashSet<string>(), Path.Combine(_directory, "backup"));
+        new AssemblyInstrumenter(NullLogger.Instance).Instrument([library, tests], new HashSet<string>([tests]), Path.Combine(_directory, "backup"));
 
-        Assert.Equal([.. before.Append("Sift.Coverage.Runtime").Order(StringComparer.Ordinal)], References(assembly));
+        Assert.Equal([.. libraryBefore.Append("Sift.Coverage.Runtime").Append("System.Private.CoreLib 10.0.0.0").Order(StringComparer.Ordinal)], References(library));
+        Assert.Equal([.. testsBefore.Append("Sift.Coverage.Runtime").Append("System.Private.CoreLib 10.0.0.0").Order(StringComparer.Ordinal)], References(tests));
+    }
+
+    [Fact]
+    public void Without_a_test_assembly_no_core_library_is_added()
+    {
+        var library = Copy(Path.Combine(AppContext.BaseDirectory, "Mono.Cecil.dll"));
+        var before = References(library);
+
+        new AssemblyInstrumenter(NullLogger.Instance).Instrument([library], new HashSet<string>(), Path.Combine(_directory, "backup"));
+
+        Assert.Equal([.. before.Append("Sift.Coverage.Runtime").Order(StringComparer.Ordinal)], References(library));
     }
 
     /// <summary>Names and versions of the assemblies <paramref name="path"/> references, sorted.</summary>
