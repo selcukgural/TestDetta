@@ -15,6 +15,18 @@ jobs:
       contents: read
       # Pull requests list the Actions caches to find the newest coverage map.
       actions: read
+    # The license service's tests need a Postgres; each test makes and drops its own database.
+    services:
+      postgres:
+        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+        env:
+          POSTGRES_PASSWORD: ci-only
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SIFT_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

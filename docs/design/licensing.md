@@ -216,6 +216,36 @@ A small web service, the only holder of the signing key.
   - each outcome; a clock moved back;
   - enforced and not enforced; JSON and Markdown.
 
+## As built (phase 2, first part, 2026-10-03)
+
+`src/Sift.LicenseService`: ASP.NET Core with Postgres through Npgsql and plain SQL, deployed as a
+container (`Dockerfile`: images pinned by digest, the image's non-root user, the signing key mounted
+as a file and never baked in or passed as a variable). The host is not chosen yet (user decision:
+container, decided later).
+
+- **Records** (`licenses`) are the source of truth. Every change also writes an `audit` row with its
+  reason, in the same transaction.
+- **Signing:** `SigningKey` loads the ECDSA P-256 key from a PEM file and never logs it. A cloud KMS
+  can replace it behind the same members. `LicenseIssuer` adds the slack: 7 days for a subscription,
+  30 for annual, none for a trial.
+- **Refresh:** `GET /v1/licenses/{id}` with `Authorization: Sift <license>`. The presented license
+  must be genuine (current or retired key) and for the same id; it may have expired. Unknown,
+  revoked, mismatched and unproven requests get the same 404. The response is `no-store`. There is
+  a rate limit per client address and per license, and the request body is limited to 16 KiB.
+- **Admin:** `dotnet Sift.LicenseService.dll admin issue|update|revoke|show|list|public-key`, run
+  from a shell on the host. There is no admin web UI. `public-key` prints what goes into
+  `LicenseKeys.Trusted`.
+- **Tests:** `tests/Sift.LicenseService.Tests` against a real Postgres, one database per test,
+  through the real HTTP pipeline; sabotage-checked. CI runs a Postgres service container
+  (`SIFT_TEST_POSTGRES`).
+
+Still to do in phase 2:
+- Sift's refresh client (daily, 2 s timeout, `SIFT_LICENSE_REFRESH=off`);
+- the production key and embedding its public key;
+- forwarded-header handling for the host's proxy, so the per-address limit sees client addresses;
+- the customer portal;
+- Polar webhooks (phase 3).
+
 ## Phases
 
 1. Format, verification, committer counting and degradation in Sift, with a locally signed test
