@@ -21,6 +21,12 @@ internal static partial class LicenseGate
         try
         {
             var inputs = new LicenseInputs(new GitClient(loggerFactory.CreateLogger<GitClient>()), environment, home);
+            using (var handler = new SocketsHttpHandler())
+            {
+                new LicenseRefresher(handler, environment, home, TimeProvider.System, loggerFactory.CreateLogger<LicenseRefresher>())
+                    .RefreshAsync(inputs.FindLicenses(repoRoot), LicenseKeys.Trusted).GetAwaiter().GetResult();
+            }
+
             return LicenseCheck.Check(inputs.Gather(repoRoot, DateTimeOffset.UtcNow), LicenseKeys.Trusted);
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException)

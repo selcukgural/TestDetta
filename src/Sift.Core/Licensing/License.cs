@@ -108,6 +108,7 @@ public static class License
             }
 
             json.WriteEndArray();
+            json.WriteString("issued"u8, claims.Issued.UtcDateTime);
             json.WriteString("validFrom"u8, claims.ValidFrom.UtcDateTime);
             json.WriteString("validUntil"u8, claims.ValidUntil.UtcDateTime);
             if (claims.Refresh is { } refresh)
@@ -150,6 +151,9 @@ public static class License
             [.. root.GetProperty("scopes").EnumerateArray().Select(static s => s.GetString()!)],
             root.GetProperty("validFrom").GetDateTimeOffset(),
             root.GetProperty("validUntil").GetDateTimeOffset(),
-            root.TryGetProperty("refresh", out var refresh) && refresh.GetString() is { } url ? new Uri(url) : null);
+            root.TryGetProperty("refresh", out var refresh) && refresh.GetString() is { } url ? new Uri(url) : null)
+        {
+            Issued = root.GetProperty("issued").GetDateTimeOffset(),
+        };
     }
 }

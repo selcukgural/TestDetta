@@ -1,12 +1,12 @@
 namespace Sift.Core.Licensing;
 
 /// <summary>What a license check looks at, gathered by <see cref="LicenseInputs"/> or by a test.</summary>
-/// <param name="LicenseText">The license string found, or null.</param>
+/// <param name="Licenses">License strings found, in order of precedence (<see cref="LicenseInputs.FindLicenses"/>).</param>
 /// <param name="Identity">The repository's normalised identity, or null when unknown.</param>
 /// <param name="Authors">Commit authors of the last 60 days on HEAD.</param>
 /// <param name="Now">The current time: the later of the clock and HEAD's commit time.</param>
 /// <param name="IsPublic">True when the CI says the repository is public.</param>
-public sealed record LicenseCheckInput(string? LicenseText, string? Identity, IReadOnlyList<CommitAuthor> Authors, DateTimeOffset Now, bool IsPublic)
+public sealed record LicenseCheckInput(IReadOnlyList<string> Licenses, string? Identity, IReadOnlyList<CommitAuthor> Authors, DateTimeOffset Now, bool IsPublic)
 {
     /// <summary>The customer's own bot patterns.</summary>
     public IReadOnlyList<string> ExtraBots { get; init; } = [];
@@ -24,6 +24,40 @@ public static class LicenseCheck
     /// <summary>Days active committers may stay above the seats (tolerance included) before selection stops.</summary>
     public const int OverSeatsDays = 30;
 
+    /// <summary>
+    /// The license to use of those found: the first genuine one decides which license it is, and of
+    /// its genuine versions (the CI secret, a refreshed or installed copy) the newest signed counts.
+    /// Null, with the first one's reason, when none is genuine.
+    /// </summary>
+    /// <param name="licenses">License strings in order of precedence.</param>
+    /// <param name="trustedKeys">Public keys by key id.</param>
+    /// <param name="error">Why none is genuine; null when one is.</param>
+    public static (string Text, LicenseClaims Claims)? Best(IReadOnlyList<string> licenses, IReadOnlyDictionary<string, byte[]> trustedKeys, out string? error)
+    {
+        error = null;
+        var genuine = new List<(string Text, LicenseClaims Claims)>();
+        foreach (var text in licenses)
+        {
+            if (License.Verify(text, trustedKeys, out var reason) is { } claims)
+            {
+                genuine.Add((text.Trim(), claims));
+            }
+            else
+            {
+                error ??= reason;
+            }
+        }
+
+        if (genuine.Count == 0)
+        {
+            return null;
+        }
+
+        error = null;
+        var id = genuine[0].Claims.Id;
+        return genuine.Where(g => g.Claims.Id == id).MaxBy(static g => g.Claims.Issued);
+    }
+
     /// <summary>Checks <paramref name="input"/> against the public keys Sift trusts.</summary>
     /// <param name="input">What was found.</param>
     /// <param name="trustedKeys">Public keys by key id.</param>
@@ -34,15 +68,17 @@ public static class LicenseCheck
             return new LicenseStatus(LicenseState.PublicRepository, "public repository: no license needed", null, null);
         }
 
-        if (input.LicenseText is null)
+        if (input.Licenses.Count == 0)
         {
             return new LicenseStatus(LicenseState.Missing, "no Sift license found (set SIFT_LICENSE or SIFT_LICENSE_FILE); every test runs", null, null);
         }
 
-        if (License.Verify(input.LicenseText, trustedKeys, out var error) is not { } claims)
+        if (Best(input.Licenses, trustedKeys, out var error) is not { } best)
         {
             return new LicenseStatus(LicenseState.Invalid, $"the Sift license is not valid: {error}; every test runs", null, null);
         }
+
+        var claims = best.Claims;
 
         if (input.Identity is null)
         {

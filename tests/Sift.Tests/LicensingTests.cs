@@ -107,7 +107,7 @@ public sealed class LicensingTests : IDisposable
         var license = License.Sign(Claims(), _key);
         var five = Enumerable.Range(1, 5).Select(i => new CommitAuthor(Now.AddDays(-i), $"dev{i}@acme.com", $"Dev {i}")).ToList();
         LicenseStatus Run(string? text, string? identity = "github.com/acme/app", IReadOnlyList<CommitAuthor>? authors = null, bool isPublic = false) =>
-            LicenseCheck.Check(new LicenseCheckInput(text, identity, authors ?? five, Now, isPublic), Trusted);
+            LicenseCheck.Check(new LicenseCheckInput(text is null ? [] : [text], identity, authors ?? five, Now, isPublic), Trusted);
 
         Assert.Equal(LicenseState.PublicRepository, Run(null, isPublic: true).State);
         Assert.Equal(LicenseState.Missing, Run(null).State);
@@ -133,6 +133,22 @@ public sealed class LicensingTests : IDisposable
     }
 
     [Fact]
+    public void The_newest_genuine_version_of_the_first_license_counts()
+    {
+        var older = License.Sign(Claims() with { Issued = Now.AddDays(-30) }, _key);
+        var newer = License.Sign(Claims(seats: 7) with { Issued = Now.AddDays(-1) }, _key);
+        var otherLicense = License.Sign(Claims(seats: 50) with { Id = "L-2", Issued = Now }, _key);
+
+        // The CI secret holds the older version; a refreshed copy holds the newer one.
+        Assert.Equal(7, LicenseCheck.Best(["garbage", older, otherLicense, newer], Trusted, out _)!.Value.Claims.Seats);
+        // A seat reduction is a newer license with fewer seats.
+        var reduced = License.Sign(Claims(seats: 3) with { Issued = Now }, _key);
+        Assert.Equal(3, LicenseCheck.Best([newer, reduced], Trusted, out _)!.Value.Claims.Seats);
+        Assert.Null(LicenseCheck.Best(["garbage"], Trusted, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
     public void Inputs_come_from_the_environment_files_and_git_without_the_network()
     {
         _repo.Write("a.txt", "a");
@@ -149,19 +165,17 @@ public sealed class LicensingTests : IDisposable
         var gathered = inputs.Gather(_repo.Root, DateTimeOffset.UtcNow);
 
         Assert.Equal("github.com/acme/app", gathered.Identity);
-        Assert.Null(gathered.LicenseText);
+        Assert.Empty(gathered.Licenses);
         Assert.False(gathered.IsPublic);
         // The old work was committed today but written in 2020: only the recent author is active,
         // under the .mailmap identity.
         Assert.Equal(["dev1@acme.com"], new ActiveCommitters(gathered.Authors, []).At(gathered.Now));
 
         _repo.Write(".sift/license", "from-repo");
-        Assert.Equal("from-repo", inputs.FindLicense(_repo.Root));
         Directory.CreateDirectory(Path.Combine(home, ".sift"));
         File.WriteAllText(LicenseInputs.InstalledPath(home), "installed\n");
-        Assert.Equal("installed", inputs.FindLicense(_repo.Root));
         variables["SIFT_LICENSE"] = " from-variable ";
-        Assert.Equal("from-variable", inputs.FindLicense(_repo.Root));
+        Assert.Equal(["from-variable", "installed", "from-repo"], inputs.FindLicenses(_repo.Root));
 
         variables["SIFT_LICENSE_SCOPE"] = "git.acme.corp/scm/pay/app";
         variables["CI_PROJECT_VISIBILITY"] = "public";

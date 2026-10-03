@@ -31,33 +31,35 @@ public sealed class LicenseInputs(GitClient git, Func<string, string?> environme
             ? RepositoryIdentity.Normalize(scope.Contains("://", StringComparison.Ordinal) ? scope : "https://" + scope)
             : RepositoryIdentity.Normalize(git.OriginUrl(repoRoot));
 
-        return new LicenseCheckInput(FindLicense(repoRoot), identity, authors, now, IsPublic())
+        return new LicenseCheckInput(FindLicenses(repoRoot), identity, authors, now, IsPublic())
         {
             ExtraBots = ReadBots(repoRoot),
         };
     }
 
     /// <summary>
-    /// The license string, from the first of: <c>SIFT_LICENSE</c>, the file <c>SIFT_LICENSE_FILE</c>
-    /// names, <c>~/.sift/license</c> (installed or refreshed), <c>.sift/license</c> in the repository.
+    /// Every license string found, in order of precedence: <c>SIFT_LICENSE</c>, the file
+    /// <c>SIFT_LICENSE_FILE</c> names, <c>~/.sift/license</c> (installed or refreshed), <c>.sift/license</c>
+    /// in the repository. <see cref="LicenseCheck.Best"/> picks the one to use.
     /// </summary>
     /// <param name="repoRoot">Repository root.</param>
-    public string? FindLicense(string repoRoot)
+    public IReadOnlyList<string> FindLicenses(string repoRoot)
     {
-        if (environment("SIFT_LICENSE") is { Length: > 0 } text)
+        var licenses = new List<string>();
+        if (environment("SIFT_LICENSE") is { Length: > 0 } text && text.Trim() is { Length: > 0 } trimmed)
         {
-            return text.Trim();
+            licenses.Add(trimmed);
         }
 
         foreach (var file in (string?[])[environment("SIFT_LICENSE_FILE"), InstalledPath(home), Path.Combine(repoRoot, ".sift", "license")])
         {
             if (file is { Length: > 0 } && File.Exists(file) && File.ReadAllText(file).Trim() is { Length: > 0 } content)
             {
-                return content;
+                licenses.Add(content);
             }
         }
 
-        return null;
+        return licenses;
     }
 
     /// <summary>Where <c>sift license install</c> keeps a license: <c>~/.sift/license</c>.</summary>

@@ -239,8 +239,16 @@ container, decided later).
   through the real HTTP pipeline; sabotage-checked. CI runs a Postgres service container
   (`SIFT_TEST_POSTGRES`).
 
+Sift's refresh client (`Sift.Cli.LicenseRefresher`, same day): before each check, at most once a
+day (`~/.sift/license-refresh`), with a 2-second timeout and no retries. It is `https` only and
+honours `SIFT_LICENSE_REFRESH=off` and `HTTPS_PROXY`. The license goes in the header only. A
+response is stored in `~/.sift/license` only when it is a genuine, newer version (`issued`) of the
+same license; every failure is ignored. Licenses carry `issued`. Of the genuine versions found (the
+CI secret, the refreshed copy), the newest of the first license counts (`LicenseCheck.Best`). A
+seat reduction is a newer license with fewer seats. Before launch no key is trusted, so no request
+is ever sent.
+
 Still to do in phase 2:
-- Sift's refresh client (daily, 2 s timeout, `SIFT_LICENSE_REFRESH=off`);
 - the production key and embedding its public key;
 - forwarded-header handling for the host's proxy, so the per-address limit sees client addresses;
 - the customer portal;

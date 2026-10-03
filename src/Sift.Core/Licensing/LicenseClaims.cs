@@ -34,4 +34,11 @@ public sealed record LicenseClaims(
     IReadOnlyList<string> Scopes,
     DateTimeOffset ValidFrom,
     DateTimeOffset ValidUntil,
-    Uri? Refresh);
+    Uri? Refresh)
+{
+    /// <summary>
+    /// When this version was signed. Of several genuine versions of the same license (the CI secret,
+    /// a refreshed copy), the newest one counts: a seat reduction is a newer license with fewer seats.
+    /// </summary>
+    public DateTimeOffset Issued { get; init; } = ValidFrom;
+}
