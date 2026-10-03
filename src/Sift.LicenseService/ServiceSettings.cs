@@ -13,6 +13,9 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
     /// <summary>Public keys of retired signing keys (key id to base64 SubjectPublicKeyInfo), still accepted when a license asks for its refresh.</summary>
     public IReadOnlyDictionary<string, string> RetiredKeys { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>The Polar webhook endpoint's secret (<c>whsec_...</c>); null turns the endpoint off.</summary>
+    public string? PolarWebhookSecret { get; init; }
+
     /// <summary>Refresh requests one client address may make per minute.</summary>
     public int PerAddressPerMinute { get; init; } = 60;
 
@@ -39,6 +42,7 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
             RetiredKeys = section.GetSection("RetiredKeys").GetChildren().ToDictionary(static c => c.Key, static c => c.Value ?? ""),
             PerAddressPerMinute = section.GetValue("PerAddressPerMinute", 60),
             PerLicensePerHour = section.GetValue("PerLicensePerHour", 600),
+            PolarWebhookSecret = section["PolarWebhookSecret"] is { Length: > 0 } secret ? secret : null,
         };
     }
 }

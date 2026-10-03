@@ -254,6 +254,42 @@ Still to do in phase 2:
 - the customer portal;
 - Polar webhooks (phase 3).
 
+## As built (phase 3, Polar, 2026-10-03)
+
+`POST /webhooks/polar` (`PolarWebhook`) turns Polar subscription events into license records.
+
+- **Signature.** Polar signs with the Standard Webhooks scheme (secrets made on or after
+  2026-09-08). The check is HMAC-SHA256 with the base64 key after `whsec_` over
+  `{webhook-id}.{webhook-timestamp}.{body}`, compared in constant time with every `v1,` signature,
+  and the timestamp must be within 5 minutes. It is checked against the specification's published
+  test vector. A failure returns 401, logs a warning, and nothing is stored. Without
+  `Licenses:PolarWebhookSecret` the endpoint answers 404.
+- **Delivery.** Each `webhook-id` is handled once. It is marked handled after it is applied, so a
+  failure in between is left to Polar's retries (up to 10). The body limit is raised to 256 KiB for
+  this endpoint only.
+- **State.** Every `subscription.*` event carries the whole subscription, so the record is rebuilt
+  from its current state, keyed `P-<subscription id>`. The write is conditional on Polar's
+  `modified_at` being newer, in one statement, so late or simultaneous events never restore an older
+  state.
+- **Mapping:**
+  - seats come from the subscription's `seats`;
+  - the period ends at `ends_at`, or else `current_period_end`; a subscription cancelled at period
+    end keeps its license until then;
+  - `ended_at`, `incomplete_expired` or `unpaid` revoke the record, which stops renewals;
+  - `trialing` makes a trial license;
+  - an incomplete checkout makes no license;
+  - the licensee is the customer's name or billing name, never the email, which would end up in the
+    license string.
+- **Needs attention** (a warning plus an `attention` audit entry): a subscription without a seat
+  count (the product must be seat-based), or without a scope.
+
+**To go live in Polar** (no change needed before then):
+1. Make the product seat-based.
+2. Add a checkout custom field with the key `scope`, where customers enter their repositories
+   (`github.com/acme/*`, `git.acme.corp/*`).
+3. Add a webhook endpoint `https://<service>/webhooks/polar` for the `subscription.*` events.
+4. Put its secret in `Licenses__PolarWebhookSecret`.
+
 ## Phases
 
 1. Format, verification, committer counting and degradation in Sift, with a locally signed test

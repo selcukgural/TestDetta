@@ -24,6 +24,7 @@ builder.WebHost.ConfigureKestrel(static kestrel =>
 });
 
 builder.Services.AddSingleton(settings);
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(settings.ConnectionString));
 builder.Services.AddSingleton<LicenseStore>();
 builder.Services.AddSingleton(_ => new SigningKey(settings.KeyId, File.ReadAllText(settings.KeyFile)));
@@ -54,6 +55,7 @@ app.UseRouting();
 app.UseRateLimiter();
 app.MapGet("/healthz", static () => Results.Text("ok"));
 app.MapGet("/v1/licenses/{id}", RefreshEndpoint.HandleAsync);
+app.MapPost("/webhooks/polar", PolarWebhook.HandleAsync);
 await app.RunAsync();
 return 0;
 

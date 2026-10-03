@@ -36,6 +36,12 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
                 action text not null,
                 detail text not null
             );
+            -- Step 2: payment provider webhooks.
+            alter table licenses add column if not exists source_modified_at timestamptz;
+            create table if not exists processed_webhooks (
+                id text primary key,
+                at timestamptz not null default now()
+            );
             """);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -67,6 +73,44 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
             reader.GetString(9));
     }
 
+    /// <summary>True when the webhook <paramref name="webhookId"/> was handled before: providers deliver an event more than once.</summary>
+    /// <param name="webhookId">The provider's webhook id.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task<bool> WebhookHandledAsync(string webhookId, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("select 1 from processed_webhooks where id = $1");
+        command.Parameters.Add(new NpgsqlParameter { Value = webhookId });
+        return await command.ExecuteScalarAsync(cancellationToken) is not null;
+    }
+
+    /// <summary>
+    /// Records that the webhook <paramref name="webhookId"/> was handled. Called after it was applied,
+    /// so a failure in between leaves it to the provider's retry; applying twice is harmless, since
+    /// provider states are written conditionally.
+    /// </summary>
+    /// <param name="webhookId">The provider's webhook id.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task MarkWebhookHandledAsync(string webhookId, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("insert into processed_webhooks (id) values ($1) on conflict (id) do nothing");
+        command.Parameters.Add(new NpgsqlParameter { Value = webhookId });
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Writes an audit entry alone: something about a license that needs an admin.</summary>
+    /// <param name="licenseId">License id, which may have no record yet.</param>
+    /// <param name="action">What happened.</param>
+    /// <param name="detail">Why it needs attention.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task AuditAsync(string licenseId, string action, string detail, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("insert into audit (license_id, action, detail) values ($1, $2, $3)");
+        command.Parameters.Add(new NpgsqlParameter { Value = licenseId });
+        command.Parameters.Add(new NpgsqlParameter { Value = action });
+        command.Parameters.Add(new NpgsqlParameter { Value = detail });
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     /// <summary>All records, newest period end first, for the admin command.</summary>
     /// <param name="cancellationToken">Cancels the call.</param>
     public async Task<IReadOnlyList<string>> ListIdsAsync(CancellationToken cancellationToken)
@@ -87,16 +131,33 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
     /// <param name="action">What happened, for the audit: <c>issue</c>, <c>update</c>, <c>revoke</c>.</param>
     /// <param name="detail">Who or what did it and why.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
-    public async Task SaveAsync(LicenseRecord record, string action, string detail, CancellationToken cancellationToken)
+    public Task SaveAsync(LicenseRecord record, string action, string detail, CancellationToken cancellationToken) =>
+        SaveAsync(record, action, detail, sourceModified: null, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="SaveAsync(LicenseRecord, string, string, CancellationToken)"/>, for a provider's state:
+    /// written only when <paramref name="sourceModified"/> is newer than what the record was last built
+    /// from, in one conditional statement, so events that arrive late or at the same time never put an
+    /// older state back. False when nothing was written.
+    /// </summary>
+    /// <param name="record">The record.</param>
+    /// <param name="action">What happened, for the audit.</param>
+    /// <param name="detail">Who or what did it and why.</param>
+    /// <param name="sourceModified">When the provider changed the source; null for manual changes, which always apply.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task<bool> SaveAsync(LicenseRecord record, string action, string detail, DateTimeOffset? sourceModified, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using (var upsert = new NpgsqlCommand("""
-            insert into licenses (id, licensee, plan, kind, seats, scopes, valid_from, period_end, revoked, source, updated_at)
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+            insert into licenses (id, licensee, plan, kind, seats, scopes, valid_from, period_end, revoked, source, source_modified_at, updated_at)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
             on conflict (id) do update set licensee = excluded.licensee, plan = excluded.plan, kind = excluded.kind,
                 seats = excluded.seats, scopes = excluded.scopes, valid_from = excluded.valid_from,
-                period_end = excluded.period_end, revoked = excluded.revoked, source = excluded.source, updated_at = now()
+                period_end = excluded.period_end, revoked = excluded.revoked, source = excluded.source,
+                source_modified_at = coalesce(excluded.source_modified_at, licenses.source_modified_at), updated_at = now()
+            where excluded.source_modified_at is null or licenses.source_modified_at is null
+                or licenses.source_modified_at < excluded.source_modified_at
             """, connection, transaction))
         {
             upsert.Parameters.Add(new NpgsqlParameter { Value = record.Id });
@@ -109,7 +170,12 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
             upsert.Parameters.Add(new NpgsqlParameter { Value = record.PeriodEnd.UtcDateTime, NpgsqlDbType = NpgsqlDbType.TimestampTz });
             upsert.Parameters.Add(new NpgsqlParameter { Value = record.Revoked });
             upsert.Parameters.Add(new NpgsqlParameter { Value = record.Source });
-            await upsert.ExecuteNonQueryAsync(cancellationToken);
+            upsert.Parameters.Add(new NpgsqlParameter { Value = (object?)sourceModified?.UtcDateTime ?? DBNull.Value, NpgsqlDbType = NpgsqlDbType.TimestampTz });
+            if (await upsert.ExecuteNonQueryAsync(cancellationToken) == 0)
+            {
+                // An older state than the one stored: nothing to audit.
+                return false;
+            }
         }
 
         await using (var audit = new NpgsqlCommand("insert into audit (license_id, action, detail) values ($1, $2, $3)", connection, transaction))
@@ -121,6 +187,7 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
         }
 
         await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     /// <summary>The audit entries of one license, oldest first, as <c>action: detail</c>.</summary>

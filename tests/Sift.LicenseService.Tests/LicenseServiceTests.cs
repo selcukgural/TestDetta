@@ -64,7 +64,52 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         host.UseSetting("Licenses:KeyFile", _keyFile);
         host.UseSetting("Licenses:PublicBaseUrl", "https://license.example/");
         host.UseSetting("Licenses:PerLicensePerHour", perLicensePerHour.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        host.UseSetting("Licenses:PolarWebhookSecret", WebhookSecret);
     });
+
+    private static readonly string WebhookSecret = "whsec_" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
+
+    private static string Subscription(string status = "active", int? seats = 5, string modified = "2026-10-03T10:00:00Z",
+        string? scope = "github.com/Acme/*", string? endedAt = null, string? endsAt = null, string type = "subscription.updated") =>
+        System.Text.Json.JsonSerializer.Serialize(new
+        {
+            type,
+            timestamp = modified,
+            api_version = "2026-10",
+            data = new
+            {
+                id = "sub-1",
+                status,
+                seats,
+                modified_at = modified,
+                started_at = "2026-10-01T00:00:00Z",
+                current_period_start = "2026-10-01T00:00:00Z",
+                current_period_end = "2026-11-01T00:00:00Z",
+                ends_at = endsAt,
+                ended_at = endedAt,
+                customer = new { name = "Acme Corp", email = "billing@acme.com" },
+                product = new { name = "Sift Team" },
+                custom_field_data = scope is null ? null : new Dictionary<string, string> { ["scope"] = scope },
+            },
+        });
+
+    private static async Task<HttpResponseMessage> Deliver(HttpClient client, string body, string id = "msg-1", DateTimeOffset? at = null, string? secret = null)
+    {
+        var timestamp = (at ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var key = Convert.FromBase64String((secret ?? WebhookSecret)[6..]);
+        var signature = Convert.ToBase64String(HMACSHA256.HashData(key, System.Text.Encoding.UTF8.GetBytes($"{id}.{timestamp}.{body}")));
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/webhooks/polar") { Content = new StringContent(body) };
+        request.Headers.Add("webhook-id", id);
+        request.Headers.Add("webhook-timestamp", timestamp);
+        request.Headers.Add("webhook-signature", $"v1a,ignored v1,{signature}");
+        return await client.SendAsync(request);
+    }
+
+    private async Task<LicenseRecord?> Record(string id = "P-sub-1")
+    {
+        await using var source = NpgsqlDataSource.Create(_connection);
+        return await new LicenseStore(source).GetAsync(id, CancellationToken.None);
+    }
 
     private async Task<(int Code, string Out, string Err)> Admin(params string[] args)
     {
@@ -172,6 +217,112 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         using var third = await Refresh(client, "L-1", license);
 
         Assert.Equal([HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.TooManyRequests], [first.StatusCode, second.StatusCode, third.StatusCode]);
+    }
+
+    [Fact]
+    public void Signature_check_matches_the_standard_webhooks_test_vector()
+    {
+        // From the Standard Webhooks specification's reference libraries.
+        var body = System.Text.Encoding.UTF8.GetBytes("""{"test": 2432232314}""");
+        var at = DateTimeOffset.FromUnixTimeSeconds(1614265330);
+        const string secret = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw";
+
+        Assert.True(PolarWebhook.Verify(secret, "msg_p5jXN8AQM9LWM0D4loKWxJek", "1614265330", "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=", body, at));
+        Assert.False(PolarWebhook.Verify(secret, "msg_p5jXN8AQM9LWM0D4loKWxJek", "1614265330", "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=", [.. body, (byte)' '], at));
+        Assert.False(PolarWebhook.Verify(secret, "msg_p5jXN8AQM9LWM0D4loKWxJek", "1614265330", "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=", body, at.AddMinutes(6)));
+    }
+
+    [Fact]
+    public async Task A_subscription_becomes_a_license_without_the_customers_email()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+
+        using var response = await Deliver(client, Subscription(type: "subscription.created"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var record = await Record();
+        Assert.Equal(("Acme Corp", "Sift Team", 5, LicenseKind.Subscription, false), (record!.Licensee, record.Plan, record.Seats, record.Kind, record.Revoked));
+        Assert.Equal(["github.com/acme/*"], record.Scopes);
+        Assert.Equal(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), record.PeriodEnd);
+        var (_, show, _) = await Admin("show", "--id", "P-sub-1");
+        Assert.DoesNotContain("billing@acme.com", show, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Late_and_repeated_deliveries_never_bring_an_older_state_back()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+
+        (await Deliver(client, Subscription(seats: 7, modified: "2026-10-03T12:00:00Z"), "msg-2")).Dispose();
+        (await Deliver(client, Subscription(seats: 5, modified: "2026-10-03T10:00:00Z"), "msg-1")).Dispose();
+        Assert.Equal(7, (await Record())!.Seats);
+
+        // The same delivery again, even with other content, is handled once.
+        (await Deliver(client, Subscription(seats: 9, modified: "2026-10-03T13:00:00Z"), "msg-2")).Dispose();
+        Assert.Equal(7, (await Record())!.Seats);
+    }
+
+    [Fact]
+    public async Task Cancelled_runs_to_its_end_and_ended_stops_renewals()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+        (await Deliver(client, Subscription(), "msg-1")).Dispose();
+
+        (await Deliver(client, Subscription(status: "active", endsAt: "2026-11-01T00:00:00Z", modified: "2026-10-04T00:00:00Z", type: "subscription.canceled"), "msg-2")).Dispose();
+        Assert.False((await Record())!.Revoked);
+
+        (await Deliver(client, Subscription(status: "canceled", endedAt: "2026-10-05T00:00:00Z", modified: "2026-10-05T00:00:00Z", type: "subscription.revoked"), "msg-3")).Dispose();
+        Assert.True((await Record())!.Revoked);
+        var (_, show, _) = await Admin("show", "--id", "P-sub-1");
+        using var refresh = await Refresh(client, "P-sub-1", show.Split('\n')[^1].Trim());
+        Assert.Equal(HttpStatusCode.NotFound, refresh.StatusCode);
+    }
+
+    [Fact]
+    public async Task Forged_stale_or_unconfigured_deliveries_store_nothing()
+    {
+        using (var service = Service())
+        using (var client = service.CreateClient())
+        {
+            using var forged = await Deliver(client, Subscription(), secret: "whsec_" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(24)));
+            using var stale = await Deliver(client, Subscription(), "msg-2", DateTimeOffset.UtcNow.AddMinutes(-10));
+            Assert.Equal([HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized], [forged.StatusCode, stale.StatusCode]);
+        }
+
+        using var unconfigured = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+        {
+            host.UseSetting("Licenses:ConnectionString", _connection);
+            host.UseSetting("Licenses:KeyId", "k1");
+            host.UseSetting("Licenses:KeyFile", _keyFile);
+            host.UseSetting("Licenses:PublicBaseUrl", "https://license.example/");
+        });
+        using var unconfiguredClient = unconfigured.CreateClient();
+        using var off = await Deliver(unconfiguredClient, Subscription(), "msg-3");
+        Assert.Equal(HttpStatusCode.NotFound, off.StatusCode);
+        Assert.Null(await Record());
+    }
+
+    [Fact]
+    public async Task Subscriptions_without_seats_or_payment_make_no_license()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+
+        (await Deliver(client, Subscription(seats: null), "msg-1")).Dispose();
+        (await Deliver(client, Subscription(status: "incomplete") .Replace("sub-1", "sub-2", StringComparison.Ordinal), "msg-2")).Dispose();
+
+        Assert.Null(await Record());
+        Assert.Null(await Record("P-sub-2"));
+        Assert.Contains("attention: polar subscription.updated: the subscription has no seat count", (await Admin("show", "--id", "P-sub-1")).Err + string.Join('\n', await Audit("P-sub-1")), StringComparison.Ordinal);
+    }
+
+    private async Task<IReadOnlyList<string>> Audit(string id)
+    {
+        await using var source = NpgsqlDataSource.Create(_connection);
+        return await new LicenseStore(source).AuditAsync(id, CancellationToken.None);
     }
 
     [Fact]
