@@ -70,6 +70,26 @@ public sealed class LinkedInitializationTests : IDisposable
                 return holder.Value;
             }
             """,
+        // A value type built by the static constructor (NodaTime's Offset.Zero): linked to its field.
+        "struct" => """
+            private static readonly Holder Turkey = new(new RateService().Build("tr"));
+            public readonly struct Holder(decimal value) { public decimal Value { get; } = value; }
+            public decimal For(string country) => Turkey.Value;
+            """,
+        // An array in a field filled element by element (NodaTime's CalendarByOrdinal[ordinal] = this):
+        // the element store stores the value for the array's readers.
+        "array" => """
+            private static readonly decimal[] Seen = new decimal[1];
+            public decimal For(string country)
+            {
+                if (Seen[0] == 0)
+                {
+                    Seen[0] = Build(country);
+                }
+
+                return Seen[0];
+            }
+            """,
         // A list in a field added to outside any fill: the add stores the value for the list's readers.
         "list" => """
             private static readonly System.Collections.Generic.List<decimal> Seen = [];
@@ -103,6 +123,7 @@ public sealed class LinkedInitializationTests : IDisposable
     [InlineData("lazy", true)]
     [InlineData("pool", true)]
     [InlineData("long", true)]
+    [InlineData("struct", true)]
     [InlineData("unlinked", false)]
     [InlineData("mixed", false)]
     public void A_cache_kept_in_a_field_is_answered_through_its_readers_and_starts_no_name_trace(string cache, bool linked)
@@ -219,10 +240,12 @@ public sealed class LinkedInitializationTests : IDisposable
         Assert.Contains("App.Tests.AaaTests", selection.TestClasses);
     }
 
-    [Fact]
-    public void A_value_added_to_a_collection_in_a_field_is_credited_to_the_collections_readers()
+    [Theory]
+    [InlineData("list")]
+    [InlineData("array")]
+    public void A_value_added_to_a_collection_in_a_field_is_credited_to_the_collections_readers(string cache)
     {
-        var map = Record("list");
+        var map = Record(cache);
 
         // Alpha built the value; Beta only read the list, and depends on what built it all the same.
         var built = map.BuiltValues!.Classes["App.Tests.BetaTests"].Select(i => map.Methods[i]).ToList();

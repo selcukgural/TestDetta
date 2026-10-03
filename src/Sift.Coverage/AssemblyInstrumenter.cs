@@ -309,11 +309,18 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// fields that are static, or that some method other than a constructor of their type stores
     /// (<c>_x ??= new X()</c>, a setter of a shared object), or that hold an object values are put into
     /// (a cache filled with <c>GetOrAdd</c>, a list added to; docs/design/run-once-cascades.md, C).
+    /// Static <c>readonly</c> fields of any type too: only the static constructor stores them, so they
+    /// cost a read probe and no more, and a value type built there (NodaTime's <c>Offset.Zero</c>) is
+    /// as run-once as an object. Mutable static values stay out: a counter would store on every call.
     /// Other fields only constructors store hold a per-object value that the constructor rules already
     /// cover, and tracking them would put a probe on every object built. Fields of compiler-generated
     /// types (closures, state machines) hold a flow's locals, and constants have no store.
     /// </summary>
     /// <param name="module">Module being instrumented.</param>
+    /// <remarks>
+    /// An element stored into an array held in a tracked field is a store into that field
+    /// (<see cref="InsertFieldProbes"/>), like an <c>Add</c> to a list.
+    /// </remarks>
     private static List<FieldDefinition> TrackedFields(ModuleDefinition module)
     {
         var storedOutsideConstructors = new HashSet<FieldDefinition>();
@@ -358,7 +365,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
             foreach (var field in type.Fields)
             {
-                if (!field.IsLiteral && MayHoldReference(field.FieldType) && (field.IsStatic || storedOutsideConstructors.Contains(field)))
+                if (!field.IsLiteral
+                    && ((field.IsStatic && field.IsInitOnly)
+                        || (MayHoldReference(field.FieldType) && (field.IsStatic || storedOutsideConstructors.Contains(field)))))
                 {
                     tracked.Add(field);
                 }
@@ -431,6 +440,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 && ReceiverField(instruction, origins.Value) is { } receiver && tracked.TryGetValue(receiver, out var index))
             {
                 mutations[instruction] = index;
+            }
+
+            // An element stored into an array held in a tracked field (NodaTime's calendar cache,
+            // CalendarByOrdinal[ordinal] = this): the array is argument 0 of stelem.
+            if (instruction.OpCode.Code is Code.Stelem_I or Code.Stelem_I1 or Code.Stelem_I2 or Code.Stelem_I4 or Code.Stelem_I8
+                    or Code.Stelem_R4 or Code.Stelem_R8 or Code.Stelem_Ref or Code.Stelem_Any
+                && origins.Value.Argument(instruction, 0) is { Operand: FieldReference arrayField } && arrayField.Resolve() is { } array
+                && tracked.TryGetValue(array, out var arrayIndex))
+            {
+                mutations[instruction] = arrayIndex;
             }
         }
 

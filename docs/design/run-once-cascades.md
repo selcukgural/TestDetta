@@ -171,6 +171,13 @@ Recording (`SiftTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
   contents are complete however long it runs. Short scopes pay nothing; recording time on NodaTime
   did not change measurably.
 
+- **Readonly statics of any type and array elements.** Static `readonly` fields are tracked
+  whatever their type (NodaTime's `Offset.Zero` is a struct built by the static constructor), and an
+  element stored into an array held in a tracked field is a store into the field
+  (`CalendarByOrdinal[ordinal] = this`). On NodaTime this moves about 80 classes from the name trace
+  to direct coverage evidence (their readers are now credited with what built the values), so the
+  share stays at 22.9%; it is what lets the single-bucket rule be narrowed later.
+
 Selection: `CoverageIndex` leaves linked methods out of the run-once set. Their users are the
 classes that ran them plus the readers of what they built (`builtValues`).
 
