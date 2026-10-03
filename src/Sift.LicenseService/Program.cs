@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 using Sift.LicenseService;
 
@@ -37,7 +38,7 @@ builder.Services.AddRateLimiter(limiter =>
     // and one leaked license cannot hammer the service from many addresses.
     limiter.GlobalLimiter = PartitionedRateLimiter.CreateChained(
         PartitionedRateLimiter.Create<HttpContext, string>(context => RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            ClientPartition.Of(context.Connection.RemoteIpAddress),
             _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.PerAddressPerMinute, Window = TimeSpan.FromMinutes(1) })),
         PartitionedRateLimiter.Create<HttpContext, string>(context => context.Request.RouteValues["id"] is string id
             ? RateLimitPartition.GetFixedWindowLimiter("license:" + id, _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.PerLicensePerHour, Window = TimeSpan.FromHours(1) })
@@ -49,6 +50,27 @@ await app.Services.GetRequiredService<LicenseStore>().EnsureSchemaAsync(Cancella
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
+}
+
+if (settings.TrustedProxies.Count > 0)
+{
+    // Before the rate limiter, which partitions by the client's address.
+    var forwarded = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, ForwardLimit = 1 };
+    forwarded.KnownIPNetworks.Clear();
+    forwarded.KnownProxies.Clear();
+    foreach (var proxy in settings.TrustedProxies.Where(static p => p != "*"))
+    {
+        if (System.Net.IPNetwork.TryParse(proxy, out var network))
+        {
+            forwarded.KnownIPNetworks.Add(network);
+        }
+        else
+        {
+            forwarded.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+        }
+    }
+
+    app.UseForwardedHeaders(forwarded);
 }
 
 app.UseRouting();

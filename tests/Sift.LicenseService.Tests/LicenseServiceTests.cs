@@ -57,8 +57,14 @@ public sealed class LicenseServiceTests : IAsyncLifetime
 
     private Dictionary<string, byte[]> Trusted => new() { ["k1"] = _key.ExportSubjectPublicKeyInfo() };
 
-    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600, int perAddressPerMinute = 60, string? trustedProxies = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
     {
+        host.UseSetting("Licenses:PerAddressPerMinute", perAddressPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (trustedProxies is not null)
+        {
+            host.UseSetting("Licenses:TrustedProxies", trustedProxies);
+        }
+
         host.UseSetting("Licenses:ConnectionString", _connection);
         host.UseSetting("Licenses:KeyId", "k1");
         host.UseSetting("Licenses:KeyFile", _keyFile);
@@ -324,6 +330,35 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         await using var source = NpgsqlDataSource.Create(_connection);
         return await new LicenseStore(source).AuditAsync(id, CancellationToken.None);
     }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("*", true)]
+    public async Task Forwarded_addresses_count_only_behind_a_trusted_proxy(string? trustedProxies, bool separate)
+    {
+        using var service = Service(perAddressPerMinute: 1, trustedProxies: trustedProxies);
+        using var client = service.CreateClient();
+        async Task<HttpStatusCode> From(string address)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/healthz");
+            request.Headers.Add("X-Forwarded-For", address);
+            using var response = await client.SendAsync(request);
+            return response.StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.OK, await From("203.0.113.1"));
+        // Another address gets its own budget only when the header is believed.
+        Assert.Equal(separate ? HttpStatusCode.OK : HttpStatusCode.TooManyRequests, await From("203.0.113.2"));
+        Assert.Equal(HttpStatusCode.TooManyRequests, await From("203.0.113.2"));
+    }
+
+    [Theory]
+    [InlineData("203.0.113.7", "203.0.113.7")]
+    [InlineData("::ffff:203.0.113.7", "203.0.113.7")]
+    [InlineData("2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:db8:1:2::/64")]
+    [InlineData("2001:db8:1:2::9", "2001:db8:1:2::/64")]
+    public void Ipv6_addresses_share_their_64_network(string address, string partition) =>
+        Assert.Equal(partition, ClientPartition.Of(System.Net.IPAddress.Parse(address)));
 
     [Fact]
     public async Task Admin_refuses_incomplete_or_invalid_input()

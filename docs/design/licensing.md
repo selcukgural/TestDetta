@@ -239,6 +239,11 @@ container, decided later).
   through the real HTTP pipeline; sabotage-checked. CI runs a Postgres service container
   (`SIFT_TEST_POSTGRES`).
 
+Client addresses behind the host's proxy: `Licenses:TrustedProxies` lists the proxies (IPs or CIDR
+networks) whose `X-Forwarded-For` is believed, or `*` for one hop from anywhere when the proxy is the
+only way in. With none configured, the header is ignored, so nobody can pick their own address. The
+per-address limit counts an IPv6 client by its /64 network (`ClientPartition`).
+
 Sift's refresh client (`Sift.Cli.LicenseRefresher`, same day): before each check, at most once a
 day (`~/.sift/license-refresh`), with a 2-second timeout and no retries. It is `https` only and
 honours `SIFT_LICENSE_REFRESH=off` and `HTTPS_PROXY`. The license goes in the header only. A
@@ -250,7 +255,6 @@ is ever sent.
 
 Still to do in phase 2:
 - the production key and embedding its public key;
-- forwarded-header handling for the host's proxy, so the per-address limit sees client addresses;
 - the customer portal;
 - Polar webhooks (phase 3).
 

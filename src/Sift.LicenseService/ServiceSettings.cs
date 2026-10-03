@@ -16,6 +16,13 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
     /// <summary>The Polar webhook endpoint's secret (<c>whsec_...</c>); null turns the endpoint off.</summary>
     public string? PolarWebhookSecret { get; init; }
 
+    /// <summary>
+    /// Proxies whose <c>X-Forwarded-For</c> is believed, as IP addresses or CIDR networks; <c>*</c>
+    /// believes one hop from anywhere, for a host whose only way in is its own proxy. Empty (the
+    /// default) believes no header: otherwise anyone could pick their address and dodge the per-address limit.
+    /// </summary>
+    public IReadOnlyList<string> TrustedProxies { get; init; } = [];
+
     /// <summary>Refresh requests one client address may make per minute.</summary>
     public int PerAddressPerMinute { get; init; } = 60;
 
@@ -43,6 +50,7 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
             PerAddressPerMinute = section.GetValue("PerAddressPerMinute", 60),
             PerLicensePerHour = section.GetValue("PerLicensePerHour", 600),
             PolarWebhookSecret = section["PolarWebhookSecret"] is { Length: > 0 } secret ? secret : null,
+            TrustedProxies = [.. (section["TrustedProxies"] ?? "").Split([',', ' '], StringSplitOptions.RemoveEmptyEntries)],
         };
     }
 }
