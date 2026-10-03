@@ -58,6 +58,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             var maps = _steps.RecordAt(sha);
             workspace.Git.Checkout(sha);
+            if (settings.ExplainOnly)
+            {
+                Explain(sha, maps, request);
+                return new SyntheticRun(sha, maps.Values.Sum(static m => m.Classes.Count), 0, [], null) { Seconds = started.Elapsed.TotalSeconds };
+            }
+
             workspace.Executor.Setup();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
             var testProjects = _steps.Build(_steps.TestProjects(graph));
@@ -137,6 +143,71 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             return new SyntheticRun(sha, 0, 0, mutants, cause.Message) { Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds };
         }
     }
+
+    /// <summary>
+    /// Writes <c>explain.json</c> next to the maps' workspace: for every sampled change, Sift's
+    /// decision per affected test project and the evidence of each selected class, without building
+    /// or running anything. The same sample as an evaluation with the same maps and request.
+    /// </summary>
+    /// <param name="sha">Commit the changes are made on.</param>
+    /// <param name="maps">Maps of the commit.</param>
+    /// <param name="request">The sample.</param>
+    private void Explain(string sha, Dictionary<string, CoverageMap> maps, SampleRequest request)
+    {
+        workspace.Executor.Setup();
+        var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
+        var targets = TargetSampler.Sample(graph, workspace.RepoRoot, CoveredMembers(maps), request);
+        var covered = targets.Count(static t => t.Covered);
+        LogSampled(targets.Count, covered);
+        var path = Path.GetFullPath(Path.Combine(workspace.MapCache, "..", "explain.json"));
+        using var stream = File.Create(path);
+        using var json = new System.Text.Json.Utf8JsonWriter(stream, new System.Text.Json.JsonWriterOptions { Indented = true });
+        json.WriteStartObject();
+        json.WriteString("sha", sha);
+        json.WriteNumber("testClasses", maps.Values.Sum(static m => m.Classes.Count));
+        json.WriteStartArray("changes");
+        foreach (var target in targets)
+        {
+            var (analysis, _) = Analyze(sha, target, mapCommit: null);
+            json.WriteStartObject();
+            json.WriteString("target", $"{target.Member.TypeName}.{target.Member.MemberName}");
+            json.WriteString("kind", MutantKinds.Name(target.Kind));
+            json.WriteBoolean("covered", target.Covered);
+            json.WriteNumber("selectedShare", Math.Round(SelectedShare(analysis, maps), 4));
+            json.WriteStartArray("projects");
+            foreach (var test in analysis.Tests)
+            {
+                json.WriteStartObject();
+                json.WriteString("project", Path.GetFileNameWithoutExtension(test.Project.Path));
+                json.WriteString("mode", test.Mode.ToString());
+                json.WriteString("reason", test.Reason);
+                json.WriteNumber("candidates", test.Decisions.Count);
+                json.WriteStartArray("selected");
+                foreach (var decision in test.Decisions.Where(static d => d.Selected))
+                {
+                    json.WriteStartObject();
+                    json.WriteString("class", decision.TestClass);
+                    json.WriteString("kind", decision.Kind.ToString());
+                    json.WriteString("evidence", decision.Evidence);
+                    json.WriteEndObject();
+                }
+
+                json.WriteEndArray();
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
+            json.WriteEndObject();
+            json.Flush();
+        }
+
+        json.WriteEndArray();
+        json.WriteEndObject();
+        LogExplained(targets.Count, path);
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Explained the selection of {Count} change(s) in {Path}")]
+    private partial void LogExplained(int count, string path);
 
     /// <summary>
     /// True for the failures an evaluation reports instead of crashing on: a build, a run or a file

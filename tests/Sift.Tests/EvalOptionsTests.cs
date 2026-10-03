@@ -53,6 +53,20 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void Explain_reuses_given_maps_and_takes_no_value()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r"], out var plain, out _));
+        Assert.False(plain.Run.ExplainOnly);
+        Assert.Null(plain.Run.Maps);
+
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--explain", "--maps", "m", "--synthetic", "5"], out var options, out var error), error);
+        Assert.True(options.Run.ExplainOnly);
+        Assert.Equal(Path.GetFullPath("m"), options.Run.Maps);
+        Assert.Equal(5, options.Target.Synthetic);
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--maps"], out _, out _));
+    }
+
+    [Fact]
     public void Corpus_run_can_replace_mutant_kinds_and_rejects_unknown_ones()
     {
         var entry = new CorpusEntry { Name = "scriban", Url = "https://example.org/scriban.git", Synthetic = 100, MutantKinds = "all" };

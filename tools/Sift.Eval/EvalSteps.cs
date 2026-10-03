@@ -33,6 +33,13 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     {
         var directory = Path.Combine(workspace.MapCache, sha);
         var cached = settings.RecordingCache is { } cache ? Path.Combine(cache, $"{sha}-{RecordingKey(settings)}") : null;
+        if (!Directory.Exists(directory) && settings.Maps is { } given && Directory.Exists(given))
+        {
+            // Maps recorded elsewhere at this commit, such as a corpus run's map cache: no recording.
+            CopyDirectory(given, directory);
+            LogRecordingReused(sha, given);
+        }
+
         if (!Directory.Exists(directory) && cached is not null && Directory.Exists(cached))
         {
             CopyDirectory(cached, directory);

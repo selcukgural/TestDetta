@@ -50,6 +50,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  and judge it on the same mutants (docs/design/tia-comparison.md)
           --idle-timeout <span>  Kill a test run whose processes use almost no CPU for this long, as stuck
                                  (default 00:05:00; 00:00:00 waits for the run's timeout only)
+          --maps <dir>           Use these maps of the evaluated commit instead of recording
+          --explain              Only write Sift's decisions and evidence for every sampled change to
+                                 explain.json (no build, no test run; for the precision round)
           --compare-affected <exe>  Also select each synthetic change with dotnet-affected (its executable),
                                  running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
@@ -120,6 +123,12 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
             if (arg == "--no-schema")
             {
                 run = run with { UseSchema = false };
+                continue;
+            }
+
+            if (arg == "--explain")
+            {
+                run = run with { ExplainOnly = true };
                 continue;
             }
 
@@ -237,6 +246,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
 
                 case "--compare-affected":
                     run = run with { AffectedCli = Path.GetFullPath(value) };
+                    break;
+
+                case "--maps":
+                    run = run with { Maps = Path.GetFullPath(value) };
                     break;
 
                 case "--tia-solution":
@@ -368,6 +381,18 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// <c>dotnet tia analyze</c> and judged on the same mutants (docs/design/tia-comparison.md); null for none.
     /// </summary>
     public string? TiaCli { get; init; }
+
+    /// <summary>
+    /// Maps recorded at the evaluated commit to use instead of recording (a directory of <c>*.json</c>,
+    /// such as a corpus run's <c>map-cache/&lt;repo&gt;/&lt;sha&gt;-&lt;key&gt;</c>); null to record.
+    /// </summary>
+    public string? Maps { get; init; }
+
+    /// <summary>
+    /// True to only explain Sift's selection of every sampled change (<c>explain.json</c>): no build,
+    /// no test run. For the precision round.
+    /// </summary>
+    public bool ExplainOnly { get; init; }
 
     /// <summary>Solution dotnet-tia analyses, relative to the repository root; null to let it discover one.</summary>
     public string? TiaSolution { get; init; }
