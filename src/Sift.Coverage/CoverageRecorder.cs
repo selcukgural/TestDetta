@@ -429,7 +429,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         arguments.AddRange(shard.Filter);
 
-        var environment = new Dictionary<string, string>
+        var environment = new Dictionary<string, string>(UnattendedRun.Variables)
         {
             [SiftTracker.MethodCountVariable] = instrumentation.Methods.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
             [SiftTracker.FieldCountVariable] = instrumentation.Fields.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),

@@ -94,6 +94,8 @@ public sealed class ExternalCallbackTests : IDisposable
             public class AlphaTests { [Fact] public void Names_widgets() => Assert.Equal("[Widget]", App.Names.Of<App.Widget>()); }
             public class BetaTests { [Fact] public void Names_widgets_too() => Assert.StartsWith("[", App.Names.Of<App.Widget>()); }
             public class PlainTests { [Fact] public void Three() => Assert.Equal(3, App.Math2.Three()); }
+            // A recording opens no diff tool for a failing snapshot.
+            public class UnattendedTests { [Fact] public void No_diff_tool() => Assert.Equal("true", System.Environment.GetEnvironmentVariable("DiffEngine_Disabled")); }
             """);
         _repo.Commit("base");
 
