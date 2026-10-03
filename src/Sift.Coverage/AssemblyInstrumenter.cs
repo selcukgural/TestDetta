@@ -595,7 +595,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType), site.Id);
-        MarkPoolFills(body, il, probes);
+        MarkPoolFills(body, il, probes, site.Id);
         if (testCodeEnd is TestCodeEnd.Return or TestCodeEnd.Task)
         {
             TrackTestCode(method, il, probes, first);
@@ -927,38 +927,50 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// and <see cref="SiftTracker.ExitCache"/>: on a miss the pool or cache builds its item there, and
     /// what that runs serves every later user, so it is run-once evidence. The mark starts where the
     /// arguments start when they are built by calls (<c>new Buffer(Build())</c>).
+    /// <para>
+    /// When exactly one collection field the method loads holds that item type, the mark ends with
+    /// <see cref="SiftTracker.ExitCacheInto"/> for it: the item is built for that collection (NodaTime's
+    /// <c>DateTimeZoneCache</c> builds a zone on a <c>TryGetValue</c> miss and puts it back with
+    /// <c>TryUpdate</c>), so the collection's readers depend on what built it and the scope is linked
+    /// (docs/design/run-once-cascades.md, C). An item that never goes in is not reused either, and one
+    /// stored elsewhere as well is linked there by that store. With two candidate fields it stays unlinked.
+    /// </para>
     /// </summary>
     /// <param name="body">Method body with short branches already expanded.</param>
     /// <param name="il">Processor of the body.</param>
     /// <param name="probes">Tracker references with the module's reused collections.</param>
-    private static void MarkPoolFills(MethodBody body, ILProcessor il, Probes probes)
+    /// <param name="methodId">Id of the method being instrumented.</param>
+    private static void MarkPoolFills(MethodBody body, ILProcessor il, Probes probes, int methodId)
     {
         if (probes.ReusedCollections.Count == 0)
         {
             return;
         }
 
-        var items = body.Instructions
+        var collections = body.Instructions
             .Where(static i => i.OpCode == OpCodes.Ldfld || i.OpCode == OpCodes.Ldsfld || i.OpCode == OpCodes.Ldflda || i.OpCode == OpCodes.Ldsflda)
             .Select(i => (i.Operand as FieldReference)?.Resolve())
-            .Where(f => f is not null && probes.ReusedCollections.ContainsKey(f))
-            .Select(f => probes.ReusedCollections[f!])
+            .OfType<FieldDefinition>()
+            .Where(f => probes.ReusedCollections.ContainsKey(f))
+            .Distinct()
+            .Select(f => (Field: f, Item: probes.ReusedCollections[f]))
             .ToList();
-        if (items.Count == 0)
+        if (collections.Count == 0)
         {
             return;
         }
 
         var builds = body.Instructions
-            .Where(i => i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix && Produced(i) is { } produced
-                        && items.Exists(item => Produces(produced, item)))
+            .Where(static i => i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
+            .Select(i => (Build: i, Into: Produced(i) is { } produced ? collections.Where(c => Produces(produced, c.Item)).ToList() : []))
+            .Where(static b => b.Into.Count > 0)
             .ToList();
-        foreach (var build in builds)
+        foreach (var (build, into) in builds)
         {
             var start = ArgumentStart(body, build) ?? build;
             var enter = il.Create(OpCodes.Call, probes.EnterCache);
             il.InsertBefore(start, enter);
-            il.InsertAfter(build, il.Create(OpCodes.Call, probes.ExitCache));
+            InsertCacheExit(il, build, probes, into.Count == 1 ? into[0].Field : null, methodId);
             Retarget(body, start, enter);
         }
     }

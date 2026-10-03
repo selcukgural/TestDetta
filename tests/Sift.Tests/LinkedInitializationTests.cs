@@ -38,6 +38,22 @@ public sealed class LinkedInitializationTests : IDisposable
                 return Cache.GetOrAdd(country, Build);
             }
             """,
+        // A hand-rolled cache: looked up with TryGetValue, filled through the indexer (NodaTime's
+        // DateTimeZoneCache). The value built on a miss is linked to the dictionary's field.
+        "pool" => """
+            private static readonly System.Collections.Generic.Dictionary<string, Holder> Cache = [];
+            public sealed class Holder(decimal value) { public decimal Value { get; } = value; }
+            public decimal For(string country)
+            {
+                if (!Cache.TryGetValue(country, out var holder))
+                {
+                    holder = new Holder(Build(country));
+                    Cache[country] = holder;
+                }
+
+                return holder.Value;
+            }
+            """,
         // A list in a field added to outside any fill: the add stores the value for the list's readers.
         "list" => """
             private static readonly System.Collections.Generic.List<decimal> Seen = [];
@@ -69,6 +85,7 @@ public sealed class LinkedInitializationTests : IDisposable
     [Theory]
     [InlineData("getoradd", true)]
     [InlineData("lazy", true)]
+    [InlineData("pool", true)]
     [InlineData("unlinked", false)]
     [InlineData("mixed", false)]
     public void A_cache_kept_in_a_field_is_answered_through_its_readers_and_starts_no_name_trace(string cache, bool linked)
