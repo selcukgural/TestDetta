@@ -37,15 +37,14 @@ jobs:
         with:
           global-json-file: global.json
 
-      # On main every commit gets a coverage map; recording is also the full test run. Recording runs
-      # one test at a time per process, so four processes (the runner's cores) keep it near the
-      # suite's own time instead of four times it.
+      # On main every commit gets a coverage map; recording is also a full test run, one test at a
+      # time, so it takes several times the plain run. Four processes gained little: the slow tests
+      # build real projects and compete for the same cores. The quick job below gives the signal.
       - name: Record coverage
         if: github.event_name == 'push'
         uses: ./
         with:
           mode: record
-          parallel: '4'
           setup-dotnet: 'false'
 
       # Pull requests run only the tests their changes affect.
@@ -55,3 +54,34 @@ jobs:
         with:
           mode: test
           setup-dotnet: 'false'
+
+  # The whole suite, as a developer runs it: the pass/fail signal in a few minutes, while recording
+  # the coverage map takes longer.
+  quick:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+        env:
+          POSTGRES_PASSWORD: ci-only
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SIFT_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Test
+        run: dotnet test --nologo

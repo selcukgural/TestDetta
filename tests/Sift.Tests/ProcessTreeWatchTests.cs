@@ -4,7 +4,15 @@ using Sift.Coverage;
 
 namespace Sift.Tests;
 
+/// <summary>
+/// Tests that measure how much CPU a process gets, run alone: next to the suite's own builds on a
+/// four-core CI runner, a busy loop got so little CPU for two seconds that it looked idle.
+/// </summary>
+[CollectionDefinition(nameof(CpuTiming), DisableParallelization = true)]
+public sealed class CpuTiming;
+
 /// <summary>A stuck test run (a mutant that deadlocks the host) is told apart from a busy one by the CPU its process tree uses.</summary>
+[Collection(nameof(CpuTiming))]
 public sealed class ProcessTreeWatchTests
 {
     [Theory]
