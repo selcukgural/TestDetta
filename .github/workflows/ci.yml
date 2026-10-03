@@ -24,7 +24,7 @@ jobs:
         ports:
           - 127.0.0.1:5432:5432
         options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       SIFT_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
     steps:
@@ -37,12 +37,15 @@ jobs:
         with:
           global-json-file: global.json
 
-      # On main every commit gets a coverage map; recording is also the full test run.
+      # On main every commit gets a coverage map; recording is also the full test run. Recording runs
+      # one test at a time per process, so four processes (the runner's cores) keep it near the
+      # suite's own time instead of four times it.
       - name: Record coverage
         if: github.event_name == 'push'
         uses: ./
         with:
           mode: record
+          parallel: '4'
           setup-dotnet: 'false'
 
       # Pull requests run only the tests their changes affect.
