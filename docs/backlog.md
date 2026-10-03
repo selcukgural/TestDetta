@@ -25,6 +25,17 @@ that report numbers (value reporting) only once the numbers are proven right.
   delegates handed to a third-party library (`AddSingleton(sp => ...)`) could still be credited
   to the first class only. Needs a list of caching framework contracts, or a measurement on the
   corpus.
+- **Precision: run-once cascades** (NodaTime 76% of its extra selection, measured 2026-10-03 with
+  the new "Spreading the type name" debug lines). A reached type declaration, or a member, whose
+  type ran anything inside a static constructor or cache fill is not answered by coverage, so its
+  type name spreads. Every member naming that type is reached, and the next type with run-once code
+  spreads too. In 37 of 100 NodaTime changes the coverage trace spreads almost every type name. A
+  type's own declaration is also reached by its own name (`IEquatable<LocalDate>`). Needs a design:
+  answer run-once code through the values it built (field-read probes, builtValues) instead of
+  names, and limit what a type-name spread may reach when maps exist.
+- **Precision: MimeKit FailedWhileRecording (28% of its extra)** is the machine, not Sift: 8
+  S/MIME classes need System.Data.SQLite's native library, which has no osx-arm64 build, so they
+  fail in every run and are always selected. On Linux/Windows CI they pass.
 - ~~**Precision: attribute polyfills reached by the name spread**~~ (done 2026-10-03): an
   attribute class nothing names (base certainly `System.Attribute`) has no instance, so it is dead
   code rather than "found through reflection" (`SourceIndex.IsAttributeClass`). NSubstitute's share
