@@ -1,6 +1,6 @@
 # Run-once cascades
 
-Status: A implemented 2026-10-03 (B measured and dropped); C and D proposed. Precision round, NodaTime.
+Status: A and C implemented 2026-10-03 (B measured and dropped); D proposed. Precision round, NodaTime.
 
 ## Problem
 
@@ -128,6 +128,63 @@ Measured on round-2 maps, 100 mutants each, no missed mutant:
 B (skipping a type's self-reference) changed nothing measurable on top of A, so it was dropped. It
 could also have removed a type-wide answer that cascades lean on today. The cascade is run-once code
 (C), as the counts above suggest.
+
+## As built: C (2026-10-03)
+
+Recording (`SiftTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
+
+- **Scopes.** `EnterCache`, `EnterTypeInitializer` and third-party callbacks push a scope that
+  remembers where it started in the thread's ring of recent hits. A fill whose target field is known
+  ends with `ExitCacheInto(field, method)`: what ran since the scope started becomes the field's
+  builders, and the scope is linked. A static constructor that stores its own fields is linked by
+  that store (`Stored` with the scope's owner). Everything else, a wrapped ring and scopes abandoned
+  by a throw or a new test end unlinked. The map's `linkedInitialization` holds the initialization
+  methods that ran in a linked scope in some process and in an unlinked one in none.
+- **Stores through a field's object.** `Add`, `TryAdd`, `set_Item`, `Insert`, `Push`, `Enqueue`,
+  `AddOrUpdate`, `AddRange`, `TryUpdate` and `Set` on an object loaded from a tracked field run
+  `Stored` for that field. A field that receives such calls or fills is tracked even when only a
+  constructor assigns it.
+- **Receivers on every path** (`StackOrigins`). Receivers and `ref` targets come from a forward
+  pass over the method's stack, not from walking back from the call. The compiler's cached
+  lambdas branch between the receiver and the call
+  (`Labels.GetOrAdd(key, static k => ...)` loads the delegate with `ldsfld; dup; brtrue`), and the
+  walk-back stopped there, which left the fill unlinked.
+- **Values built from values.** A field read also enters the ring, so a value built while reading
+  another field's value lists that field among its builders. The recorder follows such fields
+  transitively. NodaTime builds its zone cache from the parsed TZDB data, and before this its
+  readers were not credited with the parser.
+- **A test class's static initializer is its data** (`DataSources`). A static field named as a
+  data source has no code, and reading it runs the static constructor of its type. A concrete test
+  class's own static constructor builds what its tests receive, and it runs whenever a framework
+  first touches the class, often while another class is current. Both now enter the class's bucket
+  as data members do. NodaTime's `TzdbDateTimeZoneTest` and `ZonedDateTimePatternTest` built their
+  zones while `TzdbDateTimeZoneSourceTest` was current. Once the TZDB loading was linked, a change
+  to it missed them.
+
+Selection: `CoverageIndex` leaves linked methods out of the run-once set. Their users are the
+classes that ran them plus the readers of what they built (`builtValues`).
+
+Tests: `LinkedInitializationTests` covers `GetOrAdd`, `Lazy<T>`, a fill through a method (unlinked),
+a mixed fill (unlinked), a list added to, and a value built from another value. The last test pins
+the order of its classes, because xUnit orders them by an id that includes the temporary path.
+`FrameworkMatrixTests` adds a field data source under NUnit. Every test was red first and
+sabotage-checked: no transitive follow, no field read in the ring, no agreement where stack paths
+meet, and no static constructor marker.
+
+Measured with fresh recordings, 100 mutants each, no missed mutant:
+
+| Repository | Before | A | C |
+|---|---|---|---|
+| NodaTime | 42.6% | 41.0% | 27.6% |
+| protobuf-net | 89.5% | 87.6% | 92.3%, of it 4.6 points from a file the recording's tests leave in the tree (below) |
+| CommunityToolkit | 17.1% | 16.8% | 17.1% |
+| MimeKit | 21.9% | 21.9% | 22.1% |
+
+The A column used round-2 maps; C needed new recordings, so small moves either way are recording
+noise. protobuf-net's `BuildToolsUnitTests` writes `Aot/Data/Extensible.output.txt` into the
+repository, and a later analysis on that tree sees it as a changed non-code file. Without those
+selections C is at 74.7% against A's 79.3% by the same per-change measure. A recording must leave
+the tree as it found it; that is its own fix.
 
 ## C, design iteration 1 (2026-10-03, proposal for review)
 

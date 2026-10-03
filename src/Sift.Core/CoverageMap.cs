@@ -96,6 +96,14 @@ public sealed record CoverageMap(
     public IReadOnlyList<int> Initialization { get; init; } = [];
 
     /// <summary>
+    /// The part of <see cref="Initialization"/> whose every run was in a linked scope: what it built was
+    /// stored into a tracked field, so <see cref="BuiltValues"/> already credits every bucket that uses
+    /// it, and it needs no run-once treatment (docs/design/run-once-cascades.md, C). Null for maps
+    /// recorded before this was kept, which counts as none linked.
+    /// </summary>
+    public IReadOnlyList<int>? LinkedInitialization { get; init; }
+
+    /// <summary>
     /// Methods each bucket depends on through a value it read rather than code it ran: the code that
     /// built a value stored into a field (a static initializer, <c>_x ??= new X()</c>), credited to
     /// every bucket that read the field, wherever the building ran. Kept apart from

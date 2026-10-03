@@ -65,6 +65,27 @@ public static class SiftTracker
     [ThreadStatic]
     private static int _lastStoreMethod;
 
+    /// <summary>One initialization scope on a thread: a cache fill, a static constructor, a third-party callback.</summary>
+    private struct Scope
+    {
+        /// <summary>Ring position where the scope started: the hits since then ran inside it.</summary>
+        public long Start;
+
+        /// <summary>For a static constructor, its method id; -1 for other scopes.</summary>
+        public int Owner;
+
+        /// <summary>True once what the scope built was stored into a tracked field, so its readers are known.</summary>
+        public bool Linked;
+    }
+
+    /// <summary>Initialization scopes open on this thread, innermost last.</summary>
+    [ThreadStatic]
+    private static Scope[]? _scopes;
+
+    /// <summary>Number of open scopes in <see cref="_scopes"/>.</summary>
+    [ThreadStatic]
+    private static int _scopeCount;
+
     /// <summary>Per tracked field, the methods that built a value stored into it in this process.</summary>
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, System.Collections.Concurrent.ConcurrentDictionary<int, byte>> Builders = new();
 
@@ -99,6 +120,15 @@ public static class SiftTracker
     /// it to whichever test class came first although every user of the value depends on it.
     /// </summary>
     private static readonly ulong[] InitializationBits = new ulong[Words];
+
+    /// <summary>
+    /// Methods that ran inside an initialization scope whose result was stored into a tracked field
+    /// (linked). Declared after <see cref="Words"/>, which static initialization order needs.
+    /// </summary>
+    private static readonly ulong[] LinkedBits = new ulong[Words];
+
+    /// <summary>Methods that ran inside an initialization scope whose result left through a path no probe sees (unlinked).</summary>
+    private static readonly ulong[] UnlinkedBits = new ulong[Words];
 
     /// <summary>
     /// Methods that ran between tests since the last class was entered: no test code was running, so
@@ -192,6 +222,11 @@ public static class SiftTracker
         {
             MarkBetween(id >> 6, 1UL << (id & 63));
         }
+
+        // Into the ring as well: a value stored later on this thread was built from this one, so it
+        // depends on what built this one (the recorder follows such field builders transitively).
+        var recent = _recent ??= new int[RecentSize];
+        recent[(int)(_recentCount++ & (RecentSize - 1))] = id;
     }
 
     /// <summary>
@@ -301,6 +336,12 @@ public static class SiftTracker
 
         _lastStore = end;
         _lastStoreMethod = method;
+
+        // A static constructor storing its own fields hands its result to their readers.
+        if (_scopeCount > 0 && _scopes![_scopeCount - 1].Owner == method)
+        {
+            _scopes[_scopeCount - 1].Linked = true;
+        }
     }
 
     /// <summary>Sets one bit of a bit set, cheaply when it is already set.</summary>
@@ -328,7 +369,11 @@ public static class SiftTracker
     /// <c>ConcurrentDictionary.GetOrAdd</c> with a factory. When the value is cached already the
     /// factory does not run and nothing is marked.
     /// </summary>
-    public static void EnterCache() => _cacheDepth++;
+    public static void EnterCache()
+    {
+        _cacheDepth++;
+        PushScope(owner: -1);
+    }
 
     /// <summary>
     /// Called by instrumented code right after such a call. A call that throws never gets here; the
@@ -340,10 +385,51 @@ public static class SiftTracker
         {
             _cacheDepth--;
         }
+
+        PopScope(link: false);
+    }
+
+    /// <summary>
+    /// Called instead of <see cref="ExitCache"/> after a fill whose cache is an object held in a tracked
+    /// field (<c>_cache.GetOrAdd(...)</c>, <c>_lazy.Value</c>, <c>Interlocked.CompareExchange(ref _x, ...)</c>):
+    /// what the fill ran built a value stored into that field, so every reader of the field depends on
+    /// it (docs/design/run-once-cascades.md, C), and the scope is linked.
+    /// </summary>
+    /// <param name="field">Field index of the cache.</param>
+    /// <param name="method">Id of the method that made the call.</param>
+    public static void ExitCacheInto(int field, int method)
+    {
+        if (_cacheDepth > 0)
+        {
+            _cacheDepth--;
+        }
+
+        if (_scopeCount > 0 && _recent is { } recent)
+        {
+            var start = _scopes![_scopeCount - 1].Start;
+            var end = _recentCount;
+            if (end - start <= RecentSize)
+            {
+                var builders = Builders.GetOrAdd(field, static _ => new());
+                for (var i = start; i < end; i++)
+                {
+                    builders.TryAdd(recent[(int)(i & (RecentSize - 1))], 0);
+                }
+
+                builders.TryAdd(method, 0);
+            }
+        }
+
+        PopScope(link: true);
     }
 
     /// <summary>Called by instrumented code at the start of a static constructor.</summary>
-    public static void EnterTypeInitializer() => _typeInitializerDepth++;
+    /// <param name="method">Id of the static constructor: its own stores into tracked fields link its scope.</param>
+    public static void EnterTypeInitializer(int method)
+    {
+        _typeInitializerDepth++;
+        PushScope(method);
+    }
 
     /// <summary>
     /// Called by instrumented code before a static constructor returns. A static constructor that
@@ -355,6 +441,72 @@ public static class SiftTracker
         if (_typeInitializerDepth > 0)
         {
             _typeInitializerDepth--;
+        }
+
+        PopScope(link: false);
+    }
+
+    /// <summary>Opens an initialization scope at the current ring position.</summary>
+    /// <param name="owner">For a static constructor its method id, otherwise -1.</param>
+    private static void PushScope(int owner)
+    {
+        var scopes = _scopes ??= new Scope[8];
+        if (_scopeCount == scopes.Length)
+        {
+            Array.Resize(ref _scopes, scopes.Length * 2);
+            scopes = _scopes;
+        }
+
+        scopes[_scopeCount++] = new Scope { Start = _recentCount, Owner = owner };
+    }
+
+    /// <summary>
+    /// Closes the innermost scope and marks what ran in it as linked or unlinked. A scope longer than
+    /// the ring cannot say what ran in it in full, so it is unlinked whatever was stored.
+    /// </summary>
+    /// <param name="link">True when the scope's result was just stored into a tracked field.</param>
+    private static void PopScope(bool link)
+    {
+        if (_scopeCount == 0)
+        {
+            return;
+        }
+
+        var scope = _scopes![--_scopeCount];
+        MarkScope(scope.Start, scope.Linked || link);
+    }
+
+    /// <summary>Marks the methods hit on this thread since <paramref name="start"/>.</summary>
+    /// <param name="start">Ring position where the scope started.</param>
+    /// <param name="linked">True for a linked scope.</param>
+    private static void MarkScope(long start, bool linked)
+    {
+        if (_recent is not { } recent)
+        {
+            return;
+        }
+
+        var end = _recentCount;
+        if (end - start > RecentSize)
+        {
+            start = end - RecentSize;
+            linked = false;
+        }
+
+        var bits = linked ? LinkedBits : UnlinkedBits;
+        for (var i = start; i < end; i++)
+        {
+            var id = recent[(int)(i & (RecentSize - 1))];
+            Mark(bits, id >> 6, 1UL << (id & 63));
+        }
+    }
+
+    /// <summary>Closes every open scope as unlinked: one threw, and a new test starts clean.</summary>
+    private static void AbandonScopes()
+    {
+        while (_scopeCount > 0)
+        {
+            MarkScope(_scopes![--_scopeCount].Start, linked: false);
         }
     }
 
@@ -572,6 +724,7 @@ public static class SiftTracker
 
         _cacheDepth = 0;
         _typeInitializerDepth = 0;
+        AbandonScopes();
         Current.Value = Startup;
     }
 
@@ -642,6 +795,8 @@ public static class SiftTracker
                 WriteBuckets(json, "fixtures", Fixtures);
                 WriteIds(json, "ambient", Startup.Bits);
                 WriteIds(json, "initialization", InitializationBits);
+                WriteIds(json, "linked", LinkedBits);
+                WriteIds(json, "unlinked", UnlinkedBits);
                 json.WriteNumber("methodCount", MethodCount);
                 json.WriteStartObject("fieldBuilders");
                 foreach (var (field, builders) in Builders)
@@ -701,6 +856,7 @@ public static class SiftTracker
         // A cache fill or static constructor that threw left its depth up; a new test starts clean.
         _cacheDepth = 0;
         _typeInitializerDepth = 0;
+        AbandonScopes();
 
         // The first test entry must get through even into the bucket its discovery data entered.
         if (Current.Value is { } current && ReferenceEquals(current, Volatile.Read(ref _lastEntered))

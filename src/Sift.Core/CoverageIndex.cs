@@ -130,8 +130,16 @@ internal sealed class CoverageIndex
             _ambient.UnionWith(built.Ambient.Select(id => map.Methods[id]));
         }
 
+        // Initialization whose result was stored into a tracked field is answered through the values it
+        // built (builtValues, merged above): it is not run-once evidence (docs/design/run-once-cascades.md, C).
+        var linked = map.LinkedInitialization is { } linkedIds ? new HashSet<int>(linkedIds) : [];
         foreach (var id in map.Initialization)
         {
+            if (linked.Contains(id))
+            {
+                continue;
+            }
+
             _initialization.Add(map.Methods[id]);
             foreach (var type in EnclosingTypes(map.Methods[id].TypeName))
             {

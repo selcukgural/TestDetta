@@ -637,6 +637,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var fixtureSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var startupSeconds = new List<double>();
         var initialization = new SortedSet<int>();
+        var linked = new SortedSet<int>();
+        var unlinked = new SortedSet<int>();
         var sharedInProcess = new SortedSet<int>();
         var builtClasses = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var builtFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
@@ -657,6 +659,17 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 foreach (var id in initializing.EnumerateArray())
                 {
                     initialization.Add(id.GetInt32());
+                }
+            }
+
+            foreach (var (name, set) in (ReadOnlySpan<(string, SortedSet<int>)>)[("linked", linked), ("unlinked", unlinked)])
+            {
+                if (root.TryGetProperty(name, out var ids))
+                {
+                    foreach (var id in ids.EnumerateArray())
+                    {
+                        set.Add(id.GetInt32());
+                    }
                 }
             }
             foreach (var id in root.GetProperty("ambient").EnumerateArray())
@@ -696,6 +709,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             new CoverageTimings(classSeconds, fixtureSeconds, startupSeconds.Count == 0 ? 0 : startupSeconds.Average()))
         {
             Initialization = [.. initialization],
+            // Linked in some process and unlinked in none: one path the probes do not see is enough to stay run-once.
+            LinkedInitialization = [.. initialization.Where(id => linked.Contains(id) && !unlinked.Contains(id))],
             SharedInProcess = [.. sharedInProcess],
             BuiltValues = new CoverageHits(Freeze(builtClasses), Freeze(builtFixtures), [.. builtAmbient]),
         };
@@ -719,9 +734,29 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 return false;
             }
 
-            if (Builders.TryGetValue(id - MethodCount, out var builders))
+            // A value built while reading another field's value depends on what built that one too:
+            // the time zone cache built from the parsed TZDB data (NodaTime). Fields are followed
+            // transitively, each once.
+            var pending = new Stack<int>([id - MethodCount]);
+            var seen = new HashSet<int>();
+            while (pending.TryPop(out var field))
             {
-                built.UnionWith(builders.Where(b => b < MethodCount));
+                if (!seen.Add(field) || !Builders.TryGetValue(field, out var builders))
+                {
+                    continue;
+                }
+
+                foreach (var builder in builders)
+                {
+                    if (builder < MethodCount)
+                    {
+                        built.Add(builder);
+                    }
+                    else
+                    {
+                        pending.Push(builder - MethodCount);
+                    }
+                }
             }
 
             return true;

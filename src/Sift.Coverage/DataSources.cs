@@ -20,6 +20,16 @@ namespace Sift.Coverage;
 /// calls another class's data member itself keeps its bucket: the tracker sees the test's frame
 /// below the data member and does not switch (<c>SiftTracker.CalledFromRunningTest</c>).
 /// </para>
+/// <para>
+/// A static field named as a data source has no code of its own: reading it runs its type's static
+/// constructor, which is the data member then. A concrete test class's own static constructor is
+/// marked for the class too: it builds the values its tests receive through such fields, or that a
+/// framework reads by reflection, and it runs whenever the framework first touches the class, which
+/// is often while another class is current (NodaTime's <c>TzdbDateTimeZoneTest.AllTzdbZones</c> was
+/// credited to <c>TzdbDateTimeZoneSourceTest</c>, so a change to the time zone data it loads missed
+/// it). A shared base class's static constructor keeps no marker: its values serve every derived
+/// class, and the field readers already account for them.
+/// </para>
 /// </remarks>
 internal static class DataSources
 {
@@ -41,6 +51,7 @@ internal static class DataSources
     {
         var users = new Dictionary<MethodDefinition, HashSet<TypeDefinition>>();
         var bases = new HashSet<TypeDefinition>();
+        var initializers = new List<(MethodDefinition Initializer, TypeDefinition Type)>();
         foreach (var type in module.GetTypes())
         {
             if (type.BaseType is { } baseType && baseType.Module == module && baseType.Resolve() is { } resolved)
@@ -54,6 +65,11 @@ internal static class DataSources
             }
 
             Collect(type.CustomAttributes, type, users);
+            if (type is { IsAbstract: false, HasGenericParameters: false } && StaticConstructor(type) is { } initializer)
+            {
+                initializers.Add((initializer, type));
+            }
+
             foreach (var method in type.Methods)
             {
                 Collect(method.CustomAttributes, type, users);
@@ -61,6 +77,15 @@ internal static class DataSources
                 {
                     Collect(parameter.CustomAttributes, type, users);
                 }
+            }
+        }
+
+        // Known only once every type was seen: a class others derive from serves them all.
+        foreach (var (initializer, type) in initializers)
+        {
+            if (!bases.Contains(type))
+            {
+                Add(initializer, type, users);
             }
         }
 
@@ -211,7 +236,8 @@ internal static class DataSources
 
     /// <summary>
     /// Adds the methods and property getters called <paramref name="name"/> of <paramref name="type"/>
-    /// or a base class in the module, as frameworks look the member up.
+    /// or a base class in the module, as frameworks look the member up, and for a static field of
+    /// that name the static constructor of the type declaring it.
     /// </summary>
     /// <param name="type">Type that declares the member.</param>
     /// <param name="name">Member name from the attribute.</param>
@@ -229,9 +255,19 @@ internal static class DataSources
                 }
             }
 
+            if (current.Fields.Any(field => field.IsStatic && field.Name == name) && StaticConstructor(current) is { } initializer)
+            {
+                Add(initializer, owner, users);
+            }
+
             current = current.BaseType is { } baseType && baseType.Module == type.Module ? Resolve(baseType) : null;
         }
     }
+
+    /// <summary>The static constructor of <paramref name="type"/>, when it has one with a body.</summary>
+    /// <param name="type">Type definition.</param>
+    private static MethodDefinition? StaticConstructor(TypeDefinition type) =>
+        type.Methods.FirstOrDefault(static method => method is { IsConstructor: true, IsStatic: true, HasBody: true });
 
     /// <summary>True when <paramref name="getter"/> is <c>get_</c> followed by <paramref name="property"/>.</summary>
     /// <param name="getter">Method name.</param>

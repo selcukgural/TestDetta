@@ -50,6 +50,11 @@ public sealed class FrameworkMatrixTests : IDisposable
 
         // Test data ([DynamicData], [TestCaseSource]) runs before its class and counts for it.
         Assert.Equal(["Seed"], CalculatorMembers(map, "Calc.Tests.DataTests"));
+        if (framework == "nunit")
+        {
+            // A static field as the source: the static constructor that builds it is the class's data.
+            Assert.Equal(["Prime"], CalculatorMembers(map, "Calc.Tests.FieldDataTests"));
+        }
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         _repo.Replace("src/Calc/Calculator.cs", "a * b", "b * a");
@@ -84,7 +89,7 @@ public sealed class FrameworkMatrixTests : IDisposable
             """);
         _repo.Write("src/Calc/Calculator.cs", """
             namespace Calc;
-            public class Calculator { public int Add(int a, int b) => a + b; public int Mul(int a, int b) => a * b; public int Warm() => 0; public int Seed() => 5; }
+            public class Calculator { public int Add(int a, int b) => a + b; public int Mul(int a, int b) => a * b; public int Warm() => 0; public int Seed() => 5; public int Prime() => 7; }
             """);
 
         if (framework == "mstest")
@@ -133,6 +138,7 @@ public sealed class FrameworkMatrixTests : IDisposable
                 public class WarmTests { [OneTimeSetUp] public void Init() => new Calculator().Warm(); [Test] public void Warm() { } }
                 public class BrokenTests { [Test] public void Fails() => Assert.That(new Calculator().Add(1, 1), Is.EqualTo(3)); }
                 public class DataTests { static IEnumerable<int> Rows() { yield return new Calculator().Seed(); } [TestCaseSource(nameof(Rows))] public void Seeds(int n) => Assert.That(n, Is.EqualTo(5)); }
+                public class FieldDataTests { static readonly int[] Primes = [new Calculator().Prime()]; [TestCaseSource(nameof(Primes))] public void Prime(int n) => Assert.That(n, Is.EqualTo(7)); }
                 """);
         }
 

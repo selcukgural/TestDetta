@@ -196,6 +196,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             ExitTestCode = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTestCode))!),
             ExitTestCodeWhenComplete = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTestCodeWhenComplete))!),
             PrepareTestInstance = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.PrepareTestInstance))!),
+            ExitCacheInto = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCacheInto))!),
         };
         var tracked = new Dictionary<FieldDefinition, int>();
         foreach (var field in TrackedFields(module))
@@ -207,7 +208,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
-        probes = probes with { ReusedCollections = ReusedCollections(module) };
+        probes = probes with { ReusedCollections = ReusedCollections(module), Tracked = tracked };
 
         foreach (var type in module.GetTypes())
         {
@@ -295,15 +296,22 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>Collection fields of the module that objects are taken back out of, with their element type; see <see cref="ReusedCollections"/>.</summary>
         public Dictionary<FieldDefinition, TypeReference> ReusedCollections { get; init; } = [];
+
+        /// <summary><see cref="SiftTracker.ExitCacheInto"/>.</summary>
+        public required MethodReference ExitCacheInto { get; init; }
+
+        /// <summary>Tracked fields of the module (<see cref="TrackedFields"/>) by their index.</summary>
+        public Dictionary<FieldDefinition, int> Tracked { get; init; } = [];
     }
 
     /// <summary>
     /// Fields whose value may be built once and read by many tests: reference-typed (or generic)
     /// fields that are static, or that some method other than a constructor of their type stores
-    /// (<c>_x ??= new X()</c>, a setter of a shared object). Fields only constructors store hold a
-    /// per-object value that the constructor rules already cover, and tracking them would put a probe
-    /// on every object built. Fields of compiler-generated types (closures, state machines) hold a
-    /// flow's locals, and constants have no store.
+    /// (<c>_x ??= new X()</c>, a setter of a shared object), or that hold an object values are put into
+    /// (a cache filled with <c>GetOrAdd</c>, a list added to; docs/design/run-once-cascades.md, C).
+    /// Other fields only constructors store hold a per-object value that the constructor rules already
+    /// cover, and tracking them would put a probe on every object built. Fields of compiler-generated
+    /// types (closures, state machines) hold a flow's locals, and constants have no store.
     /// </summary>
     /// <param name="module">Module being instrumented.</param>
     private static List<FieldDefinition> TrackedFields(ModuleDefinition module)
@@ -318,8 +326,18 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                     continue;
                 }
 
+                var origins = new Lazy<StackOrigins>(() => StackOrigins.Of(method.Body), LazyThreadSafetyMode.None);
                 foreach (var instruction in method.Body.Instructions)
                 {
+                    // A field holding a cache or collection that values are put into is a store target
+                    // too, even when only a constructor assigns it (a service's own cache).
+                    if (instruction.OpCode.Code is Code.Call or Code.Callvirt && instruction.Operand is MethodReference called
+                        && (Mutators.Contains(called.Name) || CacheFills.Contains($"{called.DeclaringType.GetElementType().FullName}::{called.Name}"))
+                        && CacheTarget(instruction, origins.Value) is { } filled && filled.Module == module)
+                    {
+                        storedOutsideConstructors.Add(filled);
+                    }
+
                     if (instruction.OpCode.Code is Code.Stfld && instruction.Operand is FieldReference reference
                         && reference.Resolve() is { } field && field.Module == module
                         && !(method.IsConstructor && !method.IsStatic && field.DeclaringType == method.DeclaringType))
@@ -400,9 +418,34 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var body = method.Body;
         body.SimplifyMacros();
         var il = body.GetILProcessor();
+
+        // A value added to an object held in a tracked field is stored into that field as far as its
+        // readers go (_cache[key] = Build(key), Registry.Items.Add(this)). Found before any probe goes
+        // in: a read probe after the receiver's load would hide the receiver.
+        var mutations = new Dictionary<Instruction, int>();
+        var origins = new Lazy<StackOrigins>(() => StackOrigins.Of(body), LazyThreadSafetyMode.None);
+        foreach (var instruction in body.Instructions)
+        {
+            if (instruction.OpCode.Code is Code.Call or Code.Callvirt && instruction.Operand is MethodReference called && Mutators.Contains(called.Name)
+                && !CacheFills.Contains($"{called.DeclaringType.GetElementType().FullName}::{called.Name}")
+                && ReceiverField(instruction, origins.Value) is { } receiver && tracked.TryGetValue(receiver, out var index))
+            {
+                mutations[instruction] = index;
+            }
+        }
+
         foreach (var instruction in body.Instructions.ToList())
         {
             var code = instruction.OpCode.Code;
+            if (mutations.TryGetValue(instruction, out var collection))
+            {
+                var store = il.Create(OpCodes.Call, probes.Stored);
+                il.InsertAfter(instruction, store);
+                il.InsertBefore(store, il.Create(OpCodes.Ldc_I4, collection));
+                il.InsertBefore(store, il.Create(OpCodes.Ldc_I4, methodId));
+                continue;
+            }
+
             if (code is not (Code.Ldsfld or Code.Ldfld or Code.Ldsflda or Code.Ldflda or Code.Stsfld or Code.Stfld)
                 || instruction.Operand is not FieldReference reference
                 || reference.Resolve() is not { } field
@@ -520,6 +563,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var isTypeInitializer = method.IsConstructor && method.IsStatic;
         if (isTypeInitializer)
         {
+            il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, site.Id));
             il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTypeInitializer));
         }
 
@@ -550,7 +594,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             InsertBeforeReturns(body, il, probes.ExitCache);
         }
 
-        MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType));
+        MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType), site.Id);
         MarkPoolFills(body, il, probes);
         if (testCodeEnd is TestCodeEnd.Return or TestCodeEnd.Task)
         {
@@ -661,6 +705,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     }
 
     /// <summary>
+    /// Methods that put a value into the object they are called on: a call of one on an object held in a
+    /// tracked field stores into that field for its readers (docs/design/run-once-cascades.md, C).
+    /// </summary>
+    private static readonly FrozenSet<string> Mutators = FrozenSet.Create(
+        StringComparer.Ordinal, "Add", "TryAdd", "set_Item", "Insert", "Push", "Enqueue", "AddOrUpdate", "AddRange", "TryUpdate", "Set");
+
+    /// <summary>
     /// Methods that fill a cache through a factory on a miss and skip it on a hit, by declaring type
     /// (generic definition) and name. Code a factory runs is credited to the first test class that
     /// misses, so the tracker is told when such a call runs.
@@ -710,7 +761,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// True when the method's type binds a pool policy's <c>Create</c> to a delegate (see
     /// <see cref="BindsPoolPolicyCreate"/>); its <c>Func&lt;T&gt;.Invoke</c> calls are then fills too.
     /// </param>
-    private static void MarkCacheFills(MethodBody body, ILProcessor il, Probes probes, bool createsThroughDelegate)
+    /// <param name="methodId">Id of the method being instrumented.</param>
+    private static void MarkCacheFills(MethodBody body, ILProcessor il, Probes probes, bool createsThroughDelegate, int methodId)
     {
         var calls = body.Instructions
             .Where(i => (i.OpCode == OpCodes.Call || i.OpCode == OpCodes.Callvirt)
@@ -721,14 +773,6 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                         && i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
             .ToList();
 
-        foreach (var call in calls)
-        {
-            var enter = il.Create(OpCodes.Call, probes.EnterCache);
-            il.InsertBefore(call, enter);
-            il.InsertAfter(call, il.Create(OpCodes.Call, probes.ExitCache));
-            Retarget(body, call, enter);
-        }
-
         // Hand-rolled lazy initialisation, Interlocked.CompareExchange(ref _x, new X(), null): the
         // value is built before the call, so the mark starts where its arguments start.
         var exchanges = body.Instructions
@@ -737,7 +781,19 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                                && i.Previous?.OpCode.OpCodeType != OpCodeType.Prefix)
             .ToList();
 
-        foreach (var exchange in exchanges)
+        // Targets first: the stack origins describe the body before any probe goes in.
+        var origins = calls.Count + exchanges.Count > 0 ? StackOrigins.Of(body) : null;
+        var fills = calls.Select(c => (c, CacheTarget(c, origins!))).ToList();
+        var exchangeTargets = exchanges.Select(e => (e, CacheTarget(e, origins!))).ToList();
+        foreach (var (call, target) in fills)
+        {
+            var enter = il.Create(OpCodes.Call, probes.EnterCache);
+            il.InsertBefore(call, enter);
+            InsertCacheExit(il, call, probes, target, methodId);
+            Retarget(body, call, enter);
+        }
+
+        foreach (var (exchange, target) in exchangeTargets)
         {
             if (ArgumentStart(body, exchange) is not { } start)
             {
@@ -746,9 +802,55 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
             var enter = il.Create(OpCodes.Call, probes.EnterCache);
             il.InsertBefore(start, enter);
-            il.InsertAfter(exchange, il.Create(OpCodes.Call, probes.ExitCache));
+            InsertCacheExit(il, exchange, probes, target, methodId);
             Retarget(body, start, enter);
         }
+    }
+
+    /// <summary>
+    /// Ends a fill after <paramref name="call"/>: <see cref="SiftTracker.ExitCacheInto"/> when the cache is
+    /// an object held in (or the address of) a tracked field, so the fill is linked to that field's
+    /// readers, otherwise <see cref="SiftTracker.ExitCache"/>. Either leaves the stack as the call left it.
+    /// </summary>
+    /// <param name="il">Processor of the body.</param>
+    /// <param name="call">The fill call.</param>
+    /// <param name="probes">Tracker references with the tracked fields.</param>
+    /// <param name="target">The field the cache lives in, or null.</param>
+    /// <param name="methodId">Id of the method being instrumented.</param>
+    private static void InsertCacheExit(ILProcessor il, Instruction call, Probes probes, FieldDefinition? target, int methodId)
+    {
+        if (target is null || !probes.Tracked.TryGetValue(target, out var field))
+        {
+            il.InsertAfter(call, il.Create(OpCodes.Call, probes.ExitCache));
+            return;
+        }
+
+        var exit = il.Create(OpCodes.Call, probes.ExitCacheInto);
+        il.InsertAfter(call, exit);
+        il.InsertBefore(exit, il.Create(OpCodes.Ldc_I4, field));
+        il.InsertBefore(exit, il.Create(OpCodes.Ldc_I4, methodId));
+    }
+
+    /// <summary>
+    /// The field a fill stores into: the receiver's field for an instance call (<c>_cache.GetOrAdd</c>,
+    /// <c>_lazy.Value</c>), or the field whose address is the first argument of a static one
+    /// (<c>Interlocked.CompareExchange(ref _x, ...)</c>, <c>LazyInitializer.EnsureInitialized(ref _x, ...)</c>).
+    /// </summary>
+    /// <param name="call">The fill call.</param>
+    /// <param name="origins">Stack origins of the call's body, taken before any probe went in.</param>
+    private static FieldDefinition? CacheTarget(Instruction call, StackOrigins origins)
+    {
+        if (call.Operand is not MethodReference target)
+        {
+            return null;
+        }
+
+        if (target.HasThis)
+        {
+            return ReceiverField(call, origins);
+        }
+
+        return origins.Argument(call, 0) is { OpCode.Code: Code.Ldsflda or Code.Ldflda, Operand: FieldReference field } ? field.Resolve() : null;
     }
 
     /// <summary>Collections whose items a pool or hand-rolled cache takes back out, by generic definition; the value is the index of the item type argument.</summary>
@@ -788,11 +890,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var reused = new Dictionary<FieldDefinition, TypeReference>();
         foreach (var method in module.GetTypes().SelectMany(static t => t.Methods).Where(static m => m.HasBody))
         {
+            var origins = new Lazy<StackOrigins>(() => StackOrigins.Of(method.Body), LazyThreadSafetyMode.None);
             foreach (var call in method.Body.Instructions)
             {
                 if ((call.OpCode != OpCodes.Call && call.OpCode != OpCodes.Callvirt) || call.Operand is not MethodReference target
                     || !Retrievals.Contains(target.Name) || !ReusableCollections.ContainsKey(target.DeclaringType.GetElementType().FullName)
-                    || ReceiverField(call) is not { } field || field.Module != module)
+                    || ReceiverField(call, origins.Value) is not { } field || field.Module != module)
                 {
                     continue;
                 }
@@ -810,41 +913,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     }
 
     /// <summary>
-    /// The field <paramref name="call"/>'s receiver was loaded from, for the usual shapes:
-    /// <c>ldsfld F</c>, or a load (<c>ldarg</c>, <c>ldsfld</c>, <c>ldloc</c>) followed by <c>ldfld</c>s ending in <c>F</c>,
-    /// right where the call's arguments start. Null for anything else.
+    /// The field <paramref name="call"/>'s receiver was loaded from (<c>ldsfld F</c>, or <c>ldfld F</c>
+    /// at the end of a chain of loads), on every path to the call; null for anything else.
     /// </summary>
     /// <param name="call">A call on an instance.</param>
-    private static FieldDefinition? ReceiverField(Instruction call)
-    {
-        if (call.Operand is not MethodReference { HasThis: true } target)
-        {
-            return null;
-        }
-
-        // Walk back over the other arguments to the instruction that finished pushing the receiver.
-        var needed = target.Parameters.Count;
-        var instruction = call.Previous;
-        for (var steps = 0; instruction is not null && needed > 0 && steps < 32; steps++)
-        {
-            if (instruction.OpCode.FlowControl is not (FlowControl.Next or FlowControl.Call) || Pops(instruction) is not { } pops || Pushes(instruction) is not { } pushes)
-            {
-                return null;
-            }
-
-            needed -= pushes - pops;
-            instruction = instruction.Previous;
-        }
-
-        if (needed != 0 || instruction is null)
-        {
-            return null;
-        }
-
-        return instruction.OpCode == OpCodes.Ldfld || instruction.OpCode == OpCodes.Ldsfld || instruction.OpCode == OpCodes.Ldflda || instruction.OpCode == OpCodes.Ldsflda
-            ? (instruction.Operand as FieldReference)?.Resolve()
-            : null;
-    }
+    /// <param name="origins">Stack origins of the call's body, taken before any probe went in.</param>
+    private static FieldDefinition? ReceiverField(Instruction call, StackOrigins origins) =>
+        call.Operand is MethodReference { HasThis: true } && origins.Argument(call, 0) is { Operand: FieldReference field } ? field.Resolve() : null;
 
     /// <summary>
     /// In a method that loads a reused collection field (<see cref="ReusedCollections"/>), surrounds
@@ -974,12 +1049,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             return null;
         }
 
-        var needed = Pops(call) ?? 0;
+        var needed = StackOrigins.Pops(call) ?? 0;
         var buildsValue = false;
         for (var (instruction, steps) = (call.Previous, 0); instruction is not null && steps < 64; (instruction, steps) = (instruction.Previous, steps + 1))
         {
             if (instruction.OpCode.FlowControl is not (FlowControl.Next or FlowControl.Call) || instruction.OpCode.OpCodeType == OpCodeType.Prefix
-                || Pops(instruction) is not { } pops || Pushes(instruction) is not { } pushes)
+                || StackOrigins.Pops(instruction) is not { } pops || StackOrigins.Pushes(instruction) is not { } pushes)
             {
                 return null;
             }
@@ -1000,32 +1075,6 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         return null;
     }
 
-    /// <summary>Values <paramref name="instruction"/> takes off the stack; null when unknown (<c>ret</c>, <c>leave</c>).</summary>
-    /// <param name="instruction">Instruction.</param>
-    private static int? Pops(Instruction instruction) => instruction.OpCode.StackBehaviourPop switch
-    {
-        StackBehaviour.Pop0 => 0,
-        StackBehaviour.Pop1 or StackBehaviour.Popi or StackBehaviour.Popref => 1,
-        StackBehaviour.Pop1_pop1 or StackBehaviour.Popi_pop1 or StackBehaviour.Popi_popi or StackBehaviour.Popi_popi8
-            or StackBehaviour.Popi_popr4 or StackBehaviour.Popi_popr8 or StackBehaviour.Popref_pop1 or StackBehaviour.Popref_popi => 2,
-        StackBehaviour.Popi_popi_popi or StackBehaviour.Popref_popi_popi or StackBehaviour.Popref_popi_popi8 or StackBehaviour.Popref_popi_popr4
-            or StackBehaviour.Popref_popi_popr8 or StackBehaviour.Popref_popi_popref => 3,
-        StackBehaviour.Varpop when instruction.Operand is MethodReference method =>
-            method.Parameters.Count + (method.HasThis && instruction.OpCode != OpCodes.Newobj ? 1 : 0),
-        _ => null,
-    };
-
-    /// <summary>Values <paramref name="instruction"/> leaves on the stack; null when unknown.</summary>
-    /// <param name="instruction">Instruction.</param>
-    private static int? Pushes(Instruction instruction) => instruction.OpCode.StackBehaviourPush switch
-    {
-        StackBehaviour.Push0 => 0,
-        StackBehaviour.Push1 or StackBehaviour.Pushi or StackBehaviour.Pushi8 or StackBehaviour.Pushr4 or StackBehaviour.Pushr8 or StackBehaviour.Pushref => 1,
-        StackBehaviour.Push1_push1 => 2,
-        StackBehaviour.Varpush when instruction.Operand is MethodReference method =>
-            instruction.OpCode == OpCodes.Newobj || method.ReturnType.MetadataType != MetadataType.Void ? 1 : 0,
-        _ => null,
-    };
 
     /// <summary>Points branches, switch tables and exception handler boundaries at <paramref name="to"/> instead of <paramref name="from"/>.</summary>
     /// <param name="body">Method body.</param>

@@ -45,6 +45,11 @@ public static class CoverageMapStore
         WriteIds(json, "ambient", map.Ambient);
 
         WriteIds(json, "initialization", map.Initialization);
+        if (map.LinkedInitialization is { } linked)
+        {
+            WriteIds(json, "linkedInitialization", linked);
+        }
+
         if (map.BuiltValues is { } built)
         {
             json.WriteStartObject("builtValues"u8);
@@ -178,6 +183,7 @@ public static class CoverageMapStore
             {
                 FailedClasses = failed,
                 Initialization = root.TryGetProperty("initialization", out var initialization) ? ReadIds(initialization) : [],
+                LinkedInitialization = root.TryGetProperty("linkedInitialization", out var linked) ? ReadIds(linked) : null,
                 SharedInProcess = root.TryGetProperty("sharedInProcess", out var shared) ? ReadIds(shared) : null,
                 ExternalCallbacks = root.TryGetProperty("externalCallbacks", out var callbacks) ? ReadIds(callbacks) : null,
                 BuiltValues = root.TryGetProperty("builtValues", out var built)
