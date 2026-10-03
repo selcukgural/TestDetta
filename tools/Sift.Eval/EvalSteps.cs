@@ -50,6 +50,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         {
             workspace.Git.Checkout(sha);
             workspace.Executor.Setup();
+            var untracked = workspace.Git.Untracked();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
             var recorder = new CoverageRecorder(workspace.LoggerFactory);
             var temporary = directory + ".partial";
@@ -82,6 +83,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
                 }
             }
 
+            RemoveLeftBehind(untracked);
             File.WriteAllLines(Path.Combine(temporary, HungFile), _hung.Select(p => Path.GetRelativePath(workspace.RepoRoot, p)));
             Directory.Move(temporary, directory);
             LogRecorded(sha);
@@ -496,6 +498,26 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             _ => false,
         };
     }
+
+    /// <summary>
+    /// Deletes what test runs left in the clone since <paramref name="untracked"/> was taken, so
+    /// the next analysis sees only the commit and its own edit (<see cref="EvalGit.RemoveUntracked"/>).
+    /// </summary>
+    /// <param name="untracked">Untracked files before the runs.</param>
+    public void RemoveLeftBehind(IReadOnlySet<string> untracked)
+    {
+        var removed = workspace.Git.RemoveUntracked(untracked);
+        if (removed.Count == 0 || !_logger.IsEnabled(LogLevel.Information))
+        {
+            return;
+        }
+
+        var files = string.Join(", ", removed.Take(5));
+        LogLeftBehind(removed.Count, files);
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Removed {Count} file(s) test runs left in the clone: {Files}")]
+    private partial void LogLeftBehind(int count, string files);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Recording of {Sha} reused from {Cache}")]
     private partial void LogRecordingReused(string sha, string cache);

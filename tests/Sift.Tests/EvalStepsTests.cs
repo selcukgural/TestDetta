@@ -46,6 +46,56 @@ public sealed class EvalStepsTests : IDisposable
     }
 
     [Fact]
+    public void A_recording_leaves_no_file_its_tests_wrote_but_keeps_what_setup_made()
+    {
+        // protobuf-net's BuildToolsUnitTests writes Aot/Data/Extensible.output.txt into the clone; the
+        // next analysis saw it as a changed file and selected that project whole.
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n");
+        _repo.Write("tests/Out.Tests/Out.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Out.Tests/OutputTests.cs", """
+            namespace Out.Tests;
+            public class OutputTests
+            {
+                [Xunit.Fact]
+                public void Writes_next_to_its_sources()
+                {
+                    var data = System.IO.Path.Combine(System.AppContext.BaseDirectory, "../../../Data");
+                    System.IO.Directory.CreateDirectory(data);
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(data, "out.txt"), "written by a test");
+                }
+            }
+            """);
+        _repo.Commit("base");
+        var maps = Directory.CreateTempSubdirectory("sift-eval-maps-").FullName;
+        try
+        {
+            var settings = new RunSettings(Parallelism: 1, Mutants: 1, Projects: [], new RepoCommands(Setup: "echo generated > generated.txt", Cleanup: null), Framework: "net10.0");
+            var executor = new TestExecutor(new Sift.Eval.ExecutionContext(_repo.Root, settings, maps), NullLogger.Instance);
+            var workspace = new EvalWorkspace(new EvalGit(_repo.Root), _repo.Root, maps, executor, NullLoggerFactory.Instance);
+
+            var recorded = new EvalSteps(workspace, settings).RecordAt(new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root));
+
+            Assert.Equal(["Out.Tests.OutputTests"], Assert.Single(recorded).Value.Classes.Keys);
+            Assert.False(File.Exists(Path.Combine(_repo.Root, "tests/Out.Tests/Data/out.txt")));
+            Assert.True(File.Exists(Path.Combine(_repo.Root, "generated.txt")));
+        }
+        finally
+        {
+            Directory.Delete(maps, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Test_project_MSBuild_cannot_evaluate_is_left_out_instead_of_ending_the_evaluation()
     {
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");

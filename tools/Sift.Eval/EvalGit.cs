@@ -66,6 +66,35 @@ internal sealed class EvalGit(string root)
     /// <param name="sha">Commit to check out.</param>
     public void Checkout(string sha) => Run(root, "checkout", "--quiet", "--force", "--detach", sha);
 
+    /// <summary>Untracked files git does not ignore, relative to the root with '/' separators.</summary>
+    public HashSet<string> Untracked() =>
+        [.. Run(root, "-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard")];
+
+    /// <summary>
+    /// Deletes the untracked, not ignored files that are not in <paramref name="keep"/>: what test runs
+    /// wrote into the clone (protobuf-net's <c>BuildToolsUnitTests</c> writes
+    /// <c>Aot/Data/Extensible.output.txt</c>). Left there, the next analysis sees a changed non-code
+    /// file and selects that project whole, which is a finding about the evaluation, not about Sift.
+    /// </summary>
+    /// <param name="keep">Untracked files from before the runs, such as what a setup command generated.</param>
+    /// <returns>The deleted files.</returns>
+    public List<string> RemoveUntracked(IReadOnlySet<string> keep)
+    {
+        var removed = new List<string>();
+        foreach (var file in Untracked())
+        {
+            if (keep.Contains(file))
+            {
+                continue;
+            }
+
+            File.Delete(Path.Combine(root, file));
+            removed.Add(file);
+        }
+
+        return removed;
+    }
+
     /// <summary>Number of files that differ between two commits.</summary>
     /// <param name="from">Older commit.</param>
     /// <param name="to">Newer commit.</param>

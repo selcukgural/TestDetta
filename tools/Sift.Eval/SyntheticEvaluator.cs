@@ -65,6 +65,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             }
 
             workspace.Executor.Setup();
+            var untracked = workspace.Git.Untracked();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
             var testProjects = _steps.Build(_steps.TestProjects(graph));
             if (testProjects.Count == 0)
@@ -92,7 +93,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 new ProjectAssemblies(_logger).FileNames(graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
 
             // Selecting edits the clone's sources, so it happens one mutant at a time, and before any
-            // binary is touched: a hang in Sift's analysis then leaves the clone as it was.
+            // binary is touched: a hang in Sift's analysis then leaves the clone as it was. What the
+            // baseline run wrote into the clone goes first: Sift would see it as a change.
+            _steps.RemoveLeftBehind(untracked);
             var selections = targets.Select(t => Select(sha, t, maps, mapCommit)).ToList();
 
             using var schema = settings.UseSchema ? TrySchema(assemblies, targets, testProjects, baseline) : null;

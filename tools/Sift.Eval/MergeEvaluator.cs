@@ -34,12 +34,14 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
     public MergeResult Evaluate(EvalCommit commit)
     {
         var info = new MergeInfo(commit.Sha, commit.Parent, commit.Subject, workspace.Git.ChangedFileCount(commit.Parent, commit.Sha));
+        HashSet<string>? untracked = null;
         try
         {
             _steps.RecordAt(commit.Parent);
 
             workspace.Git.Checkout(commit.Sha);
             workspace.Executor.Setup();
+            untracked = workspace.Git.Untracked();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
             var testProjects = _steps.Build(_steps.TestProjects(graph));
             if (testProjects.Count == 0)
@@ -71,6 +73,14 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
         {
             LogFailed(commit.Sha, ex);
             return new MergeResult(info, null, null, null, ex.Message);
+        }
+        finally
+        {
+            // The next merge is analysed in this clone; what these runs wrote would be a change to it.
+            if (untracked is not null)
+            {
+                _steps.RemoveLeftBehind(untracked);
+            }
         }
     }
 

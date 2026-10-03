@@ -183,8 +183,8 @@ Measured with fresh recordings, 100 mutants each, no missed mutant:
 The A column used round-2 maps; C needed new recordings, so small moves either way are recording
 noise. protobuf-net's `BuildToolsUnitTests` writes `Aot/Data/Extensible.output.txt` into the
 repository, and a later analysis on that tree sees it as a changed non-code file. Without those
-selections C is at 74.7% against A's 79.3% by the same per-change measure. A recording must leave
-the tree as it found it; that is its own fix.
+selections C is at 74.7% against A's 79.3% by the same per-change measure. The evaluation now
+deletes what test runs leave in its clone before it analyses (`EvalGit.RemoveUntracked`).
 
 ## C, design iteration 1 (2026-10-03, proposal for review)
 
