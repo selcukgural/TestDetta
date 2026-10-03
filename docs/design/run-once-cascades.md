@@ -178,6 +178,15 @@ Recording (`SiftTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
   to direct coverage evidence (their readers are now credited with what built the values), so the
   share stays at 22.9%; it is what lets the single-bucket rule be narrowed later.
 
+Open gap, measured 2026-10-03: a constructor that stores its object into a tracked place (NodaTime's
+`CalendarSystem` registering itself in `CalendarByOrdinal`) records as builders only what ran since
+it was entered; its arguments (the calendar's calculator) were built by the caller before that. On
+NodaTime this is the one case where the single-bucket rule is still needed (1 failing class of 60
+mutants). Crediting such stores with everything their open scope ran so far closed half of it and
+raised the share from 22.9% to 25.2%, so it was not kept. The precise form marks where the
+arguments of `newobj` start, for the constructors that store into tracked places; it belongs with
+the decision on the single-bucket rule, after the corpus numbers.
+
 Selection: `CoverageIndex` leaves linked methods out of the run-once set. Their users are the
 classes that ran them plus the readers of what they built (`builtValues`).
 
