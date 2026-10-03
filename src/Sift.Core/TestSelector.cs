@@ -31,7 +31,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
         var generated = request.CoverageMaps.Values.SelectMany(static m => m.Generated);
         var index = new SourceIndexBuilder(logger).Build(request.Graph, request.RepoRoot, affectedProjects, generated);
-        var coverage = new CoverageSelection(request, affectedTests, index);
+        var coverage = new CoverageSelection(request, affectedTests, index, logger);
 
         // Test projects without a coverage map are decided by name alone; those with one use a second
         // spread that stops wherever the maps know which tests run the reached code.

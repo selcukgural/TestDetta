@@ -1,11 +1,15 @@
+using Microsoft.Extensions.Logging;
+
 namespace Sift.Core;
 
 /// <summary>
 /// Answers "which test classes ran this changed symbol?" from coverage maps, for the changes a map
 /// can answer reliably. Everything else is left to name propagation.
 /// </summary>
-internal sealed class CoverageSelection
+internal sealed partial class CoverageSelection
 {
+    private readonly ILogger _logger;
+
     private readonly ProjectGraph _graph;
     private readonly SourceIndex _index;
 
@@ -22,8 +26,10 @@ internal sealed class CoverageSelection
     /// <param name="request">Selection input, including the maps.</param>
     /// <param name="affectedTests">Test projects affected at project level.</param>
     /// <param name="index">Indexed source code, for the reflection check.</param>
-    public CoverageSelection(TestSelectionRequest request, List<AffectedProject> affectedTests, SourceIndex index)
+    /// <param name="logger">Receives why coverage could not answer for a change.</param>
+    public CoverageSelection(TestSelectionRequest request, List<AffectedProject> affectedTests, SourceIndex index, ILogger logger)
     {
+        _logger = logger;
         _graph = request.Graph;
         _index = index;
         foreach (var test in affectedTests)
@@ -220,7 +226,7 @@ internal sealed class CoverageSelection
         if (change.MemberName?.StartsWith(".cctor", StringComparison.Ordinal) == true)
         {
             SelectAll(Answers(change with { MemberName = null }, owner).Answers, $"ran a member of {change.TypeName}, whose static constructor changed");
-            return false;
+            return Unanswered(change, "a static constructor runs once per process");
         }
 
         // An instance serves more classes than the one that built it: a singleton a DI container builds
@@ -238,15 +244,29 @@ internal sealed class CoverageSelection
 
         if (!IsAnswerable(change, reached))
         {
-            return false;
+            return Unanswered(change, change.Kind == SymbolChangeKind.Added ? "added" : "its type may be found through reflection");
         }
 
-        var (answers, resolved, _) = Answers(change, owner);
+        var (answers, unresolved) = Answers(change, owner);
         var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
         SelectAll(answers, reached ? $"ran {member}, which names the changed code" : $"ran {member}, which changed");
         // Changed metadata is read through reflection without running the code: the classes that ran
         // it stay selected, and the change is traced through its type as well.
-        return resolved && typeUsersKnown && !change.MetadataChanged && answers.Count > 0;
+        var reason = unresolved
+                     ?? (!typeUsersKnown ? "a member of its type ran outside any test"
+                         : change.MetadataChanged ? "its metadata changed"
+                         : answers.Count == 0 ? "no affected test project with a map depends on it"
+                         : null);
+        return reason is null || Unanswered(change, reason);
+    }
+
+    /// <summary>Logs why coverage cannot answer for <paramref name="change"/>; always false, for the caller to return.</summary>
+    /// <param name="change">The change or reached member.</param>
+    /// <param name="reason">Why.</param>
+    private bool Unanswered(SymbolChange change, string reason)
+    {
+        LogUnanswered(change.TypeName, change.MemberName ?? "(type)", reason);
+        return false;
     }
 
     /// <summary>
@@ -300,10 +320,10 @@ internal sealed class CoverageSelection
     /// </summary>
     /// <param name="change">A changed type or member.</param>
     /// <param name="owner">Project that owns the changed file.</param>
-    private (List<(string Project, IReadOnlySet<string> Classes)> Answers, bool Resolved, bool Known) Answers(SymbolChange change, ProjectNode owner)
+    private AnswerSet Answers(SymbolChange change, ProjectNode owner)
     {
         var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
-        var resolved = true;
+        string? unresolved = null;
         var known = true;
         foreach (var project in _graph.WithDependents([owner.Path]))
         {
@@ -315,7 +335,7 @@ internal sealed class CoverageSelection
             var (classes, complete) = Lookup(map, change);
             if (classes is null)
             {
-                resolved = false;
+                unresolved ??= "a map does not know it or it ran outside any test";
                 known = false;
                 continue;
             }
@@ -323,17 +343,33 @@ internal sealed class CoverageSelection
             // The classes the map names ran it all the same; the rest are traced by name.
             if (!complete)
             {
-                resolved = false;
+                unresolved ??= "a member of its type ran outside any test";
                 known = false;
             }
 
             // Run-once code is traced by name, but the classes the map saw running it depend on it
             // all the same: name tracing can miss them (through generated code or reflection).
-            resolved &= !MayBeRunOnce(map, change);
+            unresolved ??= RunOnceReason(map, change);
             answers.Add((project, classes));
         }
 
-        return (answers, resolved, known);
+        return new AnswerSet(answers, unresolved, known);
+    }
+
+    /// <summary>What the maps say about one change.</summary>
+    /// <param name="Answers">Classes per affected test project with a map.</param>
+    /// <param name="Unresolved">Why a map cannot answer completely, or null when they all can.</param>
+    /// <param name="Known">False when a map does not know who ran it at all (as opposed to run-once code).</param>
+    private sealed record AnswerSet(List<(string Project, IReadOnlySet<string> Classes)> Answers, string? Unresolved, bool Known)
+    {
+        /// <summary>Deconstructs into the answers and the reason they are incomplete.</summary>
+        /// <param name="answers">Classes per project.</param>
+        /// <param name="unresolved">Why incomplete, or null.</param>
+        public void Deconstruct(out List<(string Project, IReadOnlySet<string> Classes)> answers, out string? unresolved)
+        {
+            answers = Answers;
+            unresolved = Unresolved;
+        }
     }
 
     /// <summary>Adds the classes of every answer to the selection of its project; a class keeps the evidence of its first selection.</summary>
@@ -388,20 +424,23 @@ internal sealed class CoverageSelection
         && !_index.IsReferencedOutside(DeclarationWalker.SimpleTypeName(typeName), typeName);
 
     /// <summary>
-    /// True for code that may run once per test process and cache its result, which the map credits
-    /// only to the first class that triggered it; the change is then traced by name instead. That is
-    /// any member that ran inside a static constructor or a cache fill, and a constructor or static member that ran
-    /// in only one test class or fixture per recording process (a lazy catalogue, a singleton).
+    /// Why the change may be code that runs once per test process and caches its result, which the map
+    /// credits only to the first class that triggered it (the change is then traced by name as well);
+    /// null when it is not. That is any member that ran inside a static constructor or a cache fill or
+    /// is called back by a third-party library, and a constructor or static member that ran in only one
+    /// test class or fixture per recording process (a lazy catalogue, a singleton).
     /// </summary>
     /// <param name="map">Coverage of one test project.</param>
     /// <param name="change">A changed member.</param>
-    private bool MayBeRunOnce(CoverageIndex map, SymbolChange change)
+    private string? RunOnceReason(CoverageIndex map, SymbolChange change)
     {
         // A whole type answered from coverage is only as good as its members: one built by a static
         // initializer was credited to whichever class came first.
         if (change.MemberName is null)
         {
-            return map.TypeRanDuringInitialization(change.TypeName) || map.TypeHasExternalCallback(change.TypeName);
+            return map.TypeRanDuringInitialization(change.TypeName) ? "a member of the type ran in a static constructor or cache fill"
+                : map.TypeHasExternalCallback(change.TypeName) ? "a member of the type is a third-party callback"
+                : null;
         }
 
         var isConstructor = change.MemberName.StartsWith(".ctor", StringComparison.Ordinal);
@@ -410,22 +449,27 @@ internal sealed class CoverageSelection
         var isStatic = _index.FindMember(change.TypeName, change.MemberName) is { IsStatic: true };
         foreach (var name in DeclarationWalker.CompiledNames(change.MemberName))
         {
+            if (map.RanDuringInitialization(change.TypeName, name))
+            {
+                return "it ran in a static constructor or cache fill";
+            }
+
             // A third-party library that calls the member back may have kept what it produced for later
             // classes, which the map does not credit (Castle's proxy generation hook in NSubstitute).
-            if (map.RanDuringInitialization(change.TypeName, name) || map.IsExternalCallback(change.TypeName, name))
+            if (map.IsExternalCallback(change.TypeName, name))
             {
-                return true;
+                return "a third-party library calls it back";
             }
 
             // Nothing ran it at all means no test runs it; run-once code is still recorded for its first user.
             if ((isConstructor || isStatic || MayBeFoundByReflection(change.TypeName))
                 && (map.BucketsRunning(change.TypeName, name) == 1 || map.RanInOneBucketPerProcess(change.TypeName, name)))
             {
-                return true;
+                return "a constructor or static member that ran in one bucket per process";
             }
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>
@@ -465,4 +509,7 @@ internal sealed class CoverageSelection
 
         return (classes, classes is not null);
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: coverage cannot answer alone: {Reason}")]
+    private partial void LogUnanswered(string typeName, string memberName, string reason);
 }
