@@ -13,8 +13,16 @@ namespace Sift.Core;
 /// Asked for every reached member; when it returns true, recorded coverage already knows which
 /// tests run the member, so the spread stops there instead of continuing by name. Null disables it.
 /// </param>
-internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logger, Func<IndexedMember, bool>? resolveByCoverage = null)
+/// <param name="graph">
+/// Projects of the repository: a name is only looked up in the project that declares it and the
+/// projects that depend on it, the only code that can name it (docs/design/run-once-cascades.md).
+/// Null looks names up everywhere.
+/// </param>
+internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logger, Func<IndexedMember, bool>? resolveByCoverage = null, ProjectGraph? graph = null)
 {
+    /// <summary>Per declaring project, the projects whose code can name its members: itself and its dependents.</summary>
+    private readonly Dictionary<string, HashSet<string>> _visibleFrom = new(Paths.Comparer);
+
     /// <summary>Members reached so far.</summary>
     private readonly HashSet<IndexedMember> _affected = new(ReferenceEqualityComparer.Instance);
 
@@ -82,7 +90,8 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <param name="Name">Simple identifier.</param>
     /// <param name="Owner">Qualified name of the type that declares the member, when <paramref name="Scope"/> needs it.</param>
     /// <param name="Scope">Which referencing members count.</param>
-    private readonly record struct NameLookup(string Name, string? Owner, LookupScope Scope);
+    /// <param name="Project">Project that declares what the name stands for; only it and its dependents can name it.</param>
+    private readonly record struct NameLookup(string Name, string? Owner, LookupScope Scope, string Project);
 
     /// <summary>
     /// Types whose name was spread, mapped to every project that declares (or declared) them: a file in
@@ -135,7 +144,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
         foreach (var name in DeclarationWalker.ReferenceNames(change.MemberName))
         {
-            Enqueue(new NameLookup(name, null, LookupScope.Anywhere));
+            Enqueue(new NameLookup(name, null, LookupScope.Anywhere, projectPath));
         }
     }
 
@@ -202,7 +211,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
         foreach (var name in member.DeclaredNames)
         {
-            Enqueue(new NameLookup(name, scope == LookupScope.Anywhere ? null : member.TypeName, scope), member);
+            Enqueue(new NameLookup(name, scope == LookupScope.Anywhere ? null : member.TypeName, scope, member.ProjectPath), member);
             referencedByName |= index.IsReferencedByOthers(name, member);
         }
 
@@ -314,7 +323,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         }
 
         projects.Add(projectPath);
-        Enqueue(new NameLookup(DeclarationWalker.SimpleTypeName(typeName), null, LookupScope.Anywhere), by);
+        Enqueue(new NameLookup(DeclarationWalker.SimpleTypeName(typeName), null, LookupScope.Anywhere, projectPath), by);
     }
 
     /// <summary>Queues <paramref name="lookup"/> unless the same lookup was queued before.</summary>
@@ -335,13 +344,45 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <summary>True when <paramref name="member"/>, which mentions the looked-up name, is within the lookup's scope.</summary>
     /// <param name="lookup">Name and scope.</param>
     /// <param name="member">A member that mentions <see cref="NameLookup.Name"/>.</param>
-    private bool Matches(NameLookup lookup, IndexedMember member) => lookup.Scope switch
+    private bool Matches(NameLookup lookup, IndexedMember member)
     {
-        LookupScope.OwnerOnly => IsInScope(member.TypeName, lookup.Owner!),
-        LookupScope.QualifiedByOwner => IsInScope(member.TypeName, lookup.Owner!)
-                                        || index.TypeMentions(member.TypeName, DeclarationWalker.SimpleTypeName(lookup.Owner!)),
-        _ => true,
-    };
+        if (!CanName(member, lookup.Project))
+        {
+            return false;
+        }
+
+        return lookup.Scope switch
+        {
+            LookupScope.OwnerOnly => IsInScope(member.TypeName, lookup.Owner!),
+            LookupScope.QualifiedByOwner => IsInScope(member.TypeName, lookup.Owner!)
+                                            || index.TypeMentions(member.TypeName, DeclarationWalker.SimpleTypeName(lookup.Owner!)),
+            _ => true,
+        };
+    }
+
+    /// <summary>
+    /// True when <paramref name="member"/>'s code can name something declared in <paramref name="project"/>:
+    /// it is compiled into that project or one that depends on it. Code using <c>dynamic</c> binds
+    /// names at run time, to objects from any project, so it can name anything.
+    /// </summary>
+    /// <param name="member">A member that mentions the looked-up name.</param>
+    /// <param name="project">Project that declares what the name stands for.</param>
+    private bool CanName(IndexedMember member, string project)
+    {
+        if (graph is null || Paths.Comparer.Equals(member.ProjectPath, project) || member.References.Contains("dynamic"))
+        {
+            return true;
+        }
+
+        if (!_visibleFrom.TryGetValue(project, out var visible))
+        {
+            // A project outside the graph (a removed one) is visible from everywhere: nothing says otherwise.
+            visible = graph.Find(project) is null ? [] : graph.WithDependents([project]);
+            _visibleFrom[project] = visible;
+        }
+
+        return visible.Count == 0 || visible.Contains(member.ProjectPath);
+    }
 
     /// <summary>True when <paramref name="typeName"/> is <paramref name="scope"/> or nested inside it.</summary>
     /// <param name="typeName">Qualified name of the referencing type.</param>

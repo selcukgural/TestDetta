@@ -1,6 +1,6 @@
 # Run-once cascades
 
-Status: proposal, 2026-10-03. Not implemented. Precision round, NodaTime.
+Status: A implemented 2026-10-03 (B measured and dropped); C and D proposed. Precision round, NodaTime.
 
 ## Problem
 
@@ -107,6 +107,27 @@ A field has no method of its own in the map. Its initializer runs in the constru
 the static constructor (static) of its type. A reached field whose initializer names the change
 could be answered by the coverage of those constructors, under the run-once rules. Constants stay
 name-traced, since they are compiled into their users.
+
+## As built: A (2026-10-03)
+
+`ImpactPropagation` takes the project graph. Every lookup carries the project that declares what
+the name stands for, and matches only members of that project and its dependents
+(`ImpactPropagation.CanName`), or members whose code uses `dynamic`. Tests:
+`ProjectVisibilityTests` (a tool's `Run` no longer reaches a library test calling its own `Run`; a
+`dynamic` call still does), sabotage-checked.
+
+Measured on round-2 maps, 100 mutants each, no missed mutant:
+
+| Repository | Before | A |
+|---|---|---|
+| NodaTime | 42.6% | 41.0% |
+| protobuf-net | 89.5% | 87.6% |
+| CommunityToolkit | 17.1% | 16.8% |
+| MimeKit | 21.9% | 21.9% |
+
+B (skipping a type's self-reference) changed nothing measurable on top of A, so it was dropped. It
+could also have removed a type-wide answer that cascades lean on today. The cascade is run-once code
+(C), as the counts above suggest.
 
 ## Plan
 

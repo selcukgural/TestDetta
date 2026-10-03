@@ -167,7 +167,8 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 : member => coverage.TryResolve(
                     new SymbolChange(member.TypeName, member.MemberName, SymbolChangeKind.Modified),
                     request.Graph[member.ProjectPath],
-                    reached: true));
+                    reached: true),
+            request.Graph);
         var root = Paths.Normalize(request.RepoRoot);
 
         foreach (var change in request.Impact.CodeChanges)
