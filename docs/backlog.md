@@ -88,6 +88,18 @@ that report numbers (value reporting) only once the numbers are proven right.
   other gives CS1705 or CS1701). 13 of the 15 protobuf-net classes now record; the other 2
   (`Should*DefaultCodeFixProviderTests`) fail without Sift too on a Turkish-locale machine (a code
   fix formats `2.2m` as "2,2") and pass under en-US.
+- **A test class the map never saw running is skipped** (found 2026-10-04 through Markdig, needs a
+  decision): `TestSelector.DecideClass` skips a candidate class with no coverage evidence and no
+  name path as "ran none of the changed code", also when the map has no record of the class at all.
+  The map cannot answer for such a class: it was added or renamed since (Markdig's build generates
+  spec test classes with a culture-sensitive name, so the map has `TestBlocksAndİnlinesPrecedence`
+  while the build that runs has `...AndInlines...`; round 2b counts 26 confirmed misses from this),
+  or its tests were skipped on the machine that recorded (platform-specific tests recorded on macOS
+  and run on Windows CI would never be selected). Proposal: select a `CanContainTests` class that a
+  map exists for but does not record, as a new decision kind (`NotRecorded`); most such classes have
+  no runnable test and cost nothing. Tried overnight: the rule is ten lines, but 24 TestSelectorTests
+  write maps with only some classes and need updating, and the precision cost on the corpus is not
+  measured yet, so it was not kept.
 - **Corpus runs depend on the machine's locale** (found 2026-10-04 on a Turkish-locale machine):
   Markdig's build regenerates its spec test classes with a culture-sensitive `ToUpper`, so a class is
   `TestBlocksAndİnlinesPrecedence` in one build and `...AndInlines...` in another, and an evaluation
