@@ -246,11 +246,18 @@ internal sealed class CoverageIndex
 
     /// <summary>
     /// Test classes that ran any member of <paramref name="typeName"/> or its nested types; null when
-    /// none was instrumented, or one also ran outside any test, as for <see cref="ClassesRunning"/>.
+    /// none was instrumented. Not all of them when <see cref="TypeRanOutsideTests"/>.
     /// </summary>
     /// <param name="typeName">Qualified type name.</param>
-    public IReadOnlySet<string>? ClassesRunningType(string typeName) =>
-        _ambientTypes.Contains(typeName) ? null : _classesByType.GetValueOrDefault(typeName);
+    public IReadOnlySet<string>? ClassesRunningType(string typeName) => _classesByType.GetValueOrDefault(typeName);
+
+    /// <summary>
+    /// True when a member of <paramref name="typeName"/> or its nested types also ran outside any test
+    /// (before the first test, or in a fixture no class is known to use): the classes that used what
+    /// it did there are unknown.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public bool TypeRanOutsideTests(string typeName) => _ambientTypes.Contains(typeName);
 
     /// <summary><paramref name="typeName"/> and every type it is nested in: <c>A.B.C</c> gives <c>A.B.C</c>, <c>A.B</c>, <c>A</c>.</summary>
     /// <param name="typeName">Qualified type name.</param>

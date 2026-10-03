@@ -271,6 +271,7 @@ internal sealed class CoverageSelection
             }
 
             if (map.ClassesRunningType(typeName) is not { } classes
+                || map.TypeRanOutsideTests(typeName)
                 || map.TypeRanDuringInitialization(typeName)
                 || (classes.Count > 0 && (map.BucketsRunningType(typeName) == 1 || map.TypeRanInOneBucketPerProcess(typeName))))
             {
@@ -308,11 +309,19 @@ internal sealed class CoverageSelection
                 continue;
             }
 
-            if (Lookup(map, change) is not { } classes)
+            var (classes, complete) = Lookup(map, change);
+            if (classes is null)
             {
                 resolved = false;
                 known = false;
                 continue;
+            }
+
+            // The classes the map names ran it all the same; the rest are traced by name.
+            if (!complete)
+            {
+                resolved = false;
+                known = false;
             }
 
             // Run-once code is traced by name, but the classes the map saw running it depend on it
@@ -414,30 +423,32 @@ internal sealed class CoverageSelection
 
     /// <summary>
     /// Test classes that ran the changed member (all overloads share a name in the map), or any
-    /// member of a changed type. Null when the map does not know the member: fields and constants
-    /// (constants are inlined at compile time), abstract members, members of other assemblies.
+    /// member of a changed type, and whether they are all of them. Null classes when the map does not
+    /// know the member: fields and constants (constants are inlined at compile time), abstract
+    /// members, members of other assemblies, or a member that also ran outside any test. A type
+    /// whose members ran outside any test has known users, but not all of them (incomplete).
     /// </summary>
     /// <param name="map">Coverage of one test project.</param>
     /// <param name="change">A changed type or member.</param>
-    private static IReadOnlySet<string>? Lookup(CoverageIndex map, SymbolChange change)
+    private static (IReadOnlySet<string>? Classes, bool Complete) Lookup(CoverageIndex map, SymbolChange change)
     {
         if (change.MemberName is null)
         {
-            return map.ClassesRunningType(change.TypeName);
+            return (map.ClassesRunningType(change.TypeName), !map.TypeRanOutsideTests(change.TypeName));
         }
 
         if (change.MemberName.StartsWith(".ctor", StringComparison.Ordinal))
         {
-            return map.ClassesRunning(change.TypeName, ".ctor");
+            return (map.ClassesRunning(change.TypeName, ".ctor"), true);
         }
 
         var names = DeclarationWalker.ReferenceNames(change.MemberName);
         if (names.Count != 1)
         {
             // Operators, indexers and finalizers have no source name to match; field lists are not methods.
-            return null;
+            return (null, false);
         }
 
-        return map.ClassesRunning(change.TypeName, names[0]);
+        return (map.ClassesRunning(change.TypeName, names[0]), true);
     }
 }

@@ -68,11 +68,14 @@ default values. Coverage records only code that runs. That means:
    - a member of the type ran outside any test (ambient), so its users are unknown;
    - a member ran inside a static constructor or cache fill;
    - the type ran in only one bucket, or in only one bucket per recording process.
-5. **Ambient members in type-level lookups.** `CoverageIndex.ClassesRunningType` now returns null
-   when a member of the type ran outside any test, as `ClassesRunning` does for a member. The
-   constructor rule ("every class that ran a member of the type") then cannot be complete. In that
-   case the constructor change is traced by name as well (a miss before; proven by
-   `Constructor_change_is_traced_by_name_too_when_a_member_of_its_type_ran_outside_any_test`).
+5. **Ambient members in type-level lookups.** When a member of a type ran outside any test, the
+   map's classes for the type are only some of its users (`CoverageIndex.TypeRanOutsideTests`).
+   A type-level answer and the constructor rule ("every class that ran a member of the type") still
+   select those classes, and the change is traced by name as well. That fixes a miss, proven by
+   `Constructor_change_is_traced_by_name_too_when_a_member_of_its_type_ran_outside_any_test`.
+   An earlier version of this change dropped the known classes instead: CI caught it with
+   `InjectedServiceTests`, where a DI singleton built before the first test is used through an
+   interface no test class names.
 
 A whole-project reason now ends with the chain that brought the type in
 (`ImpactPropagation.ExplainSeeded`), so a user can see why a change ran an unrelated project.
