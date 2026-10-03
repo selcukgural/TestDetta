@@ -6,6 +6,7 @@ using Sift.Core.Licensing;
 namespace Sift.Tests;
 
 /// <summary>The license applied to CLI runs: reported always, deciding the run only when enforced, never failing it.</summary>
+[Collection(nameof(ProcessEnvironment))]
 public sealed class LicenseGateTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
@@ -115,8 +116,28 @@ public sealed class LicenseGateTests : IDisposable
         using var stdout = new StringWriter();
         using var stderr = new StringWriter();
 
-        Assert.Equal(0, CliApp.Run(["license", "status", "--repo", _repo.Root], stdout, stderr));
-        Assert.Contains("License: ", stdout.ToString(), StringComparison.Ordinal);
+        // The CLI reads the real environment, and on CI for a public repository the status would be
+        // "public repository" instead of the missing license this test is about.
+        string[] visibility = ["GITHUB_EVENT_PATH", "CI_PROJECT_VISIBILITY"];
+        var previous = visibility.Select(Environment.GetEnvironmentVariable).ToArray();
+        try
+        {
+            foreach (var name in visibility)
+            {
+                Environment.SetEnvironmentVariable(name, null);
+            }
+
+            Assert.Equal(0, CliApp.Run(["license", "status", "--repo", _repo.Root], stdout, stderr));
+        }
+        finally
+        {
+            for (var i = 0; i < visibility.Length; i++)
+            {
+                Environment.SetEnvironmentVariable(visibility[i], previous[i]);
+            }
+        }
+
+        Assert.Contains("License: Missing", stdout.ToString(), StringComparison.Ordinal);
         Assert.Contains("Not enforced yet", stdout.ToString(), StringComparison.Ordinal);
 
         Assert.Equal(1, CliApp.Run(["license", "install", "sift1.not.genuine"], stdout, stderr));
