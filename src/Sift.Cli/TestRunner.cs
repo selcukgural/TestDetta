@@ -34,14 +34,14 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
 
     /// <summary>Runs every invocation, even after a failure, so one run reports all broken projects.</summary>
     /// <param name="invocations">What to run.</param>
-    /// <param name="workingDirectory">Repository root; the invocations use paths relative to it.</param>
+    /// <param name="workingDirectory">Repository root; each invocation runs in its location under it.</param>
     /// <param name="stdout">Receives the forwarded test output and fallback warnings.</param>
     public IReadOnlyList<TestRunResult> RunAll(IReadOnlyList<TestInvocation> invocations, string workingDirectory, TextWriter stdout)
     {
         var results = new List<TestRunResult>(invocations.Count);
         foreach (var invocation in invocations)
         {
-            results.Add(RunWithFallback(invocation, workingDirectory, stdout));
+            results.Add(RunWithFallback(invocation, invocation.Location.FullDirectory(workingDirectory), stdout));
         }
 
         return results;

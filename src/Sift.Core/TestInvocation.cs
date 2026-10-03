@@ -4,9 +4,10 @@ namespace Sift.Core;
 /// <param name="Selection">The decision this invocation carries out.</param>
 /// <param name="Arguments">
 /// Arguments for the <c>dotnet</c> executable, starting with <c>test</c>. The project path is
-/// relative to the repository root, so the process must run there.
+/// relative to <paramref name="Location"/>'s directory, so the process must run there.
 /// </param>
-public sealed record TestInvocation(TestProjectSelection Selection, IReadOnlyList<string> Arguments);
+/// <param name="Location">Where the process runs, and the runner it uses there.</param>
+public sealed record TestInvocation(TestProjectSelection Selection, IReadOnlyList<string> Arguments, DotnetTestLocation Location);
 
 /// <summary>Turns test selections into <c>dotnet test</c> invocations.</summary>
 public static class TestInvocationBuilder
@@ -15,16 +16,16 @@ public static class TestInvocationBuilder
     /// <param name="selections">Decisions from <see cref="TestSelector"/>.</param>
     /// <param name="repoRoot">Repository root; project paths are made relative to it.</param>
     /// <param name="extraArguments">Appended to every invocation as given, for example <c>-c Release --no-build</c>.</param>
-    /// <param name="mode">
-    /// Runner <c>dotnet test</c> uses: VSTest takes the project as an argument, Microsoft.Testing.Platform
-    /// through <c>--project</c>. Both accept the VSTest filter syntax through <c>--filter</c>, except
-    /// xUnit v3 under the testing platform, which gets its own class filters.
-    /// </param>
+    /// <remarks>
+    /// Each project runs where its <c>global.json</c> is (<see cref="DotnetTestLocation"/>), with the
+    /// runner it selects: VSTest takes the project as an argument, Microsoft.Testing.Platform through
+    /// <c>--project</c>. Both accept the VSTest filter syntax through <c>--filter</c>, except xUnit v3
+    /// and TUnit under the testing platform, which get their own class filters.
+    /// </remarks>
     public static IReadOnlyList<TestInvocation> Build(
         IReadOnlyList<TestProjectSelection> selections,
         string repoRoot,
-        IReadOnlyList<string> extraArguments,
-        DotnetTestMode mode = DotnetTestMode.VSTest)
+        IReadOnlyList<string> extraArguments)
     {
         var invocations = new List<TestInvocation>(selections.Count);
         foreach (var selection in selections)
@@ -34,15 +35,15 @@ public static class TestInvocationBuilder
                 continue;
             }
 
-            var project = Path.GetRelativePath(repoRoot, selection.Project.Path).Replace('\\', '/');
-            List<string> arguments = mode == DotnetTestMode.TestingPlatform ? ["test", "--project", project] : ["test", project];
+            var location = DotnetTestLocation.For(repoRoot, selection.Project.Path);
+            var arguments = location.TestArguments(repoRoot, selection.Project.Path);
             if (selection.Mode == TestRunMode.Filtered)
             {
-                arguments.AddRange(TestFilter.Arguments(selection.TestClasses, exclude: false, TestFilter.SyntaxFor(selection.Project, mode)));
+                arguments.AddRange(TestFilter.Arguments(selection.TestClasses, exclude: false, TestFilter.SyntaxFor(selection.Project, location.Mode)));
             }
 
             arguments.AddRange(extraArguments);
-            invocations.Add(new TestInvocation(selection, arguments));
+            invocations.Add(new TestInvocation(selection, arguments, location));
         }
 
         return invocations;

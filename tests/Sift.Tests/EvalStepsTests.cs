@@ -36,7 +36,7 @@ public sealed class EvalStepsTests : IDisposable
         Assert.True(build.WaitForExit(TimeSpan.FromMinutes(5)) && build.ExitCode == 0);
 
         var settings = new RunSettings(Parallelism: 1, Mutants: 1, Projects: [], new RepoCommands(Setup: null, Cleanup: null), Framework: "net10.0");
-        var executor = new TestExecutor(new Sift.Eval.ExecutionContext(_repo.Root, DotnetTestMode.VSTest, settings, _repo.Root), NullLogger.Instance);
+        var executor = new TestExecutor(new Sift.Eval.ExecutionContext(_repo.Root, settings, _repo.Root), NullLogger.Instance);
         var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
 
         var outcome = executor.RunAll([.. graph.Projects.Where(static p => p.IsTestProject)], "env");
@@ -66,7 +66,7 @@ public sealed class EvalStepsTests : IDisposable
         _repo.Commit("base");
 
         var settings = new RunSettings(Parallelism: 1, Mutants: 1, Projects: [], new RepoCommands(Setup: null, Cleanup: null), Framework: "net10.0");
-        var executor = new TestExecutor(new Sift.Eval.ExecutionContext(_repo.Root, DotnetTestMode.VSTest, settings, _repo.Root), NullLogger.Instance);
+        var executor = new TestExecutor(new Sift.Eval.ExecutionContext(_repo.Root, settings, _repo.Root), NullLogger.Instance);
         var workspace = new EvalWorkspace(new EvalGit(_repo.Root), _repo.Root, Path.Combine(_repo.Root, "maps"), executor, NullLoggerFactory.Instance);
         var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
         Assert.Equal(2, graph.Projects.Count(p => p.IsTestProject));

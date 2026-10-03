@@ -53,10 +53,9 @@ internal sealed partial class MergeEvaluator(EvalWorkspace workspace, RunSetting
             var analysis = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator).Run(workspace.RepoRoot, commit.Parent);
             _steps.ClearMaps();
 
-            var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);
             var inScope = new HashSet<string>(testProjects.Select(static p => p.Path), StringComparer.Ordinal);
             var invocations = TestInvocationBuilder.Build(
-                [.. analysis.Tests.Where(t => inScope.Contains(t.Project.Path))], workspace.RepoRoot, [], mode);
+                [.. analysis.Tests.Where(t => inScope.Contains(t.Project.Path))], workspace.RepoRoot, []);
 
             var selected = workspace.Executor.RunSelected(invocations, "selected");
             var full = workspace.Executor.RunAll(testProjects, "full");

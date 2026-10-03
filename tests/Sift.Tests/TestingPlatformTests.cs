@@ -33,10 +33,11 @@ public sealed class TestingPlatformTests : IDisposable
     [Fact]
     public void Testing_platform_invocations_pass_the_project_with_an_option()
     {
-        var project = new ProjectNode("/repo/tests/A.Tests/A.Tests.csproj", "/repo/tests/A.Tests", true, []);
+        File.WriteAllText(Path.Combine(_directory, "global.json"), """{ "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        var project = new ProjectNode(Path.Combine(_directory, "tests/A.Tests/A.Tests.csproj"), Path.Combine(_directory, "tests/A.Tests"), true, []);
         TestProjectSelection[] selections = [new(project, TestRunMode.Filtered, ["A.Tests.OrderTests"], "")];
 
-        var invocation = TestInvocationBuilder.Build(selections, "/repo", ["--no-build"], DotnetTestMode.TestingPlatform).Single();
+        var invocation = TestInvocationBuilder.Build(selections, _directory, ["--no-build"]).Single();
 
         Assert.Equal(["test", "--project", "tests/A.Tests/A.Tests.csproj", "--filter", "FullyQualifiedName~A.Tests.OrderTests.", "--no-build"], invocation.Arguments);
     }

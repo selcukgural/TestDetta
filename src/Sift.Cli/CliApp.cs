@@ -158,8 +158,7 @@ internal static partial class CliApp
     /// <param name="stdout">Receives the plan and the summary.</param>
     private static int RunTests(CliOptions options, AnalysisResult analysis, ILoggerFactory loggerFactory, TextWriter stdout)
     {
-        var invocations = TestInvocationBuilder.Build(
-            analysis.Tests, analysis.RepoRoot, options.Test.DotnetTestArguments, DotnetTestModeDetector.Detect(analysis.RepoRoot));
+        var invocations = TestInvocationBuilder.Build(analysis.Tests, analysis.RepoRoot, options.Test.DotnetTestArguments);
         ResultWriter.WritePlan(analysis, stdout);
 
         if (invocations.Count == 0)

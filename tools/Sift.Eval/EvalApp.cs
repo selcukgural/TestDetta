@@ -63,7 +63,7 @@ internal static partial class EvalApp
         Directory.CreateDirectory(logs);
 
         var executor = new TestExecutor(
-            new ExecutionContext(root, DotnetTestModeDetector.Detect(root), options.Run, logs),
+            new ExecutionContext(root, options.Run, logs),
             loggerFactory.CreateLogger<TestExecutor>());
         var workspace = new EvalWorkspace(git, root, Path.Combine(options.Output, "maps"), executor, loggerFactory);
         var evaluator = new MergeEvaluator(workspace, options.Run);

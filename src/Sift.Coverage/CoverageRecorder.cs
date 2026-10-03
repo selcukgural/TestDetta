@@ -69,6 +69,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var project = request.TestProject.Path;
         var root = request.RepoRoot;
 
+        // Everything runs where the project's global.json is, as dotnet test would for a developer
+        // there: the SDK it pins and the runner it selects (DotnetTestLocation).
+        var location = DotnetTestLocation.For(root, project);
+        var runDirectory = location.FullDirectory(root);
+
         List<string> build = ["build", project, "-c", request.Configuration];
         if (request.Options.Framework is { } targetFramework)
         {
@@ -78,7 +83,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         if (!request.Options.NoBuild)
         {
             var errors = new ErrorCollectingWriter(output);
-            var buildExit = dotnet.Run(build, root, new Dictionary<string, string>(), errors);
+            var buildExit = dotnet.Run(build, runDirectory, new Dictionary<string, string>(), errors);
             if (buildExit != 0)
             {
                 var reason = errors.Errors.Count == 0 ? string.Empty : ": " + string.Join(" / ", errors.Errors);
@@ -86,7 +91,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
         }
 
-        var (targetPath, framework) = FindTargetPath(dotnet, request);
+        var (targetPath, framework) = FindTargetPath(dotnet, request, runDirectory);
         if (request.Options.NoBuild && !File.Exists(targetPath))
         {
             throw new InvalidOperationException(
@@ -101,7 +106,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var instrumenter = new AssemblyInstrumenter(_logger);
         var testAssemblies = new HashSet<string>(StringComparer.Ordinal) { targetPath };
         var instrumentation = instrumenter.Instrument(assemblies, testAssemblies, Path.Combine(work, "backup"));
-        var mode = DotnetTestModeDetector.Detect(root);
+        var mode = location.Mode;
         RuntimeDeployment? deployment = null;
 
         try
@@ -123,7 +128,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 : TestFilterSyntax.VSTest;
             var shards = Shards(request, syntax);
             var synchronizedOutput = TextWriter.Synchronized(output);
-            var runs = RunShards(shards, new ShardContext(request, mode, outputDirectory, instrumentation, work), testArguments, synchronizedOutput);
+            var runs = RunShards(shards, new ShardContext(request, mode, runDirectory, outputDirectory, instrumentation, work), testArguments, synchronizedOutput);
             ThrowIfTimedOut(runs, project, request);
 
             // A shard that crashed before its process wrote results (NLog: a subset of its classes takes
@@ -134,7 +139,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 LogShardCrashed(project);
                 var single = Path.Combine(work, "single");
                 Directory.CreateDirectory(single);
-                runs = RunShards([[]], new ShardContext(request, mode, outputDirectory, instrumentation, single), testArguments, synchronizedOutput);
+                runs = RunShards([[]], new ShardContext(request, mode, runDirectory, outputDirectory, instrumentation, single), testArguments, synchronizedOutput);
                 ThrowIfTimedOut(runs, project, request);
             }
 
@@ -149,7 +154,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 var parallel = Path.Combine(work, "parallel");
                 Directory.CreateDirectory(parallel);
                 var parallelArguments = TestArguments(new TestRun(request, mode, targetPath, framework, SuiteParallelism: true), parallel);
-                runs = RunShards([[]], new ShardContext(request, mode, outputDirectory, instrumentation, parallel, SuiteParallelism: true), parallelArguments, synchronizedOutput);
+                runs = RunShards([[]], new ShardContext(request, mode, runDirectory, outputDirectory, instrumentation, parallel, SuiteParallelism: true), parallelArguments, synchronizedOutput);
                 ThrowIfTimedOut(runs, project, request);
                 suiteParallelism = true;
             }
@@ -338,6 +343,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <summary>What every shard of a recording shares.</summary>
     /// <param name="Request">What is recorded.</param>
     /// <param name="Mode">Runner <c>dotnet test</c> uses.</param>
+    /// <param name="RunDirectory">Directory <c>dotnet test</c> runs in (<see cref="DotnetTestLocation"/>).</param>
     /// <param name="OutputDirectory">Output directory of the test project.</param>
     /// <param name="Instrumentation">Instrumentation result, for the method count.</param>
     /// <param name="Work">Work directory.</param>
@@ -345,6 +351,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     private sealed record ShardContext(
         RecordRequest Request,
         DotnetTestMode Mode,
+        string RunDirectory,
         string OutputDirectory,
         InstrumentationResult Instrumentation,
         string Work,
@@ -441,7 +448,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
 
         var writer = shard.Count == 1 ? output : new PrefixWriter(output, $"[shard {shard.Index + 1}/{shard.Count}] ");
-        var exitCode = shard.Dotnet.Run(arguments, request.RepoRoot, environment, writer, request.Options.Timeout);
+        var exitCode = shard.Dotnet.Run(arguments, context.RunDirectory, environment, writer, request.Options.Timeout);
 
         // The catch-all shard legitimately matches no test when the source index knew every class,
         // and then the test host never starts the collector.
@@ -476,7 +483,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// </summary>
     /// <param name="dotnet">Process runner.</param>
     /// <param name="request">What to record.</param>
-    private static (string TargetPath, string? Framework) FindTargetPath(DotnetProcess dotnet, RecordRequest request)
+    /// <param name="runDirectory">Directory MSBuild runs in, so it uses the SDK the tests will.</param>
+    private static (string TargetPath, string? Framework) FindTargetPath(DotnetProcess dotnet, RecordRequest request, string runDirectory)
     {
         if (request.Options.Framework is { } requested)
         {
@@ -485,7 +493,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 "msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={requested}",
                 "-getProperty:TargetPath",
             ];
-            return (dotnet.Capture(exact, request.RepoRoot).Trim(), requested);
+            return (dotnet.Capture(exact, runDirectory).Trim(), requested);
         }
 
         List<string> query =
@@ -494,7 +502,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             "-getProperty:TargetPath", "-getProperty:TargetFrameworks",
         ];
 
-        using var properties = JsonDocument.Parse(dotnet.Capture(query, request.RepoRoot));
+        using var properties = JsonDocument.Parse(dotnet.Capture(query, runDirectory));
         var values = properties.RootElement.GetProperty("Properties");
         if (values.GetProperty("TargetPath").GetString() is { Length: > 0 } targetPath)
         {
@@ -505,7 +513,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             .FirstOrDefault() ?? throw new InvalidOperationException($"Could not find the output of {request.TestProject.Path}.");
 
         query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={framework}", "-getProperty:TargetPath"];
-        return (dotnet.Capture(query, request.RepoRoot).Trim(), framework);
+        return (dotnet.Capture(query, runDirectory).Trim(), framework);
     }
 
     /// <summary>The project behind each assembly file name of the request's repository, cached per graph.</summary>

@@ -126,9 +126,12 @@ and the details are in [docs/ci.md](docs/ci.md).
 
 - Both `dotnet test` runners are supported. The runner is read from `global.json`
   (`"test": { "runner": "Microsoft.Testing.Platform" }`, required for xUnit v3 on the .NET 10 SDK).
-  Recording and selection are tested end to end with xUnit v2 (VSTest), xUnit v3
-  (Microsoft.Testing.Platform), and MSTest and NUnit under both runners, including projects that
-  turn on their framework's own parallelization.
+  Each test project is built and run in the directory of the nearest `global.json` at or above it,
+  so a file kept next to the solution (`src/global.json`) counts as it does for a developer there;
+  `--dry-run` prints such commands as `(cd src && dotnet test ...)`. Recording and selection are
+  tested end to end with xUnit v2 (VSTest), xUnit v3 and TUnit (Microsoft.Testing.Platform), and
+  MSTest and NUnit under both runners, including projects that turn on their framework's own
+  parallelization.
 - Test classes that fail while recording are always selected when their project is affected: a
   failing test stops early, so its coverage is incomplete. When tests fail and no TRX report says
   which (NUnit under Microsoft.Testing.Platform without `Microsoft.Testing.Extensions.TrxReport`),

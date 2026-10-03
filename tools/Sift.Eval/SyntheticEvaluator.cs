@@ -636,7 +636,6 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         var mutation = scope.Mutation;
         var mutatedMethods = mutation.MutatedMethods;
-        var mode = DotnetTestModeDetector.Detect(workspace.RepoRoot);
         var invocations = new List<TestInvocation>();
         foreach (var project in state.Reached)
         {
@@ -646,14 +645,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 continue;
             }
 
-            var relative = Path.GetRelativePath(workspace.RepoRoot, project.Path).Replace('\\', '/');
-            List<string> arguments = mode == DotnetTestMode.TestingPlatform ? ["test", "--project", relative] : ["test", relative];
+            var location = DotnetTestLocation.For(workspace.RepoRoot, project.Path);
+            var arguments = location.TestArguments(workspace.RepoRoot, project.Path);
             if (decision is { Mode: TestRunMode.Filtered, TestClasses.Count: > 0 })
             {
-                arguments.AddRange(TestFilter.Arguments(decision.TestClasses, exclude: true, TestFilter.SyntaxFor(project, mode)));
+                arguments.AddRange(TestFilter.Arguments(decision.TestClasses, exclude: true, TestFilter.SyntaxFor(project, location.Mode)));
             }
 
-            invocations.Add(new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "outside the selection"), arguments));
+            invocations.Add(new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "outside the selection"), arguments, location));
         }
 
         // No report is no evidence that what Sift left out passed.
@@ -787,7 +786,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             }
         }
 
-        var invocations = TestInvocationBuilder.Build(selections, workspace.RepoRoot, [], DotnetTestModeDetector.Detect(workspace.RepoRoot));
+        var invocations = TestInvocationBuilder.Build(selections, workspace.RepoRoot, []);
         var run = scope.Executor.RunSelected(invocations, label, environment);
         var failed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (project, classesFailed) in run.FailedByProject)

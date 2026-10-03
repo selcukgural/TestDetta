@@ -30,15 +30,17 @@ public sealed class TestInvocationBuilderTests
     public void Xunit_v3_on_the_testing_platform_gets_its_own_class_filters()
     {
         // It rejects the VSTest --filter with "Unknown option" (Scrutor, xunit.v3.mtp-v2).
-        var xunit = Tests with { PackageReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "xunit.v3.mtp-v2" } };
-        var mstest = Other with { PackageReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MSTest" } };
+        using var repo = new GitRepoFixture();
+        repo.Write("global.json", """{ "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        var xunit = Tests with { Path = Path.Combine(repo.Root, "tests/A.Tests/A.Tests.csproj"), PackageReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "xunit.v3.mtp-v2" } };
+        var mstest = Other with { Path = Path.Combine(repo.Root, "tests/B.Tests/B.Tests.csproj"), PackageReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MSTest" } };
         TestProjectSelection[] selections =
         [
             new(xunit, TestRunMode.Filtered, ["A.Tests.OrderTests", "A.Tests.Outer+Inner"], "2 of 3"),
             new(mstest, TestRunMode.Filtered, ["B.Tests.CartTests"], "1 of 3"),
         ];
 
-        var invocations = TestInvocationBuilder.Build(selections, "/repo", [], DotnetTestMode.TestingPlatform);
+        var invocations = TestInvocationBuilder.Build(selections, repo.Root, []);
 
         Assert.Equal(
             ["test", "--project", "tests/A.Tests/A.Tests.csproj", "--filter-class", "A.Tests.OrderTests", "--filter-class", "A.Tests.Outer+Inner"],
@@ -51,10 +53,34 @@ public sealed class TestInvocationBuilderTests
     {
         var invocation = new TestInvocation(
             new TestProjectSelection(Tests, TestRunMode.Filtered, ["A.Outer+Inner"], ""),
-            ["test", "tests/A.Tests/A.Tests.csproj", "--filter", "FullyQualifiedName~A.X.|FullyQualifiedName~A.Y's."]);
+            ["test", "tests/A.Tests/A.Tests.csproj", "--filter", "FullyQualifiedName~A.X.|FullyQualifiedName~A.Y's."],
+            new DotnetTestLocation("", DotnetTestMode.VSTest));
 
         Assert.Equal(
             @"dotnet test tests/A.Tests/A.Tests.csproj --filter 'FullyQualifiedName~A.X.|FullyQualifiedName~A.Y'\''s.'",
             ResultWriter.CommandLine(invocation));
+    }
+
+    [Fact]
+    public void A_project_under_its_own_global_json_runs_there_with_the_runner_it_selects()
+    {
+        // Refit keeps the testing-platform opt-in in src/global.json; the root has none.
+        using var repo = new GitRepoFixture();
+        repo.Write("src/global.json", """{ "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        var inSrc = new ProjectNode(Path.Combine(repo.Root, "src/A.Tests/A.Tests.csproj"), Path.Combine(repo.Root, "src/A.Tests"), true, []);
+        var atRoot = new ProjectNode(Path.Combine(repo.Root, "tests/B.Tests/B.Tests.csproj"), Path.Combine(repo.Root, "tests/B.Tests"), true, []);
+        TestProjectSelection[] selections =
+        [
+            new(inSrc, TestRunMode.Filtered, ["A.Tests.OrderTests"], ""),
+            new(atRoot, TestRunMode.All, [], ""),
+        ];
+
+        var invocations = TestInvocationBuilder.Build(selections, repo.Root, []);
+
+        Assert.Equal(new DotnetTestLocation("src", DotnetTestMode.TestingPlatform), invocations[0].Location);
+        Assert.Equal(["test", "--project", "A.Tests/A.Tests.csproj", "--filter", "FullyQualifiedName~A.Tests.OrderTests."], invocations[0].Arguments);
+        Assert.Equal("(cd src && dotnet test --project A.Tests/A.Tests.csproj --filter 'FullyQualifiedName~A.Tests.OrderTests.')", ResultWriter.CommandLine(invocations[0]));
+        Assert.Equal(new DotnetTestLocation("", DotnetTestModeDetector.Detect(repo.Root)), invocations[1].Location);
+        Assert.Equal("tests/B.Tests/B.Tests.csproj", invocations[1].Arguments[^1]);
     }
 }

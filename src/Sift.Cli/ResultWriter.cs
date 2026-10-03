@@ -96,8 +96,7 @@ internal static class ResultWriter
     /// <param name="stdout">Destination.</param>
     private static void WriteCommands(ResultReport report, TextWriter stdout)
     {
-        var mode = DotnetTestModeDetector.Detect(report.RepoRoot);
-        foreach (var invocation in TestInvocationBuilder.Build(report.Tests, report.RepoRoot, [], mode))
+        foreach (var invocation in TestInvocationBuilder.Build(report.Tests, report.RepoRoot, []))
         {
             stdout.WriteLine(CommandLine(invocation));
         }
@@ -230,10 +229,18 @@ internal static class ResultWriter
         }
     }
 
-    /// <summary>The invocation as a POSIX shell command line.</summary>
+    /// <summary>
+    /// The invocation as a POSIX shell command line, run from the repository root. A project that
+    /// runs elsewhere (<see cref="DotnetTestLocation"/>) gets a subshell that changes there first, so
+    /// every line stands on its own.
+    /// </summary>
     /// <param name="invocation">What would be run.</param>
-    public static string CommandLine(TestInvocation invocation) =>
-        "dotnet " + string.Join(' ', invocation.Arguments.Select(static a => IsShellSafe(a) ? a : ShellQuote(a)));
+    public static string CommandLine(TestInvocation invocation)
+    {
+        var command = "dotnet " + string.Join(' ', invocation.Arguments.Select(static a => IsShellSafe(a) ? a : ShellQuote(a)));
+        var directory = invocation.Location.Directory;
+        return directory.Length == 0 ? command : $"(cd {(IsShellSafe(directory) ? directory : ShellQuote(directory))} && {command})";
+    }
 
     /// <summary>One line per test project with its decision and reason, followed by the selected classes.</summary>
     /// <param name="repoRoot">Repository root; printed paths are relative to it.</param>

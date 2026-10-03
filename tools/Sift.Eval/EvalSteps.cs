@@ -222,7 +222,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         string output;
         try
         {
-            output = dotnet.Capture(query, workspace.RepoRoot);
+            output = dotnet.Capture(query, RunDirectory(project));
         }
         catch (InvalidOperationException ex)
         {
@@ -247,6 +247,14 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     }
 
     /// <summary>
+    /// Where dotnet runs for <paramref name="project"/>: the directory of its global.json, so builds and
+    /// MSBuild queries use the SDK its tests run with (<see cref="DotnetTestLocation"/>).
+    /// </summary>
+    /// <param name="project">A test project of the workspace.</param>
+    private string RunDirectory(ProjectNode project) =>
+        DotnetTestLocation.For(workspace.RepoRoot, project.Path).FullDirectory(workspace.RepoRoot);
+
+    /// <summary>
     /// Builds the test projects once, so every later run can use <c>--no-build</c>. A project that does
     /// not build here (it needs another platform, say) is left out of the evaluation of this merge.
     /// </summary>
@@ -268,7 +276,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             int exitCode;
             using (var log = File.CreateText(logPath))
             {
-                exitCode = dotnet.Run(arguments, workspace.RepoRoot, new Dictionary<string, string>(), log, BuildTimeout);
+                exitCode = dotnet.Run(arguments, RunDirectory(project), new Dictionary<string, string>(), log, BuildTimeout);
             }
 
             if (exitCode == 0)
@@ -457,7 +465,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
                 query.Add($"-p:TargetFramework={framework}");
             }
 
-            var targetPath = dotnet.Capture(query, workspace.RepoRoot).Trim();
+            var targetPath = dotnet.Capture(query, RunDirectory(project)).Trim();
             if (targetPath.Length > 0)
             {
                 outputs[project.Path] = Path.GetDirectoryName(targetPath)!;

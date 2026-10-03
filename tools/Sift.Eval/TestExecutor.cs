@@ -35,10 +35,9 @@ internal sealed record TestRunOutcome(
 
 /// <summary>What <see cref="TestExecutor"/> runs in.</summary>
 /// <param name="RepoRoot">Clone directory.</param>
-/// <param name="Mode">Runner <c>dotnet test</c> uses there.</param>
 /// <param name="Settings">Evaluation settings, for the cleanup command.</param>
 /// <param name="LogDirectory">Where each run's console output is written.</param>
-internal sealed record ExecutionContext(string RepoRoot, DotnetTestMode Mode, RunSettings Settings, string LogDirectory);
+internal sealed record ExecutionContext(string RepoRoot, RunSettings Settings, string LogDirectory);
 
 /// <summary>
 /// Runs already built test projects with a TRX report, so failures are known per test class, and
@@ -96,12 +95,12 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// <param name="environment">Extra environment variables of the test processes, such as the mutant switch; null for none.</param>
     public TestRunOutcome RunAll(IReadOnlyList<ProjectNode> projects, string label, IReadOnlyDictionary<string, string>? environment = null)
     {
-        var runs = new List<(ProjectNode Project, List<string> Arguments)>(projects.Count);
+        var runs = new List<(ProjectNode Project, List<string> Arguments, DotnetTestLocation Location)>(projects.Count);
+        var root = _state.Clone ?? context.RepoRoot;
         foreach (var project in projects)
         {
-            var relative = Path.GetRelativePath(_state.Clone ?? context.RepoRoot, project.Path).Replace('\\', '/');
-            List<string> arguments = context.Mode == DotnetTestMode.TestingPlatform ? ["test", "--project", relative] : ["test", relative];
-            runs.Add((project, arguments));
+            var location = DotnetTestLocation.For(root, project.Path);
+            runs.Add((project, location.TestArguments(root, project.Path), location));
         }
 
         return Run(runs, label, environment);
@@ -113,20 +112,20 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// <param name="environment">Extra environment variables of the test processes; null for none.</param>
     public TestRunOutcome RunSelected(IReadOnlyList<TestInvocation> invocations, string label, IReadOnlyDictionary<string, string>? environment = null)
     {
-        var runs = new List<(ProjectNode Project, List<string> Arguments)>(invocations.Count);
+        var runs = new List<(ProjectNode Project, List<string> Arguments, DotnetTestLocation Location)>(invocations.Count);
         foreach (var invocation in invocations)
         {
-            runs.Add((invocation.Selection.Project, [.. invocation.Arguments]));
+            runs.Add((invocation.Selection.Project, [.. invocation.Arguments], invocation.Location));
         }
 
         return Run(runs, label, environment);
     }
 
     /// <summary>Runs each project with <c>--no-build</c> and a TRX report, and reads the reports.</summary>
-    /// <param name="runs">Project and <c>dotnet test</c> arguments per run.</param>
+    /// <param name="runs">Project, <c>dotnet test</c> arguments and where they run, per run; the directory is resolved under this executor's clone.</param>
     /// <param name="label">Name for log files.</param>
     /// <param name="environment">Extra environment variables of the test processes; null for none.</param>
-    private TestRunOutcome Run(List<(ProjectNode Project, List<string> Arguments)> runs, string label, IReadOnlyDictionary<string, string>? environment)
+    private TestRunOutcome Run(List<(ProjectNode Project, List<string> Arguments, DotnetTestLocation Location)> runs, string label, IReadOnlyDictionary<string, string>? environment)
     {
         Dictionary<string, string> variables = new(Sift.Coverage.UnattendedRun.Variables);
         foreach (var (name, value) in _environment)
@@ -147,7 +146,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         var failed = new Dictionary<string, IReadOnlySet<string>>(Paths.Comparer);
         var dotnet = new DotnetProcess(logger);
 
-        foreach (var (project, baseArguments) in runs)
+        foreach (var (project, baseArguments, location) in runs)
         {
             baseArguments.Add("--no-build");
             if (context.Settings.Framework is { } framework)
@@ -173,18 +172,18 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 
                 var reportName = $"sift-{id:000}-{label}.trx";
                 var output = Outputs.TryGetValue(project.Path, out var directory) ? directory : string.Empty;
-                List<string> arguments = [.. baseArguments, .. TestReports.Arguments(context.Mode, output, results, reportName)];
+                List<string> arguments = [.. baseArguments, .. TestReports.Arguments(location.Mode, output, results, reportName)];
                 var logPath = Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log");
                 int exitCode;
                 var started = Stopwatch.GetTimestamp();
                 using (var log = File.CreateText(logPath))
                 {
-                    exitCode = dotnet.Run(arguments, context.RepoRoot, variables, log, new RunLimits(Timeout(project.Path), context.Settings.IdleTimeout));
+                    exitCode = dotnet.Run(arguments, location.FullDirectory(context.RepoRoot), variables, log, new RunLimits(Timeout(project.Path), context.Settings.IdleTimeout));
                     LogRun(label, project.Path, exitCode);
                 }
 
                 Cleanup();
-                TestReports.Collect(context.Mode, context.RepoRoot, reportName, results);
+                TestReports.Collect(location.Mode, context.RepoRoot, reportName, results);
                 outcome = TrxReport.Read(results);
                 if (exitCode == DotnetProcess.TimedOut)
                 {
