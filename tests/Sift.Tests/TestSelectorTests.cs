@@ -783,6 +783,29 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void A_class_the_map_saw_running_is_selected_even_if_its_source_is_hidden_by_conditions()
+    {
+        // Newtonsoft.Json's DateOnlyTests sit inside #if NET6_0_OR_GREATER && !NETSTANDARD2_0, which
+        // neither parsed variant (no symbols, every named symbol) enters: the index never sees the class,
+        // but the map recorded it running the change.
+        _repo.Write("tests/Shop.Tests/ModernTaxTests.cs", """
+            #if NET6_0_OR_GREATER && !NETSTANDARD2_0
+            namespace Shop.Tests;
+            public class ModernTaxTests { [Fact] public void Taxes() => Assert.Equal(2m, new PriceCalculator().Tax(10m)); }
+            #endif
+            """);
+        _repo.Commit("modern tests");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]), ("Shop.Tests.ModernTaxTests", [("Shop.PriceCalculator", "Tax")]), ("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var selection = Select();
+
+        Assert.Contains("Shop.Tests.ModernTaxTests", selection.TestClasses);
+        Assert.Equal(ClassDecisionKind.Coverage, selection.Decisions.Single(static d => d.TestClass == "Shop.Tests.ModernTaxTests").Kind);
+        Assert.DoesNotContain("Shop.Tests.SlugTests", selection.TestClasses);
+    }
+
+    [Fact]
     public void Excluding_filter_matches_everything_outside_the_classes()
     {
         Assert.Equal("FullyQualifiedName!~A.B.&FullyQualifiedName!~A.C\\(1\\).", TestFilter.ExcludingClasses(["A.B", "A.C(1)"]));

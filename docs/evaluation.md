@@ -155,8 +155,9 @@ ASP.NET Core app with integration tests like AfterApply.
 - **Windows is untested.** Everything above ran on macOS.
 - Code that runs once per process (caches, lazy singletons) is credited to the first test class that
   triggers it; static members and constructors seen by only one class are traced by name instead.
-- Code only active under a mix of symbols (`#if A && !B`) is still invisible; such changes run the
-  whole project.
+- Code only active under a mix of symbols (`#if A && !B`) is still invisible to the name trace;
+  changes inside it run the whole project, and test classes inside it are decided by coverage
+  (round 2 found Newtonsoft.Json's DateOnlyTests missed before that; fixed 2026-10-03).
 - Name tracing is coarse for common override names: a change to one analyzer's `Initialize` reaches
   every type named by an `Initialize`. Scoping overrides to their type hierarchy would narrow this.
 - F# and VB code is not analysed; affected F#/VB projects and their dependents run completely.

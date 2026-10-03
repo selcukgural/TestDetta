@@ -159,8 +159,18 @@ internal sealed class CoverageSelection
     /// affected.
     /// </summary>
     /// <param name="type">Indexed test class.</param>
-    public bool FailedWhileRecording(IndexedType type) =>
-        _maps.TryGetValue(type.ProjectPath, out var map) && map.Map.FailedClasses!.Contains(type.RuntimeTypeName);
+    public bool FailedWhileRecording(IndexedType type) => FailedWhileRecording(type.ProjectPath, type.RuntimeTypeName);
+
+    /// <summary>See <see cref="FailedWhileRecording(IndexedType)"/>, by project and runtime class name.</summary>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="testClass">Runtime class name.</param>
+    public bool FailedWhileRecording(string project, string testClass) =>
+        _maps.TryGetValue(project, out var map) && map.Map.FailedClasses!.Contains(testClass);
+
+    /// <summary>Test classes the map of <paramref name="project"/> recorded running tests; empty without a map.</summary>
+    /// <param name="project">Normalized test project path.</param>
+    public IEnumerable<string> RecordedClasses(string project) =>
+        _maps.TryGetValue(project, out var map) ? map.Map.Classes.Keys : [];
 
     /// <summary>True when a map of the type's project recorded tests of <paramref name="type"/>.</summary>
     /// <param name="type">Indexed type of a test project.</param>
@@ -174,8 +184,13 @@ internal sealed class CoverageSelection
 
     /// <summary>Why coverage selected <paramref name="type"/>: the change it ran and the map's commit; null when it did not.</summary>
     /// <param name="type">Indexed test class.</param>
-    public string? Evidence(IndexedType type) =>
-        _selected.TryGetValue(type.ProjectPath, out var classes) ? classes.GetValueOrDefault(type.RuntimeTypeName) : null;
+    public string? Evidence(IndexedType type) => Evidence(type.ProjectPath, type.RuntimeTypeName);
+
+    /// <summary>See <see cref="Evidence(IndexedType)"/>, by project and runtime class name.</summary>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="testClass">Runtime class name.</param>
+    public string? Evidence(string project, string testClass) =>
+        _selected.TryGetValue(project, out var classes) ? classes.GetValueOrDefault(testClass) : null;
 
     /// <summary>The commit the map of <paramref name="testProject"/> was recorded at; null without a map.</summary>
     /// <param name="testProject">Normalized test project path.</param>

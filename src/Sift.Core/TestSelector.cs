@@ -385,6 +385,8 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             classes.Add(type.RuntimeTypeName);
         }
 
+        AddRecordedClassesTheIndexMisses(affectedTests, coverage, decisionsByProject, candidatesByProject, classesByProject);
+
         var result = new List<TestProjectSelection>(affectedTests.Count);
         foreach (var test in affectedTests)
         {
@@ -424,6 +426,62 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Makes every class a map recorded running tests a candidate, also when the source index does not
+    /// see it: code under a mix of preprocessor symbols that neither parsed variant enters
+    /// (Newtonsoft.Json's DateOnlyTests in <c>#if NET6_0_OR_GREATER &amp;&amp; !NETSTANDARD2_0</c>) still ran,
+    /// and the map knows what it ran. Such a class is decided by coverage alone.
+    /// </summary>
+    /// <param name="affectedTests">Test projects affected at project level.</param>
+    /// <param name="coverage">Classes selected from coverage maps.</param>
+    /// <param name="decisionsByProject">Decisions so far; updated in place.</param>
+    /// <param name="candidatesByProject">Candidate counts; updated in place.</param>
+    /// <param name="classesByProject">Selected classes; updated in place.</param>
+    private static void AddRecordedClassesTheIndexMisses(
+        List<AffectedProject> affectedTests,
+        CoverageSelection coverage,
+        Dictionary<string, List<ClassDecision>> decisionsByProject,
+        Dictionary<string, int> candidatesByProject,
+        Dictionary<string, List<string>> classesByProject)
+    {
+        foreach (var test in affectedTests)
+        {
+            var project = test.Project.Path;
+            var known = new HashSet<string>(
+                decisionsByProject.GetValueOrDefault(project)?.Select(static d => d.TestClass) ?? [], StringComparer.Ordinal);
+            foreach (var testClass in coverage.RecordedClasses(project).Where(c => !known.Contains(c)).Order(StringComparer.Ordinal).ToList())
+            {
+                var decision = coverage.Evidence(project, testClass) is { } ran
+                    ? new ClassDecision(testClass, Selected: true, ClassDecisionKind.Coverage, ran)
+                    : coverage.FailedWhileRecording(project, testClass)
+                        ? new ClassDecision(testClass, Selected: true, ClassDecisionKind.FailedWhileRecording,
+                            $"a test of it failed while the map was recorded (map {CoverageSelection.Short(coverage.MapCommit(project)!)})")
+                        : new ClassDecision(testClass, Selected: false, ClassDecisionKind.Skipped,
+                            $"ran none of the changed code (map {CoverageSelection.Short(coverage.MapCommit(project)!)}); its source is hidden from the name trace by preprocessor conditions");
+                candidatesByProject[project] = candidatesByProject.GetValueOrDefault(project) + 1;
+                if (!decisionsByProject.TryGetValue(project, out var decisions))
+                {
+                    decisions = [];
+                    decisionsByProject[project] = decisions;
+                }
+
+                decisions.Add(decision);
+                if (!decision.Selected)
+                {
+                    continue;
+                }
+
+                if (!classesByProject.TryGetValue(project, out var classes))
+                {
+                    classes = [];
+                    classesByProject[project] = classes;
+                }
+
+                classes.Add(testClass);
+            }
+        }
     }
 
     /// <summary>

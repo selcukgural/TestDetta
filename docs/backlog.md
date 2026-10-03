@@ -205,6 +205,14 @@ Interim fixes that are safe for the common case; come back for the complete solu
   is only killed after the run timeout, longest run × 5 × mutant parallelism, which was 80+ minutes
   on Newtonsoft.Json. Kill a run whose process tree stays idle for a few minutes instead.
 
+- **Parse sources with each target framework's real symbols (priority)** (round 2, 2026-10-03):
+  files are parsed twice, with no symbols and with every symbol their conditions name. Code under a
+  mix (`#if NET6_0_OR_GREATER && !NETSTANDARD2_0`, Newtonsoft.Json's DateOnlyTests) is entered by
+  neither, so the name trace never sees it. Shipped: classes the map recorded are candidates even
+  when the index cannot see them (coverage decides them). Still open: a caller inside such code is
+  invisible to the name trace. Fix: read `DefineConstants` per evaluated target framework from the
+  MSBuild graph evaluation and parse once per distinct symbol set.
+
 ## Later
 
 - Windows: build, record and select on Windows; path and process differences.
