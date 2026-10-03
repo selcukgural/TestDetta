@@ -45,6 +45,31 @@ that report numbers (value reporting) only once the numbers are proven right.
   interceptors are called per call, not cached, but count as run-once like the proxy generation
   hook. Options to measure: a recorded signal (a callback that runs in every bucket using the
   library vs. once per key), or a list of contracts known to be per call.
+- **Precision: keep the run-once rules only where third-party code calls back** (measured
+  2026-10-03 at 351f43f plus the guarded-type fix, fresh recordings, 100 mutants each). For each
+  rule that stops the coverage trace and traces by name, "needed" counts failing classes only that
+  name trace selected, "extra" the classes it added that did not fail:
+
+  | Repository | Single bucket (constructor/static) | Static constructor or cache fill | Map does not know it / outside tests |
+  |---|---|---|---|
+  | NodaTime | 0 needed / 589 extra | 0 / 258 | 0 / 0 |
+  | CommunityToolkit | 0 / 121 | 0 / 90 | 0 / 0 |
+  | MimeKit | 0 / 54 | 0 / 1 | 0 / 0 |
+  | protobuf-net | 7 / 35 | 1 / 7 | 10 / 29 |
+
+  Every needed case left is code a third-party library calls back: protobuf-net's Roslyn source
+  generators (`GrpcProxyGenerator`, `ProtoModelGenerator`), which Roslyn runs on its own threads
+  and caches per driver, so the recording cannot tell which test class used them. The needed cases
+  in ordinary code were real gaps and are closed: a static field depends on its whole static
+  constructor (NodaConstants, 351f43f) and every use of a type depends on its explicit static
+  constructor (MimeKit's `MimeEncoderTestsBase`, a miss). Idea: apply the two run-once rules only to
+  code reachable from a third-party callback (`externalCallbacks`), and answer the rest by coverage
+  and `builtValues`; NodaTime and CommunityToolkit would lose about 850 and 210 extra classes.
+  Needs a design round, and the corpus with fresh recordings first: 100 mutants per repository can
+  miss a rare shape, as the MimeKit miss showed. Measured with `seeds.py` (explain + verbose log +
+  round-2 outcomes); compare classes as (project, class), since a test class compiled into several
+  projects (CommunityToolkit's Roslyn variants) is one class per project, and comparing by name
+  alone counted 33 false "needed" cases there.
 - ~~**Direct changes to a member's metadata**~~ (done 2026-10-03,
   docs/design/reflection-types-with-coverage.md "Direct metadata changes"): the change detector
   reports `MetadataChanged` when a declaration's attributes or parameter defaults changed (or a

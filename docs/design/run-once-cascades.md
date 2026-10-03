@@ -188,6 +188,20 @@ Recording (`SiftTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
   2026-10-03 with `seeds.py`); it is 0 now, the share stays at 22.9%, no mutant missed. An earlier
   reading blamed the constructor arguments below; the map showed the two classes never touched the
   calendar, only `NodaConstants`.
+- **Every use of a type depends on its explicit static constructor.** A type with an explicit
+  static constructor (no `beforefieldinit`) runs it before it is first created or any static member
+  is used, and stays unusable when it throws, whether or not the user reads what it stored.
+  MimeKit's `MimeEncoderTestsBase` builds test data through `FilteredStream` in its static
+  constructor; `PassThroughEncoderTests` derives from it, never reads that data, and failed with
+  every mutant of `MimeFilterBase.PreFilter`. Once long scopes were linked (49ff99d) that code was no
+  longer run-once, and the class was missed (found 2026-10-03 with fresh recordings at 351f43f). Each
+  such type gets a field index standing for its initialization (`GuardedTypes`): everything the
+  static constructor runs builds it (`EnterTypeInitializerOf`), and the type's constructors, its
+  static members and static field accesses from outside it read it. A derived class's constructor
+  runs the base constructor, so derived test classes are credited too. The scope is not linked by
+  this, since what the constructor built may still leave unseen. Not covered: an untracked static
+  field of such a type used from another assembly. Measured: MimeKit 14.8% → 14.9% with the miss
+  gone, CommunityToolkit 17.0% and NodaTime 22.9% unchanged.
 - **Constructor arguments.** A constructor that stores its own object into a tracked place
   (`CalendarByOrdinal[ordinal] = this`, `Registry.Add(this)`, directly or through `: this(...)` /
   `: base(...)` in the same assembly) records as builders only what ran since it was entered; the
@@ -208,7 +222,8 @@ classes that ran them plus the readers of what they built (`builtValues`).
 
 Tests: `LinkedInitializationTests` covers `GetOrAdd`, `Lazy<T>`, a fill through a method (unlinked),
 a mixed fill (unlinked), a list added to, a value built from another value, a static field stored
-before a later part of its static constructor, and an object registering itself with its argument
+before a later part of its static constructor, a derived test class that never reads what its
+base's static constructor built, and an object registering itself with its argument
 built inline, in a local after unrelated work (which stays out), or through a chained constructor. The last test pins
 the order of its classes, because xUnit orders them by an id that includes the temporary path.
 `FrameworkMatrixTests` adds a field data source under NUnit. Every test was red first and

@@ -565,6 +565,22 @@ public static class SiftTracker
     }
 
     /// <summary>
+    /// <see cref="EnterTypeInitializer"/> for a type with an explicit static constructor (not
+    /// <c>beforefieldinit</c>): creating it or using any static member runs the constructor first, and
+    /// when the constructor throws the type cannot be used at all. Everything the constructor runs
+    /// becomes a builder of <paramref name="field"/>, a field index standing for the type's
+    /// initialization, which the type's constructors and static members read. The scope is not linked
+    /// by this: what the constructor built may still leave through a path no probe sees.
+    /// </summary>
+    /// <param name="method">Id of the static constructor.</param>
+    /// <param name="field">Field index standing for the type's initialization.</param>
+    public static void EnterTypeInitializerOf(int method, int field)
+    {
+        EnterTypeInitializer(method);
+        _scopes![_scopeCount - 1].Stores = [field];
+    }
+
+    /// <summary>
     /// Called by instrumented code before a static constructor returns. A static constructor that
     /// throws never gets here, so later code on its thread counts as type initializer code too: more
     /// members treated as run-once, never fewer.

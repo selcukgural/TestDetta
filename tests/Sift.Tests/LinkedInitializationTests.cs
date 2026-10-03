@@ -165,6 +165,10 @@ public sealed class LinkedInitializationTests : IDisposable
             public decimal For(string country) => Constants.Turkey;
             public static decimal Zero() => Constants.Zero;
             """,
+        // Built by a test base class's static constructor (MimeKit's MimeEncoderTestsBase), see Record.
+        "base" => """
+            public decimal For(string country) => Build(country);
+            """,
         // The cache comes back from a method, not a field load: the probes cannot follow it.
         _ => """
             private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
@@ -271,13 +275,24 @@ public sealed class LinkedInitializationTests : IDisposable
                 }
             }
             public class GammaTests { [Fact] public void Label() => Assert.Equal("rate 0.2", new App.RateService().Label("tr")); }
+            """ : "") + (cache == "base" ? """
+
+            // The base's static constructor builds data with the rate; Aaa uses it, Zzz never reads it
+            // but cannot even be created when the constructor throws.
+            public abstract class RatedTestsBase
+            {
+                protected static readonly decimal Turkey;
+                static RatedTestsBase() { Turkey = new App.RateService().Build("tr"); }
+            }
+            public class AaaRatedTests : RatedTestsBase { [Fact] public void Uses() => Assert.Equal(0.2m, Turkey); }
+            public class ZzzRatedTests : RatedTestsBase { [Fact] public void Holds() => Assert.True(true); }
             """ : "") + (cache == "constants" ? """
 
             // Runs after Alpha built the constants, and reads only the first of them.
             public class ZeroTests { [Fact] public void Zero() => Assert.Equal(0.5m, App.RateService.Zero()); }
             """ : ""));
 
-        if (cache is "derived" or "constants")
+        if (cache is "derived" or "constants" or "base")
         {
             // Classes run one at a time by name, so Aaa always fills before Gamma reads, and Alpha
             // builds the constants before Zero reads them.
@@ -341,6 +356,19 @@ public sealed class LinkedInitializationTests : IDisposable
             .Where(i => i < map.Methods.Count)
             .Select(i => map.Methods[i]);
         Assert.Contains(new CoveredMethod("App.Table", "Rate"), zero);
+    }
+
+    [Fact]
+    public void A_class_using_a_type_depends_on_everything_its_static_constructor_ran()
+    {
+        var map = Record("base");
+
+        // Zzz never read what the base's static constructor built, but creating it runs that
+        // constructor first; had it thrown, every test of Zzz would have failed.
+        var zzz = map.Classes["App.Tests.ZzzRatedTests"].Concat(map.BuiltValues!.Classes["App.Tests.ZzzRatedTests"])
+            .Where(i => i < map.Methods.Count)
+            .Select(i => map.Methods[i]);
+        Assert.Contains(new CoveredMethod("App.Table", "Rate"), zzz);
     }
 
     [Theory]

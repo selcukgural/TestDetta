@@ -201,6 +201,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             MarkArguments = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.MarkArguments))!),
             EnterConstruction = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterConstruction))!),
             ExitConstruction = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitConstruction))!),
+            EnterTypeInitializerOf = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTypeInitializerOf))!),
         };
         var tracked = new Dictionary<FieldDefinition, int>();
         foreach (var field in TrackedFields(module))
@@ -209,10 +210,18 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             fields.Add($"{field.DeclaringType.FullName}::{field.Name}");
         }
 
+        // A field index for each type whose static constructor guards every use of the type.
+        var initializers = new Dictionary<TypeDefinition, int>();
+        foreach (var type in GuardedTypes(module))
+        {
+            initializers[type] = fields.Count;
+            fields.Add($"{type.FullName}::.cctor");
+        }
+
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
-        probes = probes with { ReusedCollections = ReusedCollections(module), Tracked = tracked, Registering = RegisteringConstructors(module, tracked) };
+        probes = probes with { ReusedCollections = ReusedCollections(module), Tracked = tracked, Registering = RegisteringConstructors(module, tracked), Initializers = initializers };
 
         foreach (var type in module.GetTypes())
         {
@@ -321,6 +330,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>Constructors of the module that store their own object into a tracked place; see <see cref="RegisteringConstructors"/>.</summary>
         public HashSet<MethodDefinition> Registering { get; init; } = [];
+
+        /// <summary><see cref="SiftTracker.EnterTypeInitializerOf"/>.</summary>
+        public required MethodReference EnterTypeInitializerOf { get; init; }
+
+        /// <summary>Types of the module whose static constructor guards every use (<see cref="GuardedTypes"/>), with the field index standing for their initialization.</summary>
+        public Dictionary<TypeDefinition, int> Initializers { get; init; } = [];
     }
 
     /// <summary>
@@ -438,7 +453,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="tracked">Tracked fields of the module with their index.</param>
     private static void InsertFieldProbes(MethodDefinition method, Probes probes, int methodId, Dictionary<FieldDefinition, int> tracked)
     {
-        if (tracked.Count == 0)
+        if (tracked.Count == 0 && probes.Initializers.Count == 0)
         {
             return;
         }
@@ -469,22 +484,49 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 il.InsertAfter(instruction, call);
                 il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, store.Field));
                 il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, methodId));
+            }
+
+            if (instruction.OpCode.Code is not (Code.Ldsfld or Code.Ldfld or Code.Ldsflda or Code.Ldflda or Code.Stsfld)
+                || instruction.Operand is not FieldReference reference
+                || reference.Resolve() is not { } field)
+            {
                 continue;
             }
 
-            if (instruction.OpCode.Code is Code.Ldsfld or Code.Ldfld or Code.Ldsflda or Code.Ldflda
-                && instruction.Operand is FieldReference reference
-                && reference.Resolve() is { } field
-                && tracked.TryGetValue(field, out var index))
+            if (!stores.ContainsKey(instruction) && tracked.TryGetValue(field, out var index))
             {
                 var call = il.Create(OpCodes.Call, probes.Read);
                 il.InsertAfter(instruction, call);
                 il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, index));
             }
+
+            // A static field of a guarded type used from outside it runs the type's static constructor
+            // first, like a static method would (GuardedTypes); inside the type, the member's own entry
+            // probe already says so.
+            if (field.IsStatic && field.DeclaringType != method.DeclaringType && probes.Initializers.TryGetValue(field.DeclaringType, out var initialization))
+            {
+                var call = il.Create(OpCodes.Call, probes.Read);
+                il.InsertAfter(instruction, call);
+                il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, initialization));
+            }
         }
 
         body.OptimizeMacros();
     }
+
+    /// <summary>
+    /// Types whose explicit static constructor (no <c>beforefieldinit</c>) runs before the type is first
+    /// created or any static member of it is used, and leaves the type unusable when it throws: every
+    /// such use depends on everything the constructor ran, whether or not it reads what the
+    /// constructor stored (MimeKit's <c>MimeEncoderTestsBase</c> builds test data its derived classes
+    /// mostly never read). A <c>beforefieldinit</c> type runs its initializers on first static field
+    /// access only, and its field readers already depend on all of them. Compiler-generated types
+    /// (closures, state machines) are left out.
+    /// </summary>
+    /// <param name="module">Module being instrumented.</param>
+    private static IEnumerable<TypeDefinition> GuardedTypes(ModuleDefinition module) =>
+        module.GetTypes().Where(static type => !type.IsBeforeFieldInit && !IsCompilerGenerated(type)
+                                               && type.Methods.Any(static m => m.IsConstructor && m.IsStatic && m.HasBody));
 
     /// <summary>
     /// The index of the tracked field <paramref name="instruction"/> stores into; null when it stores
@@ -700,10 +742,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         var isTypeInitializer = method.IsConstructor && method.IsStatic;
+        var guarded = probes.Initializers.TryGetValue(method.DeclaringType, out var initialization);
         if (isTypeInitializer)
         {
             il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, site.Id));
-            il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterTypeInitializer));
+            if (guarded)
+            {
+                il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, initialization));
+            }
+
+            il.InsertBefore(first, il.Create(OpCodes.Call, guarded ? probes.EnterTypeInitializerOf : probes.EnterTypeInitializer));
         }
 
         // Before the hit, so the callback itself counts as run inside the fill. A callback that
@@ -722,6 +770,14 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, site.Id));
         il.InsertBefore(first, il.Create(OpCodes.Call, probes.Hit));
+
+        // Creating the type or using a static member of it ran its static constructor first: the
+        // caller depends on all of it (a derived test class's base constructor runs here too).
+        if (guarded && !isTypeInitializer && (method.IsStatic || method.IsConstructor))
+        {
+            il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, initialization));
+            il.InsertBefore(first, il.Create(OpCodes.Call, probes.Read));
+        }
 
         if (isTypeInitializer)
         {
