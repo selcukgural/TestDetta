@@ -11,12 +11,6 @@ namespace Sift.Coverage;
 /// </summary>
 internal static class ProcessTreeWatch
 {
-    /// <summary>
-    /// CPU seconds the whole tree may use over the idle window and still count as idle: timers and
-    /// the garbage collector keep a deadlocked .NET host from using exactly none.
-    /// </summary>
-    internal const double IdleCpuSeconds = 0.2;
-
     /// <summary>True when idleness can be measured on this platform.</summary>
     public static bool IsSupported => !OperatingSystem.IsWindows();
 
