@@ -1,7 +1,7 @@
 # Licensing
 
-Status: design, 2026-10-03. Decisions marked **(decided)** were made with the user. Nothing is
-implemented yet.
+Status: phase 1 implemented 2026-10-03 (see "As built"); enforcement off until launch. Decisions
+marked **(decided)** were made with the user.
 
 ## Goals
 
@@ -26,7 +26,7 @@ keeps honest customers honest and makes paying the easy path.
 
 ## The license
 
-A license is a small JSON document signed with Ed25519. It is passed to Sift as one string:
+A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into .NET, unlike Ed25519). It is passed to Sift as one string:
 `sift1.<base64url payload>.<base64url signature>`.
 
 ```json
@@ -113,8 +113,10 @@ within the last 30 days, among the commits reachable from the analysed HEAD.
    outside contributor.
 2. **Warning period, 30 days:** above the tolerance, Sift keeps selecting and warns in every
    summary, for example: "6 active committers in the last 30 days; the license covers 5. Add seats:
-   <link>". The first run over the tolerance is remembered by its HEAD commit date. If the
-   count drops back, the period resets.
+   <link>". How long the count has been over is computed from the history on every run: for
+   each of the last days, the 30-day window ending that day is counted (60 days of author dates).
+   No state is stored, so every CI gets the same answer, ephemeral runners included. If the count
+   drops back, the period resets by itself.
 3. **After 30 days** still over: as without a license, every test runs, with the reason.
 
 When the customer adds seats during the warning period, the next refresh (or a new key in the
@@ -168,8 +170,8 @@ A small web service, the only holder of the signing key.
 
 ## CLI
 
-- `sift license status`: the license found, its source, validity, scope match, active committer
-  count with the counted identities (shown locally only), bots excluded, and the next refresh.
+- `sift license status`: the license found, its validity, scopes, the active committer count and
+  the bot patterns. It shows no identities, since its output may end up in CI logs.
 - `sift license install <string|file>`: stores a license in `~/.sift/license` for machines without
   a secret mechanism.
 - The GitHub Action gets a `license` input that maps to `SIFT_LICENSE`. Other CIs set the variable.
@@ -187,6 +189,32 @@ A small web service, the only holder of the signing key.
 - Time: clock moved back, with newer commit dates.
 - Refresh: offline, slow, proxy, newer license, invalid response.
 - Degradation: every failure mode runs every test and reports why; none fails the build.
+
+## As built (phase 1, 2026-10-03)
+
+- `Sift.Core.Licensing`:
+  - `License`: signing and verifying, ECDSA P-256, key ids;
+  - `RepositoryIdentity`: remote normalisation and scope matching;
+  - `ActiveCommitters`: author-date window, built-in and custom bots, days over;
+  - `LicenseCheck` and `LicenseStatus`: every outcome above;
+  - `LicenseInputs`: variables, files, CI public flags; git output for remotes and authors is never logged.
+- `Sift.Cli.LicenseGate` applies the status to `sift affected` and `sift test`. It is recorded on the
+  analysis and in the JSON output (`license`). When enforced and not covering, every test project of
+  the repository runs completely, and the text, plan and Markdown summary say why. The analysis
+  itself (`AnalysisPipeline`) knows nothing of licenses, so `sift-eval` and the corpus measurements
+  are unaffected.
+- `sift license status`, `sift license install`, and the action's `license` input.
+- **Not enforced yet:** `LicenseKeys.Trusted` is empty until the license service makes the first
+  production key, and `LicenseKeys.Enforced` is false. Until then the status is checked and appears
+  only in the JSON output, the debug log and `sift license status`, so nobody's runs change or get
+  noisy before launch.
+- Refresh is phase 2: it needs the service.
+- Tests: `LicensingTests` and `LicenseGateTests`, sabotage-checked:
+  - a tampered license, an unknown key;
+  - remote URL forms with credentials; scopes;
+  - the long-lived branch case; bots; days over;
+  - each outcome; a clock moved back;
+  - enforced and not enforced; JSON and Markdown.
 
 ## Phases
 

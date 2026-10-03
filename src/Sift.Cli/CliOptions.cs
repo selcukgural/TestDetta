@@ -13,6 +13,12 @@ internal enum CliCommand
 
     /// <summary><c>sift record</c>: run all tests with coverage and store which code each test class runs.</summary>
     Record,
+
+    /// <summary><c>sift license status</c>: check the license and show what it found.</summary>
+    LicenseStatus,
+
+    /// <summary><c>sift license install &lt;license&gt;</c>: store a license in <c>~/.sift/license</c>.</summary>
+    LicenseInstall,
 }
 
 /// <summary>Options every command shares: what to compare and how much to log.</summary>
@@ -50,6 +56,10 @@ internal sealed record RecordSettings(string Configuration, IReadOnlyList<string
     public bool NoBuild { get; init; }
 }
 
+/// <summary>Options of <c>sift license</c>.</summary>
+/// <param name="Install">For <c>install</c>: a license string, or the path of a file holding one.</param>
+internal sealed record LicenseSettings(string? Install);
+
 /// <summary>Parsed command line.</summary>
 /// <param name="Command">Which sub-command to run.</param>
 /// <param name="Analysis">Options shared by all commands.</param>
@@ -63,12 +73,17 @@ internal sealed record CliOptions(
     TestSettings Test,
     RecordSettings Record)
 {
+    /// <summary>Options of <c>sift license</c>; defaults for other commands.</summary>
+    public LicenseSettings License { get; init; } = new(Install: null);
+
     /// <summary>Help text printed for <c>--help</c> and after a usage error.</summary>
     public const string Usage = """
         Usage:
           sift affected [options]              Print the projects and tests a change affects
           sift test [options] [-- <args>]      Run only the tests a change affects
           sift record [options]                Run all tests with coverage and store the map in .sift/coverage
+          sift license status [options]        Check the Sift license and show what it covers
+          sift license install <license|file>  Store a license in ~/.sift/license (when no CI secret can hold it)
 
         Options:
           --base <ref>         Git ref to compare against (default: origin/main)
@@ -100,6 +115,9 @@ internal sealed record CliOptions(
                                The suite must tolerate several test processes at once.
           --no-build           Use the existing build output (built with the same -c) instead of building
 
+        License: set SIFT_LICENSE (or SIFT_LICENSE_FILE) in CI. Public repositories need none.
+        Without a valid license every test runs; the build never fails because of it.
+
         Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed.
         """;
 
@@ -122,9 +140,24 @@ internal sealed record CliOptions(
             new TestSettings(DryRun: false, [], SummaryFile: null),
             new RecordSettings("Debug", [], Parallelism: 1));
         error = null;
+        var first = 1;
 
         switch (args)
         {
+            case ["license", "status", ..]:
+                options = options with { Command = CliCommand.LicenseStatus };
+                first = 2;
+                break;
+
+            case ["license", "install", var license, ..]:
+                options = options with { Command = CliCommand.LicenseInstall, License = new LicenseSettings(license) };
+                first = 3;
+                break;
+
+            case ["license", ..]:
+                error = "sift license needs status or install <license|file>";
+                return false;
+
             case ["affected", ..]:
                 break;
 
@@ -145,7 +178,7 @@ internal sealed record CliOptions(
                 return false;
         }
 
-        for (var i = 1; i < args.Length; i++)
+        for (var i = first; i < args.Length; i++)
         {
             var arg = args[i];
 

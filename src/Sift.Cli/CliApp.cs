@@ -45,6 +45,11 @@ internal static partial class CliApp
             return RecordCoverage(options, loggerFactory, logger, stdout, stderr);
         }
 
+        if (options.Command is CliCommand.LicenseStatus or CliCommand.LicenseInstall)
+        {
+            return LicenseCommand(options, loggerFactory, stdout, stderr);
+        }
+
         AnalysisResult analysis;
         try
         {
@@ -61,13 +66,82 @@ internal static partial class CliApp
             return Failure;
         }
 
+        var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, Environment.GetEnvironmentVariable, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        analysis = LicenseGate.Apply(analysis, license, Sift.Core.Licensing.LicenseKeys.Enforced, logger);
+
         if (options.Command == CliCommand.Test)
         {
             return RunTests(options, analysis, loggerFactory, stdout);
         }
 
         var stats = new RunStats(analysis.ChangedFiles.Count, analysis.Graph.Projects.Count);
-        ResultWriter.Write(new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Plan) { Drifts = analysis.Drifts }, stdout);
+        ResultWriter.Write(
+            new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Plan)
+            {
+                Drifts = analysis.Drifts,
+                License = analysis.License,
+                LicenseEnforced = analysis.LicenseEnforced,
+            },
+            stdout);
+        return Success;
+    }
+
+    /// <summary>
+    /// Carries out <c>sift license status</c> (what the check finds, without personal data) and
+    /// <c>sift license install</c> (stores a license that verifies in <c>~/.sift/license</c>).
+    /// </summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="loggerFactory">Creates the git client's logger.</param>
+    /// <param name="stdout">Receives the result.</param>
+    /// <param name="stderr">Receives errors.</param>
+    private static int LicenseCommand(CliOptions options, ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (options.Command == CliCommand.LicenseInstall)
+        {
+            var value = options.License.Install!;
+            var text = File.Exists(value) ? File.ReadAllText(value).Trim() : value.Trim();
+            if (Sift.Core.Licensing.License.Verify(text, Sift.Core.Licensing.LicenseKeys.Trusted, out var error) is not { } claims)
+            {
+                stderr.WriteLine($"sift: the license is not valid: {error}");
+                return Failure;
+            }
+
+            var path = Sift.Core.Licensing.LicenseInputs.InstalledPath(home);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, text);
+            stdout.WriteLine($"Installed license {claims.Id} ({claims.Licensee}, {claims.Seats} seats, until {claims.ValidUntil:yyyy-MM-dd}) in {path}.");
+            return Success;
+        }
+
+        string root;
+        try
+        {
+            root = new GitClient(loggerFactory.CreateLogger<GitClient>()).TopLevel(options.Analysis.RepoPath);
+        }
+        catch (InvalidOperationException ex)
+        {
+            stderr.WriteLine($"sift: {ex.Message}");
+            return Failure;
+        }
+
+        var status = LicenseGate.Check(root, loggerFactory, Environment.GetEnvironmentVariable, home);
+        stdout.WriteLine($"License: {status.State}");
+        stdout.WriteLine($"  {status.Message}");
+        if (status.Claims is { } license)
+        {
+            stdout.WriteLine($"  id {license.Id}, plan {license.Plan}, {license.Kind}, {license.Seats} seats, valid {license.ValidFrom:yyyy-MM-dd} to {license.ValidUntil:yyyy-MM-dd}");
+            stdout.WriteLine($"  scopes: {string.Join(", ", license.Scopes)}");
+        }
+
+        if (status.ActiveCommitters is { } active)
+        {
+            stdout.WriteLine($"  active committers in the last 30 days: {active} (bots excluded: {string.Join(", ", Sift.Core.Licensing.ActiveCommitters.BuiltInBots)}, plus .sift/license.json)");
+        }
+
+        stdout.WriteLine(status.AllowsSelection
+            ? "  Tests are selected."
+            : Sift.Core.Licensing.LicenseKeys.Enforced ? "  Every test runs until this is fixed." : "  Not enforced yet: tests are still selected.");
         return Success;
     }
 

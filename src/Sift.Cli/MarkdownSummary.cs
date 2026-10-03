@@ -29,6 +29,12 @@ internal static class MarkdownSummary
         writer.WriteLine();
         writer.WriteLine($"{analysis.ChangedFiles.Count} changed file(s) compared with {Code(input.BaseRef)}.");
         writer.WriteLine();
+        if (ResultWriter.LicenseLine(analysis.License, analysis.LicenseEnforced) is not null)
+        {
+            // The message holds the repository's identity, which comes from its remote: a code span.
+            writer.WriteLine($"> **License:** {Code(analysis.License!.Message)}");
+            writer.WriteLine();
+        }
         foreach (var drift in analysis.Drifts)
         {
             writer.WriteLine(ResultWriter.DriftLine(drift));

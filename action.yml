@@ -44,6 +44,10 @@ inputs:
     description: Test mode only. Token that lists the repository's Actions caches to find the newest map (needs the actions read permission). Without it only a map at the merge base is found.
     required: false
     default: ${{ github.token }}
+  license:
+    description: "Test mode only. The Sift license string, passed from a repository or organization secret such as SIFT_LICENSE. Public repositories need none. Without a valid license every test runs; the job never fails because of it."
+    required: false
+    default: ''
   working-directory:
     description: Any directory inside the repository to analyze.
     required: false
@@ -160,6 +164,7 @@ runs:
         EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
         MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
+        SIFT_LICENSE: ${{ inputs.license }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
         dotnet "$SIFT" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
