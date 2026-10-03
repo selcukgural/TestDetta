@@ -56,7 +56,14 @@ that report numbers (value reporting) only once the numbers are proven right.
   | MimeKit | 0 / 48 | 0 / 1 | 0 / 0 |
   | protobuf-net | 0 / 9 | 0 / 1 | 0 / 5 |
 
-  No needed case is left on these four. The ones in ordinary code were real gaps and are closed: a
+  No needed case is left on these four. On 26 more repositories measured the same way overnight
+  (2026-10-04, 1676718) the rules are needed in two kinds of code, both confirmed by running the
+  mutant alone: code run outside every test, such as NSec's algorithm singletons built as theory
+  data during discovery ("map does not know it / outside tests", 161 needed classes), and code a
+  test framework calls back, such as AutoFixture's NUnit 4 attributes and customizations (static
+  constructor or cache fill 14, outside tests 13; `Scenario` fails alone with a throwing
+  `FreezeOnMatchCustomization` constructor). Narrowing must keep the rules there; the other "needed"
+  cases seen (cliwrap, FluentValidation, Markdig) were test interference or locale artifacts. The ones in ordinary code were real gaps and are closed: a
   static field depends on its whole static constructor (NodaConstants, 351f43f) and every use of a
   type depends on its explicit static constructor (MimeKit's `MimeEncoderTestsBase`, a miss,
   2365bb0). The rules still add about 850 extra classes on NodaTime and about 210 on
