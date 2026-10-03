@@ -81,6 +81,13 @@ that report numbers (value reporting) only once the numbers are proven right.
   other gives CS1705 or CS1701). 13 of the 15 protobuf-net classes now record; the other 2
   (`Should*DefaultCodeFixProviderTests`) fail without Sift too on a Turkish-locale machine (a code
   fix formats `2.2m` as "2,2") and pass under en-US.
+- **Corpus runs depend on the machine's locale** (found 2026-10-04 on a Turkish-locale machine):
+  Markdig's build regenerates its spec test classes with a culture-sensitive `ToUpper`, so a class is
+  `TestBlocksAndİnlinesPrecedence` in one build and `...AndInlines...` in another, and an evaluation
+  that compares class names with stored outcomes reports false misses (26 of them in one explain
+  run); protobuf-net's two `Should*DefaultCodeFixProviderTests` fail outright. CI runs under en-US.
+  Run corpus evaluations with `LC_ALL=en_US.UTF-8` (pool scripts, or an evaluation default), so
+  numbers match CI and do not move with the machine.
 - **Microsoft code coverage next to Sift's recording** (Polly, 2026-10-04): with the fix above
   Polly.Core.Tests records fully (124 classes, none failed), but with some builds of
   Sift.Coverage.Runtime one of five shards still crashes at start ("Index not found", 0x80131124)
