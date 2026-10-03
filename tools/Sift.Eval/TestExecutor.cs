@@ -128,7 +128,12 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
     /// <param name="environment">Extra environment variables of the test processes; null for none.</param>
     private TestRunOutcome Run(List<(ProjectNode Project, List<string> Arguments)> runs, string label, IReadOnlyDictionary<string, string>? environment)
     {
-        Dictionary<string, string> variables = new(_environment);
+        Dictionary<string, string> variables = new(Sift.Coverage.UnattendedRun.Variables);
+        foreach (var (name, value) in _environment)
+        {
+            variables[name] = value;
+        }
+
         foreach (var (name, value) in environment ?? new Dictionary<string, string>())
         {
             variables[name] = value;
