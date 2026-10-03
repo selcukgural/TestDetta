@@ -27,6 +27,15 @@ internal sealed class CoverageIndex
     /// <summary>Members that some process ran in two or more buckets; null when the map does not say.</summary>
     private readonly HashSet<CoveredMethod>? _sharedInProcess;
 
+    /// <summary>Types (and the types they are nested in) with a member in <see cref="_ambient"/>.</summary>
+    private readonly HashSet<string> _ambientTypes = new(StringComparer.Ordinal);
+
+    /// <summary>Buckets (test classes and fixtures) that ran a member of each type or its nested types.</summary>
+    private readonly Dictionary<string, HashSet<string>> _bucketsByType = new(StringComparer.Ordinal);
+
+    /// <summary>Types (and the types they are nested in) with a member in <see cref="_sharedInProcess"/>.</summary>
+    private readonly HashSet<string> _sharedTypes = new(StringComparer.Ordinal);
+
     /// <summary>Builds the lookups; members that no test ran are still known, with no classes.</summary>
     /// <param name="map">Recorded map.</param>
     /// <param name="classesUsingFixture">
@@ -55,6 +64,7 @@ internal sealed class CoverageIndex
                 foreach (var type in EnclosingTypes(method.TypeName))
                 {
                     _classesByType[type].Add(testClass);
+                    AddBucket(type, testClass);
                 }
             }
         }
@@ -66,6 +76,11 @@ internal sealed class CoverageIndex
             {
                 var method = map.Methods[id];
                 _bucketCount[method] = _bucketCount.GetValueOrDefault(method) + 1;
+                foreach (var type in EnclosingTypes(method.TypeName))
+                {
+                    AddBucket(type, fixture);
+                }
+
                 if (users.Count == 0)
                 {
                     _ambient.Add(method);
@@ -121,8 +136,43 @@ internal sealed class CoverageIndex
         if (map.SharedInProcess is { } shared)
         {
             _sharedInProcess = [.. shared.Select(id => map.Methods[id])];
+            foreach (var method in _sharedInProcess)
+            {
+                _sharedTypes.UnionWith(EnclosingTypes(method.TypeName));
+            }
+        }
+
+        foreach (var method in _ambient)
+        {
+            _ambientTypes.UnionWith(EnclosingTypes(method.TypeName));
         }
     }
+
+    /// <summary>Records that <paramref name="bucket"/> ran a member of <paramref name="type"/>.</summary>
+    /// <param name="type">Qualified type name.</param>
+    /// <param name="bucket">Test class or fixture name.</param>
+    private void AddBucket(string type, string bucket)
+    {
+        if (!_bucketsByType.TryGetValue(type, out var buckets))
+        {
+            buckets = new HashSet<string>(StringComparer.Ordinal);
+            _bucketsByType[type] = buckets;
+        }
+
+        buckets.Add(bucket);
+    }
+
+    /// <summary>How many buckets (test classes and fixtures) ran a member of <paramref name="typeName"/> or its nested types.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public int BucketsRunningType(string typeName) => _bucketsByType.GetValueOrDefault(typeName)?.Count ?? 0;
+
+    /// <summary>
+    /// <see cref="RanInOneBucketPerProcess"/> for a whole type: some bucket ran a member of it, but no
+    /// recording process ran any of its members in two buckets. False when the map does not record this.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public bool TypeRanInOneBucketPerProcess(string typeName) =>
+        _sharedInProcess is not null && BucketsRunningType(typeName) > 0 && !_sharedTypes.Contains(typeName);
 
     /// <summary>Credits methods to test classes without counting buckets.</summary>
     /// <param name="map">Recorded map.</param>
@@ -194,9 +244,13 @@ internal sealed class CoverageIndex
     public int BucketsRunning(string typeName, string member) =>
         _bucketCount.GetValueOrDefault(new CoveredMethod(typeName, member));
 
-    /// <summary>Test classes that ran any member of <paramref name="typeName"/> or its nested types; null when none was instrumented.</summary>
+    /// <summary>
+    /// Test classes that ran any member of <paramref name="typeName"/> or its nested types; null when
+    /// none was instrumented, or one also ran outside any test, as for <see cref="ClassesRunning"/>.
+    /// </summary>
     /// <param name="typeName">Qualified type name.</param>
-    public IReadOnlySet<string>? ClassesRunningType(string typeName) => _classesByType.GetValueOrDefault(typeName);
+    public IReadOnlySet<string>? ClassesRunningType(string typeName) =>
+        _ambientTypes.Contains(typeName) ? null : _classesByType.GetValueOrDefault(typeName);
 
     /// <summary><paramref name="typeName"/> and every type it is nested in: <c>A.B.C</c> gives <c>A.B.C</c>, <c>A.B</c>, <c>A</c>.</summary>
     /// <param name="typeName">Qualified type name.</param>

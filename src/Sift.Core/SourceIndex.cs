@@ -35,7 +35,15 @@ internal sealed record IndexedMember(
     bool MayBeCalledImplicitly,
     bool IsPrivate,
     bool IsStatic,
-    FrozenSet<string> References);
+    FrozenSet<string> References)
+{
+    /// <summary>
+    /// The part of <see cref="References"/> that is metadata: names in the member's attributes (its
+    /// parameters' and accessors' included) and in parameter default values. Reflection reads these
+    /// without running the member, so a coverage map cannot say who depends on them.
+    /// </summary>
+    public FrozenSet<string> MetadataReferences { get; init; } = [];
+}
 
 /// <summary>A type declared in an indexed project.</summary>
 /// <param name="TypeName">Qualified name, nested types joined with '.'.</param>

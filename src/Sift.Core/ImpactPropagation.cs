@@ -18,6 +18,9 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <summary>Members reached so far.</summary>
     private readonly HashSet<IndexedMember> _affected = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>Reached members whose spread coverage stopped: it knows which tests run their code.</summary>
+    private readonly HashSet<IndexedMember> _stoppedByCoverage = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>Lookups already queued, so each is done once.</summary>
     private readonly HashSet<NameLookup> _seen = [];
 
@@ -33,8 +36,30 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <summary>For each affected type, the member that made it affected first, or null when the change itself names the type.</summary>
     private readonly Dictionary<string, IndexedMember?> _typeReachedBy = new(StringComparer.Ordinal);
 
+    /// <summary>For each type in <see cref="SeededTypes"/>, the member whose spread seeded its name first, or null for a change.</summary>
+    private readonly Dictionary<string, IndexedMember?> _typeSeededBy = new(StringComparer.Ordinal);
+
+    /// <summary>Types in <see cref="SeededTypes"/> whose name a change or changed metadata spread, not only reached code.</summary>
+    private readonly HashSet<string> _typesSeededNotByCode = new(StringComparer.Ordinal);
+
     /// <summary>The changes as seeded, by type, for the end of an explanation.</summary>
     private readonly Dictionary<string, SymbolChange> _seededChanges = new(StringComparer.Ordinal);
+
+    /// <summary>How a member was reached, which decides whether coverage may answer for it.</summary>
+    private enum Reach
+    {
+        /// <summary>The member is a change itself; the caller asked coverage about it before seeding it.</summary>
+        Change,
+
+        /// <summary>Its code names a reached name: coverage knows which tests run that code.</summary>
+        Code,
+
+        /// <summary>
+        /// Its attributes or parameter defaults name a reached name: that is metadata, which reflection
+        /// reads without running the member, so coverage cannot say who depends on it.
+        /// </summary>
+        Metadata,
+    }
 
     /// <summary>Which referencing members a lookup accepts.</summary>
     private enum LookupScope
@@ -64,6 +89,15 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// </summary>
     public Dictionary<string, HashSet<string>> SeededTypes { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// True when only members reached through their code spread the name of <paramref name="typeName"/>:
+    /// neither the type nor a member of it changed, and no metadata of it names a changed name. Such a
+    /// type behaves differently only where its code runs, which a coverage map records.
+    /// </summary>
+    /// <param name="typeName">Qualified name of a type in <see cref="SeededTypes"/>.</param>
+    public bool SeededThroughCodeOnly(string typeName) =>
+        SeededTypes.ContainsKey(typeName) && !_typesSeededNotByCode.Contains(typeName);
+
     /// <summary>Qualified names of every type that changed or contains an affected member.</summary>
     public HashSet<string> AffectedTypes { get; } = new(StringComparer.Ordinal);
 
@@ -83,7 +117,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         // implementation), and nothing is left in the index to say which.
         if (change.MemberName is null || change.Kind == SymbolChangeKind.Removed)
         {
-            SeedType(change.TypeName, projectPath);
+            SeedType(change.TypeName, projectPath, by: null, Reach.Change);
         }
 
         if (change.MemberName is null)
@@ -93,7 +127,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
         if (index.FindMember(change.TypeName, change.MemberName, projectPath) is { } member)
         {
-            MarkAffected(member, "it changed", from: null);
+            MarkAffected(member, "it changed", from: null, Reach.Change);
             return;
         }
 
@@ -112,7 +146,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
             {
                 if (Matches(lookup, member))
                 {
-                    MarkAffected(member, lookup.Name, _lookupOrigin.GetValueOrDefault(lookup));
+                    MarkAffected(member, lookup.Name, _lookupOrigin.GetValueOrDefault(lookup), member.MetadataReferences.Contains(lookup.Name) ? Reach.Metadata : Reach.Code);
                 }
             }
         }
@@ -122,10 +156,18 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <param name="member">Newly reached member.</param>
     /// <param name="because">The name that reached it, for the debug log and the explanation.</param>
     /// <param name="from">The member whose names reached it; null for a change itself.</param>
-    private void MarkAffected(IndexedMember member, string because, IndexedMember? from)
+    /// <param name="reach">How it was reached; only code reached by name is asked about coverage.</param>
+    private void MarkAffected(IndexedMember member, string because, IndexedMember? from, Reach reach)
     {
         if (!_affected.Add(member))
         {
+            // Coverage answered for the member's code; now its metadata is reached as well.
+            if (reach == Reach.Metadata && _stoppedByCoverage.Remove(member))
+            {
+                LogReachedThroughMetadata(member.TypeName, member.MemberName ?? "(type)", because);
+                Spread(member, reach);
+            }
+
             return;
         }
 
@@ -133,12 +175,21 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         _reachedFrom[member] = (from, because);
         AddAffectedType(member.TypeName, member);
 
-        if (resolveByCoverage?.Invoke(member) == true)
+        if (reach == Reach.Code && resolveByCoverage?.Invoke(member) == true)
         {
             LogStoppedByCoverage(member.TypeName, member.MemberName ?? "(type)");
+            _stoppedByCoverage.Add(member);
             return;
         }
 
+        Spread(member, reach);
+    }
+
+    /// <summary>Queues the names <paramref name="member"/> can be reached by, and its type's name when code may reach it without them.</summary>
+    /// <param name="member">Affected member that coverage did not answer for.</param>
+    /// <param name="reach">How it was reached; changed metadata is read through the type.</param>
+    private void Spread(IndexedMember member, Reach reach)
+    {
         var referencedByName = false;
         var scope = member switch
         {
@@ -155,10 +206,11 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
         // Spread the type name when the member can run without being named, when nothing names it
         // (so something outside the repository calls it), for type-level changes, and for anything in
-        // a test project: test classes inherit fixtures and setup from their base classes.
-        if (member.MemberName is null || member.MayBeCalledImplicitly || !referencedByName || member.InTestProject)
+        // a test project: test classes inherit fixtures and setup from their base classes. Changed
+        // metadata is read through the type (typeof(T).GetProperties()), by whatever names the type.
+        if (member.MemberName is null || member.MayBeCalledImplicitly || !referencedByName || member.InTestProject || reach == Reach.Metadata)
         {
-            SeedType(member.TypeName, member.ProjectPath, member);
+            SeedType(member.TypeName, member.ProjectPath, member, reach);
         }
     }
 
@@ -187,6 +239,25 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
             return null;
         }
 
+        return ExplainFrom(typeName, member, limit);
+    }
+
+    /// <summary>
+    /// Why the name of <paramref name="typeName"/>, one of <see cref="SeededTypes"/>, was spread: the
+    /// chain back to a change from the member that seeded it, as <see cref="Explain"/> writes it.
+    /// Null when the type name was not spread.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="limit">Most steps listed; a longer chain ends with "…".</param>
+    public string? ExplainSeeded(string typeName, int limit = 8) =>
+        _typeSeededBy.TryGetValue(typeName, out var member) ? ExplainFrom(typeName, member, limit) : null;
+
+    /// <summary>The chain from <paramref name="member"/> back to a change; see <see cref="Explain"/>.</summary>
+    /// <param name="typeName">Qualified type name, for a type the change itself names.</param>
+    /// <param name="member">First member of the chain; null when a change names the type.</param>
+    /// <param name="limit">Most steps listed.</param>
+    private string ExplainFrom(string typeName, IndexedMember? member, int limit)
+    {
         if (member is null)
         {
             return _seededChanges.TryGetValue(typeName, out var change) ? $"changed {Describe(change)}" : $"changed {typeName}";
@@ -220,12 +291,19 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <param name="typeName">Qualified type name.</param>
     /// <param name="projectPath">Project that declares the type.</param>
     /// <param name="by">The member whose spread seeded the type name; null for a change.</param>
-    private void SeedType(string typeName, string projectPath, IndexedMember? by = null)
+    /// <param name="reach">How <paramref name="by"/> was reached; <see cref="Reach.Change"/> for a change.</param>
+    private void SeedType(string typeName, string projectPath, IndexedMember? by, Reach reach)
     {
+        if (reach != Reach.Code)
+        {
+            _typesSeededNotByCode.Add(typeName);
+        }
+
         if (!SeededTypes.TryGetValue(typeName, out var projects))
         {
             projects = new HashSet<string>(Paths.Comparer);
             SeededTypes[typeName] = projects;
+            _typeSeededBy[typeName] = by;
         }
 
         projects.Add(projectPath);
@@ -264,6 +342,9 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     private static bool IsInScope(string typeName, string scope) =>
         typeName.StartsWith(scope, StringComparison.Ordinal)
         && (typeName.Length == scope.Length || typeName[scope.Length] == '.');
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: its metadata names {Because}, which coverage cannot see; spreading after all")]
+    private partial void LogReachedThroughMetadata(string typeName, string memberName, string because);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: coverage knows its tests, not spreading further")]
     private partial void LogStoppedByCoverage(string typeName, string memberName);

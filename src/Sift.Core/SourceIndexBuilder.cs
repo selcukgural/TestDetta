@@ -268,7 +268,10 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                 declaration.MemberName is null || MayBeCalledImplicitly(declaration),
                 declaration.MemberName is not null && IsPrivateToType(declaration.Node),
                 declaration.MemberName is not null && IsStaticAccess(declaration.Node),
-                CollectReferences(declaration.Node, declaration.Descend, usingStatic)));
+                CollectReferences(declaration.Node, declaration.Descend, usingStatic))
+            {
+                MetadataReferences = CollectMetadataReferences(declaration.Node, declaration.Descend),
+            });
         }
 
         AddTopLevelStatements(root, owner, members, types);
@@ -377,6 +380,27 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         return member is not MethodDeclarationSyntax method
                || method.ParameterList.Parameters is not [{ Modifiers: var modifiers }, ..]
                || !modifiers.Any(SyntaxKind.ThisKeyword);
+    }
+
+    /// <summary>
+    /// Names in the attributes and parameter default values of a declaration, excluding nested
+    /// declarations: the compiler stores them as metadata, which reflection reads without running code.
+    /// </summary>
+    /// <param name="node">Declaration node.</param>
+    /// <param name="descend">Which child nodes belong to the declaration.</param>
+    private static FrozenSet<string> CollectMetadataReferences(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend)
+    {
+        HashSet<string>? references = null;
+        foreach (var child in node.DescendantNodes(n => descend(n, node)))
+        {
+            if (child is AttributeListSyntax or EqualsValueClauseSyntax { Parent: ParameterSyntax })
+            {
+                references ??= new HashSet<string>(StringComparer.Ordinal);
+                AddReferences(child, DeclarationWalker.DescendAll, references);
+            }
+        }
+
+        return references?.ToFrozenSet(StringComparer.Ordinal) ?? [];
     }
 
     /// <summary>Every simple name below <paramref name="node"/>, as <see cref="AddReferences"/> collects them.</summary>

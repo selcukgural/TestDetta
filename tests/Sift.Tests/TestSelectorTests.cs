@@ -643,6 +643,191 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Reflection_discovered_type_that_only_calls_the_change_is_answered_by_the_classes_that_ran_it()
+    {
+        // Only code PingHandler calls changed: its declaration, which reflection reads, is the same,
+        // so the change matters only where Handle runs (protobuf-net's generated FeatureSetDefaults).
+        WriteHandlerTests();
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
+                 ("Shop.Tests.PingTests", [("Shop.PingHandler", "Handle")]),
+                 ("Shop.Tests.HostTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.Filtered, selection.Mode);
+        Assert.Equal(["Shop.Tests.HostTests", "Shop.Tests.PingTests", "Shop.Tests.SlugTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_that_changed_stays_conservative_however_many_classes_ran_it()
+    {
+        // Its own change may be to what reflection reads, which no map records.
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]),
+                 ("Shop.Tests.SlugTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/PingHandler.cs", "\"pong\"", "\"PONG\"");
+
+        Assert.Equal(TestRunMode.All, Select().Mode);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_reached_by_name_stays_conservative_when_one_class_ran_it()
+    {
+        // A framework may call a discovered type once and cache the result for every later class.
+        WriteHandlerTests();
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
+                 ("Shop.Tests.PingTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("(Shop.PingHandler.Handle() names Make ← changed Shop.Slug.Make(string))", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Member_reached_through_its_attributes_is_traced_through_its_type_even_with_a_map()
+    {
+        // Reflection reads Tax's attribute without running Tax, so the classes that ran Tax are not
+        // all that see the new value: whatever names PriceCalculator may read it.
+        _repo.Write("src/Shop/Limits.cs", """
+            namespace Shop;
+            public static class Limits { public const int Max = 100; }
+            """);
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public decimal Tax", "[System.ComponentModel.DefaultValue(Limits.Max)] public decimal Tax");
+        _repo.Commit("limits");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Limits.cs", "Max = 100", "Max = 200");
+
+        Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Member_coverage_answered_for_is_traced_through_its_type_when_its_attributes_are_reached_later()
+    {
+        // Rate reaches Tax's code first, which the map answers; Max then reaches its attribute.
+        _repo.Write("src/Shop/Limits.cs", """
+            namespace Shop;
+            public static class Limits { public const decimal Rate = 0.2m; public const int Max = 100; }
+            """);
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public decimal Tax(decimal net) => net * 0.2m", "[System.ComponentModel.DefaultValue(Limits.Max)] public decimal Tax(decimal net) => net * Limits.Rate");
+        _repo.Commit("limits");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Limits.cs", "Rate = 0.2m; public const int Max = 100", "Rate = 0.25m; public const int Max = 200");
+
+        Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_reached_through_code_no_map_can_answer_runs_nothing_when_no_test_ran_it()
+    {
+        // The initializer reaches PingHandler through code, but maps do not record fields; the type
+        // as a whole never ran, so with the old code it took part in no test (protobuf-net's SerializerPair).
+        WriteHandlerField();
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
+                 ("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(["Shop.Tests.SlugTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_reached_through_code_no_map_can_answer_selects_the_classes_that_ran_it()
+    {
+        WriteHandlerField();
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make"), ("Shop.PingHandler", "Handle")]),
+                 ("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        var selection = Select();
+
+        Assert.Equal(["Shop.Tests.SlugTests", "Shop.Tests.TaxTests"], selection.TestClasses);
+        Assert.Contains("ran a member of Shop.PingHandler", selection.Decisions.Single(d => d.TestClass == "Shop.Tests.TaxTests").Evidence, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_reached_through_code_stays_conservative_when_the_map_cannot_say_who_ran_it()
+    {
+        WriteHandlerField();
+        _ambient.Add(("Shop.PingHandler", "Handle"));
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make"), ("Shop.PingHandler", "Handle")]),
+                 ("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(TestRunMode.All, Select().Mode);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_reached_through_code_stays_conservative_when_one_class_ran_it()
+    {
+        WriteHandlerField();
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
+                 ("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        Assert.Equal(TestRunMode.All, Select().Mode);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_reached_through_its_attributes_stays_conservative_when_no_test_ran_it()
+    {
+        // Reflection reads the attribute without running PingHandler at all.
+        _repo.Write("src/Shop/Limits.cs", """
+            namespace Shop;
+            public static class Limits { public const int Max = 100; }
+            """);
+        _repo.Replace("src/Shop/PingHandler.cs", "public string Handle()", "[System.ComponentModel.DefaultValue(Limits.Max)] public string Handle()");
+        _repo.Commit("limits");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+        _repo.Replace("src/Shop/Limits.cs", "Max = 100", "Max = 200");
+
+        Assert.Equal(TestRunMode.All, Select().Mode);
+    }
+
+    [Fact]
+    public void Constructor_change_is_traced_by_name_too_when_a_member_of_its_type_ran_outside_any_test()
+    {
+        // Something before the first test ran Tax, so the map does not know every class that used a PriceCalculator.
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public decimal Tax", "public PriceCalculator() { }\n    public decimal Tax");
+        _repo.Write("tests/Shop.Tests/PlainTests.cs", """
+            namespace Shop.Tests;
+            public class PlainTests { [Fact] public void Holds() => Assert.True(true); }
+            """);
+        _repo.Commit("constructor");
+        _ambient.Add(("Shop.PriceCalculator", "Tax"));
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", ".ctor"), ("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.SlugTests", [("Shop.PriceCalculator", ".ctor")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public PriceCalculator() { }", "public PriceCalculator() { _ = 1; }");
+
+        Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.SlugTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    /// <summary>Gives PingHandler a field whose initializer calls Slug.Make.</summary>
+    private void WriteHandlerField()
+    {
+        _repo.Replace("src/Shop/PingHandler.cs", "public string Handle()", "public string Prefix = Slug.Make(\"Ping\");\n    public string Handle()");
+        _repo.Commit("handler field");
+    }
+
+    /// <summary>Makes PingHandler call Slug.Make and adds two classes that find it through reflection.</summary>
+    private void WriteHandlerTests()
+    {
+        _repo.Replace("src/Shop/PingHandler.cs", "=> \"pong\"", "=> Slug.Make(\"Pong\")");
+        foreach (var name in (string[])["PingTests", "HostTests"])
+        {
+            _repo.Write($"tests/Shop.Tests/{name}.cs", $$"""
+                namespace Shop.Tests;
+                public class {{name}}
+                {
+                    [Fact] public void Handles() => Assert.Single(typeof(IHandler).Assembly.GetTypes(), t => t.IsClass && typeof(IHandler).IsAssignableFrom(t));
+                }
+                """);
+        }
+
+        _repo.Commit("handler tests");
+    }
+
+    [Fact]
     public void Coverage_map_round_trips_through_the_store()
     {
         var map = new CoverageMap(
@@ -678,12 +863,15 @@ public sealed class TestSelectorTests : IDisposable
     private CoverageMap Map(string commit, List<CoveredMethod> methods, Dictionary<string, IReadOnlyList<int>> byClass) =>
         new(new CoverageMapHeader("tests/Shop.Tests/Shop.Tests.csproj", commit, DateTimeOffset.UtcNow),
             methods,
-            new CoverageHits(byClass, _fixtures, []),
+            new CoverageHits(byClass, _fixtures, [.. _ambient.Select(m => methods.IndexOf(new CoveredMethod(m.Type, m.Member)))]),
             _timings)
         {
             FailedClasses = _failed,
             Generated = _generated,
         };
+
+    /// <summary>Members the next <see cref="WriteMap"/> says ran outside any test.</summary>
+    private readonly List<(string Type, string Member)> _ambient = [];
 
     /// <summary>Generated code the next <see cref="WriteMap"/> includes.</summary>
     private List<GeneratedType> _generated = [];

@@ -15,6 +15,23 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- **Project references used as an analyzer or source generator** (found 2026-10-03 in the precision
+  round, protobuf-net). A `ProjectReference` with `OutputItemType="Analyzer"` runs the referenced
+  code inside the compiler. A change to it (or to sources it compiles in: protobuf-net.BuildTools
+  compiles all of protobuf-net.Core and protobuf-net.Reflection) changes the consumer's compiled
+  output, which neither name tracing nor coverage can see. Today the graph treats it as an
+  ordinary runtime dependency, so a possible miss. `ReferenceOutputAssembly="false"` without an
+  analyzer is build order only (protobuf-net.Core → BuildTools, for packing). The graph adds the
+  dependency anyway (over-selection), unless the consumer copies the output to run it (a CLI under
+  test), which is again invisible. Needs edge kinds in the evaluator and graph: an analyzer edge
+  makes a change in the referenced closure a project-level change of the consumer. The ROA=false
+  case needs a decision (safe default: the same). Design before code; check the corpus for both.
+- **Direct changes to a member's metadata** (2026-10-03, docs/design/reflection-types-with-coverage.md).
+  A member reached through its attributes or parameter defaults is now traced through its type.
+  A change to a member's own attributes (`[ProtoMember(1)]` → `(2)`) is still answered by the classes
+  that ran its code: the change detector reports "modified" without saying whether the declaration
+  or only the body changed. It should report declaration changes so these are traced through the
+  type as well.
 - ~~Stable mutant sample across Sift versions~~ (done, 99347df): each candidate's place and
   kind come from a hash of the member and the seed, so adding or dropping a candidate (a graph
   fix) changes at most that pick and stored outcomes stay usable. Samples differ from round 1's.

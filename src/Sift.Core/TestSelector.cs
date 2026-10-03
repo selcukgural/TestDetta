@@ -203,7 +203,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         }
 
         propagation.Run();
-        AddUnreferencedTypes(request.Graph, index, propagation, fallbacks);
+        AddUnreferencedTypes(request.Graph, index, propagation, fallbacks, coverage);
         return new TraceResult(propagation, fallbacks);
     }
 
@@ -291,11 +291,15 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     /// <param name="index">Indexed source code.</param>
     /// <param name="propagation">Finished propagation.</param>
     /// <param name="fallbacks">Project-level fallbacks; updated in place.</param>
+    /// <param name="coverage">
+    /// Coverage maps, for a type reached through its code only (<see cref="CoverageSelection.TryResolveType"/>); null for a pure name spread.
+    /// </param>
     private void AddUnreferencedTypes(
         ProjectGraph graph,
         SourceIndex index,
         ImpactPropagation propagation,
-        Dictionary<string, string> fallbacks)
+        Dictionary<string, string> fallbacks,
+        CoverageSelection? coverage)
     {
         foreach (var (typeName, projects) in propagation.SeededTypes)
         {
@@ -314,9 +318,17 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 continue;
             }
 
+            if (type is not null && propagation.SeededThroughCodeOnly(typeName) && coverage?.TryResolveType(typeName, candidates) == true)
+            {
+                LogUnreferencedTypeResolvedByCoverage(typeName);
+                continue;
+            }
+
+            // The chain says which reached member brought the type in, the first thing to look at when
+            // a whole project runs for a change that seems unrelated.
             var reason = type is null
                 ? $"{typeName} was removed and nothing names it, so it may have been created through reflection"
-                : $"{typeName} is affected and nothing names it, so it may be created through reflection";
+                : $"{typeName} is affected and nothing names it, so it may be created through reflection ({propagation.ExplainSeeded(typeName, limit: 4)})";
             foreach (var projectPath in candidates)
             {
                 AddFallback(fallbacks, projectPath, reason);
@@ -553,6 +565,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         LogDecision(selection.Project.Path, selection.Mode, selection.Reason);
         return selection;
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} is affected and nothing names it, but only through its code: the coverage maps say which classes ran it")]
+    private partial void LogUnreferencedTypeResolvedByCoverage(string typeName);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Not using the coverage map of {Project} from {MapCommit}: since then, {Reason}")]

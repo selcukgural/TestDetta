@@ -226,33 +226,81 @@ internal sealed class CoverageSelection
         // An instance serves more classes than the one that built it: a singleton a DI container builds
         // once, between tests or before them, and hands to every class (docs/design/between-tests-code.md).
         // Every class that ran a member of the type used an instance some constructor built.
+        // When a map cannot say who ran the type (a member also ran before the first test), the
+        // classes it names are not all of them, and the change is traced by name as well.
+        var typeUsersKnown = true;
         if (change.MemberName?.StartsWith(".ctor", StringComparison.Ordinal) == true)
         {
-            SelectAll(Answers(change with { MemberName = null }, owner).Answers, $"ran a member of {change.TypeName}, whose constructor changed");
+            var typeWide = Answers(change with { MemberName = null }, owner);
+            SelectAll(typeWide.Answers, $"ran a member of {change.TypeName}, whose constructor changed");
+            typeUsersKnown = typeWide.Known;
         }
 
-        if (!IsAnswerable(change))
+        if (!IsAnswerable(change, reached))
         {
             return false;
         }
 
-        var (answers, resolved) = Answers(change, owner);
+        var (answers, resolved, _) = Answers(change, owner);
         var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
         SelectAll(answers, reached ? $"ran {member}, which names the changed code" : $"ran {member}, which changed");
-        return resolved && answers.Count > 0;
+        return resolved && typeUsersKnown && answers.Count > 0;
+    }
+
+    /// <summary>
+    /// Answers for a type that nothing names, so a framework may create it through reflection, when
+    /// the name spread reached it through code only: neither its declaration (which reflection reads)
+    /// nor its metadata changed, so it behaves differently only where its code runs. Selects the
+    /// classes that ran any of its members in every affected test project with a map downstream of
+    /// <paramref name="owners"/>; a type no test ran took part in no test. Returns false, leaving the
+    /// project-level fallback, when a map cannot say who ran it (not instrumented, run before the
+    /// first test) or it may be run-once code: run inside a static constructor or cache fill, or by a
+    /// single bucket per process, as a framework that builds it once and caches the result would
+    /// (docs/design/reflection-types-with-coverage.md).
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="owners">Projects that compile the type.</param>
+    public bool TryResolveType(string typeName, IReadOnlyCollection<string> owners)
+    {
+        var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
+        foreach (var project in _graph.WithDependents(owners))
+        {
+            if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var map))
+            {
+                continue;
+            }
+
+            if (map.ClassesRunningType(typeName) is not { } classes
+                || map.TypeRanDuringInitialization(typeName)
+                || (classes.Count > 0 && (map.BucketsRunningType(typeName) == 1 || map.TypeRanInOneBucketPerProcess(typeName))))
+            {
+                return false;
+            }
+
+            answers.Add((project, classes));
+        }
+
+        if (answers.Count == 0)
+        {
+            return false;
+        }
+
+        SelectAll(answers, $"ran a member of {typeName}, which nothing names and the change reaches through its code");
+        return true;
     }
 
     /// <summary>
     /// What the maps of the affected test projects downstream of <paramref name="owner"/> say about
-    /// <paramref name="change"/>: the classes each one names, and false when one of them cannot answer
-    /// or the change may be run-once code.
+    /// <paramref name="change"/>: the classes each one names; Resolved is false when one of them cannot
+    /// answer or the change may be run-once code, Known only when one cannot answer.
     /// </summary>
     /// <param name="change">A changed type or member.</param>
     /// <param name="owner">Project that owns the changed file.</param>
-    private (List<(string Project, IReadOnlySet<string> Classes)> Answers, bool Resolved) Answers(SymbolChange change, ProjectNode owner)
+    private (List<(string Project, IReadOnlySet<string> Classes)> Answers, bool Resolved, bool Known) Answers(SymbolChange change, ProjectNode owner)
     {
         var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
         var resolved = true;
+        var known = true;
         foreach (var project in _graph.WithDependents([owner.Path]))
         {
             if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var map))
@@ -263,6 +311,7 @@ internal sealed class CoverageSelection
             if (Lookup(map, change) is not { } classes)
             {
                 resolved = false;
+                known = false;
                 continue;
             }
 
@@ -272,7 +321,7 @@ internal sealed class CoverageSelection
             answers.Add((project, classes));
         }
 
-        return (answers, resolved);
+        return (answers, resolved, known);
     }
 
     /// <summary>Adds the classes of every answer to the selection of its project; a class keeps the evidence of its first selection.</summary>
@@ -302,22 +351,29 @@ internal sealed class CoverageSelection
 
     /// <summary>
     /// Changes coverage cannot describe: additions (no test ran them yet), static constructors
-    /// (they run once per process, for whichever test comes first), and types a framework may
-    /// discover through reflection, whose effect often comes from a cached result.
+    /// (they run once per process, for whichever test comes first), and changes to a type a framework
+    /// may discover through reflection: the framework reads its declaration (attributes, members)
+    /// without running any of it. A member of such a type that the name spread only reached is
+    /// answerable: its declaration is unchanged, so what changed is only what it does when it runs
+    /// (docs/design/reflection-types-with-coverage.md).
     /// </summary>
     /// <param name="change">A changed type or member.</param>
-    private bool IsAnswerable(SymbolChange change)
+    /// <param name="reached">True for a member the name spread reached rather than a change itself.</param>
+    private bool IsAnswerable(SymbolChange change, bool reached)
     {
         if (change.Kind == SymbolChangeKind.Added || change.MemberName?.StartsWith(".cctor", StringComparison.Ordinal) == true)
         {
             return false;
         }
 
-        var type = _index.FindType(change.TypeName);
-        return type is null
-               || !type.MayBeFoundByReflection
-               || _index.IsReferencedOutside(DeclarationWalker.SimpleTypeName(change.TypeName), change.TypeName);
+        return reached || !MayBeFoundByReflection(change.TypeName);
     }
+
+    /// <summary>True for a type that nothing else names and a framework could discover (it has a base list or attributes).</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    private bool MayBeFoundByReflection(string typeName) =>
+        _index.FindType(typeName) is { MayBeFoundByReflection: true }
+        && !_index.IsReferencedOutside(DeclarationWalker.SimpleTypeName(typeName), typeName);
 
     /// <summary>
     /// True for code that may run once per test process and cache its result, which the map credits
@@ -348,9 +404,11 @@ internal sealed class CoverageSelection
             return true;
         }
 
+        // A framework that discovers a type may call it once and cache the result for every later class,
+        // so any member of such a type counts, not only constructors and static members.
         var isStatic = _index.FindMember(change.TypeName, change.MemberName) is { IsStatic: true };
         // Nothing ran it at all means no test runs it; run-once code is still recorded for its first user.
-        return (isConstructor || isStatic)
+        return (isConstructor || isStatic || MayBeFoundByReflection(change.TypeName))
                && (map.BucketsRunning(change.TypeName, name) == 1 || map.RanInOneBucketPerProcess(change.TypeName, name));
     }
 

@@ -25,13 +25,17 @@ def category(kind, evidence):
     return kind
 
 extra = collections.Counter(); needed = collections.Counter(); reached = collections.Counter(); names = collections.Counter()
-judged = 0; selected_total = 0; extra_total = 0
+judged = 0; selected_total = 0; extra_total = 0; missed = []; shares = []
 for change in explain["changes"]:
     key = (change["target"], change["kind"])
     if key not in killed:
         continue
     judged += 1
     failing = killed[key]
+    shares.append(change["selectedShare"])
+    chosen = {d["class"] for project in change["projects"] for d in project["selected"]}
+    if failing - chosen:
+        missed.append((change["target"], change["kind"], sorted(failing - chosen)))
     for project in change["projects"]:
         for d in project["selected"]:
             selected_total += 1
@@ -48,6 +52,9 @@ for change in explain["changes"]:
                 if hops: names[hops[-1]] += 1  # the name nearest to the change
 
 print(f"judged failing mutants: {judged}; selected classes: {selected_total}; of them did not fail: {extra_total} ({100*extra_total/max(1,selected_total):.0f}%)")
+print(f"mean selected share: {100*sum(shares)/max(1,len(shares)):.1f}%; missed mutants: {len(missed)}")
+for target, kind, classes in missed:
+    print(f"  MISSED {kind} {target}: {', '.join(classes)}")
 print("\nclasses that did not fail, by what selected them:")
 for cat, n in extra.most_common():
     print(f"  {n:6}  {100*n/max(1,extra_total):5.1f}%  {cat}   (needed by the same rule: {needed[cat]})")
