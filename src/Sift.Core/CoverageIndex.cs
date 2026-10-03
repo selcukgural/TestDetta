@@ -238,6 +238,11 @@ internal sealed class CoverageIndex
         return _sharedInProcess is not null && _bucketCount.GetValueOrDefault(method) > 0 && !_sharedInProcess.Contains(method);
     }
 
+    /// <summary>True when the map lists <paramref name="member"/> of <paramref name="typeName"/> (run or not).</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name.</param>
+    public bool Knows(string typeName, string member) => _classesByMember.ContainsKey(new CoveredMethod(typeName, member));
+
     /// <summary>The map this index reads.</summary>
     public CoverageMap Map { get; }
 

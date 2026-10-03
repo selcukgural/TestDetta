@@ -157,6 +157,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         CoverageSelection? coverage,
         List<(SymbolChange Change, ProjectNode Owner)> bridged)
     {
+        LogTraceStart(coverage is null ? "by name, for test projects without a coverage map" : "stopping where coverage maps know the tests");
         var fallbacks = new Dictionary<string, string>(projectLevel, Paths.Comparer);
         var propagation = new ImpactPropagation(
             index,
@@ -583,6 +584,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         LogDecision(selection.Project.Path, selection.Mode, selection.Reason);
         return selection;
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Tracing the changes {Mode}")]
+    private partial void LogTraceStart(string mode);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} is affected, but it is an attribute class nothing uses: it has no instance")]
     private partial void LogUnusedAttribute(string typeName);

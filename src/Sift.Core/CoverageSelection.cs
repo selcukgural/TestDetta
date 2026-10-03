@@ -405,25 +405,27 @@ internal sealed class CoverageSelection
         }
 
         var isConstructor = change.MemberName.StartsWith(".ctor", StringComparison.Ordinal);
-        var name = isConstructor ? ".ctor" : DeclarationWalker.ReferenceNames(change.MemberName) is [var single] ? single : null;
-        if (name is null)
-        {
-            return false;
-        }
-
-        // A third-party library that calls the member back may have kept what it produced for later
-        // classes, which the map does not credit (Castle's proxy generation hook in NSubstitute).
-        if (map.RanDuringInitialization(change.TypeName, name) || map.IsExternalCallback(change.TypeName, name))
-        {
-            return true;
-        }
-
         // A framework that discovers a type may call it once and cache the result for every later class,
         // so any member of such a type counts, not only constructors and static members.
         var isStatic = _index.FindMember(change.TypeName, change.MemberName) is { IsStatic: true };
-        // Nothing ran it at all means no test runs it; run-once code is still recorded for its first user.
-        return (isConstructor || isStatic || MayBeFoundByReflection(change.TypeName))
-               && (map.BucketsRunning(change.TypeName, name) == 1 || map.RanInOneBucketPerProcess(change.TypeName, name));
+        foreach (var name in DeclarationWalker.CompiledNames(change.MemberName))
+        {
+            // A third-party library that calls the member back may have kept what it produced for later
+            // classes, which the map does not credit (Castle's proxy generation hook in NSubstitute).
+            if (map.RanDuringInitialization(change.TypeName, name) || map.IsExternalCallback(change.TypeName, name))
+            {
+                return true;
+            }
+
+            // Nothing ran it at all means no test runs it; run-once code is still recorded for its first user.
+            if ((isConstructor || isStatic || MayBeFoundByReflection(change.TypeName))
+                && (map.BucketsRunning(change.TypeName, name) == 1 || map.RanInOneBucketPerProcess(change.TypeName, name)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -442,18 +444,25 @@ internal sealed class CoverageSelection
             return (map.ClassesRunningType(change.TypeName), !map.TypeRanOutsideTests(change.TypeName));
         }
 
-        if (change.MemberName.StartsWith(".ctor", StringComparison.Ordinal))
+        // Operators are recorded under their metadata names (op_Addition); the checked form of one may
+        // not exist, which is fine, but a name the map knows and cannot answer for makes the whole unknown.
+        HashSet<string>? classes = null;
+        foreach (var name in DeclarationWalker.CompiledNames(change.MemberName))
         {
-            return (map.ClassesRunning(change.TypeName, ".ctor"), true);
+            if (!map.Knows(change.TypeName, name))
+            {
+                continue;
+            }
+
+            if (map.ClassesRunning(change.TypeName, name) is not { } ran)
+            {
+                return (null, false);
+            }
+
+            classes ??= new HashSet<string>(StringComparer.Ordinal);
+            classes.UnionWith(ran);
         }
 
-        var names = DeclarationWalker.ReferenceNames(change.MemberName);
-        if (names.Count != 1)
-        {
-            // Operators, indexers and finalizers have no source name to match; field lists are not methods.
-            return (null, false);
-        }
-
-        return (map.ClassesRunning(change.TypeName, names[0]), true);
+        return (classes, classes is not null);
     }
 }

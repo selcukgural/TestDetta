@@ -895,6 +895,23 @@ public sealed class TestSelectorTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Operator_change_is_answered_by_the_classes_that_ran_it()
+    {
+        // The map records operator + as op_Addition; without that, the change spread the type name.
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public decimal Tax", "public static decimal operator +(PriceCalculator a, decimal b) => a.Tax(b) + b;\n    public decimal Tax");
+        _repo.Write("tests/Shop.Tests/PlainTests.cs", """
+            namespace Shop.Tests;
+            public class PlainTests { [Fact] public void Holds() => Assert.True(true); }
+            """);
+        _repo.Commit("operator");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "op_Addition")]),
+                 ("Shop.Tests.SlugTests", [("Shop.PriceCalculator", "op_Addition")]));
+
+        _repo.Replace("src/Shop/PriceCalculator.cs", "=> a.Tax(b) + b;", "=> a.Tax(b) + b + 1;");
+        Assert.Equal(["Shop.Tests.SlugTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
     /// <summary>Makes PingHandler call Slug.Make and adds two classes that find it through reflection.</summary>
     private void WriteHandlerTests()
     {
@@ -986,6 +1003,7 @@ public sealed class TestSelectorTests : IDisposable
             new("Shop.PriceCalculator", ".ctor"), new("Shop.PriceCalculator", "Total"), new("Shop.PriceCalculator", "Tax"),
             new("Shop.OrderService", ".ctor"), new("Shop.OrderService", "Checkout"),
             new("Shop.Slug", "Make"), new("Shop.PingHandler", "Handle"), new("Shop.Report", "Title"),
+            new("Shop.PriceCalculator", "op_Addition"),
         };
 
         var byClass = new Dictionary<string, IReadOnlyList<int>>();

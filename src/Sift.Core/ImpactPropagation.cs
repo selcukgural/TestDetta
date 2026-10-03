@@ -301,6 +301,11 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
             _typesSeededNotByCode.Add(typeName);
         }
 
+        if (!SeededTypes.ContainsKey(typeName) && logger.IsEnabled(LogLevel.Debug))
+        {
+            LogTypeSpread(typeName, by is null ? "it changed" : $"{by.TypeName}.{by.MemberName ?? "(type)"}", reach);
+        }
+
         if (!SeededTypes.TryGetValue(typeName, out var projects))
         {
             projects = new HashSet<string>(Paths.Comparer);
@@ -347,6 +352,9 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: its metadata names {Because}, which coverage cannot see; spreading after all")]
     private partial void LogReachedThroughMetadata(string typeName, string memberName, string because);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Spreading the type name {TypeName}: {Member} may run without being named ({Reach})")]
+    private partial void LogTypeSpread(string typeName, string member, Reach reach);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: coverage knows its tests, not spreading further")]
     private partial void LogStoppedByCoverage(string typeName, string memberName);

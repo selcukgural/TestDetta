@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -236,6 +237,107 @@ internal static class DeclarationWalker
                 yield return child;
             }
         }
+    }
+
+    /// <summary>Metadata names of overloadable operators with two operands (C# operator token to name).</summary>
+    private static readonly FrozenDictionary<string, string> BinaryOperators = new Dictionary<string, string>
+    {
+        ["+"] = "op_Addition", ["-"] = "op_Subtraction", ["*"] = "op_Multiply", ["/"] = "op_Division",
+        ["%"] = "op_Modulus", ["&"] = "op_BitwiseAnd", ["|"] = "op_BitwiseOr", ["^"] = "op_ExclusiveOr",
+        ["<<"] = "op_LeftShift", [">>"] = "op_RightShift", [">>>"] = "op_UnsignedRightShift",
+        ["=="] = "op_Equality", ["!="] = "op_Inequality", ["<"] = "op_LessThan", [">"] = "op_GreaterThan",
+        ["<="] = "op_LessThanOrEqual", [">="] = "op_GreaterThanOrEqual",
+    }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>Metadata names of overloadable operators with one operand.</summary>
+    private static readonly FrozenDictionary<string, string> UnaryOperators = new Dictionary<string, string>
+    {
+        ["+"] = "op_UnaryPlus", ["-"] = "op_UnaryNegation", ["!"] = "op_LogicalNot", ["~"] = "op_OnesComplement",
+        ["++"] = "op_Increment", ["--"] = "op_Decrement", ["true"] = "op_True", ["false"] = "op_False",
+    }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The names the compiler gives the methods of <paramref name="memberName"/>, as a coverage map
+    /// records them: the member's name, <c>.ctor</c>, <c>op_Addition</c> for <c>operator +(A,B)</c>,
+    /// <c>op_Implicit</c> for an implicit conversion. The <c>checked</c> form of an operator has the
+    /// same signature here, so both of its names are given. Empty when the name cannot be known from
+    /// the signature: field lists, indexers (<c>[IndexerName]</c> may rename them), unknown operators.
+    /// </summary>
+    /// <param name="memberName">Member signature as <see cref="Collect"/> produces it.</param>
+    public static IReadOnlyList<string> CompiledNames(string memberName)
+    {
+        if (memberName.StartsWith(".ctor", StringComparison.Ordinal))
+        {
+            return [".ctor"];
+        }
+
+        if (memberName.StartsWith(".cctor", StringComparison.Ordinal))
+        {
+            return [".cctor"];
+        }
+
+        if (memberName == "Finalize()")
+        {
+            return ["Finalize"];
+        }
+
+        if (!memberName.StartsWith("operator ", StringComparison.Ordinal))
+        {
+            return ReferenceNames(memberName) is [var single] ? [single] : [];
+        }
+
+        var open = memberName.IndexOf('(', StringComparison.Ordinal);
+        if (open < 0)
+        {
+            return [];
+        }
+
+        var token = memberName["operator ".Length..open];
+        if (token.StartsWith("implicit ", StringComparison.Ordinal))
+        {
+            return ["op_Implicit"];
+        }
+
+        if (token.StartsWith("explicit ", StringComparison.Ordinal))
+        {
+            return ["op_Explicit", "op_CheckedExplicit"];
+        }
+
+        var parameters = memberName[(open + 1)..^1];
+        var table = TopLevelCommas(parameters) == 0 ? UnaryOperators : BinaryOperators;
+        if (!table.TryGetValue(token, out var name))
+        {
+            return [];
+        }
+
+        return name is "op_Addition" or "op_Subtraction" or "op_Multiply" or "op_Division" or "op_UnaryNegation" or "op_Increment" or "op_Decrement"
+            ? [name, "op_Checked" + name[3..]]
+            : [name];
+    }
+
+    /// <summary>Commas outside angle brackets and parentheses: the parameter separators of a compact list.</summary>
+    /// <param name="parameters">Parameter types as in a member signature.</param>
+    private static int TopLevelCommas(string parameters)
+    {
+        var depth = 0;
+        var commas = 0;
+        foreach (var c in parameters)
+        {
+            switch (c)
+            {
+                case '<' or '(' or '[':
+                    depth++;
+                    break;
+                case '>' or ')' or ']':
+                    depth--;
+                    break;
+                case ',' when depth == 0:
+                    commas++;
+                    break;
+            }
+        }
+
+        return commas;
     }
 
     /// <summary>Includes everything below a node.</summary>
