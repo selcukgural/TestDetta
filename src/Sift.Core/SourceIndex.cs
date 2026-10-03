@@ -151,6 +151,64 @@ internal sealed class SourceIndex
     public bool TypeMentions(string typeName, string name) =>
         _typeReferences.TryGetValue(typeName, out var references) && references.Contains(name);
 
+    /// <summary>Indexed types (every part and project) by their simple name, built on first use.</summary>
+    private Dictionary<string, List<IndexedType>>? _typesBySimpleName;
+
+    /// <summary>
+    /// True when <paramref name="typeName"/> certainly derives from <c>System.Attribute</c>: a part of
+    /// it lists <c>Attribute</c> as its base and no indexed type is called <c>Attribute</c>, or every
+    /// indexed type its base names is such a class. Instances of an attribute class come only from its
+    /// uses (<c>[Name]</c>) and <c>new</c>, which both name it, so one that nothing names has none,
+    /// whatever reflection does. A base outside the repository with another name (an
+    /// <c>XmlAttribute</c>) gives false.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public bool IsAttributeClass(string typeName) => IsAttributeClass(typeName, []);
+
+    /// <summary>See <see cref="IsAttributeClass(string)"/>; <paramref name="visited"/> stops cycles.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="visited">Types already on the path.</param>
+    private bool IsAttributeClass(string typeName, HashSet<string> visited)
+    {
+        if (!visited.Add(typeName))
+        {
+            return false;
+        }
+
+        _typesBySimpleName ??= _types.Values
+            .GroupBy(static t => DeclarationWalker.SimpleTypeName(t.TypeName), StringComparer.Ordinal)
+            .ToDictionary(static g => g.Key, static g => g.ToList(), StringComparer.Ordinal);
+
+        foreach (var part in _types.Values)
+        {
+            if (part.TypeName != typeName)
+            {
+                continue;
+            }
+
+            foreach (var baseName in part.BaseTypeNames)
+            {
+                if (_typesBySimpleName.TryGetValue(baseName, out var candidates))
+                {
+                    // A base the repository declares counts when every type of that name is an attribute class.
+                    if (candidates.TrueForAll(c => IsAttributeClass(c.TypeName, [.. visited])))
+                    {
+                        return true;
+                    }
+
+                    continue;
+                }
+
+                if (baseName == "Attribute")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>The type called <paramref name="typeName"/>, or null when no indexed file declares it.</summary>
     /// <param name="typeName">Qualified type name.</param>
     public IndexedType? FindType(string typeName) => _typesByName.GetValueOrDefault(typeName);

@@ -863,6 +863,38 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(["Shop.Tests.TaxTests"], Select().TestClasses);
     }
 
+    [Theory]
+    [InlineData("System.Attribute", TestRunMode.Filtered)]
+    [InlineData("Attribute", TestRunMode.Filtered)]
+    [InlineData("TagBase", TestRunMode.Filtered)]
+    // Not certainly an attribute: something outside the repository may create it through reflection.
+    [InlineData("ExternalAttribute", TestRunMode.All)]
+    public void Attribute_class_nothing_uses_is_dead_code_however_the_spread_reaches_it(string baseType, TestRunMode expected)
+    {
+        // NSubstitute's MaybeNullAttribute polyfill: instances come only from [Tag] uses or new, which name it.
+        _repo.Write("src/Shop/Tags.cs", $$"""
+            namespace Shop;
+            using System;
+            public abstract class TagBase : Attribute { }
+            [AttributeUsage(AttributeTargets.Method)]
+            internal sealed class TagAttribute : {{baseType}} { public string Name => Slug.Make("tag"); }
+            """);
+        _repo.Write("tests/Shop.Tests/PlainTests.cs", """
+            namespace Shop.Tests;
+            public class PlainTests { [Fact] public void Holds() => Assert.True(true); }
+            """);
+        _repo.Commit("tags");
+        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
+
+        var selection = Select();
+
+        Assert.Equal(expected, selection.Mode);
+        if (expected == TestRunMode.Filtered)
+        {
+            Assert.Equal(["Shop.Tests.SlugTests"], selection.TestClasses);
+        }
+    }
+
     /// <summary>Makes PingHandler call Slug.Make and adds two classes that find it through reflection.</summary>
     private void WriteHandlerTests()
     {

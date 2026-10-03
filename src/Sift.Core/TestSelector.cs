@@ -329,6 +329,13 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 continue;
             }
 
+            // Reflection finds an attribute through its uses, which name it: one nothing names has no instance.
+            if (type is not null && index.IsAttributeClass(typeName))
+            {
+                LogUnusedAttribute(typeName);
+                continue;
+            }
+
             if (type is not null && propagation.SeededThroughCodeOnly(typeName) && coverage?.TryResolveType(typeName, candidates) == true)
             {
                 LogUnreferencedTypeResolvedByCoverage(typeName);
@@ -576,6 +583,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         LogDecision(selection.Project.Path, selection.Mode, selection.Reason);
         return selection;
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} is affected, but it is an attribute class nothing uses: it has no instance")]
+    private partial void LogUnusedAttribute(string typeName);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} is affected and nothing names it, but only through its code: the coverage maps say which classes ran it")]
     private partial void LogUnreferencedTypeResolvedByCoverage(string typeName);

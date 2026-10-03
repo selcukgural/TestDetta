@@ -25,10 +25,15 @@ that report numbers (value reporting) only once the numbers are proven right.
   delegates handed to a third-party library (`AddSingleton(sp => ...)`) could still be credited
   to the first class only. Needs a list of caching framework contracts, or a measurement on the
   corpus.
-- **Precision: attribute polyfills reached by the name spread** (NSubstitute, 98.5% of its
-  extra selection): a repository-declared `System.Diagnostics.CodeAnalysis.MaybeNullAttribute`
-  is "affected and nothing names it", so the whole project runs. The code of an attribute class
-  runs only when reflection reads the attribute.
+- ~~**Precision: attribute polyfills reached by the name spread**~~ (done 2026-10-03): an
+  attribute class nothing names (base certainly `System.Attribute`) has no instance, so it is dead
+  code rather than "found through reflection" (`SourceIndex.IsAttributeClass`). NSubstitute's share
+  did not move (73.8%): the same classes are reached through code run under Castle's interceptors,
+  which the external-callback rule makes run-once. That is the real cost (see the next item).
+- **Precision: per-call third-party callbacks** (NSubstitute 46% → 74%, docs/design/external-callbacks.md):
+  interceptors are called per call, not cached, but count as run-once like the proxy generation
+  hook. Options to measure: a recorded signal (a callback that runs in every bucket using the
+  library vs. once per key), or a list of contracts known to be per call.
 - ~~**Direct changes to a member's metadata**~~ (done 2026-10-03,
   docs/design/reflection-types-with-coverage.md "Direct metadata changes"): the change detector
   reports `MetadataChanged` when a declaration's attributes or parameter defaults changed (or a
