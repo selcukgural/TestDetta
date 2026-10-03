@@ -32,6 +32,9 @@ internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLeve
 
     /// <summary>What a test project does when its older map's drift cannot be bridged.</summary>
     public Sift.Core.DriftFallback DriftFallback { get; init; } = Sift.Core.DriftFallback.RunAll;
+
+    /// <summary>Folder of per-commit coverage maps outside the repository (<see cref="MapDirectory"/>); null when unused.</summary>
+    public string? MapsDir { get; init; }
 }
 
 /// <summary>Options of <c>sift affected</c>.</summary>
@@ -92,6 +95,9 @@ internal sealed record CliOptions(
           --log-level <level>  trace, debug, information, warning (default), error or none
           --max-map-age <n>    Use coverage maps recorded up to n commits before the merge base,
                                bridging the changes in between (default: 50; 0 = only exact maps)
+          --maps-dir <dir>     Coverage maps kept outside the repository, one folder per commit: record
+                               saves there, affected and test restore the newest one within --max-map-age
+                               (for CI systems other than GitHub Actions; see docs/ci.md)
           --drift-fallback <all|name>  When the changes since an older map include a build file,
                                configuration or a global using, run the affected test projects
                                completely (all, the default) or decide them by name (name: faster,
@@ -232,6 +238,7 @@ internal sealed record CliOptions(
                 return true;
 
             case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback":
+            case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record:
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
             case "--summary-file" when options.Command == CliCommand.Test:
@@ -257,6 +264,10 @@ internal sealed record CliOptions(
 
             case "--repo":
                 options = options with { Analysis = options.Analysis with { RepoPath = value } };
+                return true;
+
+            case "--maps-dir":
+                options = options with { Analysis = options.Analysis with { MapsDir = value } };
                 return true;
 
             case "--drift-fallback":

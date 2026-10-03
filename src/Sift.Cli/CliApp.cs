@@ -53,6 +53,12 @@ internal static partial class CliApp
         AnalysisResult analysis;
         try
         {
+            if (options.Analysis.MapsDir is { } mapsDir)
+            {
+                var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
+                MapDirectory.Restore(Path.GetFullPath(mapsDir), git.TopLevel(options.Analysis.RepoPath), options.Analysis.BaseRef, options.Analysis.MaxMapAge, git, logger);
+            }
+
             analysis = new AnalysisPipeline(loggerFactory, new Sift.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(
                 options.Analysis.RepoPath,
                 options.Analysis.BaseRef,
@@ -226,6 +232,7 @@ internal static partial class CliApp
             var recorder = new Sift.Coverage.CoverageRecorder(loggerFactory);
             var allPassed = true;
             var summary = new List<string>();
+            var written = new List<string>();
 
             foreach (var project in testProjects)
             {
@@ -245,6 +252,7 @@ internal static partial class CliApp
                 var (map, passed) = recorded;
                 var path = CoverageMapStore.PathFor(root, project.Path);
                 CoverageMapStore.Write(path, map);
+                written.Add(path);
 
                 allPassed &= passed;
                 summary.Add($"  {(passed ? "recorded" : "recorded, tests FAILED")}  {map.TestProject}: " +
@@ -259,6 +267,13 @@ internal static partial class CliApp
                         summary.Add($"    {failed.Count} test class(es) failed while recording; they run whenever the project is affected");
                         break;
                 }
+            }
+
+            if (options.Analysis.MapsDir is { } mapsDir && written.Count > 0)
+            {
+                var head = new GitClient(loggerFactory.CreateLogger<GitClient>()).Head(root);
+                MapDirectory.Save(Path.GetFullPath(mapsDir), head, written, logger);
+                summary.Add($"  saved     {written.Count} map(s) to {Path.Combine(mapsDir, head)}");
             }
 
             stdout.WriteLine();

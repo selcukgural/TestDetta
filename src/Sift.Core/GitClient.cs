@@ -204,6 +204,13 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
         }
     }
 
+    /// <summary><paramref name="commit"/> and its first-parent ancestors, newest first, at most <paramref name="count"/>.</summary>
+    /// <param name="repoRoot">Repository root.</param>
+    /// <param name="commit">A commit or ref.</param>
+    /// <param name="count">How many commits to list.</param>
+    public IReadOnlyList<string> FirstParentAncestors(string repoRoot, string commit, int count) =>
+        Run(repoRoot, "rev-list", "--first-parent", "-n", count.ToString(System.Globalization.CultureInfo.InvariantCulture), commit);
+
     /// <summary>The committer time of HEAD, as Unix seconds.</summary>
     /// <param name="repoRoot">Repository root.</param>
     public long HeadCommitTime(string repoRoot) =>

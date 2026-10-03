@@ -116,6 +116,12 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `working-directory` | `.` | any directory inside the repository |
 | `setup-dotnet` | `true` | install the .NET 10 SDK Sift runs on |
 
+## Other CI systems
+
+GitLab CI, Jenkins, Azure DevOps, Bitbucket and on-premises setups use the same two commands with a
+folder of per-commit coverage maps (`--maps-dir`) kept on a shared disk or object storage. Examples
+and the details are in [docs/ci.md](docs/ci.md).
+
 ## Limitations
 
 - Both `dotnet test` runners are supported. The runner is read from `global.json`
