@@ -162,10 +162,25 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.Equal(sequential.Classes.Keys.Order(), parallel.Classes.Keys.Order());
         foreach (var testClass in sequential.Classes.Keys)
         {
-            Assert.Equal(Ran(sequential, testClass), Ran(parallel, testClass));
+            Assert.Equal(Selects(sequential, testClass), Selects(parallel, testClass));
         }
 
         Assert.Equal(sequential.Fixtures.Keys.Order(), parallel.Fixtures.Keys.Order());
+    }
+
+    // The fixture's worker thread starts in its constructor. Whether its first hit lands before the
+    // fixture's scope ends or after the test started depends on the scheduler (a busy CI runner
+    // delays it), so the hit is the fixture's in one recording and the class's in the other.
+    // Selection adds a fixture's hits to every class that uses it, so compare what selection sees.
+    private static HashSet<CoveredMethod> Selects(CoverageMap map, string testClass)
+    {
+        var methods = Ran(map, testClass);
+        if (testClass == "Calc.Tests.FixtureTests")
+        {
+            methods.UnionWith(map.Fixtures["Calc.Tests.WarmCalculator"].Select(id => map.Methods[id]));
+        }
+
+        return methods;
     }
 
     private static HashSet<CoveredMethod> Ran(CoverageMap map, string testClass) =>

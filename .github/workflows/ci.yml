@@ -55,8 +55,9 @@ jobs:
           mode: test
           setup-dotnet: 'false'
 
-  # The whole suite, as a developer runs it: the pass/fail signal in a few minutes, while recording
-  # the coverage map takes longer.
+  # The pass/fail signal within three minutes, while recording the coverage map takes longer. The
+  # Slow tests build and run real projects; they run in the recording above (on every push to main)
+  # and before every push locally.
   quick:
     runs-on: ubuntu-latest
     permissions:
@@ -84,4 +85,4 @@ jobs:
           global-json-file: global.json
 
       - name: Test
-        run: dotnet test --nologo
+        run: dotnet test --nologo --filter "Category!=Slow"
