@@ -86,6 +86,9 @@ public static class SiftTracker
 
         /// <summary>Ring position up to which the scope's hits are in <see cref="Spilled"/>.</summary>
         public long SpilledTo;
+
+        /// <summary>For a static constructor, the tracked fields it stored; null until it stores one.</summary>
+        public List<int>? Stores;
     }
 
     /// <summary>Initialization scopes open on this thread, innermost last.</summary>
@@ -95,6 +98,23 @@ public static class SiftTracker
     /// <summary>Number of open scopes in <see cref="_scopes"/>.</summary>
     [ThreadStatic]
     private static int _scopeCount;
+
+    /// <summary>
+    /// Constructions open on this thread, innermost last: calls of constructors that store their own
+    /// object into a tracked place, each starting where its arguments started (<see cref="EnterConstruction"/>).
+    /// Kept apart from <see cref="_scopes"/>: a construction is not an initialization scope and marks
+    /// nothing linked or unlinked.
+    /// </summary>
+    [ThreadStatic]
+    private static Scope[]? _constructions;
+
+    /// <summary>Number of open constructions in <see cref="_constructions"/>.</summary>
+    [ThreadStatic]
+    private static int _constructionCount;
+
+    /// <summary>Per construction site, the ring position where its arguments started to be built (<see cref="MarkArguments"/>).</summary>
+    [ThreadStatic]
+    private static Dictionary<int, long>? _argumentStarts;
 
     /// <summary>Per tracked field, the methods that built a value stored into it in this process.</summary>
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, System.Collections.Concurrent.ConcurrentDictionary<int, byte>> Builders = new();
@@ -246,9 +266,10 @@ public static class SiftTracker
     {
         var recent = _recent ??= new int[RecentSize];
         recent[(int)(_recentCount++ & (RecentSize - 1))] = id;
-        if ((_recentCount & (RecentSize - 1)) == 0 && _scopeCount > 0)
+        if ((_recentCount & (RecentSize - 1)) == 0 && (_scopeCount > 0 || _constructionCount > 0))
         {
-            SpillScopes();
+            SpillScopes(_scopes, _scopeCount);
+            SpillScopes(_constructions, _constructionCount);
         }
     }
 
@@ -256,13 +277,15 @@ public static class SiftTracker
     /// Copies what the ring holds of each open scope, and has not copied yet, into the scope's bit set.
     /// Runs once per lap of the ring, when it holds exactly the last <see cref="RecentSize"/> entries.
     /// </summary>
-    private static void SpillScopes()
+    /// <param name="scopes">Open initialization scopes or constructions.</param>
+    /// <param name="count">How many of them are open.</param>
+    private static void SpillScopes(Scope[]? scopes, int count)
     {
         var recent = _recent!;
         var end = _recentCount;
-        for (var s = 0; s < _scopeCount; s++)
+        for (var s = 0; s < count; s++)
         {
-            ref var scope = ref _scopes![s];
+            ref var scope = ref scopes![s];
             var from = Math.Max(scope.Start, scope.SpilledTo);
             if (from >= end)
             {
@@ -391,15 +414,75 @@ public static class SiftTracker
         _lastStore = end;
         _lastStoreMethod = method;
 
-        // A static constructor storing its own fields hands its result to their readers, all of it:
-        // the walk above stops where the ring ends, the scope does not.
+        // A static constructor storing its own fields hands its result to their readers, all of it,
+        // once it ends (ExitTypeInitializer): the walk above stops where the ring ends, the scope does
+        // not, and a field stored early depends on the rest of the constructor too.
         if (_scopeCount > 0 && _scopes![_scopeCount - 1].Owner == method)
         {
             _scopes[_scopeCount - 1].Linked = true;
-            if (_scopes[_scopeCount - 1].Spilled is not null)
-            {
-                AddScopeContents(in _scopes[_scopeCount - 1], builders);
-            }
+            (_scopes[_scopeCount - 1].Stores ??= []).Add(field);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Stored"/> for a constructor storing its own object into a tracked place (NodaTime's
+    /// <c>CalendarSystem</c> registers itself in <c>CalendarByOrdinal</c>). The object holds what its
+    /// arguments were built from, and the caller built those before the constructor was entered, where
+    /// the walk of <see cref="Stored"/> stops. So everything the innermost construction ran since its
+    /// arguments started counts as well (docs/design/run-once-cascades.md, constructor arguments).
+    /// A constructor called without a construction around it (by reflection, from another assembly)
+    /// stores as <see cref="Stored"/> does.
+    /// </summary>
+    /// <param name="field">Field index assigned by the instrumenter.</param>
+    /// <param name="method">Id of the constructor that stored its object.</param>
+    public static void StoredSelf(int field, int method)
+    {
+        Stored(field, method);
+        if (_constructionCount > 0)
+        {
+            AddScopeContents(in _constructions![_constructionCount - 1], Builders.GetOrAdd(field, static _ => new()));
+        }
+    }
+
+    /// <summary>
+    /// Called by instrumented code where the arguments of a construction site start to be built: the
+    /// first instruction of the argument expressions, or of the definitions of the locals they read in
+    /// the same straight-line code (<c>var calculator = new X(); new CalendarSystem(..., calculator)</c>).
+    /// </summary>
+    /// <param name="site">Construction site id assigned by the instrumenter.</param>
+    public static void MarkArguments(int site) => (_argumentStarts ??= [])[site] = _recentCount;
+
+    /// <summary>
+    /// Called by instrumented code right before a constructor that stores its own object into a
+    /// tracked place is called (<c>newobj</c>): opens a construction starting where the site's arguments
+    /// started. A path that skipped the mark (a jump into the middle of the arguments) starts it here,
+    /// as if the arguments had been built by the constructor's caller. Arguments built longer ago than
+    /// the ring reaches are cut to the part it still holds, as <see cref="Stored"/> cuts its walk.
+    /// </summary>
+    /// <param name="site">Construction site id assigned by the instrumenter.</param>
+    public static void EnterConstruction(int site)
+    {
+        var start = _argumentStarts is { } starts && starts.Remove(site, out var marked) ? marked : _recentCount;
+        var constructions = _constructions ??= new Scope[4];
+        if (_constructionCount == constructions.Length)
+        {
+            Array.Resize(ref _constructions, constructions.Length * 2);
+            constructions = _constructions;
+        }
+
+        constructions[_constructionCount++] = new Scope { Start = Math.Max(start, _recentCount - RecentSize), Owner = -1 };
+    }
+
+    /// <summary>
+    /// Called by instrumented code after the constructor returned. A constructor that throws never gets
+    /// here; its construction stays open until the next test class or fixture is entered on the thread,
+    /// which credits later self-stores with more builders, never fewer.
+    /// </summary>
+    public static void ExitConstruction()
+    {
+        if (_constructionCount > 0)
+        {
+            _constructions![--_constructionCount].Spilled = null;
         }
     }
 
@@ -493,6 +576,25 @@ public static class SiftTracker
             _typeInitializerDepth--;
         }
 
+        // Every field the static constructor stored depends on all of it: when any part throws, the
+        // type cannot be used, and reading even a field stored before that fails. NodaTime's
+        // NodaConstants stores UnixEpoch, then builds BclEpoch through the calendar; a broken calendar
+        // fails every test reading UnixEpoch.
+        if (_scopeCount > 0 && _scopes![_scopeCount - 1] is { Owner: >= 0, Stores: { } stores } scope)
+        {
+            // Collected once: a static constructor may store hundreds of fields and run a long scope.
+            var contents = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
+            AddScopeContents(in scope, contents);
+            foreach (var field in stores)
+            {
+                var builders = Builders.GetOrAdd(field, static _ => new());
+                foreach (var id in contents.Keys)
+                {
+                    builders.TryAdd(id, 0);
+                }
+            }
+        }
+
         PopScope(link: false);
     }
 
@@ -525,6 +627,7 @@ public static class SiftTracker
         ref var scope = ref _scopes![--_scopeCount];
         MarkScope(in scope, scope.Linked || link);
         scope.Spilled = null;
+        scope.Stores = null;
     }
 
     /// <summary>Marks what ran in <paramref name="scope"/> as linked or unlinked.</summary>
@@ -583,7 +686,7 @@ public static class SiftTracker
         }
     }
 
-    /// <summary>Closes every open scope as unlinked: one threw, and a new test starts clean.</summary>
+    /// <summary>Closes every open scope as unlinked and every open construction: one threw, and a new test starts clean.</summary>
     private static void AbandonScopes()
     {
         while (_scopeCount > 0)
@@ -591,7 +694,15 @@ public static class SiftTracker
             ref var scope = ref _scopes![--_scopeCount];
             MarkScope(in scope, linked: false);
             scope.Spilled = null;
+            scope.Stores = null;
         }
+
+        while (_constructionCount > 0)
+        {
+            _constructions![--_constructionCount].Spilled = null;
+        }
+
+        _argumentStarts?.Clear();
     }
 
     /// <summary>

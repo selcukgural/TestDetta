@@ -178,20 +178,38 @@ Recording (`SiftTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
   to direct coverage evidence (their readers are now credited with what built the values), so the
   share stays at 22.9%; it is what lets the single-bucket rule be narrowed later.
 
-Open gap, measured 2026-10-03: a constructor that stores its object into a tracked place (NodaTime's
-`CalendarSystem` registering itself in `CalendarByOrdinal`) records as builders only what ran since
-it was entered; its arguments (the calendar's calculator) were built by the caller before that. On
-NodaTime this is the one case where the single-bucket rule is still needed (1 failing class of 60
-mutants). Crediting such stores with everything their open scope ran so far closed half of it and
-raised the share from 22.9% to 25.2%, so it was not kept. The precise form marks where the
-arguments of `newobj` start, for the constructors that store into tracked places; it belongs with
-the decision on the single-bucket rule, after the corpus numbers.
+- **A static field depends on its whole static constructor.** A static constructor either
+  completes or leaves its type unusable, so reading a field it stored early fails when a later part
+  throws. NodaTime's `NodaConstants` stores `UnixEpoch`, then builds `BclEpoch` through the
+  calendar; a broken `YearMonthDayCalculator` constructor fails every test reading `UnixEpoch`.
+  When a static constructor ends, everything it ran becomes a builder of every field it stored
+  (`ExitTypeInitializer`); before, a field had only what ran up to its own store. This was the last
+  case on NodaTime where the single-bucket rule was needed (2 failing classes of 60 mutants, measured
+  2026-10-03 with `seeds.py`); it is 0 now, the share stays at 22.9%, no mutant missed. An earlier
+  reading blamed the constructor arguments below; the map showed the two classes never touched the
+  calendar, only `NodaConstants`.
+- **Constructor arguments.** A constructor that stores its own object into a tracked place
+  (`CalendarByOrdinal[ordinal] = this`, `Registry.Add(this)`, directly or through `: this(...)` /
+  `: base(...)` in the same assembly) records as builders only what ran since it was entered; the
+  caller built its arguments before that. Each `newobj` of such a constructor is surrounded by
+  `EnterConstruction`/`ExitConstruction`, and `MarkArguments` goes where its arguments start to be
+  built: the first instruction of the argument expressions or, earlier, of the definitions of the
+  locals they read (and of the locals those read), in straight-line code (`var calculator = new X();
+  new CalendarSystem(..., calculator)`). The self-store (`StoredSelf`) adds what the innermost
+  construction ran since that mark. Only self-stores do, and only from the mark: crediting every
+  constructor store with its whole open scope (tried first) raised NodaTime's share from 22.9% to
+  25.2%. Not followed: arguments built by the enclosing method's caller (a parameter passed on), a
+  chain into another assembly, construction by reflection; those stores keep `Stored`'s builders.
+  NodaTime does not need it today (the single-bucket rule covers such objects), but narrowing that
+  rule would turn this gap into misses.
 
 Selection: `CoverageIndex` leaves linked methods out of the run-once set. Their users are the
 classes that ran them plus the readers of what they built (`builtValues`).
 
 Tests: `LinkedInitializationTests` covers `GetOrAdd`, `Lazy<T>`, a fill through a method (unlinked),
-a mixed fill (unlinked), a list added to, and a value built from another value. The last test pins
+a mixed fill (unlinked), a list added to, a value built from another value, a static field stored
+before a later part of its static constructor, and an object registering itself with its argument
+built inline, in a local after unrelated work (which stays out), or through a chained constructor. The last test pins
 the order of its classes, because xUnit orders them by an id that includes the temporary path.
 `FrameworkMatrixTests` adds a field data source under NUnit. Every test was red first and
 sabotage-checked: no transitive follow, no field read in the ring, no agreement where stack paths

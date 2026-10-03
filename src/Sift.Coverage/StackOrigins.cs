@@ -5,8 +5,8 @@ namespace Sift.Coverage;
 
 /// <summary>
 /// For every instruction of a method body, which instruction loaded each value on the stack before
-/// it, as far as a field load (<c>ldfld</c>, <c>ldsfld</c>, <c>ldflda</c>, <c>ldsflda</c>) goes: a forward
-/// data-flow pass over all branches. Walking back from a call only finds its receiver when nothing
+/// it, as far as a field load (<c>ldfld</c>, <c>ldsfld</c>, <c>ldflda</c>, <c>ldsflda</c>) or a load of
+/// <c>this</c> goes: a forward data-flow pass over all branches. Walking back from a call only finds its receiver when nothing
 /// between them branches, and the compiler's cached lambdas do branch
 /// (<c>_cache.GetOrAdd(key, static k => ...)</c> loads the delegate with <c>ldsfld; dup; brtrue</c>).
 /// Where paths meet, a slot keeps its loader only when every path agrees, so an answer is never
@@ -15,18 +15,21 @@ namespace Sift.Coverage;
 /// </summary>
 internal sealed class StackOrigins
 {
-    /// <summary>Stack on entry to each reached instruction, bottom first; a slot holds its field load or null.</summary>
+    /// <summary>Stack on entry to each reached instruction, bottom first; a slot holds its field load, its load of <c>this</c>, or null.</summary>
     private readonly Dictionary<Instruction, Instruction?[]?> _entry = [];
 
-    private StackOrigins()
-    {
-    }
+    /// <summary>The body's <c>this</c>; null in a static method.</summary>
+    private readonly ParameterDefinition? _this;
+
+    /// <summary>Creates an empty pass result for a body.</summary>
+    /// <param name="self">The body's <c>this</c>; null in a static method.</param>
+    private StackOrigins(ParameterDefinition? self) => _this = self;
 
     /// <summary>Runs the pass over <paramref name="body"/>; later changes to the body are not seen.</summary>
     /// <param name="body">A method body.</param>
     public static StackOrigins Of(MethodBody body)
     {
-        var origins = new StackOrigins();
+        var origins = new StackOrigins(body.Method.HasThis ? body.ThisParameter : null);
         var work = new Stack<Instruction>();
         if (body.Instructions.Count > 0)
         {
@@ -46,7 +49,7 @@ internal sealed class StackOrigins
 
         while (work.TryPop(out var instruction))
         {
-            if (origins._entry[instruction] is not { } stack || After(instruction, stack) is not { } after)
+            if (origins._entry[instruction] is not { } stack || origins.After(instruction, stack) is not { } after)
             {
                 continue;
             }
@@ -61,8 +64,9 @@ internal sealed class StackOrigins
     }
 
     /// <summary>
-    /// The field load that pushed argument <paramref name="index"/> of <paramref name="call"/>, the
-    /// receiver of an instance call being argument 0; null when it was something else or is unknown.
+    /// The field load or load of <c>this</c> that pushed argument <paramref name="index"/> of
+    /// <paramref name="call"/>, the receiver of an instance call being argument 0; null when it was
+    /// something else or is unknown.
     /// </summary>
     /// <param name="call">A call in the analysed body.</param>
     /// <param name="index">Argument position, receiver included.</param>
@@ -119,10 +123,15 @@ internal sealed class StackOrigins
         }
     }
 
+    /// <summary>True when <paramref name="instruction"/> pushes the body's <c>this</c>.</summary>
+    /// <param name="instruction">An instruction of the analysed body.</param>
+    public bool LoadsThis(Instruction instruction) =>
+        _this is not null && (instruction.OpCode.Code == Code.Ldarg_0 || (instruction.OpCode.Code is Code.Ldarg or Code.Ldarg_S && instruction.Operand == _this));
+
     /// <summary>The stack after <paramref name="instruction"/> runs; null when it ends the flow or cannot be sized.</summary>
     /// <param name="instruction">Instruction.</param>
     /// <param name="stack">Stack before it.</param>
-    private static Instruction?[]? After(Instruction instruction, Instruction?[] stack)
+    private Instruction?[]? After(Instruction instruction, Instruction?[] stack)
     {
         var code = instruction.OpCode.Code;
         if (code is Code.Leave or Code.Leave_S or Code.Endfinally)
@@ -148,7 +157,7 @@ internal sealed class StackOrigins
 
         var after = new Instruction?[stack.Length - pops + pushes];
         Array.Copy(stack, after, stack.Length - pops);
-        if (pushes == 1 && code is Code.Ldfld or Code.Ldsfld or Code.Ldflda or Code.Ldsflda)
+        if (pushes == 1 && (code is Code.Ldfld or Code.Ldsfld or Code.Ldflda or Code.Ldsflda || LoadsThis(instruction)))
         {
             after[^1] = instruction;
         }

@@ -110,6 +110,61 @@ public sealed class LinkedInitializationTests : IDisposable
             public decimal For(string country) => Cache.GetOrAdd(country, Build);
             public string Label(string country) => Labels.GetOrAdd(country, static c => "rate " + new RateService().For(c).ToString(System.Globalization.CultureInfo.InvariantCulture));
             """,
+        // An object that registers itself in its constructor (NodaTime's CalendarSystem in
+        // CalendarByOrdinal), built in a holder's static constructor from an argument built before
+        // the constructor ran. Readers of the registry depend on what built the argument.
+        "registry" => Registry("""
+            public Entry(decimal rate)
+            {
+                Rate = rate;
+                Registry[0] = this;
+            }
+            """, """
+            internal static readonly Entry Turkey = new(new RateService().Build("tr"));
+            """),
+        // The same with the argument built into a local first (NodaTime's ISO calendar and its
+        // calculator), after unrelated work that is not the registry's.
+        "registry-local" => Registry("""
+            public Entry(decimal rate)
+            {
+                Rate = rate;
+                Registry[0] = this;
+            }
+            """, """
+            internal static readonly Entry Turkey;
+            static Holder()
+            {
+                var report = new Report().Build();
+                var rate = new RateService().Build("tr");
+                Turkey = new Entry(rate);
+            }
+            """),
+        // The same through a constructor chained to the one that registers.
+        "registry-chain" => Registry("""
+            public Entry(decimal rate)
+                : this(rate, "tr")
+            {
+            }
+
+            private Entry(decimal rate, string country)
+            {
+                Rate = rate;
+                Registry[0] = this;
+            }
+            """, """
+            internal static readonly Entry Turkey = new(new RateService().Build("tr"));
+            """),
+        // Two values built by one static constructor (NodaTime's NodaConstants: UnixEpoch, then
+        // BclEpoch through the calendar). Reading the first fails when building the second throws.
+        "constants" => """
+            private static class Constants
+            {
+                internal static readonly decimal Zero = 0.5m;
+                internal static readonly decimal Turkey = new RateService().Build("tr");
+            }
+            public decimal For(string country) => Constants.Turkey;
+            public static decimal Zero() => Constants.Zero;
+            """,
         // The cache comes back from a method, not a field load: the probes cannot follow it.
         _ => """
             private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
@@ -117,6 +172,23 @@ public sealed class LinkedInitializationTests : IDisposable
             public decimal For(string country) => Shared().GetOrAdd(country, Build);
             """,
     };
+
+    /// <summary>RateService members for the registry shapes: an entry type registering itself, and a holder building one.</summary>
+    /// <param name="constructors">Constructors of the entry.</param>
+    /// <param name="holder">Members of the holder.</param>
+    private static string Registry(string constructors, string holder) => $$"""
+        private static readonly Entry?[] Registry = new Entry?[1];
+        public sealed class Entry
+        {
+            {{constructors}}
+            public decimal Rate { get; }
+        }
+        private static class Holder
+        {
+            {{holder}}
+        }
+        public decimal For(string country) => Registry[0]?.Rate ?? Holder.Turkey.Rate;
+        """;
 
     [Theory]
     [InlineData("getoradd", true)]
@@ -199,11 +271,16 @@ public sealed class LinkedInitializationTests : IDisposable
                 }
             }
             public class GammaTests { [Fact] public void Label() => Assert.Equal("rate 0.2", new App.RateService().Label("tr")); }
+            """ : "") + (cache == "constants" ? """
+
+            // Runs after Alpha built the constants, and reads only the first of them.
+            public class ZeroTests { [Fact] public void Zero() => Assert.Equal(0.5m, App.RateService.Zero()); }
             """ : ""));
 
-        if (cache == "derived")
+        if (cache is "derived" or "constants")
         {
-            // Classes run one at a time by name, so Aaa always fills before Gamma reads.
+            // Classes run one at a time by name, so Aaa always fills before Gamma reads, and Alpha
+            // builds the constants before Zero reads them.
             _repo.Write("tests/App.Tests/Order.cs", """
                 [assembly: Xunit.TestCollectionOrderer("App.Tests.ByName", "App.Tests")]
                 [assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
@@ -251,6 +328,39 @@ public sealed class LinkedInitializationTests : IDisposable
         var built = map.BuiltValues!.Classes["App.Tests.BetaTests"].Select(i => map.Methods[i]).ToList();
         Assert.Contains(new CoveredMethod("App.Table", "Rate"), built);
         Assert.Contains(new CoveredMethod("App.RateService", "Build"), built);
+    }
+
+    [Fact]
+    public void A_static_field_depends_on_everything_its_static_constructor_ran()
+    {
+        var map = Record("constants");
+
+        // Zero read only the first constant, built before the second; had building the second thrown,
+        // the type would not have been usable, and reading the first would have failed too.
+        var zero = map.Classes["App.Tests.ZeroTests"].Concat(map.BuiltValues!.Classes["App.Tests.ZeroTests"])
+            .Where(i => i < map.Methods.Count)
+            .Select(i => map.Methods[i]);
+        Assert.Contains(new CoveredMethod("App.Table", "Rate"), zero);
+    }
+
+    [Theory]
+    [InlineData("registry")]
+    [InlineData("registry-local")]
+    [InlineData("registry-chain")]
+    public void An_object_registered_by_its_constructor_carries_what_built_its_arguments(string cache)
+    {
+        var map = Record(cache);
+        var rate = new CoveredMethod("App.Table", "Rate");
+
+        // Whichever of Alpha and Beta came second only read the registry; the rate was built as an
+        // argument before the registering constructor ran, inside the holder's static constructor.
+        string[] classes = ["App.Tests.AlphaTests", "App.Tests.BetaTests"];
+        var reader = classes.Single(c => !map.Classes[c].Where(i => i < map.Methods.Count).Select(i => map.Methods[i]).Contains(rate));
+        var built = map.BuiltValues!.Classes[reader].Select(i => map.Methods[i]).ToList();
+        Assert.Contains(rate, built);
+
+        // Only what built the arguments: the holder's work before them is not the registry's.
+        Assert.DoesNotContain(new CoveredMethod("App.Report", "Build"), built);
     }
 
     public void Dispose() => _repo.Dispose();

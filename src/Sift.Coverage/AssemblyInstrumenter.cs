@@ -197,6 +197,10 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             ExitTestCodeWhenComplete = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTestCodeWhenComplete))!),
             PrepareTestInstance = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.PrepareTestInstance))!),
             ExitCacheInto = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCacheInto))!),
+            StoredSelf = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.StoredSelf))!),
+            MarkArguments = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.MarkArguments))!),
+            EnterConstruction = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterConstruction))!),
+            ExitConstruction = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitConstruction))!),
         };
         var tracked = new Dictionary<FieldDefinition, int>();
         foreach (var field in TrackedFields(module))
@@ -208,7 +212,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
-        probes = probes with { ReusedCollections = ReusedCollections(module), Tracked = tracked };
+        probes = probes with { ReusedCollections = ReusedCollections(module), Tracked = tracked, Registering = RegisteringConstructors(module, tracked) };
 
         foreach (var type in module.GetTypes())
         {
@@ -302,6 +306,21 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>Tracked fields of the module (<see cref="TrackedFields"/>) by their index.</summary>
         public Dictionary<FieldDefinition, int> Tracked { get; init; } = [];
+
+        /// <summary><see cref="SiftTracker.StoredSelf"/>.</summary>
+        public required MethodReference StoredSelf { get; init; }
+
+        /// <summary><see cref="SiftTracker.MarkArguments"/>.</summary>
+        public required MethodReference MarkArguments { get; init; }
+
+        /// <summary><see cref="SiftTracker.EnterConstruction"/>.</summary>
+        public required MethodReference EnterConstruction { get; init; }
+
+        /// <summary><see cref="SiftTracker.ExitConstruction"/>.</summary>
+        public required MethodReference ExitConstruction { get; init; }
+
+        /// <summary>Constructors of the module that store their own object into a tracked place; see <see cref="RegisteringConstructors"/>.</summary>
+        public HashSet<MethodDefinition> Registering { get; init; } = [];
     }
 
     /// <summary>
@@ -428,59 +447,35 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         body.SimplifyMacros();
         var il = body.GetILProcessor();
 
-        // A value added to an object held in a tracked field is stored into that field as far as its
-        // readers go (_cache[key] = Build(key), Registry.Items.Add(this)). Found before any probe goes
-        // in: a read probe after the receiver's load would hide the receiver.
-        var mutations = new Dictionary<Instruction, int>();
+        // Found before any probe goes in: a read probe after a receiver's load would hide the receiver.
+        // A constructor storing its own object (CalendarByOrdinal[ordinal] = this) stores what its
+        // arguments were built from as well (SiftTracker.StoredSelf).
         var origins = new Lazy<StackOrigins>(() => StackOrigins.Of(body), LazyThreadSafetyMode.None);
+        var selfStores = method.IsConstructor && !method.IsStatic;
+        var stores = new Dictionary<Instruction, (int Field, bool Self)>();
         foreach (var instruction in body.Instructions)
         {
-            if (instruction.OpCode.Code is Code.Call or Code.Callvirt && instruction.Operand is MethodReference called && Mutators.Contains(called.Name)
-                && !CacheFills.Contains($"{called.DeclaringType.GetElementType().FullName}::{called.Name}")
-                && ReceiverField(instruction, origins.Value) is { } receiver && tracked.TryGetValue(receiver, out var index))
+            if (TrackedStore(instruction, origins, tracked) is { } stored)
             {
-                mutations[instruction] = index;
-            }
-
-            // An element stored into an array held in a tracked field (NodaTime's calendar cache,
-            // CalendarByOrdinal[ordinal] = this): the array is argument 0 of stelem.
-            if (instruction.OpCode.Code is Code.Stelem_I or Code.Stelem_I1 or Code.Stelem_I2 or Code.Stelem_I4 or Code.Stelem_I8
-                    or Code.Stelem_R4 or Code.Stelem_R8 or Code.Stelem_Ref or Code.Stelem_Any
-                && origins.Value.Argument(instruction, 0) is { Operand: FieldReference arrayField } && arrayField.Resolve() is { } array
-                && tracked.TryGetValue(array, out var arrayIndex))
-            {
-                mutations[instruction] = arrayIndex;
+                stores[instruction] = (stored, selfStores && StoresThis(instruction, origins.Value));
             }
         }
 
         foreach (var instruction in body.Instructions.ToList())
         {
-            var code = instruction.OpCode.Code;
-            if (mutations.TryGetValue(instruction, out var collection))
+            if (stores.TryGetValue(instruction, out var store))
             {
-                var store = il.Create(OpCodes.Call, probes.Stored);
-                il.InsertAfter(instruction, store);
-                il.InsertBefore(store, il.Create(OpCodes.Ldc_I4, collection));
-                il.InsertBefore(store, il.Create(OpCodes.Ldc_I4, methodId));
-                continue;
-            }
-
-            if (code is not (Code.Ldsfld or Code.Ldfld or Code.Ldsflda or Code.Ldflda or Code.Stsfld or Code.Stfld)
-                || instruction.Operand is not FieldReference reference
-                || reference.Resolve() is not { } field
-                || !tracked.TryGetValue(field, out var index))
-            {
-                continue;
-            }
-
-            if (code is Code.Stsfld or Code.Stfld)
-            {
-                var call = il.Create(OpCodes.Call, probes.Stored);
+                var call = il.Create(OpCodes.Call, store.Self ? probes.StoredSelf : probes.Stored);
                 il.InsertAfter(instruction, call);
-                il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, index));
+                il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, store.Field));
                 il.InsertBefore(call, il.Create(OpCodes.Ldc_I4, methodId));
+                continue;
             }
-            else
+
+            if (instruction.OpCode.Code is Code.Ldsfld or Code.Ldfld or Code.Ldsflda or Code.Ldflda
+                && instruction.Operand is FieldReference reference
+                && reference.Resolve() is { } field
+                && tracked.TryGetValue(field, out var index))
             {
                 var call = il.Create(OpCodes.Call, probes.Read);
                 il.InsertAfter(instruction, call);
@@ -489,6 +484,131 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         body.OptimizeMacros();
+    }
+
+    /// <summary>
+    /// The index of the tracked field <paramref name="instruction"/> stores into; null when it stores
+    /// into none. Besides <c>stsfld</c> and <c>stfld</c>, a value added to an object held in a tracked
+    /// field is stored into that field as far as its readers go (<c>_cache[key] = Build(key)</c>,
+    /// <c>Registry.Items.Add(this)</c>), and so is an element stored into an array held in one
+    /// (NodaTime's <c>CalendarByOrdinal[ordinal] = this</c>; the array is argument 0 of <c>stelem</c>).
+    /// </summary>
+    /// <param name="instruction">An instruction of a body not yet probed for fields.</param>
+    /// <param name="origins">Stack origins of that body, computed on first use.</param>
+    /// <param name="tracked">Tracked fields of the module by index.</param>
+    private static int? TrackedStore(Instruction instruction, Lazy<StackOrigins> origins, Dictionary<FieldDefinition, int> tracked)
+    {
+        var code = instruction.OpCode.Code;
+        if (code is Code.Stsfld or Code.Stfld)
+        {
+            return instruction.Operand is FieldReference reference && reference.Resolve() is { } field && tracked.TryGetValue(field, out var index) ? index : null;
+        }
+
+        if (code is Code.Call or Code.Callvirt)
+        {
+            return instruction.Operand is MethodReference called && Mutators.Contains(called.Name)
+                   && !CacheFills.Contains($"{called.DeclaringType.GetElementType().FullName}::{called.Name}")
+                   && ReceiverField(instruction, origins.Value) is { } receiver && tracked.TryGetValue(receiver, out var index)
+                ? index
+                : null;
+        }
+
+        return IsElementStore(code)
+               && origins.Value.Argument(instruction, 0) is { Operand: FieldReference arrayField } && arrayField.Resolve() is { } array
+               && tracked.TryGetValue(array, out var arrayIndex)
+            ? arrayIndex
+            : null;
+    }
+
+    /// <summary>True for the <c>stelem</c> instructions.</summary>
+    /// <param name="code">Op code.</param>
+    private static bool IsElementStore(Code code) =>
+        code is Code.Stelem_I or Code.Stelem_I1 or Code.Stelem_I2 or Code.Stelem_I4 or Code.Stelem_I8
+            or Code.Stelem_R4 or Code.Stelem_R8 or Code.Stelem_Ref or Code.Stelem_Any;
+
+    /// <summary>
+    /// True when the value a store (<see cref="TrackedStore"/>) puts away is the body's <c>this</c>:
+    /// <c>Instance = this</c>, <c>CalendarByOrdinal[ordinal] = this</c>, <c>Registry.Add(this)</c>.
+    /// </summary>
+    /// <param name="instruction">A store into a tracked place.</param>
+    /// <param name="origins">Stack origins of its body.</param>
+    private static bool StoresThis(Instruction instruction, StackOrigins origins)
+    {
+        var code = instruction.OpCode.Code;
+        var (first, last) = code switch
+        {
+            Code.Stsfld => (0, 0),
+            Code.Stfld => (1, 1),
+            _ when IsElementStore(code) => (2, 2),
+            // Any argument of a mutating call, its receiver aside: Add(this), set_Item(key, this).
+            _ => (1, (StackOrigins.Pops(instruction) ?? 0) - 1),
+        };
+
+        for (var index = first; index <= last; index++)
+        {
+            if (origins.Argument(instruction, index) is { } loader && origins.LoadsThis(loader))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Instance constructors of <paramref name="module"/> that store their own object into a tracked
+    /// place (<see cref="StoresThis"/>), directly or through a constructor they chain to on the same
+    /// object (<c>: this(...)</c>, <c>: base(...)</c>) in the same module. Calls of these get their
+    /// arguments marked (<see cref="MarkConstructions"/>): the object holds what its arguments were
+    /// built from. A chain into another assembly is not followed; such a store keeps the builders
+    /// <see cref="SiftTracker.Stored"/> finds, and the selection's run-once rules cover the rest.
+    /// </summary>
+    /// <param name="module">Module being instrumented, before any probe went in.</param>
+    /// <param name="tracked">Tracked fields of the module by index.</param>
+    private static HashSet<MethodDefinition> RegisteringConstructors(ModuleDefinition module, Dictionary<FieldDefinition, int> tracked)
+    {
+        var registering = new HashSet<MethodDefinition>();
+        var chains = new List<(MethodDefinition Constructor, MethodDefinition Callee)>();
+        foreach (var type in module.GetTypes())
+        {
+            foreach (var method in type.Methods)
+            {
+                if (!method.IsConstructor || method.IsStatic || !method.HasBody)
+                {
+                    continue;
+                }
+
+                var origins = new Lazy<StackOrigins>(() => StackOrigins.Of(method.Body), LazyThreadSafetyMode.None);
+                foreach (var instruction in method.Body.Instructions)
+                {
+                    if (TrackedStore(instruction, origins, tracked) is not null && StoresThis(instruction, origins.Value))
+                    {
+                        registering.Add(method);
+                    }
+
+                    if (instruction.OpCode.Code == Code.Call && instruction.Operand is MethodReference { Name: ".ctor" } called
+                        && origins.Value.Argument(instruction, 0) is { } receiver && origins.Value.LoadsThis(receiver)
+                        && called.Resolve() is { } callee && callee.Module == module)
+                    {
+                        chains.Add((method, callee));
+                    }
+                }
+            }
+        }
+
+        for (var changed = true; changed;)
+        {
+            changed = false;
+            foreach (var (constructor, callee) in chains)
+            {
+                if (registering.Contains(callee) && registering.Add(constructor))
+                {
+                    changed = true;
+                }
+            }
+        }
+
+        return registering;
     }
 
     /// <summary>What the probes of one method record.</summary>
@@ -615,6 +735,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         MarkCacheFills(body, il, probes, BindsPoolPolicyCreate(method.DeclaringType), site.Id);
         MarkPoolFills(body, il, probes, site.Id);
+        MarkConstructions(body, il, probes, site.Id);
         if (testCodeEnd is TestCodeEnd.Return or TestCodeEnd.Task)
         {
             TrackTestCode(method, il, probes, first);
@@ -991,6 +1112,226 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             il.InsertBefore(start, enter);
             InsertCacheExit(il, build, probes, into.Count == 1 ? into[0].Field : null, methodId);
             Retarget(body, start, enter);
+        }
+    }
+
+    /// <summary>
+    /// Surrounds every <c>newobj</c> of a constructor that stores its own object into a tracked place
+    /// (<see cref="RegisteringConstructors"/>) with <see cref="SiftTracker.EnterConstruction"/> and
+    /// <see cref="SiftTracker.ExitConstruction"/>, and puts <see cref="SiftTracker.MarkArguments"/> where
+    /// its arguments start to be built (<see cref="ConstructionStart"/>). NodaTime's ISO calendar
+    /// registers itself in <c>CalendarByOrdinal</c>, built from a calculator its static constructor made
+    /// in a local first; readers of the registry depend on that calculator
+    /// (docs/design/run-once-cascades.md, constructor arguments).
+    /// </summary>
+    /// <param name="body">Method body with short branches already expanded.</param>
+    /// <param name="il">Processor of the body.</param>
+    /// <param name="probes">Tracker references with the module's registering constructors.</param>
+    /// <param name="methodId">Id of the method being instrumented; site ids are made from it.</param>
+    private static void MarkConstructions(MethodBody body, ILProcessor il, Probes probes, int methodId)
+    {
+        if (probes.Registering.Count == 0 || methodId >= 1 << (31 - SiteBits))
+        {
+            return;
+        }
+
+        var sites = body.Instructions
+            .Where(i => i.OpCode.Code == Code.Newobj && i.Operand is MethodReference called && called.Resolve() is { } constructor && probes.Registering.Contains(constructor))
+            .Take(1 << SiteBits)
+            .ToList();
+        if (sites.Count == 0)
+        {
+            return;
+        }
+
+        // All starts first: they are found in the body as the compiler wrote it.
+        var flow = new StraightLine(body);
+        var starts = sites.Select(newobj => ConstructionStart(newobj, flow)).ToList();
+        for (var n = 0; n < sites.Count; n++)
+        {
+            var site = (methodId << SiteBits) | n;
+            if (starts[n] is { } start)
+            {
+                var mark = il.Create(OpCodes.Ldc_I4, site);
+                il.InsertBefore(start, mark);
+                il.InsertBefore(start, il.Create(OpCodes.Call, probes.MarkArguments));
+                Retarget(body, start, mark);
+            }
+
+            var newobj = sites[n];
+            var enter = il.Create(OpCodes.Ldc_I4, site);
+            il.InsertBefore(newobj, enter);
+            il.InsertBefore(newobj, il.Create(OpCodes.Call, probes.EnterConstruction));
+            Retarget(body, newobj, enter);
+            il.InsertAfter(newobj, il.Create(OpCodes.Call, probes.ExitConstruction));
+        }
+    }
+
+    /// <summary>Bits of a construction site id that number the sites of one method; the method id fills the rest.</summary>
+    private const int SiteBits = 10;
+
+    /// <summary>
+    /// Where the arguments of <paramref name="newobj"/> start to be built: the first instruction of the
+    /// argument expressions or, earlier, of the definitions of the locals they read (and of the locals
+    /// those read), as long as all of it is straight-line code (<see cref="StraightLine"/>). Null when
+    /// the arguments are not built in straight-line code; the construction then starts at the call.
+    /// </summary>
+    /// <param name="newobj">A <c>newobj</c> instruction.</param>
+    /// <param name="flow">Straight-line facts of its body.</param>
+    private static Instruction? ConstructionStart(Instruction newobj, StraightLine flow)
+    {
+        if (flow.ValueStart(newobj, StackOrigins.Pops(newobj) ?? 0) is not { } start)
+        {
+            return null;
+        }
+
+        var definitions = new HashSet<Instruction>();
+        var ranges = new Stack<(Instruction From, Instruction To)>();
+        ranges.Push((start, newobj));
+        while (ranges.TryPop(out var range))
+        {
+            for (var instruction = range.From; instruction != range.To; instruction = instruction.Next)
+            {
+                if (instruction.OpCode.Code is not (Code.Ldloc or Code.Ldloca) || instruction.Operand is not VariableDefinition local
+                    || flow.Definition(instruction, local) is not { } store || !definitions.Add(store)
+                    || flow.ValueStart(store, 1) is not { } from)
+                {
+                    continue;
+                }
+
+                ranges.Push((from, store));
+                if (flow.Before(from, start))
+                {
+                    start = from;
+                }
+            }
+        }
+
+        return start;
+    }
+
+    /// <summary>
+    /// Walks back through the straight-line code of a method body: instructions that neither branch nor
+    /// are branch targets or exception handler boundaries. A value built there was built on every path
+    /// to its use.
+    /// </summary>
+    private sealed class StraightLine
+    {
+        /// <summary>How far back a walk goes.</summary>
+        private const int MaxSteps = 256;
+
+        /// <summary>Branch targets, switch targets and exception handler boundaries.</summary>
+        private readonly HashSet<Instruction> _targets = [];
+
+        /// <summary>Position of every instruction in the body.</summary>
+        private readonly Dictionary<Instruction, int> _positions = [];
+
+        /// <summary>Collects the branch targets and positions of <paramref name="body"/>.</summary>
+        /// <param name="body">Method body with short branches already expanded.</param>
+        public StraightLine(MethodBody body)
+        {
+            for (var i = 0; i < body.Instructions.Count; i++)
+            {
+                var instruction = body.Instructions[i];
+                _positions[instruction] = i;
+                if (instruction.Operand is Instruction target)
+                {
+                    _targets.Add(target);
+                }
+                else if (instruction.Operand is Instruction[] table)
+                {
+                    _targets.UnionWith(table);
+                }
+            }
+
+            foreach (var handler in body.ExceptionHandlers)
+            {
+                _targets.UnionWith(new[] { handler.TryStart, handler.TryEnd, handler.HandlerStart, handler.HandlerEnd, handler.FilterStart }.OfType<Instruction>());
+            }
+        }
+
+        /// <summary>True when <paramref name="first"/> comes before <paramref name="second"/> in the body.</summary>
+        /// <param name="first">An instruction of the body.</param>
+        /// <param name="second">An instruction of the body.</param>
+        public bool Before(Instruction first, Instruction second) => _positions[first] < _positions[second];
+
+        /// <summary>
+        /// The first instruction of the code that pushes the <paramref name="values"/> values
+        /// <paramref name="consumer"/> takes; null when there are none or when that code is not
+        /// straight-line (a branch inside, or a jump to the consumer).
+        /// </summary>
+        /// <param name="consumer">Instruction taking the values.</param>
+        /// <param name="values">How many values it takes.</param>
+        public Instruction? ValueStart(Instruction consumer, int values)
+        {
+            if (values <= 0 || _targets.Contains(consumer))
+            {
+                return null;
+            }
+
+            var needed = values;
+            for (var (instruction, steps) = (consumer.Previous, 0); instruction is not null && steps < MaxSteps; (instruction, steps) = (instruction.Previous, steps + 1))
+            {
+                // A prefix belongs to the instruction after it.
+                if (instruction.OpCode.OpCodeType == OpCodeType.Prefix)
+                {
+                    continue;
+                }
+
+                if (instruction.OpCode.FlowControl is not (FlowControl.Next or FlowControl.Call)
+                    || StackOrigins.Pops(instruction) is not { } pops || StackOrigins.Pushes(instruction) is not { } pushes)
+                {
+                    return null;
+                }
+
+                needed += pops - pushes;
+                if (needed == 0)
+                {
+                    while (instruction.Previous is { OpCode.OpCodeType: OpCodeType.Prefix } prefix)
+                    {
+                        instruction = prefix;
+                    }
+
+                    return instruction;
+                }
+
+                if (needed < 0 || _targets.Contains(instruction))
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The <c>stloc</c> of <paramref name="local"/> that the value <paramref name="use"/> reads comes
+        /// from, when it is in the same straight-line code; null otherwise (a parameter, a definition
+        /// before a branch or loop).
+        /// </summary>
+        /// <param name="use">An instruction reading the local.</param>
+        /// <param name="local">The local.</param>
+        public Instruction? Definition(Instruction use, VariableDefinition local)
+        {
+            for (var (instruction, steps) = (use.Previous, 0); instruction is not null && steps < MaxSteps; (instruction, steps) = (instruction.Previous, steps + 1))
+            {
+                if (instruction.OpCode.FlowControl is not (FlowControl.Next or FlowControl.Call or FlowControl.Meta))
+                {
+                    return null;
+                }
+
+                if (instruction.OpCode.Code == Code.Stloc && instruction.Operand == local)
+                {
+                    return instruction;
+                }
+
+                if (_targets.Contains(instruction))
+                {
+                    return null;
+                }
+            }
+
+            return null;
         }
     }
 
