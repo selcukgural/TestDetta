@@ -1,6 +1,10 @@
 {
   "version": 1,
   "archives": {
+    "aspnetcore-runtime/8.0.31/linux-arm64": {
+      "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-linux-arm64.tar.gz",
+      "sha512": "a6871d002860d8cb920360c98f6fdb4fa8470d34139b83b900aed512c4127e7ed221d19d6e1d88bb3f51f3e5369e680f5e517e5c35189935812a8ad774f55c5a"
+    },
     "aspnetcore-runtime/8.0.31/linux-x64": {
       "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-linux-x64.tar.gz",
       "sha512": "d870c948d54609939886725e29d8b9c235277e9d63b2d77adefcf38563b66932c480f1b980f1f183e2b2ac1c09fc066730ea080adf1148efdd654b1503e69ec0"
@@ -12,6 +16,10 @@
     "aspnetcore-runtime/8.0.31/osx-x64": {
       "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-osx-x64.tar.gz",
       "sha512": "49c4bc43e80960f0c334c08913db0f0d7591f30bde9a3b0fc376e7e58628bc56fbfd4e9473406b9bfe53d96705f473eac112c3aaf2dd85ad4d709925040b86bb"
+    },
+    "sdk/10.0.401/linux-arm64": {
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-arm64.tar.gz",
+      "sha512": "58ace73ced6b4360754689a686bdfb8a317f4da6cb8bb416dbc7d0ba9f47e43e3c09f5eb1f1a1cfaacbd10df9558da4882bf2a5e195d6ab56a02c1f9f76102ed"
     },
     "sdk/10.0.401/linux-x64": {
       "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-x64.tar.gz",

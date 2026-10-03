@@ -55,7 +55,8 @@ in CI with the same corpus entry run the same bits, and the report names them.
   (`builds.dotnet.microsoft.com/dotnet/release-metadata/<major>/releases.json`) and are verified
   against SHA-512 values in `eval/toolchains.lock.json`, committed like `packages.lock.json`:
   - A version missing from the lock is resolved from the metadata and added for every supported
-    RID (`osx-arm64`, `osx-x64`, `linux-x64`), so a lock written on the Mac serves CI too.
+    RID (`osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64`), so a lock written on the Mac serves CI
+    too. (`linux-arm64` was missing until 2026-10-03: tests pinning `arm64` failed on Linux CI only.)
   - With `CI=true` the lock is read-only: a missing entry fails the run (locked mode, as for NuGet).
   - A download whose hash differs from the lock fails the run; nothing is extracted.
 - Extraction with `System.Formats.Tar` into a scratch directory per archive. The SDK archive is the

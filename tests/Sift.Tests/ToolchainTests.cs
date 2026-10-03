@@ -113,6 +113,29 @@ public sealed class ToolchainTests : IDisposable
     }
 
     [Theory]
+    [InlineData(true, "arm64")]
+    [InlineData(true, "x64")]
+    [InlineData(false, "arm64")]
+    [InlineData(false, "x64")]
+    public void Every_platform_a_toolchain_can_run_on_is_supported_and_locked(bool macOS, string architecture)
+    {
+        // A toolchain pinned to arm64 resolved to linux-arm64 on Linux CI, which was neither supported
+        // nor locked; only the Mac's identifiers were ever exercised locally.
+        var rid = Toolchain.RidFor(macOS, architecture);
+        Assert.Contains(rid, Toolchain.SupportedRids);
+
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!File.Exists(Path.Combine(root.FullName, "eval", "toolchains.lock.json")))
+        {
+            root = root.Parent ?? throw new InvalidOperationException("eval/toolchains.lock.json not found above the test output");
+        }
+
+        var archives = JsonDocument.Parse(File.ReadAllText(Path.Combine(root.FullName, "eval", "toolchains.lock.json"))).RootElement.GetProperty("archives");
+        Assert.True(archives.TryGetProperty($"sdk/10.0.401/{rid}", out _), rid);
+        Assert.True(archives.TryGetProperty($"aspnetcore-runtime/8.0.31/{rid}", out _), rid);
+    }
+
+    [Theory]
     [InlineData("10.0.401", "arm64", true)]
     [InlineData("11.0.100-preview.1.25120.13", null, true)]
     [InlineData("../../etc", null, false)]
