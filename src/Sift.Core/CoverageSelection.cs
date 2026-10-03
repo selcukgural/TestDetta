@@ -273,6 +273,7 @@ internal sealed class CoverageSelection
             if (map.ClassesRunningType(typeName) is not { } classes
                 || map.TypeRanOutsideTests(typeName)
                 || map.TypeRanDuringInitialization(typeName)
+                || map.TypeHasExternalCallback(typeName)
                 || (classes.Count > 0 && (map.BucketsRunningType(typeName) == 1 || map.TypeRanInOneBucketPerProcess(typeName))))
             {
                 return false;
@@ -398,7 +399,7 @@ internal sealed class CoverageSelection
         // initializer was credited to whichever class came first.
         if (change.MemberName is null)
         {
-            return map.TypeRanDuringInitialization(change.TypeName);
+            return map.TypeRanDuringInitialization(change.TypeName) || map.TypeHasExternalCallback(change.TypeName);
         }
 
         var isConstructor = change.MemberName.StartsWith(".ctor", StringComparison.Ordinal);
@@ -408,7 +409,9 @@ internal sealed class CoverageSelection
             return false;
         }
 
-        if (map.RanDuringInitialization(change.TypeName, name))
+        // A third-party library that calls the member back may have kept what it produced for later
+        // classes, which the map does not credit (Castle's proxy generation hook in NSubstitute).
+        if (map.RanDuringInitialization(change.TypeName, name) || map.IsExternalCallback(change.TypeName, name))
         {
             return true;
         }

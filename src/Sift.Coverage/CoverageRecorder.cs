@@ -173,7 +173,13 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
 
             var map = BuildMap(request, instrumentation.Methods, resultsFiles);
-            map = map with { FailedClasses = Untrusted(runs, map), Generated = generated, Timings = suiteParallelism ? null : map.Timings };
+            map = map with
+            {
+                FailedClasses = Untrusted(runs, map),
+                Generated = generated,
+                Timings = suiteParallelism ? null : map.Timings,
+                ExternalCallbacks = instrumentation.ExternalCallbacks,
+            };
             LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
             return (map, runs.All(static r => r.Result.ExitCode == 0));
         }

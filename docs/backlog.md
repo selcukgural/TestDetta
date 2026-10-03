@@ -19,6 +19,16 @@ that report numbers (value reporting) only once the numbers are proven right.
   docs/design/opaque-project-references.md): a reference with `OutputItemType` or
   `ReferenceOutputAssembly="false"` is opaque, and an affected opaque reference makes its consumer
   a project-level change. Found in protobuf-net; 20 of 41 corpus repositories have such references.
+- **Framework caches that call repository code back** (2026-10-03, docs/design/external-callbacks.md):
+  third-party callbacks are now run-once code. .NET's own callbacks are not, because most are
+  per use. Those it caches (`JsonConverterFactory.CreateConverter`, `TypeConverter`, ...) and
+  delegates handed to a third-party library (`AddSingleton(sp => ...)`) could still be credited
+  to the first class only. Needs a list of caching framework contracts, or a measurement on the
+  corpus.
+- **Precision: attribute polyfills reached by the name spread** (NSubstitute, 98.5% of its
+  extra selection): a repository-declared `System.Diagnostics.CodeAnalysis.MaybeNullAttribute`
+  is "affected and nothing names it", so the whole project runs. The code of an attribute class
+  runs only when reflection reads the attribute.
 - **Direct changes to a member's metadata** (2026-10-03, docs/design/reflection-types-with-coverage.md).
   A member reached through its attributes or parameter defaults is now traced through its type.
   A change to a member's own attributes (`[ProtoMember(1)]` → `(2)`) is still answered by the classes

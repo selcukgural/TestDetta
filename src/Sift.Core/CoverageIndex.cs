@@ -33,6 +33,12 @@ internal sealed class CoverageIndex
     /// <summary>Buckets (test classes and fixtures) that ran a member of each type or its nested types.</summary>
     private readonly Dictionary<string, HashSet<string>> _bucketsByType = new(StringComparer.Ordinal);
 
+    /// <summary>Members a third-party library calls back (<see cref="CoverageMap.ExternalCallbacks"/>).</summary>
+    private readonly HashSet<CoveredMethod> _externalCallbacks = [];
+
+    /// <summary>Types (and the types they are nested in) with a member in <see cref="_externalCallbacks"/>.</summary>
+    private readonly HashSet<string> _externalCallbackTypes = new(StringComparer.Ordinal);
+
     /// <summary>Types (and the types they are nested in) with a member in <see cref="_sharedInProcess"/>.</summary>
     private readonly HashSet<string> _sharedTypes = new(StringComparer.Ordinal);
 
@@ -146,7 +152,25 @@ internal sealed class CoverageIndex
         {
             _ambientTypes.UnionWith(EnclosingTypes(method.TypeName));
         }
+
+        foreach (var id in map.ExternalCallbacks ?? [])
+        {
+            _externalCallbacks.Add(map.Methods[id]);
+            _externalCallbackTypes.UnionWith(EnclosingTypes(map.Methods[id].TypeName));
+        }
     }
+
+    /// <summary>
+    /// True when an overload of the member is called back by a third-party library, which may keep
+    /// what it produced for every later caller (see <see cref="CoverageMap.ExternalCallbacks"/>).
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name.</param>
+    public bool IsExternalCallback(string typeName, string member) => _externalCallbacks.Contains(new CoveredMethod(typeName, member));
+
+    /// <summary>True when a member of <paramref name="typeName"/> or a type nested in it is called back by a third-party library.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public bool TypeHasExternalCallback(string typeName) => _externalCallbackTypes.Contains(typeName);
 
     /// <summary>Records that <paramref name="bucket"/> ran a member of <paramref name="type"/>.</summary>
     /// <param name="type">Qualified type name.</param>

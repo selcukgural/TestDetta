@@ -112,6 +112,15 @@ public sealed record CoverageMap(
     public IReadOnlyList<int>? SharedInProcess { get; init; }
 
     /// <summary>
+    /// Methods (indexes into <see cref="Methods"/>) that implement an interface or override a method of
+    /// a third-party library (neither the repository's nor the .NET shared framework's), such as a
+    /// Castle DynamicProxy <c>IProxyGenerationHook</c>. Such a library calls them and may keep the
+    /// result for every later caller (Castle builds a proxy type once per interface), so the classes
+    /// that ran them are not all that depend on them. Null for maps recorded before this was kept.
+    /// </summary>
+    public IReadOnlyList<int>? ExternalCallbacks { get; init; }
+
+    /// <summary>
     /// Code source generators wrote into the recorded assemblies, read from their PDBs. It is not in
     /// the source tree, so the source index adds it from here for name tracing.
     /// </summary>
