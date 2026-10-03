@@ -2,11 +2,12 @@ name: Nightly corpus
 
 # A small synthetic evaluation of real repositories every night: Sift must miss no failing test, and
 # the summary compares the night with the previous successful one (comparison.md).
-# Kept to about 30-40 minutes so it stays a nightly check, not a second full evaluation;
-# the full corpus runs on a dedicated machine. A miss or an evaluation error fails the run.
+# Kept to about 30-40 minutes on a 2-core runner and run once a week (Monday night) so the private
+# repository's Actions minutes last; the full corpus runs on a dedicated machine. A miss or an
+# evaluation error fails the run.
 on:
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 1 * * 1'
   workflow_dispatch:
 
 permissions:

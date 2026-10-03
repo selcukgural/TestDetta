@@ -1,15 +1,22 @@
 name: CI
 
+# The repository is private and Actions minutes are limited (about 3,000 a month): every push gets
+# only the quick job; the coverage map is recorded once a week or by hand.
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   test:
+    # Recording takes about 20 minutes, so a push does not record.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,11 +44,12 @@ jobs:
         with:
           global-json-file: global.json
 
-      # On main every commit gets a coverage map; recording is also a full test run, one test at a
-      # time, so it takes several times the plain run. Four processes gained little: the slow tests
-      # build real projects and compete for the same cores. The quick job below gives the signal.
+      # Weekly or by hand, main gets a coverage map; recording is also a full test run (Slow tests
+      # included), one test at a time, so it takes several times the plain run. Four processes gained
+      # little: the slow tests build real projects and compete for the same cores. Maps a few commits
+      # old are used through the drift bridge.
       - name: Record coverage
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: ./
         with:
           mode: record
@@ -55,10 +63,10 @@ jobs:
           mode: test
           setup-dotnet: 'false'
 
-  # The pass/fail signal within three minutes, while recording the coverage map takes longer. The
-  # Slow tests build and run real projects; they run in the recording above (on every push to main)
-  # and before every push locally.
+  # The pass/fail signal within three minutes on every push. The Slow tests build and run real
+  # projects; they run in the weekly recording above and before every push locally.
   quick:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
