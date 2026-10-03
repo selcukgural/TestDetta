@@ -56,9 +56,15 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
                 affectsWholeProject |= definedAffects;
                 foreach (var symbol in definedSymbols)
                 {
-                    if (!symbols.Contains(symbol))
+                    var same = symbols.FindIndex(s => s with { MetadataChanged = false } == symbol with { MetadataChanged = false });
+                    if (same < 0)
                     {
                         symbols.Add(symbol);
+                    }
+                    else if (symbol.MetadataChanged)
+                    {
+                        // Metadata changed under one of the views: the change counts as one.
+                        symbols[same] = symbol;
                     }
                 }
             }
@@ -129,7 +135,12 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
 
             if (!SignificantEquals(oldDeclaration.Node, newDeclaration.Node, oldDeclaration.Descend))
             {
-                symbols.Add(new SymbolChange(oldDeclaration.TypeName, oldDeclaration.MemberName, SymbolChangeKind.Modified));
+                symbols.Add(new SymbolChange(oldDeclaration.TypeName, oldDeclaration.MemberName, SymbolChangeKind.Modified)
+                {
+                    MetadataChanged = !SignificantEquals(
+                        DeclarationWalker.MetadataNodes(oldDeclaration.Node, oldDeclaration.Descend),
+                        DeclarationWalker.MetadataNodes(newDeclaration.Node, newDeclaration.Descend)),
+                });
             }
         }
 
@@ -186,7 +197,8 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
                 continue;
             }
 
-            symbols.Add(new SymbolChange(declaration.TypeName, null, SymbolChangeKind.Modified));
+            // A changed using can make an attribute name bind to another type: metadata may have changed.
+            symbols.Add(new SymbolChange(declaration.TypeName, null, SymbolChangeKind.Modified) { MetadataChanged = true });
         }
 
         var hasTopLevelStatements =

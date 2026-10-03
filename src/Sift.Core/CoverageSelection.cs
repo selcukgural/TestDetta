@@ -244,7 +244,9 @@ internal sealed class CoverageSelection
         var (answers, resolved, _) = Answers(change, owner);
         var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
         SelectAll(answers, reached ? $"ran {member}, which names the changed code" : $"ran {member}, which changed");
-        return resolved && typeUsersKnown && answers.Count > 0;
+        // Changed metadata is read through reflection without running the code: the classes that ran
+        // it stay selected, and the change is traced through its type as well.
+        return resolved && typeUsersKnown && !change.MetadataChanged && answers.Count > 0;
     }
 
     /// <summary>

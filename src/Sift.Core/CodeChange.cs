@@ -24,7 +24,16 @@ public enum SymbolChangeKind
 /// or the whole type being added or removed.
 /// </param>
 /// <param name="Kind">Whether the declaration was added, removed or modified.</param>
-public sealed record SymbolChange(string TypeName, string? MemberName, SymbolChangeKind Kind);
+public sealed record SymbolChange(string TypeName, string? MemberName, SymbolChangeKind Kind)
+{
+    /// <summary>
+    /// True for a <see cref="SymbolChangeKind.Modified"/> declaration whose metadata changed: its
+    /// attributes or parameter default values (<see cref="DeclarationWalker.MetadataNodes"/>).
+    /// Reflection reads them without running the declaration's code, so the classes a coverage map
+    /// credits with running it are not all that see the change.
+    /// </summary>
+    public bool MetadataChanged { get; init; }
+}
 
 /// <summary>The code-level difference of one C# file.</summary>
 /// <param name="Path">File path relative to the repository root, as git prints it.</param>

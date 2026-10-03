@@ -828,6 +828,41 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.SlugTests", "Shop.Tests.TaxTests"], Select().TestClasses);
     }
 
+    [Fact]
+    public void Change_to_a_members_attribute_is_traced_through_its_type_even_with_a_map()
+    {
+        // A serializer reads the attribute without running Tax: whatever names PriceCalculator may see it.
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public decimal Tax", "[System.ComponentModel.DefaultValue(1)] public decimal Tax");
+        _repo.Commit("attribute");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+
+        _repo.Replace("src/Shop/PriceCalculator.cs", "DefaultValue(1)", "DefaultValue(2)");
+        Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Change_to_a_parameter_default_is_traced_through_its_type_even_with_a_map()
+    {
+        // The default is compiled into Total's call, and reflection reads it from the metadata too.
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public decimal Tax(decimal net) => net * 0.2m;", "public decimal Tax(decimal net, decimal rate = 0.2m) => net * rate;");
+        _repo.Commit("default");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+
+        _repo.Replace("src/Shop/PriceCalculator.cs", "rate = 0.2m", "rate = 0.25m");
+        Assert.Equal(["Shop.Tests.OrderServiceTests", "Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
+    [Fact]
+    public void Body_change_of_an_attributed_member_is_still_answered_by_the_map()
+    {
+        _repo.Replace("src/Shop/PriceCalculator.cs", "public decimal Tax", "[System.ComponentModel.DefaultValue(1)] public decimal Tax");
+        _repo.Commit("attribute");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]));
+
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+        Assert.Equal(["Shop.Tests.TaxTests"], Select().TestClasses);
+    }
+
     /// <summary>Makes PingHandler call Slug.Make and adds two classes that find it through reflection.</summary>
     private void WriteHandlerTests()
     {

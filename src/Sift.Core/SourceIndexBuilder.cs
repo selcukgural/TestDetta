@@ -391,13 +391,10 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     private static FrozenSet<string> CollectMetadataReferences(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend)
     {
         HashSet<string>? references = null;
-        foreach (var child in node.DescendantNodes(n => descend(n, node)))
+        foreach (var metadata in DeclarationWalker.MetadataNodes(node, descend))
         {
-            if (child is AttributeListSyntax or EqualsValueClauseSyntax { Parent: ParameterSyntax })
-            {
-                references ??= new HashSet<string>(StringComparer.Ordinal);
-                AddReferences(child, DeclarationWalker.DescendAll, references);
-            }
+            references ??= new HashSet<string>(StringComparer.Ordinal);
+            AddReferences(metadata, DeclarationWalker.DescendAll, references);
         }
 
         return references?.ToFrozenSet(StringComparer.Ordinal) ?? [];

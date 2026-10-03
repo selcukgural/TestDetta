@@ -77,6 +77,17 @@ default values. Coverage records only code that runs. That means:
    `InjectedServiceTests`, where a DI singleton built before the first test is used through an
    interface no test class names.
 
+### Direct metadata changes (2026-10-03, later the same day)
+
+A member that changes itself has the same problem when its attributes or parameter defaults change
+(`[ProtoMember(1)]` → `(2)`). The change detector compares each modified declaration's metadata nodes
+(`DeclarationWalker.MetadataNodes`, shared with the source index) and sets
+`SymbolChange.MetadataChanged`. A changed using also sets it on every type of the file, since an
+attribute name may bind to another type. With the flag, `CoverageSelection.TryResolve` keeps the
+classes the maps name but does not stop there. The propagation seeds the member as a `Metadata`
+reach, so its type name spreads. A parameter default is also compiled into every call site, so the
+callers change too (`Change_to_a_parameter_default_is_traced_through_its_type_even_with_a_map`).
+
 A whole-project reason now ends with the chain that brought the type in
 (`ImpactPropagation.ExplainSeeded`), so a user can see why a change ran an unrelated project.
 

@@ -98,6 +98,37 @@ public sealed class CodeChangeDetectorTests
         Assert.NotEmpty(change.Symbols);
     }
 
+    [Theory]
+    [InlineData("public int Place(string sku) => 1;", "[Obsolete] public int Place(string sku) => 1;")]
+    [InlineData("public int Place(string sku) => 1;", "public int Place([NotNull] string sku) => 1;")]
+    [InlineData("public int Place(string sku, int quantity) => quantity;", "public int Place(string sku, int quantity = 1) => quantity;")]
+    [InlineData("public string Name { get; } = \"orders\";", "public string Name { [Pure] get; } = \"orders\";")]
+    public void Attribute_or_default_value_change_is_a_metadata_change(string before, string after)
+    {
+        var change = Detect(Original, Original.Replace(before, after));
+
+        var symbol = Assert.Single(change.Symbols);
+        Assert.Equal(SymbolChangeKind.Modified, symbol.Kind);
+        Assert.True(symbol.MetadataChanged);
+    }
+
+    [Fact]
+    public void Body_change_of_an_attributed_member_is_not_a_metadata_change()
+    {
+        var edited = Original.Replace("public int Place(string sku) => 1;", "[Obsolete] public int Place(string sku) => 1;");
+
+        var symbol = Assert.Single(Detect(edited, edited.Replace("=> 1;", "=> 2;")).Symbols);
+        Assert.False(symbol.MetadataChanged);
+    }
+
+    [Fact]
+    public void Type_attribute_change_is_a_type_level_metadata_change()
+    {
+        var symbol = Assert.Single(Detect(Original, Original.Replace("public class OrderService", "[Serializable] public class OrderService")).Symbols);
+
+        Assert.Equal(new SymbolChange("App.Orders.OrderService", null, SymbolChangeKind.Modified) { MetadataChanged = true }, symbol);
+    }
+
     [Fact]
     public void Using_change_marks_every_type_in_the_file()
     {
@@ -107,6 +138,8 @@ public sealed class CodeChangeDetectorTests
         Assert.Equal(
             ["App.Orders.OrderService", "App.Orders.Status"],
             change.Symbols.Where(s => s is { MemberName: null, Kind: SymbolChangeKind.Modified }).Select(s => s.TypeName).Order());
+        // A using can change which attribute type a name binds to.
+        Assert.All(change.Symbols, static s => Assert.True(s.MetadataChanged));
     }
 
     [Fact]

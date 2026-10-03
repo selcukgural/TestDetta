@@ -220,6 +220,24 @@ internal static class DeclarationWalker
     public static bool DescendTypeShell(SyntaxNode node, SyntaxNode type) =>
         node == type || node.Parent != type || node is not MemberDeclarationSyntax;
 
+    /// <summary>
+    /// The parts of a declaration the compiler stores as metadata, which reflection reads without
+    /// running any code: attribute lists (also on parameters, accessors and return values) and
+    /// parameter default values. Nested declarations are left out as <paramref name="descend"/> says.
+    /// </summary>
+    /// <param name="node">Declaration node.</param>
+    /// <param name="descend">Which child nodes belong to the declaration.</param>
+    public static IEnumerable<SyntaxNode> MetadataNodes(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend)
+    {
+        foreach (var child in node.DescendantNodes(n => descend(n, node)))
+        {
+            if (child is AttributeListSyntax or EqualsValueClauseSyntax { Parent: ParameterSyntax })
+            {
+                yield return child;
+            }
+        }
+    }
+
     /// <summary>Includes everything below a node.</summary>
     /// <param name="node">Candidate node.</param>
     /// <param name="root">Declaration node.</param>

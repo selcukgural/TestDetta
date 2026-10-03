@@ -29,12 +29,10 @@ that report numbers (value reporting) only once the numbers are proven right.
   extra selection): a repository-declared `System.Diagnostics.CodeAnalysis.MaybeNullAttribute`
   is "affected and nothing names it", so the whole project runs. The code of an attribute class
   runs only when reflection reads the attribute.
-- **Direct changes to a member's metadata** (2026-10-03, docs/design/reflection-types-with-coverage.md).
-  A member reached through its attributes or parameter defaults is now traced through its type.
-  A change to a member's own attributes (`[ProtoMember(1)]` → `(2)`) is still answered by the classes
-  that ran its code: the change detector reports "modified" without saying whether the declaration
-  or only the body changed. It should report declaration changes so these are traced through the
-  type as well.
+- ~~**Direct changes to a member's metadata**~~ (done 2026-10-03,
+  docs/design/reflection-types-with-coverage.md "Direct metadata changes"): the change detector
+  reports `MetadataChanged` when a declaration's attributes or parameter defaults changed (or a
+  using of its file). Such a change keeps the classes the map names and is traced through its type.
 - ~~Stable mutant sample across Sift versions~~ (done, 99347df): each candidate's place and
   kind come from a hash of the member and the seed, so adding or dropping a candidate (a graph
   fix) changes at most that pick and stored outcomes stay usable. Samples differ from round 1's.

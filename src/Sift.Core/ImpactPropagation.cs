@@ -55,8 +55,9 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         Code,
 
         /// <summary>
-        /// Its attributes or parameter defaults name a reached name: that is metadata, which reflection
-        /// reads without running the member, so coverage cannot say who depends on it.
+        /// Its attributes or parameter defaults name a reached name, or are a change themselves
+        /// (<see cref="SymbolChange.MetadataChanged"/>): that is metadata, which reflection reads without
+        /// running the member, so coverage cannot say who depends on it.
         /// </summary>
         Metadata,
     }
@@ -127,7 +128,8 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
 
         if (index.FindMember(change.TypeName, change.MemberName, projectPath) is { } member)
         {
-            MarkAffected(member, "it changed", from: null, Reach.Change);
+            // Changed metadata is read through the type, by whatever names it.
+            MarkAffected(member, "it changed", from: null, change.MetadataChanged ? Reach.Metadata : Reach.Change);
             return;
         }
 
