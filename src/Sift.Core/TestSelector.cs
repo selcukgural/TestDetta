@@ -275,6 +275,17 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             {
                 AddFallback(fallbacks, affected.Project.Path, $"{Path.GetFileName(affected.Project.Path)} is not a C# project");
             }
+
+            // An analyzer or source generator runs inside the consumer's compiler, and an output the
+            // consumer does not compile against is run in another process if at all: neither name
+            // tracing nor coverage sees what the change does there, so the consumer changed as a whole.
+            foreach (var consumer in graph.OpaqueConsumersOf(affected.Project.Path))
+            {
+                AddFallback(
+                    fallbacks,
+                    consumer.Path,
+                    $"it uses {Path.GetFileName(affected.Project.Path)}, which is affected, as an analyzer or source generator or without compiling against it");
+            }
         }
 
         return fallbacks;

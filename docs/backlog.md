@@ -15,17 +15,10 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
-- **Project references used as an analyzer or source generator** (found 2026-10-03 in the precision
-  round, protobuf-net). A `ProjectReference` with `OutputItemType="Analyzer"` runs the referenced
-  code inside the compiler. A change to it (or to sources it compiles in: protobuf-net.BuildTools
-  compiles all of protobuf-net.Core and protobuf-net.Reflection) changes the consumer's compiled
-  output, which neither name tracing nor coverage can see. Today the graph treats it as an
-  ordinary runtime dependency, so a possible miss. `ReferenceOutputAssembly="false"` without an
-  analyzer is build order only (protobuf-net.Core → BuildTools, for packing). The graph adds the
-  dependency anyway (over-selection), unless the consumer copies the output to run it (a CLI under
-  test), which is again invisible. Needs edge kinds in the evaluator and graph: an analyzer edge
-  makes a change in the referenced closure a project-level change of the consumer. The ROA=false
-  case needs a decision (safe default: the same). Design before code; check the corpus for both.
+- ~~**Project references used as an analyzer or source generator**~~ (done 2026-10-03,
+  docs/design/opaque-project-references.md): a reference with `OutputItemType` or
+  `ReferenceOutputAssembly="false"` is opaque, and an affected opaque reference makes its consumer
+  a project-level change. Found in protobuf-net; 20 of 41 corpus repositories have such references.
 - **Direct changes to a member's metadata** (2026-10-03, docs/design/reflection-types-with-coverage.md).
   A member reached through its attributes or parameter defaults is now traced through its type.
   A change to a member's own attributes (`[ProtoMember(1)]` → `(2)`) is still answered by the classes

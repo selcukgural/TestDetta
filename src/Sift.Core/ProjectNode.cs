@@ -78,6 +78,18 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     /// </summary>
     public IReadOnlyList<string> UnknownItemPatterns { get; init; } = [];
 
+    /// <summary>
+    /// The part of <see cref="References"/> the project does not compile against: references with an
+    /// <c>OutputItemType</c> (<c>Analyzer</c>: an analyzer or source generator that runs inside the
+    /// compiler) or with <c>ReferenceOutputAssembly="false"</c> (build order, or an output the project
+    /// copies and runs). What such a project does reaches this one through its build or through
+    /// another process, where neither name tracing nor coverage can follow it.
+    /// </summary>
+    public IReadOnlySet<string> OpaqueReferences { get; init; } = new HashSet<string>(Paths.Comparer);
+
+    /// <summary>The part of <see cref="UnknownReferencePatterns"/> that comes from references as described in <see cref="OpaqueReferences"/>.</summary>
+    public IReadOnlyList<string> UnknownOpaqueReferencePatterns { get; init; } = [];
+
     /// <summary>True when some <c>ProjectReference</c> could not be resolved; see <see cref="UnknownReferencePatterns"/>.</summary>
     public bool HasUnknownReferences => UnknownReferencePatterns.Count > 0;
 

@@ -129,6 +129,8 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 IsTestProject = node.IsTestProject || project.IsTestProject || project.Packages.Any(TestPackages.Contains),
                 References = project.References,
                 UnknownReferencePatterns = [],
+                OpaqueReferences = project.OpaqueReferences,
+                UnknownOpaqueReferencePatterns = [],
                 UnknownItemPatterns = [],
                 ExternalItems = [],
                 PackageReferences = packages,
@@ -163,6 +165,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
         var projectDir = Paths.Normalize(Path.GetDirectoryName(projectPath)!);
         var references = new List<string>();
+        var opaque = new HashSet<string>(Paths.Comparer);
         var isTest = false;
 
         // Elements are matched by local name so legacy projects with the MSBuild XML namespace also work.
@@ -177,6 +180,12 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     {
                         references.Add(reference);
                     }
+
+                    if (IsOpaqueReference(element))
+                    {
+                        opaque.Add(reference);
+                    }
+
                     break;
 
                 case "IsTestProject" when bool.TryParse(element.Value.Trim(), out var value) && value:
@@ -224,12 +233,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         var unknownReferences = new List<string>();
         foreach (var (include, declaringDirectory) in ExpandItems(inputs.ProjectReferences, inputs))
         {
-            var resolved = Resolve(include, projectDir, projectDir, inputs, declaringDirectory).ToList();
-            // A property expanded to a path that is not there was guessed wrong (conditions are not
-            // evaluated), and one with an assignment only MSBuild can compute may have another value
-            // altogether; a plain path that is not there names no project and is ignored as before.
-            var properties = PropertyReference().Matches(include).Select(static m => m.Groups[1].Value).Where(static p => !IsPathProperty(p)).ToList();
-            if (resolved.Count == 0 || properties.Any(inputs.IncompleteProperties.Contains) || properties.Count > 0 && resolved.Any(static r => !File.Exists(r)))
+            if (ResolveReference(include, declaringDirectory) is not { } resolved)
             {
                 unknownReferences.Add(PathPattern(include, projectDir, declaringDirectory));
                 continue;
@@ -239,6 +243,32 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             {
                 references.Add(reference);
             }
+        }
+
+        // The same includes again, for the references the project does not compile against.
+        var unknownOpaqueReferences = new List<string>();
+        foreach (var (include, declaringDirectory) in ExpandItems(inputs.OpaqueProjectReferences, inputs))
+        {
+            if (ResolveReference(include, declaringDirectory) is not { } resolved)
+            {
+                unknownOpaqueReferences.Add(PathPattern(include, projectDir, declaringDirectory));
+                continue;
+            }
+
+            opaque.UnionWith(resolved);
+        }
+
+        // A property expanded to a path that is not there was guessed wrong (conditions are not
+        // evaluated), and one with an assignment only MSBuild can compute may have another value
+        // altogether; a plain path that is not there names no project and is ignored as before.
+        // Null when the include cannot be resolved.
+        List<string>? ResolveReference(string include, string declaringDirectory)
+        {
+            var resolved = Resolve(include, projectDir, projectDir, inputs, declaringDirectory).ToList();
+            var properties = PropertyReference().Matches(include).Select(static m => m.Groups[1].Value).Where(static p => !IsPathProperty(p)).ToList();
+            return resolved.Count == 0 || properties.Any(inputs.IncompleteProperties.Contains) || properties.Count > 0 && resolved.Any(static r => !File.Exists(r))
+                ? null
+                : resolved;
         }
 
         if (unknownReferences.Count > 0 && logger.IsEnabled(LogLevel.Debug))
@@ -256,6 +286,8 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             ExternalItems = inputs.ExternalItems,
             HasUnresolvedInputs = inputs.Unresolved,
             UnknownReferencePatterns = unknownReferences,
+            OpaqueReferences = opaque,
+            UnknownOpaqueReferencePatterns = unknownOpaqueReferences,
             UnknownItemPatterns = inputs.UnknownItems,
             PackageReferences = inputs.Packages,
         };
@@ -266,6 +298,24 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             { } name when name.Length == 0 => node with { AssemblyNameUnresolved = true },
             { } name => node with { AssemblyName = name },
         };
+    }
+
+    /// <summary>
+    /// True for a <c>ProjectReference</c> the project does not compile against (see
+    /// <see cref="ProjectNode.OpaqueReferences"/>): an <c>OutputItemType</c> or
+    /// <c>ReferenceOutputAssembly="false"</c>, as an attribute or a child element. A value only MSBuild
+    /// can compute counts as opaque. Metadata set elsewhere (<c>ItemDefinitionGroup</c>, <c>Update</c>)
+    /// is seen only by the MSBuild evaluation.
+    /// </summary>
+    /// <param name="element">The <c>ProjectReference</c> element.</param>
+    private static bool IsOpaqueReference(XElement element)
+    {
+        string? Metadata(string name) =>
+            (element.Attribute(name)?.Value ?? element.Elements().FirstOrDefault(e => e.Name.LocalName == name)?.Value)?.Trim();
+
+        return Metadata("OutputItemType") is { Length: > 0 }
+               || Metadata("ReferenceOutputAssembly") is { } reference
+                  && (reference.Equals("false", StringComparison.OrdinalIgnoreCase) || reference.Contains("$(", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -311,6 +361,9 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         /// of the project itself that use a property or item. With the directory of the declaring file.
         /// </summary>
         public List<(string Include, string Directory)> ProjectReferences { get; } = [];
+
+        /// <summary>The part of <see cref="ProjectReferences"/> that <see cref="IsOpaqueReference"/> accepts.</summary>
+        public List<(string Include, string Directory)> OpaqueProjectReferences { get; } = [];
 
         /// <summary>Patterns for compile and content items whose path could not be resolved.</summary>
         public List<string> UnknownItems { get; } = [];
@@ -440,6 +493,10 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     if (!own || part.Contains("$(", StringComparison.Ordinal) || part.Contains("@(", StringComparison.Ordinal))
                     {
                         inputs.ProjectReferences.Add((part, directory));
+                        if (IsOpaqueReference(element))
+                        {
+                            inputs.OpaqueProjectReferences.Add((part, directory));
+                        }
                     }
                 }
 

@@ -131,3 +131,10 @@ SDK project it first depends on `AddImplicitDefineConstants`, so the SDK's frame
 `DeclarationWalker.ParseVariants` and `CodeChangeDetector` add one parse per set, reduced to the
 symbols a file's conditions name, next to the no-symbol and all-symbols parses. That way code under
 a mix of symbols (`#if A && !B`) is indexed and its changes are attributed.
+
+## Opaque references (2026-10-03)
+
+The target also reports `ProjectReference` items with an `OutputItemType` or
+`ReferenceOutputAssembly="false"` as `OpaqueReference` lines (evaluator version 3):
+`EvaluatedProject.OpaqueReferences`, `ProjectNode.OpaqueReferences`. See
+docs/design/opaque-project-references.md.

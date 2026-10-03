@@ -37,4 +37,7 @@ public sealed record EvaluatedProject(
     /// with the SDK's implicit framework symbols (<c>NET8_0_OR_GREATER</c>). Empty when unknown.
     /// </summary>
     public IReadOnlyList<IReadOnlyList<string>> SymbolSets { get; init; } = [];
+
+    /// <summary>The part of <see cref="References"/> it does not compile against; see <see cref="ProjectNode.OpaqueReferences"/>.</summary>
+    public IReadOnlySet<string> OpaqueReferences { get; init; } = new HashSet<string>(Paths.Comparer);
 }

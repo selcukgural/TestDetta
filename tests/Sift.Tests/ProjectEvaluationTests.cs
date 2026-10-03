@@ -171,6 +171,80 @@ public sealed class ProjectEvaluationTests : IDisposable
     }
 
     [Fact]
+    public void References_not_compiled_against_are_reported_as_opaque()
+    {
+        var evaluated = MsBuildProjectEvaluator.Parse(
+        [
+            "Project\t/r/T.csproj\t/r/T.csproj\ttrue\tT\t",
+            "Reference\t/r/T.csproj\t/r/Lib.csproj\t\t\t",
+            "Reference\t/r/T.csproj\t/r/Gen.csproj\t\t\t",
+            "OpaqueReference\t/r/T.csproj\t/r/Gen.csproj\t\t\t",
+        ]);
+
+        Assert.Equal(["/r/Gen.csproj", "/r/Lib.csproj"], evaluated["/r/T.csproj"].References);
+        Assert.Equal(["/r/Gen.csproj"], evaluated["/r/T.csproj"].OpaqueReferences);
+    }
+
+    [Fact]
+    [Trait("Category", "Slow")]
+    public void Msbuild_finds_opaque_references_whatever_sets_their_metadata()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write("src/Lib/Lib.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+        _repo.Write("src/Gen/Gen.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup></Project>""");
+        _repo.Write("src/Tool/Tool.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+        // Metadata from an Update item and from an item definition: only evaluation sees these.
+        _repo.Write("tests/T/T.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>
+              <ItemDefinitionGroup><ProjectReference><Private>false</Private></ProjectReference></ItemDefinitionGroup>
+              <ItemGroup>
+                <ProjectReference Include="../../src/Lib/Lib.csproj" />
+                <ProjectReference Include="../../src/Gen/Gen.csproj" />
+                <ProjectReference Update="../../src/Gen/Gen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+                <ProjectReference Include="../../src/Tool/Tool.csproj" Condition="'$(TargetFramework)' == 'net10.0'" ReferenceOutputAssembly="$([System.String]::Concat('fal', 'se'))" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var evaluator = new MsBuildProjectEvaluator(NullLoggerFactory.Instance);
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance, evaluator).Load(_repo.Root);
+
+        var tests = graph[Full("tests/T/T.csproj")];
+        Assert.Equal([Full("src/Gen/Gen.csproj"), Full("src/Lib/Lib.csproj"), Full("src/Tool/Tool.csproj")], tests.References.Order(StringComparer.Ordinal));
+        Assert.Equal([Full("src/Gen/Gen.csproj"), Full("src/Tool/Tool.csproj")], tests.OpaqueReferences.Order(StringComparer.Ordinal));
+
+        // A copy elsewhere reads the evaluation from the disk cache, its paths relative to the repository.
+        var copy = Directory.CreateTempSubdirectory("sift-opaque-copy-").FullName;
+        try
+        {
+            CopyDirectory(_repo.Root, copy);
+            var cacheFiles = Directory.GetFiles(Path.Combine(copy, ".sift", "cache", "graph"));
+            var fromCache = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance, evaluator).Load(copy);
+            string InCopy(string relative) => Paths.Normalize(Path.Combine(copy, relative));
+            Assert.Equal([InCopy("src/Gen/Gen.csproj"), InCopy("src/Tool/Tool.csproj")], fromCache[InCopy("tests/T/T.csproj")].OpaqueReferences.Order(StringComparer.Ordinal));
+            Assert.Equal(cacheFiles, Directory.GetFiles(Path.Combine(copy, ".sift", "cache", "graph")));
+        }
+        finally
+        {
+            Directory.Delete(copy, recursive: true);
+        }
+    }
+
+    private static void CopyDirectory(string from, string to)
+    {
+        foreach (var directory in Directory.GetDirectories(from, "*", SearchOption.AllDirectories))
+        {
+            Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, directory)));
+        }
+
+        foreach (var file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
+        {
+            File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)));
+        }
+    }
+
+    [Fact]
     public void Each_target_framework_reports_its_preprocessor_symbols_once()
     {
         var evaluated = MsBuildProjectEvaluator.Parse(

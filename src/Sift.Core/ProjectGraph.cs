@@ -15,6 +15,9 @@ public sealed class ProjectGraph
     /// <summary>Per project, its external items and imports as matchers, built once.</summary>
     private readonly List<(ProjectNode Project, PathMatcher Items, PathMatcher Imports)> _inputs;
 
+    /// <summary>Per project, the projects that reference it without compiling against it (<see cref="ProjectNode.OpaqueReferences"/>).</summary>
+    private readonly Dictionary<string, List<ProjectNode>> _opaqueConsumers = new(Paths.Comparer);
+
     /// <summary>Projects whose inputs could not all be resolved.</summary>
     private readonly ProjectNode[] _unresolved;
 
@@ -59,6 +62,11 @@ public sealed class ProjectGraph
                 owners.Add(node);
             }
 
+            foreach (var reference in node.OpaqueReferences)
+            {
+                AddOpaqueConsumer(reference, node);
+            }
+
             foreach (var reference in node.References)
             {
                 // References to projects outside the repository are not part of the graph.
@@ -81,8 +89,14 @@ public sealed class ProjectGraph
         foreach (var node in nodes.Values.Where(static p => p.HasUnknownReferences))
         {
             var patterns = node.UnknownReferencePatterns.Select(static p => new System.Text.RegularExpressions.Regex(p)).ToList();
+            var opaquePatterns = node.UnknownOpaqueReferencePatterns.Select(static p => new System.Text.RegularExpressions.Regex(p)).ToList();
             foreach (var other in nodes.Keys.Where(k => !Paths.Comparer.Equals(k, node.Path) && patterns.Any(p => p.IsMatch(k))))
             {
+                if (opaquePatterns.Exists(p => p.IsMatch(other)))
+                {
+                    AddOpaqueConsumer(other, node);
+                }
+
                 if (!_dependents.TryGetValue(other, out var list))
                 {
                     list = [];
@@ -96,6 +110,31 @@ public sealed class ProjectGraph
             }
         }
     }
+
+    /// <summary>Records that <paramref name="consumer"/> references <paramref name="reference"/> without compiling against it.</summary>
+    /// <param name="reference">Normalized path of the referenced project.</param>
+    /// <param name="consumer">The referencing project.</param>
+    private void AddOpaqueConsumer(string reference, ProjectNode consumer)
+    {
+        if (!_opaqueConsumers.TryGetValue(reference, out var consumers))
+        {
+            consumers = [];
+            _opaqueConsumers[reference] = consumers;
+        }
+
+        if (!consumers.Contains(consumer))
+        {
+            consumers.Add(consumer);
+        }
+    }
+
+    /// <summary>
+    /// Projects that reference <paramref name="path"/> without compiling against it: as an analyzer or
+    /// source generator, or with <c>ReferenceOutputAssembly="false"</c> (see <see cref="ProjectNode.OpaqueReferences"/>).
+    /// </summary>
+    /// <param name="path">Normalized project path.</param>
+    public IReadOnlyList<ProjectNode> OpaqueConsumersOf(string path) =>
+        _opaqueConsumers.TryGetValue(path, out var consumers) ? consumers : [];
 
     /// <summary>All projects found in the repository.</summary>
     public IReadOnlyCollection<ProjectNode> Projects => _nodes.Values;
