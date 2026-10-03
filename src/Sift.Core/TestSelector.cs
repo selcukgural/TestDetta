@@ -139,7 +139,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     private static bool ReachesChange(SourceIndex index, ImpactPropagation propagation, SymbolChange symbol) =>
         symbol.MemberName is null
             ? propagation.AffectedTypes.Contains(symbol.TypeName)
-            : index.FindMember(symbol.TypeName, symbol.MemberName) is { } member && propagation.Reached(member);
+            : index.FindMembers(symbol.TypeName, symbol.MemberName).Any(propagation.Reached);
 
     /// <summary>
     /// Seeds the detected changes and spreads them by name. With <paramref name="coverage"/>, a change or
@@ -297,32 +297,30 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         ImpactPropagation propagation,
         Dictionary<string, string> fallbacks)
     {
-        foreach (var (typeName, projectPath) in propagation.SeededTypes)
+        foreach (var (typeName, projects) in propagation.SeededTypes)
         {
-            if (graph[projectPath].IsTestProject || fallbacks.ContainsKey(projectPath))
-            {
-                continue;
-            }
-
-            if (index.IsReferencedOutside(DeclarationWalker.SimpleTypeName(typeName), typeName))
+            // Every project compiling the type gets the same answer: a fallback for one of them alone
+            // left the tests under the others to a name trace that cannot see reflection (Meziantou.Analyzer).
+            var candidates = projects.Where(p => !graph[p].IsTestProject && !fallbacks.ContainsKey(p)).ToList();
+            if (candidates.Count == 0 || index.IsReferencedOutside(DeclarationWalker.SimpleTypeName(typeName), typeName))
             {
                 continue;
             }
 
             var type = index.FindType(typeName);
-            if (type is null)
-            {
-                AddFallback(fallbacks, projectPath, $"{typeName} was removed and nothing names it, so it may have been created through reflection");
-                continue;
-            }
-
-            if (!type.MayBeFoundByReflection)
+            if (type is { MayBeFoundByReflection: false })
             {
                 LogDeadType(typeName);
                 continue;
             }
 
-            AddFallback(fallbacks, projectPath, $"{typeName} is affected and nothing names it, so it may be created through reflection");
+            var reason = type is null
+                ? $"{typeName} was removed and nothing names it, so it may have been created through reflection"
+                : $"{typeName} is affected and nothing names it, so it may be created through reflection";
+            foreach (var projectPath in candidates)
+            {
+                AddFallback(fallbacks, projectPath, reason);
+            }
         }
     }
 

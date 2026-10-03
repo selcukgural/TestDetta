@@ -58,8 +58,11 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <param name="Scope">Which referencing members count.</param>
     private readonly record struct NameLookup(string Name, string? Owner, LookupScope Scope);
 
-    /// <summary>Types whose name was spread, mapped to the project that declares (or declared) them.</summary>
-    public Dictionary<string, string> SeededTypes { get; } = new(StringComparer.Ordinal);
+    /// <summary>
+    /// Types whose name was spread, mapped to every project that declares (or declared) them: a file in
+    /// a folder several projects compile (one project per Roslyn version) declares its types in each.
+    /// </summary>
+    public Dictionary<string, HashSet<string>> SeededTypes { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Qualified names of every type that changed or contains an affected member.</summary>
     public HashSet<string> AffectedTypes { get; } = new(StringComparer.Ordinal);
@@ -88,7 +91,7 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
             return;
         }
 
-        if (index.FindMember(change.TypeName, change.MemberName) is { } member)
+        if (index.FindMember(change.TypeName, change.MemberName, projectPath) is { } member)
         {
             MarkAffected(member, "it changed", from: null);
             return;
@@ -219,7 +222,13 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <param name="by">The member whose spread seeded the type name; null for a change.</param>
     private void SeedType(string typeName, string projectPath, IndexedMember? by = null)
     {
-        SeededTypes.TryAdd(typeName, projectPath);
+        if (!SeededTypes.TryGetValue(typeName, out var projects))
+        {
+            projects = new HashSet<string>(Paths.Comparer);
+            SeededTypes[typeName] = projects;
+        }
+
+        projects.Add(projectPath);
         Enqueue(new NameLookup(DeclarationWalker.SimpleTypeName(typeName), null, LookupScope.Anywhere), by);
     }
 

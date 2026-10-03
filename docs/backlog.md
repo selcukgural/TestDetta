@@ -201,6 +201,10 @@ Interim fixes that are safe for the common case; come back for the complete solu
   Record (Polar.sh primary, Paddle fallback) and keys from direct sales (Turkish corporate customers
   with a TL e-Fatura) must work the same way, so the license check cannot depend on one provider's API.
 
+- **Hang detection by idleness** (round 2, 2026-10-03): a mutant that deadlocks the test host (0% CPU)
+  is only killed after the run timeout, longest run × 5 × mutant parallelism, which was 80+ minutes
+  on Newtonsoft.Json. Kill a run whose process tree stays idle for a few minutes instead.
+
 ## Later
 
 - Windows: build, record and select on Windows; path and process differences.

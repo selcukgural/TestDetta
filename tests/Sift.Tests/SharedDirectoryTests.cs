@@ -53,6 +53,39 @@ public sealed class SharedDirectoryTests : IDisposable
     }
 
     [Fact]
+    public void Type_found_by_reflection_runs_the_tests_of_every_project_compiling_it()
+    {
+        // Meziantou.Analyzer: a code fixer in a folder compiled by one project per Roslyn version is
+        // created by the test harness through reflection, so its change runs every downstream test
+        // project, not only the one under the first project compiling the file.
+        _repo.Write("src/Lib/Lib.roslyn4.8.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
+        _repo.Write("src/Lib/Lib.roslyn5.0.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
+        _repo.Write("src/Lib/Fixer.cs", """
+            namespace Lib;
+            public abstract class FixerBase { public abstract int Fix(); }
+            [System.Obsolete] public sealed class SpacingFixer : FixerBase { public override int Fix() => 1; }
+            """);
+        foreach (var version in new[] { "roslyn4.8", "roslyn5.0" })
+        {
+            _repo.Write($"tests/Lib.Tests/Lib.Tests.{version}.csproj", $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <ItemGroup><PackageReference Include="xunit.v3" /><ProjectReference Include="../../src/Lib/Lib.{version}.csproj" /></ItemGroup>
+                </Project>
+                """);
+        }
+
+        _repo.Write("tests/Lib.Tests/FixerTests.cs", "namespace Lib.Tests; public class FixerTests { [Xunit.Fact] public void Fixes() => Xunit.Assert.NotNull(typeof(Lib.FixerBase)); }");
+        _repo.Write("tests/Lib.Tests/OtherTests.cs", "namespace Lib.Tests; public class OtherTests { [Xunit.Fact] public void Two() => Xunit.Assert.Equal(2, 1 + 1); }");
+        _repo.Commit("base");
+
+        _repo.Replace("src/Lib/Fixer.cs", "=> 1;", "=> 0 + 1;");
+        var tests = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests;
+
+        Assert.Equal(2, tests.Count);
+        Assert.All(tests, t => Assert.Equal(TestRunMode.All, t.Mode));
+    }
+
+    [Fact]
     public void Linked_file_whose_path_needs_evaluation_belongs_to_the_linking_project()
     {
         // OpenTelemetry compiles test files of one test project into others through $(RepoRoot),

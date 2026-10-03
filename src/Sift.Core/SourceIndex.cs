@@ -169,6 +169,47 @@ internal sealed class SourceIndex
     }
 
     /// <summary>
+    /// The member with signature <paramref name="memberName"/> in <paramref name="typeName"/> as
+    /// <paramref name="projectPath"/> compiles it: a file in a folder several projects compile is
+    /// indexed once per project, and each copy spreads to that project's dependents. Falls back to any
+    /// copy when the project has none.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="memberName">Member signature, or null for the type declaration.</param>
+    /// <param name="projectPath">Project that owns the changed file.</param>
+    public IndexedMember? FindMember(string typeName, string? memberName, string projectPath)
+    {
+        if (!_membersByType.TryGetValue(typeName, out var members))
+        {
+            return null;
+        }
+
+        IndexedMember? any = null;
+        foreach (var member in members)
+        {
+            if (member.MemberName != memberName)
+            {
+                continue;
+            }
+
+            if (Paths.Comparer.Equals(member.ProjectPath, projectPath))
+            {
+                return member;
+            }
+
+            any ??= member;
+        }
+
+        return any;
+    }
+
+    /// <summary>Every indexed copy of the member: one per project compiling its file.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="memberName">Member signature, or null for the type declaration.</param>
+    public IEnumerable<IndexedMember> FindMembers(string typeName, string? memberName) =>
+        _membersByType.TryGetValue(typeName, out var members) ? members.Where(m => m.MemberName == memberName) : [];
+
+    /// <summary>
     /// True when a member of another type than <paramref name="typeName"/> mentions <paramref name="name"/>.
     /// A type that nothing else names is probably found through reflection (controllers, handlers, hosted services).
     /// </summary>
