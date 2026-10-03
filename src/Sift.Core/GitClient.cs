@@ -187,6 +187,51 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
         }
     }
 
+    /// <summary>
+    /// The URL of the <c>origin</c> remote, or null when there is none. It may embed credentials
+    /// (Jenkins clones with them), so it is never logged.
+    /// </summary>
+    /// <param name="repoRoot">Repository root.</param>
+    public string? OriginUrl(string repoRoot)
+    {
+        try
+        {
+            return Run(repoRoot, logOutput: false, "remote", "get-url", "origin").FirstOrDefault();
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The committer time of HEAD, as Unix seconds.</summary>
+    /// <param name="repoRoot">Repository root.</param>
+    public long HeadCommitTime(string repoRoot) =>
+        long.Parse(Run(repoRoot, "log", "-1", "--format=%ct", "HEAD").Single(), System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Author time (Unix seconds), email and name of every commit reachable from HEAD whose committer
+    /// time is at or after <paramref name="since"/>, with <c>.mailmap</c> applied. A commit is committed
+    /// no earlier than it is authored, so this includes every commit authored since then. The output
+    /// holds personal data and is never logged.
+    /// </summary>
+    /// <param name="repoRoot">Repository root.</param>
+    /// <param name="since">Unix seconds.</param>
+    public IReadOnlyList<(long AuthorTime, string Email, string Name)> AuthorsSince(string repoRoot, long since)
+    {
+        var authors = new List<(long, string, string)>();
+        foreach (var line in Run(repoRoot, logOutput: false, "log", "HEAD", $"--since=@{since}", "--format=%at%x09%aE%x09%aN"))
+        {
+            var fields = line.Split('\t');
+            if (fields.Length == 3 && long.TryParse(fields[0], System.Globalization.CultureInfo.InvariantCulture, out var time))
+            {
+                authors.Add((time, fields[1], fields[2]));
+            }
+        }
+
+        return authors;
+    }
+
     /// <summary>Creates the start info shared by every git invocation.</summary>
     /// <param name="workingDirectory">Directory git runs in.</param>
     /// <param name="args">git arguments, passed without shell quoting.</param>
@@ -214,7 +259,14 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
     /// <param name="workingDirectory">Directory git runs in.</param>
     /// <param name="args">git arguments, passed without shell quoting.</param>
     /// <exception cref="InvalidOperationException">git could not start or exited with a non-zero code.</exception>
-    private List<string> Run(string workingDirectory, params ReadOnlySpan<string> args)
+    private List<string> Run(string workingDirectory, params ReadOnlySpan<string> args) => Run(workingDirectory, logOutput: true, args);
+
+    /// <summary>Runs git and returns its non-empty stdout lines.</summary>
+    /// <param name="workingDirectory">Directory git runs in.</param>
+    /// <param name="logOutput">False for output that may hold credentials or personal data.</param>
+    /// <param name="args">git arguments, passed without shell quoting.</param>
+    /// <exception cref="InvalidOperationException">git could not start or exited with a non-zero code.</exception>
+    private List<string> Run(string workingDirectory, bool logOutput, params ReadOnlySpan<string> args)
     {
         var psi = CreateStartInfo(workingDirectory, args);
         var commandLine = string.Join(' ', psi.ArgumentList);
@@ -233,7 +285,11 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
                 continue;
             }
 
-            LogOutputLine(line);
+            if (logOutput)
+            {
+                LogOutputLine(line);
+            }
+
             lines.Add(line);
         }
 
