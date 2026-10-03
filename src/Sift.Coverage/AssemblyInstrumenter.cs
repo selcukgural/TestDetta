@@ -177,31 +177,32 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             AssemblyResolver = resolver,
         });
 
+        var tracker = module.ImportReference(typeof(SiftTracker));
         var probes = new Probes(
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Hit))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestInstance))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestClass))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterFixtureInstance))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTypeInitializer))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTypeInitializer))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterCache))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCache))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterAmbient))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterSetUpScope))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterDataSource))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Read))!),
-            module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.Stored))!))
+            Probe(tracker, nameof(SiftTracker.Hit)),
+            Probe(tracker, nameof(SiftTracker.EnterTestInstance)),
+            Probe(tracker, nameof(SiftTracker.EnterTestClass)),
+            Probe(tracker, nameof(SiftTracker.EnterFixtureInstance)),
+            Probe(tracker, nameof(SiftTracker.EnterTypeInitializer)),
+            Probe(tracker, nameof(SiftTracker.ExitTypeInitializer)),
+            Probe(tracker, nameof(SiftTracker.EnterCache)),
+            Probe(tracker, nameof(SiftTracker.ExitCache)),
+            Probe(tracker, nameof(SiftTracker.EnterAmbient)),
+            Probe(tracker, nameof(SiftTracker.EnterSetUpScope)),
+            Probe(tracker, nameof(SiftTracker.EnterDataSource)),
+            Probe(tracker, nameof(SiftTracker.Read)),
+            Probe(tracker, nameof(SiftTracker.Stored)))
         {
-            EnterTestCode = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTestCode))!),
-            ExitTestCode = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTestCode))!),
-            ExitTestCodeWhenComplete = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitTestCodeWhenComplete))!),
-            PrepareTestInstance = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.PrepareTestInstance))!),
-            ExitCacheInto = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitCacheInto))!),
-            StoredSelf = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.StoredSelf))!),
-            MarkArguments = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.MarkArguments))!),
-            EnterConstruction = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterConstruction))!),
-            ExitConstruction = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.ExitConstruction))!),
-            EnterTypeInitializerOf = module.ImportReference(typeof(SiftTracker).GetMethod(nameof(SiftTracker.EnterTypeInitializerOf))!),
+            EnterTestCode = Probe(tracker, nameof(SiftTracker.EnterTestCode)),
+            ExitTestCode = Probe(tracker, nameof(SiftTracker.ExitTestCode)),
+            ExitTestCodeWhenComplete = Probe(tracker, nameof(SiftTracker.ExitTestCodeWhenComplete)),
+            PrepareTestInstance = Probe(tracker, nameof(SiftTracker.PrepareTestInstance)),
+            ExitCacheInto = Probe(tracker, nameof(SiftTracker.ExitCacheInto)),
+            StoredSelf = Probe(tracker, nameof(SiftTracker.StoredSelf)),
+            MarkArguments = Probe(tracker, nameof(SiftTracker.MarkArguments)),
+            EnterConstruction = Probe(tracker, nameof(SiftTracker.EnterConstruction)),
+            ExitConstruction = Probe(tracker, nameof(SiftTracker.ExitConstruction)),
+            EnterTypeInitializerOf = Probe(tracker, nameof(SiftTracker.EnterTypeInitializerOf)),
         };
         var tracked = new Dictionary<FieldDefinition, int>();
         foreach (var field in TrackedFields(module))
@@ -264,6 +265,35 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
+    }
+
+    /// <summary>
+    /// A reference to tracker method <paramref name="name"/>, built by hand with the instrumented
+    /// module's own core types. Importing the method through reflection would add a reference to the
+    /// instrumenting process's core library (System.Private.CoreLib 10.0) for its <c>int</c> and
+    /// <c>object</c> parameters, which the runtime tolerates but Roslyn refuses when it compiles against
+    /// the assembly for an older target (CS1705; protobuf-net's BuildTools tests).
+    /// </summary>
+    /// <param name="tracker">Imported <see cref="SiftTracker"/> type; it references only the tracker's assembly.</param>
+    /// <param name="name">Name of a public static tracker method without overloads.</param>
+    private static MethodReference Probe(TypeReference tracker, string name)
+    {
+        var method = typeof(SiftTracker).GetMethod(name)!;
+        var types = tracker.Module.TypeSystem;
+        var probe = new MethodReference(name, Core(method.ReturnType), tracker);
+        foreach (var parameter in method.GetParameters())
+        {
+            probe.Parameters.Add(new ParameterDefinition(Core(parameter.ParameterType)));
+        }
+
+        return probe;
+
+        TypeReference Core(Type type) =>
+            type == typeof(void) ? types.Void
+            : type == typeof(int) ? types.Int32
+            : type == typeof(string) ? types.String
+            : type == typeof(object) ? types.Object
+            : throw new NotSupportedException($"Tracker method {name} uses {type}; probes take only int, string and object.");
     }
 
     /// <summary>Imported references to the tracker methods the probes call.</summary>

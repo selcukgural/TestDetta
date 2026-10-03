@@ -40,6 +40,27 @@ public sealed class AssemblyInstrumenterTests : IDisposable
         Assert.Equal(original, File.ReadAllBytes(assembly));
     }
 
+    [Fact]
+    public void Instrumenting_adds_no_assembly_reference_but_the_tracker()
+    {
+        // A reference to the instrumenting process's own core library (System.Private.CoreLib 10.0)
+        // makes Roslyn refuse the assembly as a metadata reference for an older target (CS1705), as
+        // protobuf-net's BuildTools tests do when they compile code against it.
+        var assembly = Copy(typeof(GitClient).Assembly.Location);
+        var before = References(assembly);
+
+        new AssemblyInstrumenter(NullLogger.Instance).Instrument([assembly], new HashSet<string>(), Path.Combine(_directory, "backup"));
+
+        Assert.Equal([.. before.Append("Sift.Coverage.Runtime").Order(StringComparer.Ordinal)], References(assembly));
+    }
+
+    /// <summary>Names and versions of the assemblies <paramref name="path"/> references, sorted.</summary>
+    private static List<string> References(string path)
+    {
+        using var module = Mono.Cecil.ModuleDefinition.ReadModule(path);
+        return [.. module.AssemblyReferences.Select(static r => r.Name == "Sift.Coverage.Runtime" ? r.Name : $"{r.Name} {r.Version}").Order(StringComparer.Ordinal)];
+    }
+
     private string Copy(string path)
     {
         var target = Path.Combine(_directory, Path.GetFileName(path));

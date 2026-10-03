@@ -68,12 +68,15 @@ that report numbers (value reporting) only once the numbers are proven right.
   it compares classes as (project, class), since a test class compiled into several projects
   (CommunityToolkit's Roslyn variants) is one class per project, and leaves out classes that failed
   while recording, which `TestSelector.DecideClass` selects after the name trace in any case.
-- **Recording breaks protobuf-net's BuildTools tests** (found 2026-10-03): 15 classes
-  (`GrpcReferencedModelTests`, `DisableSwitchTests`, `ExternAliasTests`, ...) pass in a plain run and
-  fail while recorded, in `CompileWithModelGenerator`, which compiles code with Roslyn against the
-  repository's assemblies. They are selected for every change (FailedWhileRecording) and their
-  coverage stops where they fail. Likely cause, not checked: Roslyn gets the instrumented
-  assemblies as metadata references, which now reference `Sift.Coverage.Runtime`.
+- ~~**Recording breaks protobuf-net's BuildTools tests**~~ (done 2026-10-03): 15 classes
+  (`GrpcReferencedModelTests`, `DisableSwitchTests`, ...) failed only while recorded, since round 1,
+  with CS1705 in `CompileWithModelGenerator`: the probes were imported through reflection, which gave
+  every instrumented assembly a reference to the instrumenting process's System.Private.CoreLib
+  10.0, and Roslyn refuses such an assembly as a metadata reference for a net8.0 compilation. Probe
+  references are now built with the module's own core types (`AssemblyInstrumenter.Probe`); the only
+  reference instrumentation adds is Sift.Coverage.Runtime. 13 of the 15 now record; the other 2
+  (`Should*DefaultCodeFixProviderTests`) fail without Sift too on a Turkish-locale machine (a code
+  fix formats `2.2m` as "2,2") and pass under en-US.
 - ~~**Direct changes to a member's metadata**~~ (done 2026-10-03,
   docs/design/reflection-types-with-coverage.md "Direct metadata changes"): the change detector
   reports `MetadataChanged` when a declaration's attributes or parameter defaults changed (or a
