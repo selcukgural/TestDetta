@@ -1,0 +1,72 @@
+name: Site
+
+# Builds the product site on every change to it, so a stale translation fails the pull request, and
+# publishes main to Firebase Hosting (site/README.md, "Hosting"). Both jobs take seconds.
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/site.yml']
+  pull_request:
+    paths: ['site/**', '.github/workflows/site.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two releases never race; the later push waits and publishes last.
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - run: node site/build.mjs
+
+  # Only this job can mint Google credentials. The workload identity provider accepts this
+  # repository's main branch, this workflow and the protected `site` environment only, and the
+  # service account it impersonates can do nothing but publish to Firebase Hosting. The build
+  # runs again here instead of passing an artifact: it is our own script, without dependencies.
+  # Until the repository variables are set (site/README.md, "Hosting"), the job is skipped.
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.FIREBASE_SITE != ''
+    runs-on: ubuntu-latest
+    environment: site
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - run: node site/build.mjs
+
+      - id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.SITE_DEPLOYER_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+
+      - run: node site/deploy.mjs
+        env:
+          FIREBASE_SITE: ${{ vars.FIREBASE_SITE }}
+          GOOGLE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
