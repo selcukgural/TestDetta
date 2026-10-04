@@ -75,7 +75,28 @@ internal sealed record IndexedType(
     bool HasTestMethods,
     IReadOnlyList<string> BaseTypeNames,
     bool CanContainTests,
-    bool MayBeFoundByReflection);
+    bool MayBeFoundByReflection)
+{
+    /// <summary>
+    /// Where the type is declared, one span per declaration (partial parts, and each parsed variant of
+    /// conditional code once). Kept for types of test projects only: selection matches a test class
+    /// the build names differently from its coverage map by the place the map recorded it at
+    /// (docs/design/unrecorded-classes.md). Empty for other types.
+    /// </summary>
+    public IReadOnlyList<DeclarationSpan> Spans { get; init; } = [];
+}
+
+/// <summary>The lines a type declaration covers in one file, attributes and braces included.</summary>
+/// <param name="File">Normalized file path.</param>
+/// <param name="StartLine">First line, 1-based like PDB sequence points.</param>
+/// <param name="EndLine">Last line, 1-based.</param>
+internal sealed record DeclarationSpan(string File, int StartLine, int EndLine)
+{
+    /// <summary>True when <paramref name="line"/> of <paramref name="file"/> lies inside the declaration.</summary>
+    /// <param name="file">Normalized file path.</param>
+    /// <param name="line">1-based line.</param>
+    public bool Contains(string file, int line) => line >= StartLine && line <= EndLine && Paths.Comparer.Equals(file, File);
+}
 
 /// <summary>
 /// Name-based view of the source code of a set of projects: which members mention which

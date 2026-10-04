@@ -133,4 +133,49 @@ public sealed record CoverageMap(
     /// the source tree, so the source index adds it from here for name tracing.
     /// </summary>
     public IReadOnlyList<GeneratedType> Generated { get; init; } = [];
+
+    /// <summary>
+    /// Test classes (runtime names) the test reports listed although none of their tests executed:
+    /// every test was skipped, inconclusive or ignored, so the map cannot say what the class runs.
+    /// Together with <see cref="Classes"/> and <see cref="FailedClasses"/> this is every class the
+    /// runner reported (see <see cref="KnowsClasses"/>). Null when a test process left no report or
+    /// for maps recorded before this was kept: then the map cannot tell a class it never saw from one
+    /// that ran nothing (docs/design/unrecorded-classes.md).
+    /// </summary>
+    public IReadOnlySet<string>? SkippedClasses { get; init; }
+
+    /// <summary>
+    /// Runtime identifier of the machine that recorded the map, such as <c>osx-arm64</c>. A class
+    /// skipped there may run on another platform, where the map cannot answer for it. Null for maps
+    /// recorded before this was kept.
+    /// </summary>
+    public string? Platform { get; init; }
+
+    /// <summary>
+    /// Where each reported test class (runtime name) is written: one entry per source file with the
+    /// first line of its code there, read from the test assembly's PDB. When the build names a class
+    /// differently from the recording (Markdig's culture-dependent generated spec classes), the class
+    /// at the same place is the one the map recorded. Null when the PDB could not be read or for maps
+    /// recorded before this was kept.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<ClassLocation>>? ClassLocations { get; init; }
+
+    /// <summary>
+    /// True when the map knows every class the runner reported, run or not, so a class outside them
+    /// was not seen while recording rather than seen running nothing.
+    /// </summary>
+    public bool KnowsClasses => SkippedClasses is not null && FailedClasses is not null;
+
+    /// <summary>
+    /// True when the runner reported <paramref name="testClass"/> while the map was recorded: it ran,
+    /// failed or was skipped. Meaningful only when <see cref="KnowsClasses"/> is true.
+    /// </summary>
+    /// <param name="testClass">Runtime class name.</param>
+    public bool Reported(string testClass) =>
+        Classes.ContainsKey(testClass) || FailedClasses?.Contains(testClass) == true || SkippedClasses?.Contains(testClass) == true;
 }
+
+/// <summary>Where a test class is written in one source file, as the test assembly's PDB says.</summary>
+/// <param name="File">Path relative to the repository root, with '/' separators.</param>
+/// <param name="Line">First line (1-based) of the class's code in that file.</param>
+public sealed record ClassLocation(string File, int Line);

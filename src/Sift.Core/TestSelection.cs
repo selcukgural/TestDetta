@@ -45,6 +45,18 @@ public enum ClassDecisionKind
     /// <summary>One of its tests failed while the map was recorded, so the map may lack its code.</summary>
     FailedWhileRecording,
 
+    /// <summary>
+    /// Every test of it was skipped while the map was recorded on another platform, so the map cannot
+    /// say what it runs here.
+    /// </summary>
+    SkippedWhileRecording,
+
+    /// <summary>
+    /// The map does not know it, and recorded classes in its file that the build no longer has without
+    /// one matching it at its place: the map and the build disagree.
+    /// </summary>
+    MapMismatch,
+
     /// <summary>Its whole project runs: the change cannot be narrowed below the project.</summary>
     WholeProject,
 
@@ -107,4 +119,11 @@ public sealed record TestSelectionRequest(
 
     /// <summary>What a test project does when its map's drift cannot be bridged; see <see cref="Core.DriftFallback"/>.</summary>
     public DriftFallback DriftFallback { get; init; } = DriftFallback.RunAll;
+
+    /// <summary>
+    /// Runtime identifier of the platform the selected tests run on, this machine's by default. A test
+    /// class whose tests were all skipped while a map was recorded on another platform may run here,
+    /// where the map cannot say what it runs (docs/design/unrecorded-classes.md).
+    /// </summary>
+    public string Platform { get; init; } = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
 }

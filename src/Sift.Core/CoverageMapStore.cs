@@ -102,6 +102,27 @@ public static class CoverageMapStore
             json.WriteNull("failedClasses"u8);
         }
 
+        if (map.SkippedClasses is { } skipped)
+        {
+            json.WriteStartArray("skippedClasses"u8);
+            foreach (var name in skipped.Order(StringComparer.Ordinal))
+            {
+                json.WriteStringValue(name);
+            }
+
+            json.WriteEndArray();
+        }
+
+        if (map.Platform is { } platform)
+        {
+            json.WriteString("platform"u8, platform);
+        }
+
+        if (map.ClassLocations is { } locations)
+        {
+            WriteLocations(json, locations);
+        }
+
         if (map.Timings is { } timings)
         {
             json.WriteStartObject("timings"u8);
@@ -190,6 +211,11 @@ public static class CoverageMapStore
                     ? new CoverageHits(ReadBuckets(built.GetProperty("classes")), ReadBuckets(built.GetProperty("fixtures")), ReadIds(built.GetProperty("ambient")))
                     : null,
                 Generated = root.TryGetProperty("generated", out var generated) ? ReadGenerated(generated) : [],
+                SkippedClasses = root.TryGetProperty("skippedClasses", out var skipped)
+                    ? skipped.EnumerateArray().Select(static n => n.GetString()!).ToHashSet(StringComparer.Ordinal)
+                    : null,
+                Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
+                ClassLocations = root.TryGetProperty("classLocations", out var locations) ? ReadLocations(locations) : null,
             };
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
@@ -212,6 +238,48 @@ public static class CoverageMapStore
         }
 
         return types;
+    }
+
+    /// <summary>Writes class locations as <c>{"class": [[file, line], ...]}</c>, sorted by class so the file is stable.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="locations">Class to its locations.</param>
+    private static void WriteLocations(Utf8JsonWriter json, IReadOnlyDictionary<string, IReadOnlyList<ClassLocation>> locations)
+    {
+        json.WriteStartObject("classLocations"u8);
+        foreach (var (testClass, places) in locations.OrderBy(static l => l.Key, StringComparer.Ordinal))
+        {
+            json.WriteStartArray(testClass);
+            foreach (var place in places)
+            {
+                json.WriteStartArray();
+                json.WriteStringValue(place.File);
+                json.WriteNumberValue(place.Line);
+                json.WriteEndArray();
+            }
+
+            json.WriteEndArray();
+        }
+
+        json.WriteEndObject();
+    }
+
+    /// <summary>Reads the <c>classLocations</c> object written by <see cref="WriteLocations"/>.</summary>
+    /// <param name="element">JSON object.</param>
+    private static Dictionary<string, IReadOnlyList<ClassLocation>> ReadLocations(JsonElement element)
+    {
+        var locations = new Dictionary<string, IReadOnlyList<ClassLocation>>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            var places = new List<ClassLocation>(property.Value.GetArrayLength());
+            foreach (var place in property.Value.EnumerateArray())
+            {
+                places.Add(new ClassLocation(place[0].GetString()!, place[1].GetInt32()));
+            }
+
+            locations[property.Name] = places;
+        }
+
+        return locations;
     }
 
     /// <summary>Writes an object of named id arrays, sorted by name so the file is stable.</summary>

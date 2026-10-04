@@ -485,6 +485,12 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                 decisionsByProject.GetValueOrDefault(project)?.Select(static d => d.TestClass) ?? [], StringComparer.Ordinal);
             foreach (var testClass in coverage.RecordedClasses(project).Where(c => !known.Contains(c)).Order(StringComparer.Ordinal).ToList())
             {
+                // The build has it under another name, and that class was decided as this one.
+                if (coverage.RecordedUnderAnotherName(project, testClass))
+                {
+                    continue;
+                }
+
                 var decision = coverage.Evidence(project, testClass) is { } ran
                     ? new ClassDecision(testClass, Selected: true, ClassDecisionKind.Coverage, ran)
                     : coverage.FailedWhileRecording(project, testClass)
@@ -518,8 +524,10 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
     /// <summary>
     /// What is decided for one candidate test class and why: coverage first (the most direct
-    /// evidence), then the name spread, then a failure while recording; otherwise skipped, saying
-    /// whether a map was there to ask.
+    /// evidence), then the name spread, then what the map knows about the class not running (a failure,
+    /// skipped tests, a disagreement with the build); otherwise skipped, saying whether a map was there
+    /// to ask. A class the map recorded under another name is looked up by that name
+    /// (docs/design/unrecorded-classes.md).
     /// </summary>
     /// <param name="type">Candidate test class.</param>
     /// <param name="trace">The spread that decides its project.</param>
@@ -527,9 +535,12 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     private static ClassDecision DecideClass(IndexedType type, TraceResult trace, CoverageSelection coverage)
     {
         var name = type.RuntimeTypeName;
-        if (coverage.Evidence(type) is { } ran)
+        var project = type.ProjectPath;
+        var recorded = coverage.RecordedName(type);
+        var recordedAs = recorded == name ? "" : $"; recorded as {recorded}";
+        if (coverage.Evidence(project, recorded) is { } ran)
         {
-            return new ClassDecision(name, Selected: true, ClassDecisionKind.Coverage, ran);
+            return new ClassDecision(name, Selected: true, ClassDecisionKind.Coverage, ran + recordedAs);
         }
 
         if (trace.Propagation.AffectedTypes.Contains(type.TypeName))
@@ -537,15 +548,35 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             return new ClassDecision(name, Selected: true, ClassDecisionKind.Name, trace.Propagation.Explain(type.TypeName) ?? "names the changed code");
         }
 
-        if (coverage.FailedWhileRecording(type))
+        if (coverage.MapCommit(project) is not { } commit)
         {
-            return new ClassDecision(name, Selected: true, ClassDecisionKind.FailedWhileRecording,
-                $"a test of it failed while the map was recorded (map {CoverageSelection.Short(coverage.MapCommit(type.ProjectPath)!)})");
+            return new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, "names none of the changed code (no coverage map)");
         }
 
-        return coverage.MapCommit(type.ProjectPath) is { } commit
-            ? new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, $"ran none of the changed code and names none of it (map {CoverageSelection.Short(commit)})")
-            : new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, "names none of the changed code (no coverage map)");
+        var map = $"map {CoverageSelection.Short(commit)}";
+        if (coverage.FailedWhileRecording(project, recorded))
+        {
+            return new ClassDecision(name, Selected: true, ClassDecisionKind.FailedWhileRecording,
+                $"a test of it failed while the map was recorded ({map}{recordedAs})");
+        }
+
+        if (coverage.SkippedWhileRecording(project, recorded))
+        {
+            // On the platform the map came from the tests skip again; elsewhere they may run.
+            return coverage.RecordedElsewhere(project)
+                ? new ClassDecision(name, Selected: true, ClassDecisionKind.SkippedWhileRecording,
+                    $"every test of it was skipped while the map was recorded on {coverage.MapPlatform(project)}, so the map cannot say what it runs on {coverage.Platform} ({map}{recordedAs})")
+                : new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped,
+                    $"every test of it was skipped while the map was recorded on this platform ({coverage.Platform}), so they skip here too ({map}{recordedAs})");
+        }
+
+        if (coverage.Mismatch(type) is { } orphans)
+        {
+            return new ClassDecision(name, Selected: true, ClassDecisionKind.MapMismatch,
+                $"the map does not know it and recorded {string.Join(", ", orphans)} in its file, which the build no longer has; record the map again ({map})");
+        }
+
+        return new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, $"ran none of the changed code and names none of it ({map}{recordedAs})");
     }
 
     /// <summary>Every project downstream of a fallback, with the first reason that reaches it.</summary>

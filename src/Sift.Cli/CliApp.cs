@@ -266,6 +266,11 @@ internal static partial class CliApp
                         summary.Add($"    {failed.Count} test class(es) failed while recording; they run whenever the project is affected");
                         break;
                 }
+
+                if (map.SkippedClasses is { Count: > 0 } skipped)
+                {
+                    summary.Add($"    {skipped.Count} test class(es) had every test skipped on {map.Platform}; on other platforms they run whenever the project is affected");
+                }
             }
 
             if (options.Analysis.MapsDir is { } mapsDir && written.Count > 0)

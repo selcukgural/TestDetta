@@ -82,6 +82,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                         HasTestMethods = existing.HasTestMethods || type.HasTestMethods,
                         BaseTypeNames = [.. existing.BaseTypeNames, .. type.BaseTypeNames],
                         MayBeFoundByReflection = existing.MayBeFoundByReflection || type.MayBeFoundByReflection,
+                        Spans = type.Spans.Count == 0 ? existing.Spans : [.. existing.Spans.Union(type.Spans)],
                     }
                     : type;
             }
@@ -229,19 +230,25 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         // both are merged like partial types, and a member seen twice only widens its references.
         foreach (var root in DeclarationWalker.ParseVariants(text, owner.SymbolSets))
         {
-            IndexRoot(root, owner, members, types);
+            IndexRoot(new ParsedFile(path, root), owner, members, types);
         }
 
         return new FileIndex(path, owner.Path, members, types);
     }
 
+    /// <summary>One parse of a file.</summary>
+    /// <param name="Path">Normalized file path.</param>
+    /// <param name="Root">Compilation unit.</param>
+    private sealed record ParsedFile(string Path, CompilationUnitSyntax Root);
+
     /// <summary>Indexes the declarations and top-level statements of one parse of a file.</summary>
-    /// <param name="root">Compilation unit.</param>
+    /// <param name="file">The parse.</param>
     /// <param name="owner">Project that compiles the file.</param>
     /// <param name="members">Members of the file; updated in place.</param>
     /// <param name="types">Types of the file; updated in place.</param>
-    private static void IndexRoot(CompilationUnitSyntax root, ProjectNode owner, List<IndexedMember> members, List<IndexedType> types)
+    private static void IndexRoot(ParsedFile file, ProjectNode owner, List<IndexedMember> members, List<IndexedType> types)
     {
+        var root = file.Root;
         var usingStatic = UsingStaticTargets(root);
         foreach (var declaration in DeclarationWalker.Collect(root).Values)
         {
@@ -256,7 +263,10 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                     HasTestMethods(declaration.Node),
                     BaseTypeNames(declaration.Node),
                     CanContainTests: false,
-                    declaration.Node.AttributeLists.Count > 0 || declaration.Node is BaseTypeDeclarationSyntax { BaseList: not null }));
+                    declaration.Node.AttributeLists.Count > 0 || declaration.Node is BaseTypeDeclarationSyntax { BaseList: not null })
+                {
+                    Spans = owner.IsTestProject ? [Span(file, declaration.Node)] : [],
+                });
             }
 
             members.Add(new IndexedMember(
@@ -275,6 +285,15 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         }
 
         AddTopLevelStatements(root, owner, members, types);
+    }
+
+    /// <summary>Lines of <paramref name="node"/> in <paramref name="file"/>, 1-based.</summary>
+    /// <param name="file">The parse the node belongs to.</param>
+    /// <param name="node">A type declaration.</param>
+    private static DeclarationSpan Span(ParsedFile file, SyntaxNode node)
+    {
+        var lines = file.Root.SyntaxTree.GetLineSpan(node.Span);
+        return new DeclarationSpan(file.Path, lines.StartLinePosition.Line + 1, lines.EndLinePosition.Line + 1);
     }
 
     /// <summary>Indexes top-level statements as the generated <c>Program</c> type's entry point.</summary>

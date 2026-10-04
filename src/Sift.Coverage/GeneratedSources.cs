@@ -60,7 +60,7 @@ internal static class GeneratedSources
     /// <summary>The embedded PDB, or the <c>.pdb</c> file next to the assembly; null when neither is portable.</summary>
     /// <param name="pe">Opened assembly.</param>
     /// <param name="assemblyPath">Assembly file.</param>
-    private static MetadataReaderProvider? OpenPdb(PEReader pe, string assemblyPath)
+    internal static MetadataReaderProvider? OpenPdb(PEReader pe, string assemblyPath)
     {
         foreach (var entry in pe.ReadDebugDirectory())
         {

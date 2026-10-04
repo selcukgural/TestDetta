@@ -47,6 +47,7 @@ public sealed class CoverageRecorderTests : IDisposable
             namespace Calc.Tests;
             public class AddTests { [Fact] public void Adds() => Assert.Equal(3, new Calculator().Add(1, 2)); }
             public class MultiplyTests { [Fact] public async Task Multiplies() => Assert.Equal(6, await new Calculator().MultiplyAsync(2, 3)); }
+            public class LaterTests { [Fact(Skip = "not yet")] public void Later() => Assert.Equal(0, new Calculator().Add(1, 2)); }
 
             // The fixture's constructor runs before the class is created; its hits belong to the fixture.
             // Its background worker keeps the fixture's execution context, but works for the running test.
@@ -117,6 +118,14 @@ public sealed class CoverageRecorderTests : IDisposable
             ["Calc.Tests.AddTests", "Calc.Tests.DetachedTests", "Calc.Tests.FixtureTests", "Calc.Tests.MultiplyTests"],
             map.Classes.Keys.Order());
 
+        // The skipped class is known by name and place; the async one by the lines of its state machine.
+        Assert.Equal(["Calc.Tests.LaterTests"], map.SkippedClasses!);
+        Assert.Equal(System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, map.Platform);
+        Assert.Equal([new ClassLocation("tests/Calc.Tests/Tests.cs", 3)], map.ClassLocations!["Calc.Tests.AddTests"]);
+        Assert.Equal([new ClassLocation("tests/Calc.Tests/Tests.cs", 4)], map.ClassLocations["Calc.Tests.MultiplyTests"]);
+        Assert.Equal([new ClassLocation("tests/Calc.Tests/Tests.cs", 5)], map.ClassLocations["Calc.Tests.LaterTests"]);
+        Assert.DoesNotContain("Calc.Tests.WarmCalculator", map.ClassLocations.Keys);
+
         var add = Ran(map, "Calc.Tests.AddTests");
         var multiply = Ran(map, "Calc.Tests.MultiplyTests");
         Assert.Contains(new CoveredMethod("Calc.Calculator", "Add"), add);
@@ -166,6 +175,7 @@ public sealed class CoverageRecorderTests : IDisposable
         }
 
         Assert.Equal(sequential.Fixtures.Keys.Order(), parallel.Fixtures.Keys.Order());
+        Assert.Equal(sequential.SkippedClasses!.Order(), parallel.SkippedClasses!.Order());
     }
 
     // The fixture's worker thread starts in its constructor. Whether its first hit lands before the

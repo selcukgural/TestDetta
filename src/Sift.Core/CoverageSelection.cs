@@ -13,6 +13,15 @@ internal sealed partial class CoverageSelection
     private readonly ProjectGraph _graph;
     private readonly SourceIndex _index;
 
+    /// <summary>Repository root, which map class locations are relative to.</summary>
+    private readonly string _repoRoot;
+
+    /// <summary>Runtime identifier of the machine selecting, compared with each map's <see cref="CoverageMap.Platform"/>.</summary>
+    private readonly string _platform;
+
+    /// <summary>Matches of unreported candidates with orphans, per test project, computed on first use.</summary>
+    private readonly Dictionary<string, RecordedClassMatches> _matches = new(Paths.Comparer);
+
     /// <summary>Coverage index per test project that has a usable map.</summary>
     private readonly Dictionary<string, CoverageIndex> _maps = new(Paths.Comparer);
 
@@ -32,6 +41,8 @@ internal sealed partial class CoverageSelection
         _logger = logger;
         _graph = request.Graph;
         _index = index;
+        _repoRoot = request.RepoRoot;
+        _platform = request.Platform;
         foreach (var test in affectedTests)
         {
             _affectedTests.Add(test.Project.Path);
@@ -160,16 +171,11 @@ internal sealed partial class CoverageSelection
     public bool HasMap(string testProject) => _maps.ContainsKey(testProject);
 
     /// <summary>
-    /// True when a test of <paramref name="type"/> failed while its map was recorded. A failing test
-    /// stops early, so the map may lack code the class reaches; the class runs whenever its project is
-    /// affected.
+    /// True when a test of the class failed while its map was recorded. A failing test stops early, so
+    /// the map may lack code the class reaches; the class runs whenever its project is affected.
     /// </summary>
-    /// <param name="type">Indexed test class.</param>
-    public bool FailedWhileRecording(IndexedType type) => FailedWhileRecording(type.ProjectPath, type.RuntimeTypeName);
-
-    /// <summary>See <see cref="FailedWhileRecording(IndexedType)"/>, by project and runtime class name.</summary>
     /// <param name="project">Normalized test project path.</param>
-    /// <param name="testClass">Runtime class name.</param>
+    /// <param name="testClass">Runtime class name as the map recorded it.</param>
     public bool FailedWhileRecording(string project, string testClass) =>
         _maps.TryGetValue(project, out var map) && map.Map.FailedClasses!.Contains(testClass);
 
@@ -188,15 +194,90 @@ internal sealed partial class CoverageSelection
     public bool Selects(IndexedType type) =>
         _selected.TryGetValue(type.ProjectPath, out var classes) && classes.ContainsKey(type.RuntimeTypeName);
 
-    /// <summary>Why coverage selected <paramref name="type"/>: the change it ran and the map's commit; null when it did not.</summary>
-    /// <param name="type">Indexed test class.</param>
-    public string? Evidence(IndexedType type) => Evidence(type.ProjectPath, type.RuntimeTypeName);
-
-    /// <summary>See <see cref="Evidence(IndexedType)"/>, by project and runtime class name.</summary>
+    /// <summary>Why coverage selected the class: the change it ran and the map's commit; null when it did not.</summary>
     /// <param name="project">Normalized test project path.</param>
-    /// <param name="testClass">Runtime class name.</param>
+    /// <param name="testClass">Runtime class name as the map recorded it.</param>
     public string? Evidence(string project, string testClass) =>
         _selected.TryGetValue(project, out var classes) ? classes.GetValueOrDefault(testClass) : null;
+
+    /// <summary>
+    /// The name the map of <paramref name="type"/>'s project recorded the class under: its own name,
+    /// or the orphan written at its place when the map never reported the class
+    /// (<see cref="RecordedClassMatcher"/>). Coverage, failure and skip are looked up by this name.
+    /// </summary>
+    /// <param name="type">Indexed test class.</param>
+    public string RecordedName(IndexedType type) =>
+        Matches(type.ProjectPath).Aliases.GetValueOrDefault(type.RuntimeTypeName) ?? type.RuntimeTypeName;
+
+    /// <summary>
+    /// The orphans that keep <paramref name="type"/> from being matched one to one, when the map and
+    /// the build disagree about the classes of its file; null when they do not.
+    /// </summary>
+    /// <param name="type">Indexed test class.</param>
+    public IReadOnlyList<string>? Mismatch(IndexedType type) =>
+        Matches(type.ProjectPath).Mismatches.GetValueOrDefault(type.RuntimeTypeName);
+
+    /// <summary>
+    /// True for a class of the map that the build has under another name. It is decided as that class,
+    /// so it is not a candidate of its own: a filter on its name would match nothing.
+    /// </summary>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="testClass">Runtime class name from the map.</param>
+    public bool RecordedUnderAnotherName(string project, string testClass) => Matches(project).PairedOrphans.Contains(testClass);
+
+    /// <summary>True when every test of the class was skipped while the map was recorded.</summary>
+    /// <param name="project">Normalized test project path.</param>
+    /// <param name="testClass">Runtime class name as the map recorded it.</param>
+    public bool SkippedWhileRecording(string project, string testClass) =>
+        _maps.TryGetValue(project, out var map) && map.Map.SkippedClasses?.Contains(testClass) == true;
+
+    /// <summary>The platform the map of <paramref name="project"/> was recorded on; "an unknown platform" when it does not say.</summary>
+    /// <param name="project">Normalized test project path.</param>
+    public string MapPlatform(string project) =>
+        _maps.TryGetValue(project, out var map) && map.Map.Platform is { } platform ? platform : "an unknown platform";
+
+    /// <summary>The platform selecting, where the selected tests are expected to run.</summary>
+    public string Platform => _platform;
+
+    /// <summary>
+    /// True when the map of <paramref name="project"/> was recorded on another platform than this one,
+    /// or does not say: a test skipped there may run here.
+    /// </summary>
+    /// <param name="project">Normalized test project path.</param>
+    public bool RecordedElsewhere(string project) =>
+        _maps.TryGetValue(project, out var map) && !string.Equals(map.Map.Platform, _platform, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Matches for <paramref name="project"/>, computed once. Only a map that knows its classes can say
+    /// that a class is outside them; the warning for each mismatch is logged here, once per run.
+    /// </summary>
+    /// <param name="project">Normalized test project path.</param>
+    private RecordedClassMatches Matches(string project)
+    {
+        if (_matches.TryGetValue(project, out var matches))
+        {
+            return matches;
+        }
+
+        matches = RecordedClassMatches.None;
+        if (_maps.TryGetValue(project, out var map) && map.Map.KnowsClasses)
+        {
+            var types = _index.Types.Where(t => t.InTestProject && Paths.Comparer.Equals(t.ProjectPath, project)).ToList();
+            matches = RecordedClassMatcher.Match(map.Map, types, _repoRoot);
+            foreach (var (candidate, orphan) in matches.Aliases)
+            {
+                LogRecordedAs(candidate, orphan);
+            }
+
+            foreach (var (candidate, orphans) in matches.Mismatches)
+            {
+                LogMismatch(candidate, Path.GetFileName(project), string.Join(", ", orphans));
+            }
+        }
+
+        _matches[project] = matches;
+        return matches;
+    }
 
     /// <summary>The commit the map of <paramref name="testProject"/> was recorded at; null without a map.</summary>
     /// <param name="testProject">Normalized test project path.</param>
@@ -509,6 +590,13 @@ internal sealed partial class CoverageSelection
 
         return (classes, classes is not null);
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TestClass} is not in its coverage map by name; the map recorded it as {RecordedAs}, at the same place")]
+    private partial void LogRecordedAs(string testClass, string recordedAs);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "{TestClass} is not in the coverage map of {Project}, which recorded classes at its place or in its file that the build no longer has ({Orphans}); it is selected. Record the map again")]
+    private partial void LogMismatch(string testClass, string project, string orphans);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: coverage cannot answer alone: {Reason}")]
     private partial void LogUnanswered(string typeName, string memberName, string reason);

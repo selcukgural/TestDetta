@@ -6,11 +6,19 @@ namespace Sift.Coverage;
 /// <param name="Total">Number of tests that ran.</param>
 /// <param name="FailedClasses">Test classes (runtime names) with at least one failed test.</param>
 /// <param name="ExecutedClasses">Test classes (runtime names) with at least one test that ran, passed or failed.</param>
-internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses, IReadOnlySet<string> ExecutedClasses);
+internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses, IReadOnlySet<string> ExecutedClasses)
+{
+    /// <summary>
+    /// Test classes (runtime names) with any test in the report, executed or not. Those not in
+    /// <see cref="ExecutedClasses"/> had every test skipped.
+    /// </summary>
+    public IReadOnlySet<string> ReportedClasses { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+}
 
 /// <summary>
-/// Reads the parts of a test report Sift needs: how many tests ran and which classes failed. Visual
-/// Studio TRX reports, and NUnit's own result XML for NUnit runs that cannot write TRX.
+/// Reads the parts of a test report Sift needs: how many tests ran, which classes failed and which
+/// had every test skipped. Visual Studio TRX reports, and NUnit's own result XML for NUnit runs that
+/// cannot write TRX.
 /// </summary>
 internal static class TrxReport
 {
@@ -34,6 +42,7 @@ internal static class TrxReport
         var total = 0;
         var failed = new HashSet<string>(StringComparer.Ordinal);
         var executed = new HashSet<string>(StringComparer.Ordinal);
+        var reported = new HashSet<string>(StringComparer.Ordinal);
         var reports = files.Length;
         foreach (var file in nunitFiles)
         {
@@ -53,6 +62,7 @@ internal static class TrxReport
                 }
 
                 // Skipped and inconclusive tests never enter their class, as with TRX.
+                reported.Add(testClass);
                 var result = testCase.Attribute("result")?.Value;
                 if (result is "Passed" or "Failed" or "Warning")
                 {
@@ -96,6 +106,7 @@ internal static class TrxReport
                 }
 
                 // A skipped test never enters its class, so it proves nothing about the map.
+                reported.Add(testClass);
                 if (outcome is not ("NotExecuted" or "Inconclusive" or "Pending"))
                 {
                     executed.Add(testClass);
@@ -108,7 +119,7 @@ internal static class TrxReport
             }
         }
 
-        return new TrxOutcome(total, failed, executed);
+        return new TrxOutcome(total, failed, executed) { ReportedClasses = reported };
     }
 
     /// <summary>

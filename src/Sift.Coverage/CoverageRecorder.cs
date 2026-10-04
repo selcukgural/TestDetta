@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
@@ -100,6 +101,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
         var assemblies = AssembliesToInstrument(new HashSet<string>(AssemblyOwners(request).Keys, StringComparer.OrdinalIgnoreCase), outputDirectory);
         var generated = ReadGenerated(request, targetPath, assemblies);
+        var locations = ClassLocationReader.Read(targetPath, request.RepoRoot);
         LogAssemblies(assemblies.Count, outputDirectory);
 
         var work = Path.Combine(Path.GetTempPath(), "sift-record-" + Guid.NewGuid().ToString("N"));
@@ -178,14 +180,21 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
 
             var map = BuildMap(request, instrumentation.Methods, resultsFiles);
+            map = map with { FailedClasses = Untrusted(runs, map) };
             map = map with
             {
-                FailedClasses = Untrusted(runs, map),
+                SkippedClasses = Skipped(runs, map),
+                Platform = RuntimeInformation.RuntimeIdentifier,
+            };
+            map = map with
+            {
+                ClassLocations = Reported(map, locations),
                 Generated = generated,
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
             };
             LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
+            LogSkippedClasses(project, map.SkippedClasses?.Count ?? -1, map.ClassLocations?.Count ?? 0);
             return (map, runs.All(static r => r.Result.ExitCode == 0));
         }
         finally
@@ -397,6 +406,59 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
 
         return untrusted;
+    }
+
+    /// <summary>
+    /// Test classes the reports list with none of their tests executed (every test skipped), which the
+    /// map therefore knows by name only. Null when a shard left no report: the map cannot tell which
+    /// classes the runner saw, so selection treats none as known (docs/design/unrecorded-classes.md).
+    /// </summary>
+    /// <param name="runs">Finished shards.</param>
+    /// <param name="map">The map with its failed classes.</param>
+    private static HashSet<string>? Skipped(Task<ShardResult>[] runs, CoverageMap map)
+    {
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        var executed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var run in runs)
+        {
+            if (run.Result.Report is not { } report)
+            {
+                return null;
+            }
+
+            reported.UnionWith(report.ReportedClasses);
+            executed.UnionWith(report.ExecutedClasses);
+        }
+
+        reported.ExceptWith(executed);
+        reported.RemoveWhere(c => map.Classes.ContainsKey(c) || map.FailedClasses?.Contains(c) == true);
+        return reported;
+    }
+
+    /// <summary>
+    /// The part of <paramref name="locations"/> that belongs to classes the runner reported; the PDB
+    /// also lists helpers and fakes, which selection never asks about. Null without any location (no
+    /// readable PDB).
+    /// </summary>
+    /// <param name="map">The map with its failed and skipped classes.</param>
+    /// <param name="locations">Locations of every class of the test assembly.</param>
+    private static Dictionary<string, IReadOnlyList<ClassLocation>>? Reported(CoverageMap map, Dictionary<string, IReadOnlyList<ClassLocation>> locations)
+    {
+        if (locations.Count == 0)
+        {
+            return null;
+        }
+
+        var reported = new Dictionary<string, IReadOnlyList<ClassLocation>>(StringComparer.Ordinal);
+        foreach (var (testClass, places) in locations)
+        {
+            if (map.Reported(testClass))
+            {
+                reported[testClass] = places;
+            }
+        }
+
+        return reported;
     }
 
     /// <summary>Runs one shard with its own results file and report, prefixing its output lines with the shard number.</summary>
@@ -912,6 +974,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{Project}: {Count} test class(es) failed while recording (-1: unknown, the map will not be used)")]
     private partial void LogFailedClasses(string project, int count);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "{Project}: {Count} test class(es) had every test skipped (-1: unknown, no report); {Located} reported class(es) located in the PDB")]
+    private partial void LogSkippedClasses(string project, int count, int located);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{TestClass} ran but left no coverage; it will always be selected")]
     private partial void LogUnrecordedClass(string testClass);
