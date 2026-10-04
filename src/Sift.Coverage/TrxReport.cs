@@ -90,9 +90,10 @@ internal static class TrxReport
             var classById = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var test in document.Descendants(ns + "UnitTest"))
             {
-                if (test.Attribute("id")?.Value is { } id && test.Element(ns + "TestMethod")?.Attribute("className")?.Value is { } className)
+                if (test.Attribute("id")?.Value is { } id && test.Element(ns + "TestMethod") is { } method
+                    && method.Attribute("className")?.Value is { } className)
                 {
-                    classById[id] = ClassName(className);
+                    classById[id] = ClassName(className, method);
                 }
             }
 
@@ -122,14 +123,29 @@ internal static class TrxReport
         return new TrxOutcome(total, failed, executed) { ReportedClasses = reported };
     }
 
+    /// <summary>Adapter of Machine.Specifications (MSpec), which names tests unlike the others.</summary>
+    private const string MSpecAdapter = "executor://machine.vstestadapter";
+
     /// <summary>
     /// The class name as test filters and coverage maps spell it. VSTest may write it with the
-    /// assembly appended (<c>Ns.Class, Assembly</c>).
+    /// assembly appended (<c>Ns.Class, Assembly</c>). MSpec writes only the namespace as the class and
+    /// <c>Context::Specification</c> as the test name; its class is the context, so it is put back
+    /// together from both. Left as the namespace, it would match no class in the source, and a failing
+    /// context would never be selected.
     /// </summary>
     /// <param name="className">Class name from the report.</param>
-    private static string ClassName(string className)
+    /// <param name="method">The report's <c>TestMethod</c> element, for the adapter and the test name.</param>
+    private static string ClassName(string className, XElement method)
     {
         var comma = className.IndexOf(',', StringComparison.Ordinal);
-        return (comma < 0 ? className : className[..comma]).Trim();
+        var name = (comma < 0 ? className : className[..comma]).Trim();
+        if (method.Attribute("adapterTypeName")?.Value.StartsWith(MSpecAdapter, StringComparison.OrdinalIgnoreCase) != true
+            || method.Attribute("name")?.Value is not { } testName)
+        {
+            return name;
+        }
+
+        var separator = testName.IndexOf("::", StringComparison.Ordinal);
+        return separator > 0 ? $"{name}.{testName[..separator]}" : name;
     }
 }

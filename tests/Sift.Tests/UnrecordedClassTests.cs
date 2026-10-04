@@ -277,6 +277,30 @@ public sealed class UnrecordedClassTests : IDisposable
     }
 
     [Fact]
+    public void Trx_report_names_mspec_contexts_by_their_class_not_their_namespace()
+    {
+        // Machine.Specifications writes the namespace as className and "Context::Specification" as name.
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path.Combine(_directory, "run.trx"), """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <TestDefinitions>
+                <UnitTest id="1"><TestMethod adapterTypeName="executor://machine.vstestadapter/" className="MSpec.Specs" name="When_mspec_is_used::should_fail" /></UnitTest>
+                <UnitTest id="2"><TestMethod adapterTypeName="executor://machine.vstestadapter/" className="MSpec.Specs" name="When_nothing_happens::should_pass" /></UnitTest>
+              </TestDefinitions>
+              <Results>
+                <UnitTestResult testId="1" outcome="Failed" />
+                <UnitTestResult testId="2" outcome="Passed" />
+              </Results>
+            </TestRun>
+            """);
+
+        var outcome = TrxReport.Read(_directory)!;
+
+        Assert.Equal(["MSpec.Specs.When_mspec_is_used", "MSpec.Specs.When_nothing_happens"], outcome.ExecutedClasses.Order(StringComparer.Ordinal));
+        Assert.Equal(["MSpec.Specs.When_mspec_is_used"], outcome.FailedClasses);
+    }
+
+    [Fact]
     public void Class_locations_come_from_the_pdb_with_generated_code_counted_for_its_class()
     {
         Directory.CreateDirectory(_directory);

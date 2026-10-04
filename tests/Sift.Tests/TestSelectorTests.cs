@@ -1104,6 +1104,29 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void A_class_that_failed_while_recording_is_selected_even_if_the_index_does_not_take_it_for_tests()
+    {
+        // An MSpec context has no test attributes, and the tracker leaves it no coverage; the runner
+        // reported it, so the recorder lists it as failed (untrusted). AwesomeAssertions' MSpec.Specs.
+        _repo.Write("tests/Shop.Tests/When_taxing.cs", """
+            namespace Shop.Tests;
+            public class When_taxing { static decimal Tax = new PriceCalculator().Tax(10m); }
+            """);
+        _repo.Commit("context");
+        _failed = new HashSet<string> { "Shop.Tests.When_taxing", "Shop.Tests.Hidden" };
+        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]));
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        var selection = Select();
+
+        Assert.Contains("Shop.Tests.When_taxing", selection.TestClasses);
+        Assert.Equal(ClassDecisionKind.FailedWhileRecording, selection.Decisions.Single(static d => d.TestClass == "Shop.Tests.When_taxing").Kind);
+        // Reported by the runner but not in the source the index read: still the map's failure decides.
+        Assert.Contains("Shop.Tests.Hidden", selection.TestClasses);
+        Assert.DoesNotContain("Shop.Tests.SlugTests", selection.TestClasses);
+    }
+
+    [Fact]
     public void Excluding_filter_matches_everything_outside_the_classes()
     {
         Assert.Equal("FullyQualifiedName!~A.B.&FullyQualifiedName!~A.C\\(1\\).", TestFilter.ExcludingClasses(["A.B", "A.C(1)"]));

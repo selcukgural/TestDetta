@@ -80,6 +80,23 @@ orphan too, and the map still decides it.
 No name folding (`İ`/`I`): matching by place covers any generator that names classes differently
 from one build to the next, not only a Turkish `ToUpper`.
 
+### Classes the runner reported but the index does not take for tests (2026-10-04)
+
+Round 2c missed a failing MSpec context in AwesomeAssertions' `MSpec.Specs`. Two gaps met:
+
+- MSpec's adapter writes the namespace as the TRX `className` and `Context::Specification` as the
+  test name, so the map recorded the class as `MSpec.Specs`, which matches no class in the source.
+  `TrxReport` now puts the class back together for that adapter (`MSpec.Specs.When_mspec_is_used`).
+- An MSpec context has no test attributes and the tracker leaves it no coverage, so the recorder
+  lists it as failed (untrusted), and only classes with coverage counted as candidates beyond what
+  the index recognises. Every class the runner reported (`Classes`, `FailedClasses`,
+  `SkippedClasses`) is now a candidate, inside the index or not, and a reported class the index
+  cannot see is decided by the map alone: coverage, a failure while recording, or tests skipped on
+  another platform (Rule 1).
+
+Maps recorded before the fix still name the namespace; it is selected as a class the index misses,
+and its filter (`MSpec.Specs.`) runs the whole project, which is safe.
+
 ### Old maps
 
 Without `SkippedClasses` neither rule applies and selection is unchanged. Without `ClassLocations`

@@ -387,8 +387,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         var decisionsByProject = new Dictionary<string, List<ClassDecision>>(Paths.Comparer);
         foreach (var type in index.Types)
         {
-            // A class the coverage map recorded ran tests, whatever attributes the index recognised.
-            if (!type.InTestProject || !(type.CanContainTests || coverage.Recorded(type)))
+            // A class the runner reported while the map was recorded holds tests, whatever attributes
+            // the index recognised (MSpec contexts have none).
+            if (!type.InTestProject || !(type.CanContainTests || coverage.Reported(type)))
             {
                 continue;
             }
@@ -461,10 +462,11 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     }
 
     /// <summary>
-    /// Makes every class a map recorded running tests a candidate, also when the source index does not
-    /// see it: code under a mix of preprocessor symbols that neither parsed variant enters
+    /// Makes every class the runner reported while a map was recorded a candidate, also when the source
+    /// index does not see it: code under a mix of preprocessor symbols that neither parsed variant enters
     /// (Newtonsoft.Json's DateOnlyTests in <c>#if NET6_0_OR_GREATER &amp;&amp; !NETSTANDARD2_0</c>) still ran,
-    /// and the map knows what it ran. Such a class is decided by coverage alone.
+    /// and the map knows what it ran. Such a class is decided by what the map says alone: its coverage,
+    /// a failure while recording, or tests skipped on another platform.
     /// </summary>
     /// <param name="affectedTests">Test projects affected at project level.</param>
     /// <param name="coverage">Classes selected from coverage maps.</param>
@@ -483,7 +485,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             var project = test.Project.Path;
             var known = new HashSet<string>(
                 decisionsByProject.GetValueOrDefault(project)?.Select(static d => d.TestClass) ?? [], StringComparer.Ordinal);
-            foreach (var testClass in coverage.RecordedClasses(project).Where(c => !known.Contains(c)).Order(StringComparer.Ordinal).ToList())
+            foreach (var testClass in coverage.ReportedClasses(project).Where(c => !known.Contains(c)).Order(StringComparer.Ordinal).ToList())
             {
                 // The build has it under another name, and that class was decided as this one.
                 if (coverage.RecordedUnderAnotherName(project, testClass))
@@ -496,8 +498,11 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
                     : coverage.FailedWhileRecording(project, testClass)
                         ? new ClassDecision(testClass, Selected: true, ClassDecisionKind.FailedWhileRecording,
                             $"a test of it failed while the map was recorded (map {CoverageSelection.Short(coverage.MapCommit(project)!)})")
-                        : new ClassDecision(testClass, Selected: false, ClassDecisionKind.Skipped,
-                            $"ran none of the changed code (map {CoverageSelection.Short(coverage.MapCommit(project)!)}); its source is hidden from the name trace by preprocessor conditions");
+                        : coverage.SkippedWhileRecording(project, testClass) && coverage.RecordedElsewhere(project)
+                            ? new ClassDecision(testClass, Selected: true, ClassDecisionKind.SkippedWhileRecording,
+                                $"every test of it was skipped while the map was recorded on {coverage.MapPlatform(project)}, so the map cannot say what it runs on {coverage.Platform} (map {CoverageSelection.Short(coverage.MapCommit(project)!)})")
+                            : new ClassDecision(testClass, Selected: false, ClassDecisionKind.Skipped,
+                                $"ran none of the changed code (map {CoverageSelection.Short(coverage.MapCommit(project)!)}); the name trace cannot see its source");
                 candidatesByProject[project] = candidatesByProject.GetValueOrDefault(project) + 1;
                 if (!decisionsByProject.TryGetValue(project, out var decisions))
                 {

@@ -181,15 +181,27 @@ internal sealed partial class CoverageSelection
     public bool FailedWhileRecording(string project, string testClass) =>
         _maps.TryGetValue(project, out var map) && map.Map.FailedClasses!.Contains(testClass);
 
-    /// <summary>Test classes the map of <paramref name="project"/> recorded running tests; empty without a map.</summary>
+    /// <summary>
+    /// Test classes the test runner reported while the map of <paramref name="project"/> was recorded:
+    /// those with coverage, those that failed (whose coverage may be missing altogether, as for a
+    /// framework the tracker cannot follow) and those whose tests were all skipped. Empty without a map.
+    /// </summary>
     /// <param name="project">Normalized test project path.</param>
-    public IEnumerable<string> RecordedClasses(string project) =>
-        _maps.TryGetValue(project, out var map) ? map.Map.Classes.Keys : [];
+    public IEnumerable<string> ReportedClasses(string project) =>
+        _maps.TryGetValue(project, out var map)
+            ? map.Map.Classes.Keys.Union(map.Map.FailedClasses ?? Enumerable.Empty<string>()).Union(map.Map.SkippedClasses ?? Enumerable.Empty<string>())
+            : [];
 
-    /// <summary>True when a map of the type's project recorded tests of <paramref name="type"/>.</summary>
+    /// <summary>
+    /// True when the runner reported <paramref name="type"/> as a test class while its project's map was
+    /// recorded (see <see cref="ReportedClasses"/>), whatever attributes the index recognised.
+    /// </summary>
     /// <param name="type">Indexed type of a test project.</param>
-    public bool Recorded(IndexedType type) =>
-        _maps.TryGetValue(type.ProjectPath, out var map) && map.Map.Classes.ContainsKey(type.RuntimeTypeName);
+    public bool Reported(IndexedType type) =>
+        _maps.TryGetValue(type.ProjectPath, out var map)
+        && (map.Map.Classes.ContainsKey(type.RuntimeTypeName)
+            || map.Map.FailedClasses?.Contains(type.RuntimeTypeName) == true
+            || map.Map.SkippedClasses?.Contains(type.RuntimeTypeName) == true);
 
     /// <summary>True when coverage selected <paramref name="type"/>, a test class.</summary>
     /// <param name="type">Indexed test class.</param>
