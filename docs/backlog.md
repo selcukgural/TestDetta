@@ -212,6 +212,25 @@ Interim fixes that are safe for the common case; come back for the complete solu
   code inside a test flow counts for its class, code outside every flow counts as ambient instead of
   for the class entered last, and the map has no class times. To be checked on NLog in round 2.
 
+## v1 (agreed 2026-10-04)
+
+Reliability is shown (round 1: 3 misses of 2941 failing mutants, all fixed; round 2b: none real),
+and the rest of this file is mostly precision, which keeps growing. v1 is the finish line:
+
+1. Round 2c (every corpus repository, build of main, en-US) without a real miss.
+2. A customer can install and use Sift: README and docs/ci.md checked end to end, the GitHub Action
+   (`action.yml`) run on a real repository from a fresh clone.
+3. A licence can be bought and works: purchase through the Merchant of Record, key installed,
+   `sift license status` green (see "Licensing independent of the payment provider").
+4. A simple "what you saved" report: the existing per-class decisions and time estimate in the job
+   summary, checked on a real run (item 4 below goes further after v1).
+5. A product name before any public launch (see Later).
+
+Until v1 only misses are fixed. Parked until after v1: narrowing the run-once rules, Microsoft
+code coverage next to recording, per-call third-party callbacks, the precision round (3),
+method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks run the corpus
+repositories a change touches; the full corpus runs at milestones.
+
 ## Next
 
 0. **Fast, reliable evaluation environment (top priority, user and Claude agreed 2026-10-02).**
