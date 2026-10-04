@@ -258,10 +258,15 @@ repositories a change touches; the full corpus runs at milestones.
      a check run missed a race on a fixed publish folder (Scriban's TestAot). Default parallelism
      to be set from the measurements in the design doc.
    - ~~Stable sample + outcome cache~~: done (f12e713, 99347df).
-   - ~~Cache recordings~~: done (7f38a58), keyed by commit, recording settings and the contents
-     of TestDetta's core, coverage and tracker assemblies, so any TestDetta change records again. Baselines
+   - ~~Cache recordings~~: done (7f38a58), keyed by commit and recording settings. Baselines
      are not cached: one or two suite runs per commit, and they also measure the time limits and
      anchor the schema and parallel checks.
+   - ~~Reuse across rounds~~ (2026-10-05, docs/design/eval-result-cache.md): corpus entries can pin a
+     `commit`, and `--cache <dir>` keeps outcomes and maps outside the round, so a fix costs only
+     selection and the mutants it newly reaches. The recording key takes the coverage and tracker
+     assemblies and only the core code they reach (`RecordingFingerprint`), so a selection fix no
+     longer records again. Next: pin the corpus to the round 2c commits, seed the shared cache from
+     runs-r2c, pass `--cache` in the pool script, and measure a round.
    - ~~Tiers~~: nightly smoke corpus on GitHub done (6a1a57e; Scriban, Fluid, Carter, 20 mutants each,
      about 18 minutes on a 2-core runner; first run 0 of 47 missed). User chose nightly over per-commit
      and kept the repository private (Actions minutes). On 2026-10-03 TestDetta had used 1,635 of the

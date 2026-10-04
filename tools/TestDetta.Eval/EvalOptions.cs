@@ -27,7 +27,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                testdetta-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
                          [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
                          [--compare-tia <dll>] [--compare-affected <exe>] [--toolchains <dir>] [--compare <dir>]
-                         [--history <dir>] [-v]
+                         [--history <dir>] [--cache <dir>] [-v]
                testdetta-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -62,10 +62,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  it the evaluation stops and reports a hang in TestDetta
           --recording-cache <dir>  Keep recorded coverage maps in <dir> and reuse them while the commit, the
                                  recording settings and TestDetta's recording code are the same (corpus runs
-                                 use <out>/map-cache/<name>)
+                                 use <out>/map-cache/<name>, or <cache>/maps/<name> with --cache)
           --outcome-cache <dir>  Keep what the tests did against each synthetic mutant in <dir> and reuse it
                                  next time, so only TestDetta's selection is computed again (corpus runs use
-                                 <out>/outcome-cache/<name>)
+                                 <out>/outcome-cache/<name>, or <cache>/outcomes/<name> with --cache)
           --sdk <version>        Build, record and test with this exact .NET SDK, installed under --toolchains
                                  from archives whose SHA-512 is in the toolchain lock (default: dotnet on PATH)
           --runtime <version>    Add this ASP.NET Core runtime to the toolchain; repeat for several
@@ -89,6 +89,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
         whose entries name a toolchain needs --toolchains; the lock is toolchains.lock.json next to it.
         --compare <dir> compares the run with an earlier one (its summary.json) into comparison.md;
         --history <dir> keeps the run's summary there and redraws <dir>/dashboard.html from all runs.
+        --cache <dir> keeps test outcomes and coverage maps for every round there instead of in <out>;
+        with a corpus entry's "commit" pinned, a later round reuses them (docs/design/eval-result-cache.md).
         """;
 
     /// <summary>Parses the command line.</summary>

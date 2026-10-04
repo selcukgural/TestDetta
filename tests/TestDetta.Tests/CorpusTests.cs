@@ -169,6 +169,28 @@ public sealed class CorpusTests : IDisposable
         Assert.Equal(0.8, totals.Single(static t => t.Entry.Name == "a").ProjectLevelShare!.Value, 4);
     }
 
+    [Fact]
+    public void A_pinned_commit_is_evaluated_and_the_cache_lives_outside_the_round()
+    {
+        var corpusPath = Write("""
+            { "repositories": [
+              { "name": "a", "url": "x", "commit": "f9dd7546cc3d", "synthetic": 10 },
+              { "name": "b", "url": "y", "branch": "dev", "synthetic": 10 } ] }
+            """);
+        var corpus = Corpus.Load(corpusPath);
+        Assert.True(BatchOptions.TryParse(["--corpus", corpusPath, "--out", Path.Combine(_directory, "round"), "--cache", Path.Combine(_directory, "cache")], out var options, out var error), error);
+
+        var (pinned, shared) = BatchRunner.SettingsFor(corpus.Resolve(corpus.Repositories[0]), options);
+        var (branch, local) = BatchRunner.SettingsFor(corpus.Resolve(corpus.Repositories[1]), options with { Cache = null });
+
+        Assert.Equal("f9dd7546cc3d", pinned.Branch);
+        Assert.Equal(Path.Combine(_directory, "cache", "outcomes", "a"), shared.OutcomeCache);
+        Assert.Equal(Path.Combine(_directory, "cache", "maps", "a"), shared.RecordingCache);
+        Assert.Equal("dev", branch.Branch);
+        Assert.Equal(Path.Combine(_directory, "round", "outcome-cache", "b"), local.OutcomeCache);
+        Assert.Equal(Path.Combine(_directory, "round", "map-cache", "b"), local.RecordingCache);
+    }
+
     private string Write(string json)
     {
         var path = Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".json");

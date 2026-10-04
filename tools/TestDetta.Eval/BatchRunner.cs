@@ -20,6 +20,12 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
     /// <summary>Where toolchains are installed (<c>--toolchains</c>); needed when an entry names a toolchain.</summary>
     public string? Toolchains { get; init; }
 
+    /// <summary>
+    /// Folder for test outcomes and coverage maps shared by every round (<c>--cache</c>); null keeps
+    /// them in the output folder. Useful with pinned commits (docs/design/eval-result-cache.md).
+    /// </summary>
+    public string? Cache { get; init; }
+
     /// <summary>Directory or <c>summary.json</c> of an earlier run to compare with (<c>--compare</c>); null for none.</summary>
     public string? Compare { get; init; }
 
@@ -54,6 +60,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         var logLevel = LogLevel.Information;
         var overrides = new BatchOverrides();
         string? toolchains = null;
+        string? cache = null;
         string? compare = null;
         string? history = null;
         options = null!;
@@ -100,6 +107,10 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 
                 case "--toolchains":
                     toolchains = Path.GetFullPath(value);
+                    break;
+
+                case "--cache":
+                    cache = Path.GetFullPath(value);
                     break;
 
                 case "--only":
@@ -161,7 +172,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         }
 
         output ??= Path.Combine(Path.GetTempPath(), "sift-corpus-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains, Compare = compare, History = history };
+        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains, Compare = compare, History = history, Cache = cache };
         return true;
     }
 }
@@ -263,9 +274,10 @@ internal static partial class BatchRunner
             entry.Framework)
         {
             Excluded = entry.Exclude ?? [],
-            // Outside the repository's directory, which is moved aside for a rerun after a fix.
-            OutcomeCache = Path.Combine(options.Output, "outcome-cache", entry.Name),
-            RecordingCache = Path.Combine(options.Output, "map-cache", entry.Name),
+            // Outside the repository's directory, which is moved aside for a rerun after a fix. With
+            // --cache, shared by every round, so a pinned commit's outcomes and maps are paid for once.
+            OutcomeCache = options.Cache is { } cache ? Path.Combine(cache, "outcomes", entry.Name) : Path.Combine(options.Output, "outcome-cache", entry.Name),
+            RecordingCache = options.Cache is { } maps ? Path.Combine(maps, "maps", entry.Name) : Path.Combine(options.Output, "map-cache", entry.Name),
             MutantParallelism = options.Overrides.MutantParallelism ?? entry.MutantParallelism ?? 1,
             MapAge = options.Overrides.MapAge ?? 0,
             TiaCli = options.Overrides.TiaCli,
@@ -292,8 +304,8 @@ internal static partial class BatchRunner
             run = run with { MutantKinds = kinds };
         }
 
-        // Without a branch, the repository's default branch, whatever it is called.
-        var target = new EvalTarget(entry.Url, entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
+        // A pinned commit first; without a branch, the repository's default branch, whatever it is called.
+        var target = new EvalTarget(entry.Url, entry.Commit ?? entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
         return (target, run);
     }
 

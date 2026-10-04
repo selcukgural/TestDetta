@@ -18,6 +18,13 @@ internal sealed record CorpusEntry
     /// <summary>Branch to evaluate; the repository's default branch when left out.</summary>
     public string? Branch { get; init; }
 
+    /// <summary>
+    /// Commit to evaluate instead of the branch head. Pinning keeps the stored test outcomes and maps
+    /// valid from one round to the next; a refresh round moves it on purpose
+    /// (docs/design/eval-result-cache.md).
+    /// </summary>
+    public string? Commit { get; init; }
+
     /// <summary>Target framework to build, record and test.</summary>
     public string? Framework { get; init; }
 

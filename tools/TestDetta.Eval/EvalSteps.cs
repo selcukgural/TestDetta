@@ -126,24 +126,31 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     /// the recording options it passes); raise it with any change there, since cached recordings are
     /// keyed by it.
     /// </summary>
-    private const int RecordingVersion = 1;
+    private const int RecordingVersion = 2;
 
     /// <summary>Longest a test project's build may take; a build that hangs leaves the project out instead of stopping the evaluation.</summary>
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(30);
 
     /// <summary>
-    /// What decides a recording besides the commit: TestDetta's recording code (the contents of the core,
-    /// coverage and tracker assemblies, so any change to TestDetta records again), the evaluation's recording
-    /// logic (<see cref="RecordingVersion"/>) and the settings that shape it. A hash, as a file name part.
+    /// The recording code's fingerprint: the coverage and tracker assemblies in full, and the part of the
+    /// core assembly they, the project graph loader and the map store reach (<see cref="RecordingFingerprint"/>).
+    /// Computed once per process.
+    /// </summary>
+    private static readonly Lazy<string> RecordingCode = new(static () => RecordingFingerprint.Compute(
+        [typeof(CoverageRecorder).Assembly.Location, typeof(TestDetta.Coverage.Runtime.TestDettaTracker).Assembly.Location],
+        typeof(ProjectGraphLoader).Assembly.Location,
+        [typeof(ProjectGraphLoader).FullName!, typeof(CoverageMapStore).FullName!]));
+
+    /// <summary>
+    /// What decides a recording besides the commit: TestDetta's recording code (<see cref="RecordingCode"/>,
+    /// so a change to selection alone keeps the cached maps), the evaluation's recording logic
+    /// (<see cref="RecordingVersion"/>) and the settings that shape it. A hash, as a file name part.
     /// </summary>
     /// <param name="settings">Evaluation settings.</param>
     internal static string RecordingKey(RunSettings settings)
     {
         using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
-        foreach (var assembly in new[] { typeof(ProjectGraphLoader).Assembly, typeof(CoverageRecorder).Assembly, typeof(TestDetta.Coverage.Runtime.TestDettaTracker).Assembly })
-        {
-            hash.AppendData(File.ReadAllBytes(assembly.Location));
-        }
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(RecordingCode.Value));
 
         var shape = string.Join("\n",
             RecordingVersion,
