@@ -24,7 +24,8 @@ publishes main with `deploy.mjs`, which sends the same settings through the Host
 needs no firebase-tools. By hand: `FIREBASE_SITE=<site id> GOOGLE_ACCESS_TOKEN=$(gcloud auth
 print-access-token) node deploy.mjs` after `node build.mjs`.
 
-One-time setup (`PROJECT` is the Google Cloud project, `NUMBER` its project number; run gcloud
+One-time setup (`PROJECT` is the Google Cloud project, `testdetta-prod` under the `testdetta.com`
+organization, `NUMBER` its project number; run gcloud
 under the company account, e.g. a separate `gcloud config configurations create testdetta`):
 
 1. Add Firebase to the project and open Hosting once in the Firebase console; its default site id
@@ -36,7 +37,8 @@ under the company account, e.g. a separate `gcloud config configurations create 
    gcloud projects add-iam-policy-binding PROJECT --role=roles/firebasehosting.admin \
      --member=serviceAccount:site-deployer@PROJECT.iam.gserviceaccount.com
    ```
-4. A workload identity provider that trusts this repository's main branch, this workflow and the
+4. (Project owners lack `iam.workloadIdentityPools.create`; grant yourself
+   `roles/iam.workloadIdentityPoolAdmin` on the project first.) A workload identity provider that trusts this repository's main branch, this workflow and the
    `site` environment only (the repository is matched by id, so a renamed or recreated repository
    gains nothing):
    ```sh
