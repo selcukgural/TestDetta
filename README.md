@@ -113,8 +113,17 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `max-map-age` | `50` | test mode: commits a map may be behind the merge base (0: only an exact map) |
 | `drift-fallback` | `all` | test mode: `all` runs test projects completely when the changes since an older map include a build file or configuration; `name` decides them by name |
 | `github-token` | `github.token` | test mode: lists the Actions caches to find the newest map |
+| `license` | | test mode: the Sift license, from a secret such as `SIFT_LICENSE`; public repositories need none |
 | `working-directory` | `.` | any directory inside the repository |
 | `setup-dotnet` | `true` | install the .NET 10 SDK Sift runs on |
+
+## License
+
+Public repositories need no license. Private ones pass the license string in `SIFT_LICENSE` (or a
+file named by `SIFT_LICENSE_FILE`); in GitHub Actions, through the `license` input from a secret.
+`sift license status` shows what a license covers. Without a valid license every test runs and the
+build never fails because of it. Machines that cannot reach the license service set
+`SIFT_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).
 
 ## Other CI systems
 
@@ -142,18 +151,18 @@ and the details are in [docs/ci.md](docs/ci.md).
   `ConditionalWeakTable`, `IMemoryCache.GetOrCreate`), and to constructors and static members that
   only one test class per recording process ran, are traced by name instead. A cache written by
   hand (a `Dictionary` checked with `TryGetValue`) can still hide its users. Keep running the full suite on the default branch; recording does that.
-- Project files are read as XML, not evaluated. Imports (`<Import>`, `.projitems`, the imports of
-  `Directory.Build.*`), linked items outside the project directory (`<Compile Include="../Shared/*.cs">`)
-  and the common path properties (`$(MSBuildThisFileDirectory)`, `$(MSBuildProjectDirectory)`,
-  `GetPathOfFileAbove`) are followed; conditions are not evaluated. When an import or item uses any
-  other property, changed build or source files that no project claims are assumed to affect that
-  project. Test projects are also recognised by a `*.Tests`/`*.Test` name.
-- Preprocessor symbols (`DefineConstants`, target framework symbols) are not evaluated. C# files
-  are read twice, with no symbols and with every symbol their `#if`s name, so code inside
-  `#if NET8_0_OR_GREATER` or a whole file inside `#if` is seen. A change Sift still cannot place
-  (code active only under a mix like `#if A && !B`) counts as a change to the whole project.
-- `AssemblyName` values that need MSBuild (`$(Prefix)Name`, property functions) are asked from
-  MSBuild when recording, one query per such project.
+- Project files are evaluated by MSBuild (one `dotnet msbuild` call, cached in `.sift/cache`) for
+  references, compiled and embedded items, assembly names and target frameworks, in the default
+  configuration and without a restore. Items only a package's props add, or only a `Release`
+  condition adds, are not seen. A project MSBuild cannot evaluate is read as XML, as are imports;
+  changed files no project claims are assumed to affect the projects of their directory. Test
+  projects are also recognised by a `*.Tests`/`*.Test` name.
+- C# files are parsed with each target framework's real preprocessor symbols, and also with no
+  symbols and with every symbol their `#if`s name, so code under any active condition is seen.
+- Tests skipped while a map was recorded have no coverage. A class whose tests were all skipped is
+  selected on another platform (it may run there) and skipped on the recording platform. Tests
+  skipped for other reasons, such as a missing Docker daemon, are covered only by recording where
+  the tests run.
 - Code written by source generators is not in the source tree; `sift record` reads it from the
   PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the
   map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.
