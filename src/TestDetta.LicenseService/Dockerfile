@@ -1,7 +1,7 @@
 # The license service as a container: build with the SDK, run on the ASP.NET runtime as a non-root user.
 # Images are pinned by digest; update them deliberately (docker buildx imagetools inspect <image>:10.0).
 # Build from the repository root: docker build -f src/TestDetta.LicenseService/Dockerfile .
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:5eda31303f8b1b852e79d89fee9f4274cc9ec0f3c96e19e1b837e49d8df288e0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS build
 WORKDIR /source
 # Restore exactly what the committed lock files say (Directory.Build.props turns locked mode on for CI).
 ENV CI=true
