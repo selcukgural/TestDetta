@@ -219,11 +219,18 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
 
 1. Round 2c (every corpus repository, build of main, en-US) without a real miss.
 2. A customer can install and use Sift: README and docs/ci.md checked end to end, the GitHub Action
-   (`action.yml`) run on a real repository from a fresh clone.
+   (`action.yml`) run on a real repository from a fresh clone. Status 2026-10-04: README brought up
+   to date (MSBuild evaluation, symbols, license); the action runs on Sift itself (record mode
+   2026-10-03, pull request path 2026-09-30). Open: how customers get the action and the tool while
+   the repository is private (public action repository, released binaries or a NuGet tool).
 3. A licence can be bought and works: purchase through the Merchant of Record, key installed,
-   `sift license status` green (see "Licensing independent of the payment provider").
+   `sift license status` green (see "Licensing independent of the payment provider"). Status: the
+   format, the check, the service, refresh and Polar webhooks are built
+   (docs/design/licensing.md). Open: where the service runs, the production key, the Polar product
+   setup, and how a buyer receives the license string (no portal or e-mail yet); trials.
 4. A simple "what you saved" report: the existing per-class decisions and time estimate in the job
-   summary, checked on a real run (item 4 below goes further after v1).
+   summary, checked on a real run (item 4 below goes further after v1). Status: checked on Markdig
+   2026-10-04 (16 of 177 classes, 93% of the recorded time saved, a reason per class).
 5. A product name before any public launch (see Later).
 
 Until v1 only misses are fixed. Parked until after v1: narrowing the run-once rules, Microsoft
