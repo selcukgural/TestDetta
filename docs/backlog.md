@@ -15,6 +15,13 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- ~~**A deleted file an item glob brings in from outside the project folder selected nothing**~~
+  (done 2026-10-05): MSBuild expands `<None Include="..\..\testdata\**" />` on the files present,
+  so a deleted data file was in no evaluated item, and the XML item paths that would have matched
+  were dropped from evaluated projects. They are now kept for files that no longer exist only
+  (`ProjectNode.ItemsOfDeletedFiles`), so the deletion runs the project and nothing else widens.
+  Found while designing run-time file reads (still open: files read by a path built in code and
+  listed as no item select nothing; tracking reads while recording would give the precise signal).
 - ~~**Project references used as an analyzer or source generator**~~ (done 2026-10-03,
   docs/design/opaque-project-references.md): a reference with `OutputItemType` or
   `ReferenceOutputAssembly="false"` is opaque, and an affected opaque reference makes its consumer

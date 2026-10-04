@@ -1,4 +1,4 @@
-<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: edb2bc45715a -->
+<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 9d69a2b5015f -->
 <h1>Qué lo ejecuta todo</h1>
 <p class="lead">La mayoría de los cambios seleccionan unas pocas clases de prueba. Algunos no se pueden acotar de forma segura, así que {{name}} ejecuta un proyecto de pruebas completo o todos los proyectos bajo una carpeta. Esta página los enumera todos, para que una selección amplia nunca te sorprenda.</p>
 
@@ -40,7 +40,7 @@
 
 <h2 id="ignored">Archivos que se ignoran</h2>
 <p>Un archivo modificado fuera de todas las carpetas de proyecto, como <code>README.md</code>, los archivos bajo <code>.github/</code> o un script en la raíz del repositorio, no pertenece a ningún proyecto y no selecciona nada. Aparece en la salida como no asignado.</p>
-<div class="callout"><p>Si tus pruebas leen un archivo que está fuera de todas las carpetas de proyecto, un cambio en él no las seleccionará. Mantén esos archivos dentro del proyecto de pruebas, donde un cambio ejecuta el proyecto.</p></div>
+<div class="callout"><p>Si tus pruebas leen un archivo que está fuera de todas las carpetas de proyecto, un cambio en él no las seleccionará. Mantén esos archivos dentro del proyecto de pruebas o decláralos como elementos suyos, por ejemplo <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code>. Así el archivo pertenece al proyecto esté donde esté, y cambiarlo o borrarlo ejecuta el proyecto.</p></div>
 <p>Una excepción: un archivo de código fuente o de compilación que ningún proyecto reclama (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>) cuenta como entrada de compilación de todos los proyectos cuyos imports no se pudieron resolver por completo, así que esos se ejecutan.</p>
 
 <h2 id="related">Páginas relacionadas</h2>

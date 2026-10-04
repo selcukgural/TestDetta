@@ -133,6 +133,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 UnknownOpaqueReferencePatterns = [],
                 UnknownItemPatterns = [],
                 ExternalItems = [],
+                ItemsOfDeletedFiles = node.ExternalItems,
                 PackageReferences = packages,
                 AssemblyName = project.AssemblyName ?? node.AssemblyName,
                 AssemblyNameUnresolved = project.AssemblyName is null && node.AssemblyNameUnresolved,

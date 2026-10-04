@@ -1,4 +1,4 @@
-<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: edb2bc45715a -->
+<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: 9d69a2b5015f -->
 <h1>Neler her şeyi çalıştırır</h1>
 <p class="lead">Değişikliklerin çoğu birkaç test sınıfı seçer. Bazıları güvenli bir şekilde daraltılamaz; bu yüzden {{name}} bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırır. Bu sayfa hepsini listeler; böylece geniş bir seçim asla sürpriz olmaz.</p>
 
@@ -40,7 +40,7 @@
 
 <h2 id="ignored">Yok sayılan dosyalar</h2>
 <p>Hiçbir proje klasörünün içinde olmayan değişmiş bir dosya, örneğin <code>README.md</code>, <code>.github/</code> altındaki dosyalar ya da depo kökündeki bir script, hiçbir projeye ait değildir ve hiçbir şey seçmez. Çıktıda eşlenmemiş (unmapped) olarak listelenir.</p>
-<div class="callout"><p>Testleriniz hiçbir proje klasörünün içinde olmayan bir dosyayı okuyorsa, o dosyadaki bir değişiklik onları seçmez. Bu tür dosyaları, bir değişikliğin projeyi çalıştırdığı test projesinin içinde tutun.</p></div>
+<div class="callout"><p>Testleriniz hiçbir proje klasörünün içinde olmayan bir dosyayı okuyorsa, o dosyadaki bir değişiklik onları seçmez. Bu tür dosyaları test projesinin içinde tutun ya da <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code> gibi projenin öğeleri olarak listeleyin. Böylece dosya nerede olursa olsun projeye ait olur; değiştirilmesi ya da silinmesi projeyi çalıştırır.</p></div>
 <p>Bir istisna: hiçbir projenin sahiplenmediği bir kaynak ya da derleme dosyası (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>), import'ları tam olarak çözümlenemeyen her projenin derleme girdisi sayılır; dolayısıyla o projeler çalışır.</p>
 
 <h2 id="related">İlgili sayfalar</h2>

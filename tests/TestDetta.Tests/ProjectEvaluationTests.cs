@@ -37,6 +37,61 @@ public sealed class ProjectEvaluationTests : IDisposable
     }
 
     [Fact]
+    public void A_deleted_file_a_glob_brings_in_from_outside_the_folder_still_belongs_to_the_project()
+    {
+        _repo.Write("tests/Data.Tests/Data.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup><None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Write("testdata/kept.json", "{}");
+        // MSBuild expands the glob on the files that exist, so a deleted file is in no evaluated item.
+        var evaluator = new FakeEvaluator
+        {
+            [Full("tests/Data.Tests/Data.Tests.csproj")] = Evaluated(test: true, items: [Full("testdata/kept.json")]),
+        };
+
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance, evaluator).Load(_repo.Root);
+
+        Assert.Equal(["Data.Tests.csproj"], Owners(graph, "testdata/kept.json"));
+        Assert.Equal(["Data.Tests.csproj"], Owners(graph, "testdata/deleted.json"));
+        Assert.Empty(Owners(graph, "docs/deleted.md"));
+    }
+
+    [Fact]
+    public void Deleting_shared_test_data_runs_the_test_project_that_ships_it()
+    {
+        _repo.Write("tests/Data.Tests/Data.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" />
+                <None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Data.Tests/ReaderTests.cs", "namespace Data.Tests; public class ReaderTests { [Fact] public void Reads() => Assert.NotEmpty(System.IO.File.ReadAllText(\"deleted.json\")); }");
+        _repo.Write("testdata/kept.json", "{}");
+        _repo.Write("testdata/deleted.json", "{}");
+        _repo.Commit("base");
+        File.Delete(Full("testdata/deleted.json"));
+        // The pipeline works from the root as git reports it (on macOS /private/var, not /var), so the
+        // evaluations must be keyed the same way or the project would silently fall back to the XML reading.
+        var root = new GitClient(NullLogger<GitClient>.Instance).TopLevel(_repo.Root);
+        string Top(string relative) => Paths.Normalize(Path.Combine(root, relative));
+        var evaluator = new FakeEvaluator
+        {
+            [Top("tests/Data.Tests/Data.Tests.csproj")] = Evaluated(test: true, items: [Top("tests/Data.Tests/ReaderTests.cs"), Top("testdata/kept.json")]),
+        };
+
+        var tests = new AnalysisPipeline(NullLoggerFactory.Instance, evaluator).Run(_repo.Root, "main").Tests;
+
+        var data = tests.Single(t => Path.GetFileNameWithoutExtension(t.Project.Path) == "Data.Tests");
+        Assert.Equal(TestRunMode.All, data.Mode);
+        Assert.Contains("testdata/deleted.json", data.Reason, StringComparison.Ordinal);
+        Assert.NotNull(data.Project.EvaluatedItems);
+    }
+
+    [Fact]
     public void Evaluated_references_replace_guessed_patterns_and_the_test_flag_is_united()
     {
         _repo.Write("src/Lib.v1/Lib.v1.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");

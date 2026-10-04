@@ -40,7 +40,7 @@
 
 <h2 id="ignored">Files that are ignored</h2>
 <p>A changed file outside every project folder, such as <code>README.md</code>, files under <code>.github/</code> or a script at the root of the repository, belongs to no project and selects nothing. It is listed in the output as unmapped.</p>
-<div class="callout"><p>If your tests read a file that lives outside every project folder, a change to it will not select them. Keep such files inside the test project, where a change runs the project.</p></div>
+<div class="callout"><p>If your tests read a file that lives outside every project folder, a change to it will not select them. Keep such files inside the test project, or list them as its items, for example <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code>. Then the file belongs to the project wherever it lives, and changing or deleting it runs the project.</p></div>
 <p>One exception: a source or build file that no project claims (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>) counts as a build input of every project whose imports could not be fully resolved, so those run.</p>
 
 <h2 id="related">Related pages</h2>

@@ -48,6 +48,13 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     public IReadOnlyList<string> ExternalItems { get; init; } = [];
 
     /// <summary>
+    /// <see cref="ExternalItems"/> as the XML reading found them, kept on a project MSBuild evaluated,
+    /// for files that no longer exist only: MSBuild expands an item glob on the files present, so a
+    /// deleted file the glob named (shared test data under the repository root) is in no evaluated item.
+    /// </summary>
+    public IReadOnlyList<string> ItemsOfDeletedFiles { get; init; } = [];
+
+    /// <summary>
     /// MSBuild files the project imports beyond the implicit <c>Directory.Build.*</c> files (a shared
     /// <c>build/common.props</c>, a <c>.projitems</c>), found through its own imports and theirs.
     /// A change to one of them changes how the project builds.

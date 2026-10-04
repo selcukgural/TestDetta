@@ -27,6 +27,9 @@ public sealed class ProjectGraph
     /// <summary>Projects with item paths that could not be resolved, with their compiled patterns.</summary>
     private readonly (ProjectNode Project, System.Text.RegularExpressions.Regex[] Patterns)[] _unknownItems;
 
+    /// <summary>Evaluated projects with items outside their directory, for files that no longer exist (<see cref="ProjectNode.ItemsOfDeletedFiles"/>).</summary>
+    private readonly (ProjectNode Project, PathMatcher Items)[] _deletedFileItems;
+
     /// <summary>
     /// Extensions of files that may be an unresolved project's hidden import or source; other
     /// unclaimed files (documentation, scripts) stay unclaimed.
@@ -45,6 +48,9 @@ public sealed class ProjectGraph
             .Where(static p => p.ExternalItems.Count > 0 || p.Imports.Count > 0)
             .Select(static p => (p, new PathMatcher(p.ExternalItems), new PathMatcher(p.Imports)))];
         _unresolved = [.. nodes.Values.Where(static p => p.HasUnresolvedInputs)];
+        _deletedFileItems = [.. nodes.Values
+            .Where(static p => p.ItemsOfDeletedFiles.Count > 0)
+            .Select(static p => (p, new PathMatcher(p.ItemsOfDeletedFiles)))];
         _unknownItems = [.. nodes.Values
             .Where(static p => p.UnknownItemPatterns.Count > 0)
             .Select(static p => (p, p.UnknownItemPatterns.Select(static x => new System.Text.RegularExpressions.Regex(x, System.Text.RegularExpressions.RegexOptions.Compiled)).ToArray()))];
@@ -208,6 +214,19 @@ public sealed class ProjectGraph
             else if (items.Matches(file) && !owners.Exists(o => ReferenceEquals(o.Project, project)))
             {
                 owners.Add(new FileOwner(project, FileRole.Source));
+            }
+        }
+
+        // MSBuild expanded the items on the files present; a deleted file an item glob named still
+        // belongs to the project, which then runs as for any change to its non-C# files.
+        if (_deletedFileItems.Length > 0 && !File.Exists(file))
+        {
+            foreach (var (project, items) in _deletedFileItems)
+            {
+                if (items.Matches(file) && !owners.Exists(o => ReferenceEquals(o.Project, project)))
+                {
+                    owners.Add(new FileOwner(project, FileRole.Source));
+                }
             }
         }
 

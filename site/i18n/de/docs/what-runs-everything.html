@@ -1,4 +1,4 @@
-<!-- title: Was alle Tests auslöst; layout: docs; description: Die Änderungen, bei denen {{name}} ein ganzes Testprojekt oder alle Projekte unterhalb eines Ordners ausführt, und die Dateien, die es ignoriert.; source: edb2bc45715a -->
+<!-- title: Was alle Tests auslöst; layout: docs; description: Die Änderungen, bei denen {{name}} ein ganzes Testprojekt oder alle Projekte unterhalb eines Ordners ausführt, und die Dateien, die es ignoriert.; source: 9d69a2b5015f -->
 <h1>Was alle Tests auslöst</h1>
 <p class="lead">Die meisten Änderungen wählen wenige Testklassen aus. Manche lassen sich nicht sicher eingrenzen, deshalb führt {{name}} dann ein ganzes Testprojekt aus oder alle Projekte unterhalb eines Ordners. Diese Seite listet sie alle auf, damit eine breite Auswahl nie überrascht.</p>
 
@@ -40,7 +40,7 @@
 
 <h2 id="ignored">Ignorierte Dateien</h2>
 <p>Eine geänderte Datei außerhalb aller Projektordner, etwa <code>README.md</code>, Dateien unter <code>.github/</code> oder ein Skript im Stammverzeichnis des Repositorys, gehört zu keinem Projekt und wählt nichts aus. Sie erscheint in der Ausgabe als nicht zugeordnet.</p>
-<div class="callout"><p>Wenn Ihre Tests eine Datei lesen, die außerhalb aller Projektordner liegt, wählt eine Änderung daran sie nicht aus. Legen Sie solche Dateien in das Testprojekt, wo eine Änderung das Projekt ausführt.</p></div>
+<div class="callout"><p>Wenn Ihre Tests eine Datei lesen, die außerhalb aller Projektordner liegt, wählt eine Änderung daran sie nicht aus. Legen Sie solche Dateien in das Testprojekt oder führen Sie sie als dessen Items auf, zum Beispiel <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code>. Dann gehört die Datei zum Projekt, wo immer sie liegt, und eine Änderung oder ihr Löschen führt das Projekt aus.</p></div>
 <p>Eine Ausnahme: Eine Quell- oder Build-Datei, die kein Projekt beansprucht (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>), zählt als Build-Eingabe jedes Projekts, dessen Importe nicht vollständig aufgelöst werden konnten, sodass diese laufen.</p>
 
 <h2 id="related">Verwandte Seiten</h2>
