@@ -61,6 +61,17 @@ const fill = (text, values, file, escape = true) =>
 
 const hash = (text) => createHash("sha256").update(text).digest("hex").slice(0, 12);
 
+// Stylesheets and scripts are linked with a hash of their content (site.css?v=…), so a deploy never
+// pairs new pages with a stylesheet or script a browser or CDN still holds from the previous one.
+const versioned = new Map();
+const versionAssets = (html) =>
+  html.replace(/(href|src)="\/assets\/([\w.-]+\.(?:css|js))"/g, (_, attr, file) => {
+    if (!versioned.has(file)) {
+      versioned.set(file, hash(readFileSync(join(src, "assets", file))).slice(0, 8));
+    }
+    return `${attr}="/assets/${file}?v=${versioned.get(file)}"`;
+  });
+
 // Front matter: a first-line comment such as <!-- title: Pricing; layout: page; description: ... -->.
 function parse(text) {
   const match = text.match(/^<!--([\s\S]*?)-->\s*/);
@@ -219,7 +230,7 @@ function build({ allowStale }) {
         ? join(outDir, url, "index.html")
         : join(outDir, relativePath);
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, highlight(html));
+      writeFileSync(target, versionAssets(highlight(html)));
     }
   }
 

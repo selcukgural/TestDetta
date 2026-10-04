@@ -37,7 +37,9 @@ and licenses are in `src/assets/logos/SOURCES.md`.
 ## Hosting
 
 Firebase Hosting. `firebase.json` holds the hosting settings, the security headers among them (the
-CSP allows no inline styles or scripts). `.github/workflows/site.yml` builds every change and
+CSP allows no inline styles or scripts) and caching: pages are revalidated on every visit,
+stylesheets and scripts are linked with a hash of their content (`site.css?v=…`) and kept for a
+year, images and fonts for a day. `.github/workflows/site.yml` builds every change and
 publishes main with `deploy.mjs`, which sends the same settings through the Hosting REST API, so CI
 needs no firebase-tools. By hand: `FIREBASE_SITE=<site id> GOOGLE_ACCESS_TOKEN=$(gcloud auth
 print-access-token) node deploy.mjs` after `node build.mjs`.
