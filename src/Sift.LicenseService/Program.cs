@@ -30,6 +30,21 @@ builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(settings.ConnectionSt
 builder.Services.AddSingleton<LicenseStore>();
 builder.Services.AddSingleton(_ => new SigningKey(settings.KeyId, File.ReadAllText(settings.KeyFile)));
 builder.Services.AddSingleton(static services => new LicenseIssuer(services.GetRequiredService<SigningKey>(), services.GetRequiredService<ServiceSettings>().PublicBaseUrl));
+if (settings.ResendApiKey is not null)
+{
+    builder.Services.AddHttpClient<ILicenseMailer, ResendMailer>(static http =>
+    {
+        http.BaseAddress = ResendMailer.ApiBase;
+        http.Timeout = TimeSpan.FromSeconds(15);
+    });
+}
+
+// Transient, as the typed client it takes: a singleton would pin one HTTP handler for good.
+builder.Services.AddTransient(static services => new LicenseDelivery(
+    services.GetRequiredService<LicenseStore>(),
+    services.GetRequiredService<LicenseIssuer>(),
+    services.GetService<ILicenseMailer>(),
+    services.GetRequiredService<ILogger<LicenseDelivery>>()));
 builder.Services.AddSingleton(static services => TrustedKeys.From(services.GetRequiredService<SigningKey>(), services.GetRequiredService<ServiceSettings>()));
 builder.Services.AddRateLimiter(limiter =>
 {

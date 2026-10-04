@@ -287,12 +287,42 @@ Still to do in phase 2:
 - **Needs attention** (a warning plus an `attention` audit entry): a subscription without a seat
   count (the product must be seat-based), or without a scope.
 
+### Delivery by e-mail (2026-10-04)
+
+A buyer receives the license string by e-mail, sent by the service after the webhook has saved the
+record (`LicenseDelivery`, through Resend's HTTP API in `ResendMailer`). The customer portal comes
+later; e-mail is enough for the first sales.
+
+- **When.** A license is sent when it is new and again whenever what it grants changes: licensee,
+  plan, kind (a trial that becomes a subscription), seats or scopes. A renewal alone sends nothing,
+  since the refresh endpoint hands those out. Revoked records and records without scopes (flagged
+  for an admin) are not sent.
+- **Once per version.** `license_deliveries` keeps the license id and a SHA-256 of what it grants,
+  written with an audit entry after the provider accepted the mail. The same key, as Resend's
+  `Idempotency-Key`, lets Resend drop a second send of one version within a day.
+- **Failures.** Network errors, 429 and 5xx make the webhook answer 503 without marking it handled,
+  so Polar delivers it again; the record is saved already and the retry sends the mail. Any other
+  refusal (an invalid address, an unverified domain) is not retried: it is audited as `attention`
+  and an admin sends the license from `admin show`. An event without a usable address (one plain
+  address) is audited the same way.
+- **Personal data.** The address comes from the event (`customer.email`) and is neither stored nor
+  logged; logs and audit name the license id only. The mail is plain text, so the licensee name from
+  the checkout cannot become markup or links.
+- **Settings.** `Licenses:ResendApiKey` (a key with sending access to the sender's domain only,
+  separate from any mailbox's key), `Licenses:MailFrom` (required with the key) and optionally
+  `Licenses:MailReplyTo`. Without the key, delivery is off and logged at debug level.
+- Licenses issued with `admin issue` are not e-mailed: the admin has no address from an event and
+  sends the string from `admin show` with the invoice.
+
 **To go live in Polar** (no change needed before then):
 1. Make the product seat-based.
 2. Add a checkout custom field with the key `scope`, where customers enter their repositories
    (`github.com/acme/*`, `git.acme.corp/*`).
 3. Add a webhook endpoint `https://<service>/webhooks/polar` for the `subscription.*` events.
 4. Put its secret in `Licenses__PolarWebhookSecret`.
+5. Verify the sending domain in Resend (DKIM and the return-path records in DNS), make an API key
+   with sending access to that domain only, and set `Licenses__ResendApiKey`,
+   `Licenses__MailFrom` and `Licenses__MailReplyTo`.
 
 ## Phases
 

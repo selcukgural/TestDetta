@@ -226,8 +226,9 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
 3. A licence can be bought and works: purchase through the Merchant of Record, key installed,
    `sift license status` green (see "Licensing independent of the payment provider"). Status: the
    format, the check, the service, refresh and Polar webhooks are built
-   (docs/design/licensing.md). Open: where the service runs, the production key, the Polar product
-   setup, and how a buyer receives the license string (no portal or e-mail yet); trials.
+   (docs/design/licensing.md), and the license string is e-mailed to the buyer through Resend
+   (2026-10-04; the portal comes later). Open: where the service runs, the production key, the
+   Polar product setup and the sending domain; trials.
 4. A simple "what you saved" report: the existing per-class decisions and time estimate in the job
    summary, checked on a real run (item 4 below goes further after v1). Status: checked on Markdig
    2026-10-04 (16 of 177 classes, 93% of the recorded time saved, a reason per class).

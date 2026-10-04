@@ -16,6 +16,15 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
     /// <summary>The Polar webhook endpoint's secret (<c>whsec_...</c>); null turns the endpoint off.</summary>
     public string? PolarWebhookSecret { get; init; }
 
+    /// <summary>Resend API key with sending access to the sender's domain; null turns license e-mails off.</summary>
+    public string? ResendApiKey { get; init; }
+
+    /// <summary>Sender of license e-mails, such as <c>Sift &lt;licenses@example.com&gt;</c>; required with <see cref="ResendApiKey"/>.</summary>
+    public string MailFrom { get; init; } = "";
+
+    /// <summary>Where replies to license e-mails go, such as the support address; optional.</summary>
+    public string? MailReplyTo { get; init; }
+
     /// <summary>
     /// Proxies whose <c>X-Forwarded-For</c> is believed, as IP addresses or CIDR networks; <c>*</c>
     /// believes one hop from anywhere, for a host whose only way in is its own proxy. Empty (the
@@ -40,6 +49,7 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
             : throw new InvalidOperationException($"Licenses:{name} is not set.");
 
         var baseUrl = Required("PublicBaseUrl");
+        var resendApiKey = section["ResendApiKey"] is { Length: > 0 } apiKey ? apiKey : null;
         return new ServiceSettings(
             Required("ConnectionString"),
             Required("KeyId"),
@@ -50,6 +60,9 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
             PerAddressPerMinute = section.GetValue("PerAddressPerMinute", 60),
             PerLicensePerHour = section.GetValue("PerLicensePerHour", 600),
             PolarWebhookSecret = section["PolarWebhookSecret"] is { Length: > 0 } secret ? secret : null,
+            ResendApiKey = resendApiKey,
+            MailFrom = resendApiKey is null ? section["MailFrom"] ?? "" : Required("MailFrom"),
+            MailReplyTo = section["MailReplyTo"] is { Length: > 0 } replyTo ? replyTo : null,
             TrustedProxies = [.. (section["TrustedProxies"] ?? "").Split([',', ' '], StringSplitOptions.RemoveEmptyEntries)],
         };
     }

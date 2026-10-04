@@ -28,12 +28,10 @@ public static partial class PolarWebhook
 
     /// <summary>Handles one delivery.</summary>
     /// <param name="context">The request.</param>
-    /// <param name="settings">Service settings, for the webhook secret.</param>
-    /// <param name="store">License records.</param>
-    /// <param name="clock">The current time.</param>
-    /// <param name="logger">Receives rejected deliveries (counted) and records that need attention.</param>
-    public static async Task<IResult> HandleAsync(HttpContext context, ServiceSettings settings, LicenseStore store, TimeProvider clock, ILogger<LicenseStore> logger)
+    /// <param name="services">What handling needs from the service.</param>
+    public static async Task<IResult> HandleAsync(HttpContext context, [AsParameters] PolarWebhookServices services)
     {
+        var (settings, store, delivery, clock, logger) = services;
         if (settings.PolarWebhookSecret is not { Length: > 0 } secret)
         {
             return Results.NotFound();
@@ -70,7 +68,20 @@ public static partial class PolarWebhook
         var type = root.GetProperty("type").GetString() ?? "";
         if (type.StartsWith("subscription.", StringComparison.Ordinal))
         {
-            await ApplyAsync(root.GetProperty("data"), type, store, logger, context.RequestAborted);
+            var subscription = root.GetProperty("data");
+            await ApplyAsync(subscription, type, store, logger, context.RequestAborted);
+
+            // After the record is saved and before the webhook counts as handled: a send that fails for
+            // now leaves the event to Polar's retries, which find the record saved and send again.
+            try
+            {
+                await delivery.DeliverAsync(LicenseId(subscription), CustomerEmail(subscription), context.RequestAborted);
+            }
+            catch (Exception e) when (e is HttpRequestException || e is TaskCanceledException && !context.RequestAborted.IsCancellationRequested)
+            {
+                LogDeliveryFailed(logger, LicenseId(subscription));
+                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
         }
 
         await store.MarkWebhookHandledAsync(webhookId, context.RequestAborted);
@@ -140,7 +151,7 @@ public static partial class PolarWebhook
     /// <param name="cancellationToken">Cancels the call.</param>
     private static async Task ApplyAsync(JsonElement subscription, string type, LicenseStore store, ILogger logger, CancellationToken cancellationToken)
     {
-        var licenseId = "P-" + subscription.GetProperty("id").GetString();
+        var licenseId = LicenseId(subscription);
         var status = subscription.GetProperty("status").GetString();
         var existing = await store.GetAsync(licenseId, cancellationToken);
 
@@ -195,6 +206,18 @@ public static partial class PolarWebhook
             ? [.. value.GetString()!.Split([',', ' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(static s => s.Trim().ToLowerInvariant())]
             : [];
 
+    /// <summary>The id of the license record a Polar subscription makes.</summary>
+    /// <param name="subscription">A Polar subscription.</param>
+    private static string LicenseId(JsonElement subscription) => "P-" + subscription.GetProperty("id").GetString();
+
+    /// <summary>The customer's e-mail address, where the license is sent; null when the event carries none.</summary>
+    /// <param name="subscription">A Polar subscription.</param>
+    private static string? CustomerEmail(JsonElement subscription) =>
+        subscription.TryGetProperty("customer", out var customer) && customer.TryGetProperty("email", out var email)
+        && email.ValueKind == JsonValueKind.String
+            ? email.GetString()
+            : null;
+
     /// <summary>The customer's name, or billing name; never the email, which a license string would carry.</summary>
     /// <param name="subscription">A Polar subscription.</param>
     private static string Licensee(JsonElement subscription)
@@ -234,6 +257,17 @@ public static partial class PolarWebhook
     [LoggerMessage(Level = LogLevel.Warning, Message = "Polar webhook rejected: signature or timestamp does not check out")]
     private static partial void LogRejected(ILogger logger);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "License {LicenseId} saved but not e-mailed yet; Polar will deliver the event again")]
+    private static partial void LogDeliveryFailed(ILogger logger, string licenseId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "License {LicenseId} needs attention: {Reason}")]
     private static partial void LogNeedsAttention(ILogger logger, string licenseId, string reason);
 }
+
+/// <summary>What <see cref="PolarWebhook.HandleAsync"/> needs from the service, bound from its services.</summary>
+/// <param name="Settings">Service settings, for the webhook secret.</param>
+/// <param name="Store">License records.</param>
+/// <param name="Delivery">E-mails the license to the buyer.</param>
+/// <param name="Clock">The current time.</param>
+/// <param name="Logger">Receives rejected deliveries (counted) and records that need attention.</param>
+public sealed record PolarWebhookServices(ServiceSettings Settings, LicenseStore Store, LicenseDelivery Delivery, TimeProvider Clock, ILogger<LicenseStore> Logger);

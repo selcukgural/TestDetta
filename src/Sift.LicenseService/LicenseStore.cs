@@ -42,6 +42,13 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
                 id text primary key,
                 at timestamptz not null default now()
             );
+            -- Step 3: license e-mails, one row per license and version of what it grants; no address is kept.
+            create table if not exists license_deliveries (
+                license_id text not null,
+                content_key text not null,
+                at timestamptz not null default now(),
+                primary key (license_id, content_key)
+            );
             """);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -95,6 +102,45 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
         await using var command = dataSource.CreateCommand("insert into processed_webhooks (id) values ($1) on conflict (id) do nothing");
         command.Parameters.Add(new NpgsqlParameter { Value = webhookId });
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>True when the license <paramref name="licenseId"/> was e-mailed with the grants <paramref name="contentKey"/> stands for.</summary>
+    /// <param name="licenseId">License id.</param>
+    /// <param name="contentKey">See <see cref="LicenseDelivery.ContentKey"/>.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task<bool> DeliveredAsync(string licenseId, string contentKey, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("select 1 from license_deliveries where license_id = $1 and content_key = $2");
+        command.Parameters.Add(new NpgsqlParameter { Value = licenseId });
+        command.Parameters.Add(new NpgsqlParameter { Value = contentKey });
+        return await command.ExecuteScalarAsync(cancellationToken) is not null;
+    }
+
+    /// <summary>Records that the license was e-mailed, with an audit entry, in one transaction.</summary>
+    /// <param name="licenseId">License id.</param>
+    /// <param name="contentKey">See <see cref="LicenseDelivery.ContentKey"/>.</param>
+    /// <param name="detail">What was sent, without the address.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task MarkDeliveredAsync(string licenseId, string contentKey, string detail, CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var insert = new NpgsqlCommand(
+            "insert into license_deliveries (license_id, content_key) values ($1, $2) on conflict do nothing", connection, transaction))
+        {
+            insert.Parameters.Add(new NpgsqlParameter { Value = licenseId });
+            insert.Parameters.Add(new NpgsqlParameter { Value = contentKey });
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var audit = new NpgsqlCommand("insert into audit (license_id, action, detail) values ($1, 'deliver', $2)", connection, transaction))
+        {
+            audit.Parameters.Add(new NpgsqlParameter { Value = licenseId });
+            audit.Parameters.Add(new NpgsqlParameter { Value = detail });
+            await audit.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>Writes an audit entry alone: something about a license that needs an admin.</summary>

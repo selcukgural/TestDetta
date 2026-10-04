@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Sift.Core.Licensing;
 
@@ -57,8 +60,13 @@ public sealed class LicenseServiceTests : IAsyncLifetime
 
     private Dictionary<string, byte[]> Trusted => new() { ["k1"] = _key.ExportSubjectPublicKeyInfo() };
 
-    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600, int perAddressPerMinute = 60, string? trustedProxies = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600, int perAddressPerMinute = 60, string? trustedProxies = null, ILicenseMailer? mailer = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
     {
+        if (mailer is not null)
+        {
+            host.ConfigureTestServices(services => services.AddSingleton(mailer));
+        }
+
         host.UseSetting("Licenses:PerAddressPerMinute", perAddressPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (trustedProxies is not null)
         {
@@ -76,7 +84,8 @@ public sealed class LicenseServiceTests : IAsyncLifetime
     private static readonly string WebhookSecret = "whsec_" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
     private static string Subscription(string status = "active", int? seats = 5, string modified = "2026-10-03T10:00:00Z",
-        string? scope = "github.com/Acme/*", string? endedAt = null, string? endsAt = null, string type = "subscription.updated") =>
+        string? scope = "github.com/Acme/*", string? endedAt = null, string? endsAt = null, string type = "subscription.updated",
+        string? email = "billing@acme.com", string periodEnd = "2026-11-01T00:00:00Z") =>
         System.Text.Json.JsonSerializer.Serialize(new
         {
             type,
@@ -90,10 +99,10 @@ public sealed class LicenseServiceTests : IAsyncLifetime
                 modified_at = modified,
                 started_at = "2026-10-01T00:00:00Z",
                 current_period_start = "2026-10-01T00:00:00Z",
-                current_period_end = "2026-11-01T00:00:00Z",
+                current_period_end = periodEnd,
                 ends_at = endsAt,
                 ended_at = endedAt,
-                customer = new { name = "Acme Corp", email = "billing@acme.com" },
+                customer = new { name = "Acme Corp", email },
                 product = new { name = "Sift Team" },
                 custom_field_data = scope is null ? null : new Dictionary<string, string> { ["scope"] = scope },
             },
@@ -329,6 +338,180 @@ public sealed class LicenseServiceTests : IAsyncLifetime
     {
         await using var source = NpgsqlDataSource.Create(_connection);
         return await new LicenseStore(source).AuditAsync(id, CancellationToken.None);
+    }
+
+    /// <summary>Keeps what would be e-mailed; <see cref="Next"/> decides the outcome of the coming sends.</summary>
+    private sealed class FakeMailer : ILicenseMailer
+    {
+        public List<(LicenseMail Mail, string Key)> Sent { get; } = [];
+
+        public Queue<Func<MailOutcome>> Next { get; } = [];
+
+        public Task<MailOutcome> SendAsync(LicenseMail mail, string idempotencyKey, CancellationToken cancellationToken)
+        {
+            var outcome = Next.Count > 0 ? Next.Dequeue()() : MailOutcome.Sent;
+            if (outcome == MailOutcome.Sent)
+            {
+                Sent.Add((mail, idempotencyKey));
+            }
+
+            return Task.FromResult(outcome);
+        }
+    }
+
+    private string LicenseIn(LicenseMail mail) =>
+        mail.Text.Split('\n').Select(static line => line.Trim()).Single(line => License.Verify(line, Trusted, out _) is not null);
+
+    [Fact]
+    public async Task A_new_subscription_emails_its_license_to_the_buyer_and_keeps_no_address()
+    {
+        var mailer = new FakeMailer();
+        using var service = Service(mailer: mailer);
+        using var client = service.CreateClient();
+
+        using var response = await Deliver(client, Subscription(type: "subscription.created"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var (mail, _) = Assert.Single(mailer.Sent);
+        Assert.Equal("billing@acme.com", mail.To);
+        var claims = License.Verify(LicenseIn(mail), Trusted, out _)!;
+        Assert.Equal(("P-sub-1", 5), (claims.Id, claims.Seats));
+        Assert.Equal(["github.com/acme/*"], claims.Scopes);
+        Assert.Contains("SIFT_LICENSE", mail.Text, StringComparison.Ordinal);
+        var audit = string.Join('\n', await Audit("P-sub-1"));
+        Assert.Contains("deliver: license e-mailed: 5 seats, subscription", audit, StringComparison.Ordinal);
+        Assert.DoesNotContain("acme.com", audit, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Only_a_change_in_what_the_license_grants_emails_it_again()
+    {
+        var mailer = new FakeMailer();
+        using var service = Service(mailer: mailer);
+        using var client = service.CreateClient();
+        (await Deliver(client, Subscription(type: "subscription.created"), "msg-1")).Dispose();
+
+        // A renewal moves the period only: the refresh endpoint hands that out.
+        (await Deliver(client, Subscription(modified: "2026-11-01T00:00:00Z", periodEnd: "2026-12-01T00:00:00Z"), "msg-2")).Dispose();
+        (await Deliver(client, Subscription(modified: "2026-11-01T00:00:00Z", periodEnd: "2026-12-01T00:00:00Z"), "msg-3")).Dispose();
+        Assert.Single(mailer.Sent);
+
+        (await Deliver(client, Subscription(seats: 7, modified: "2026-11-02T00:00:00Z", periodEnd: "2026-12-01T00:00:00Z"), "msg-4")).Dispose();
+        Assert.Equal(2, mailer.Sent.Count);
+        Assert.Equal(7, License.Verify(LicenseIn(mailer.Sent[1].Mail), Trusted, out _)!.Seats);
+        Assert.NotEqual(mailer.Sent[0].Key, mailer.Sent[1].Key);
+    }
+
+    [Fact]
+    public async Task A_send_that_fails_for_now_leaves_the_event_to_the_providers_retry()
+    {
+        var mailer = new FakeMailer();
+        mailer.Next.Enqueue(static () => throw new HttpRequestException("provider down"));
+        using var service = Service(mailer: mailer);
+        using var client = service.CreateClient();
+
+        using var first = await Deliver(client, Subscription(type: "subscription.created"), "msg-1");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, first.StatusCode);
+        Assert.NotNull(await Record());
+        Assert.Empty(mailer.Sent);
+
+        using var retry = await Deliver(client, Subscription(type: "subscription.created"), "msg-1");
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.Single(mailer.Sent);
+    }
+
+    [Fact]
+    public async Task A_refused_or_unaddressed_email_is_left_to_an_admin()
+    {
+        var mailer = new FakeMailer();
+        mailer.Next.Enqueue(static () => MailOutcome.Rejected);
+        using var service = Service(mailer: mailer);
+        using var client = service.CreateClient();
+
+        using var refused = await Deliver(client, Subscription(type: "subscription.created"), "msg-1");
+        using var unaddressed = await Deliver(client, Subscription(email: "not an address", type: "subscription.created").Replace("sub-1", "sub-2", StringComparison.Ordinal), "msg-2");
+
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.OK], [refused.StatusCode, unaddressed.StatusCode]);
+        Assert.Empty(mailer.Sent);
+        Assert.Contains("attention: the e-mail provider refused the license e-mail", string.Join('\n', await Audit("P-sub-1")), StringComparison.Ordinal);
+        Assert.Contains("attention: the license e-mail was not sent: the event carries no usable customer address", string.Join('\n', await Audit("P-sub-2")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Revoked_or_scopeless_licenses_are_not_emailed()
+    {
+        var mailer = new FakeMailer();
+        using var service = Service(mailer: mailer);
+        using var client = service.CreateClient();
+
+        (await Deliver(client, Subscription(scope: null, type: "subscription.created"), "msg-1")).Dispose();
+        (await Deliver(client, Subscription(status: "canceled", endedAt: "2026-10-05T00:00:00Z", type: "subscription.revoked").Replace("sub-1", "sub-2", StringComparison.Ordinal), "msg-2")).Dispose();
+
+        Assert.NotNull(await Record());
+        Assert.True((await Record("P-sub-2"))!.Revoked);
+        Assert.Empty(mailer.Sent);
+    }
+
+    /// <summary>Answers every request with one status and keeps the last request.</summary>
+    private sealed class FixedHandler(HttpStatusCode status) : HttpMessageHandler
+    {
+        public HttpRequestMessage? Request { get; private set; }
+
+        public string Body { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Request = request;
+            Body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(status);
+        }
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, MailOutcome.Sent)]
+    [InlineData(HttpStatusCode.UnprocessableEntity, MailOutcome.Rejected)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, null)]
+    [InlineData(HttpStatusCode.TooManyRequests, null)]
+    public async Task Resend_gets_a_plain_text_email_and_its_answer_decides_on_a_retry(HttpStatusCode status, MailOutcome? expected)
+    {
+        using var handler = new FixedHandler(status);
+        using var http = new HttpClient(handler) { BaseAddress = ResendMailer.ApiBase };
+        var settings = Settings() with { ResendApiKey = "re_test", MailFrom = "Sift <licenses@example.com>", MailReplyTo = "support@example.com" };
+        var mailer = new ResendMailer(http, settings, Microsoft.Extensions.Logging.Abstractions.NullLogger<ResendMailer>.Instance);
+        var mail = new LicenseMail("buyer@acme.com", "Your Sift license", "Hello \"Acme\" <b>");
+
+        if (expected is null)
+        {
+            await Assert.ThrowsAsync<HttpRequestException>(() => mailer.SendAsync(mail, "P-1/abc", CancellationToken.None));
+        }
+        else
+        {
+            Assert.Equal(expected, await mailer.SendAsync(mail, "P-1/abc", CancellationToken.None));
+        }
+
+        Assert.Equal(new Uri("https://api.resend.com/emails"), handler.Request!.RequestUri);
+        Assert.Equal("Bearer re_test", handler.Request.Headers.Authorization!.ToString());
+        Assert.Equal("P-1/abc", Assert.Single(handler.Request.Headers.GetValues("Idempotency-Key")));
+        using var body = System.Text.Json.JsonDocument.Parse(handler.Body);
+        var root = body.RootElement;
+        Assert.Equal(("Sift <licenses@example.com>", "buyer@acme.com", "support@example.com", "Hello \"Acme\" <b>"),
+            (root.GetProperty("from").GetString(), root.GetProperty("to")[0].GetString(), root.GetProperty("reply_to").GetString(), root.GetProperty("text").GetString()));
+        Assert.False(root.TryGetProperty("html", out _));
+    }
+
+    [Fact]
+    public void An_email_provider_needs_a_sender()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Licenses:ConnectionString"] = "Host=x",
+            ["Licenses:KeyId"] = "k1",
+            ["Licenses:KeyFile"] = "k.pem",
+            ["Licenses:PublicBaseUrl"] = "https://license.example",
+            ["Licenses:ResendApiKey"] = "re_test",
+        }).Build();
+
+        Assert.Contains("MailFrom", Assert.Throws<InvalidOperationException>(() => (object)ServiceSettings.From(configuration)).Message, StringComparison.Ordinal);
     }
 
     [Theory]
