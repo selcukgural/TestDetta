@@ -88,18 +88,23 @@ that report numbers (value reporting) only once the numbers are proven right.
   other gives CS1705 or CS1701). 13 of the 15 protobuf-net classes now record; the other 2
   (`Should*DefaultCodeFixProviderTests`) fail without Sift too on a Turkish-locale machine (a code
   fix formats `2.2m` as "2,2") and pass under en-US.
-- **A test class the map never saw running is skipped** (found 2026-10-04 through Markdig, needs a
-  decision): `TestSelector.DecideClass` skips a candidate class with no coverage evidence and no
-  name path as "ran none of the changed code", also when the map has no record of the class at all.
-  The map cannot answer for such a class: it was added or renamed since (Markdig's build generates
-  spec test classes with a culture-sensitive name, so the map has `TestBlocksAndİnlinesPrecedence`
-  while the build that runs has `...AndInlines...`; round 2b counts 26 confirmed misses from this),
-  or its tests were skipped on the machine that recorded (platform-specific tests recorded on macOS
-  and run on Windows CI would never be selected). Proposal: select a `CanContainTests` class that a
-  map exists for but does not record, as a new decision kind (`NotRecorded`); most such classes have
-  no runnable test and cost nothing. Tried overnight: the rule is ten lines, but 24 TestSelectorTests
-  write maps with only some classes and need updating, and the precision cost on the corpus is not
-  measured yet, so it was not kept.
+- **A test class the map never saw running is skipped** (found 2026-10-04 through Markdig; open
+  design question, the user wants an elegant answer, discuss before building): `TestSelector.DecideClass`
+  skips a candidate class with no coverage evidence and no name path as "ran none of the changed
+  code", also when the map has no record of the class at all. A customer can hit this: a map recorded
+  on a Turkish-locale machine names Markdig's generated spec class `TestBlocksAndİnlinesPrecedence`,
+  the build on an en-US CI runner names it `...AndInlines...`, and the class never runs (round 2b's 26
+  misses). Tests skipped on the recording platform (macOS) and run on another (Windows CI) are never
+  selected either. Rejected (user, 2026-10-04): selecting every class the map does not record; taken
+  far enough, that runs everything and the product loses its point. Directions to weigh:
+  - identify a class by something stabler than its name where the name came from generated code
+    (the declaring file and position the map can read from the PDB, or names folded culture-invariantly
+    so `İ` and `I` meet);
+  - record skipped tests too: the recorder sees them in the test report, so the map can say "ran here
+    but skipped on this platform" instead of not knowing the class;
+  - treat only what changed since the map as unknown (the drift bridge already selects test classes
+    added or changed after the map was recorded), and report a recorded class that no longer exists
+    in the build, since that means the map and the source disagree.
 - **Corpus runs depend on the machine's locale** (found 2026-10-04 on a Turkish-locale machine):
   Markdig's build regenerates its spec test classes with a culture-sensitive `ToUpper`, so a class is
   `TestBlocksAndİnlinesPrecedence` in one build and `...AndInlines...` in another, and an evaluation
