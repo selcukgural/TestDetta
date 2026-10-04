@@ -40,9 +40,14 @@ A filter that matches no test is treated as a Sift bug: the project is run again
 |---|---|
 | `sift affected [--format text\|json\|paths\|commands]` | Print what a change affects and why. |
 | `sift test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
-| `sift record [--project <csproj>]... [-c <configuration>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.sift/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. |
+| `sift record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.sift/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. |
+| `sift license status` | Check the license and show what it covers. |
+| `sift license install <license\|file>` | Store a license in `~/.sift/license`, for machines where no CI secret can hold it. |
 
-Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `-v` for debug logs on stderr.
+Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `--maps-dir <dir>` (coverage
+maps outside the repository, see [docs/ci.md](docs/ci.md)), `-v` for debug logs on stderr,
+`--log-level <level>` for any other level. Exit codes: `0` success, `1` the analysis failed, `2`
+invalid command line, `3` tests failed.
 
 Coverage maps are best recorded at the merge base of your branch. A map recorded up to 50 commits
 earlier (`--max-map-age`) is still used: code changed in between could have created calls the map
@@ -119,8 +124,11 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 
 ## License
 
-Public repositories need no license. Private ones pass the license string in `SIFT_LICENSE` (or a
-file named by `SIFT_LICENSE_FILE`); in GitHub Actions, through the `license` input from a secret.
+Public repositories need no license on GitHub Actions and GitLab CI, which say whether a repository
+is public; on other CI systems and on developer machines every repository counts as private. Private
+ones pass the license string in `SIFT_LICENSE` (or a file named by `SIFT_LICENSE_FILE`); in GitHub
+Actions, through the `license` input from a secret. Only `affected` and `test` check the license;
+`record` runs every test anyway.
 `sift license status` shows what a license covers. Without a valid license every test runs and the
 build never fails because of it. Machines that cannot reach the license service set
 `SIFT_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).

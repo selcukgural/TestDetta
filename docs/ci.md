@@ -19,10 +19,14 @@ Sift itself never uses the network for maps.
 
 - **Full git history.** Sift compares with the merge base and walks history to find maps. Shallow
   clones cannot do either.
-- **The target branch fetched**, so `origin/<target>` exists.
+- **The target branch fetched**, so `origin/<target>` exists. Fetch it with an explicit refspec
+  (`+refs/heads/<target>:refs/remotes/origin/<target>`): CI clones often limit the remote's refspecs to
+  the pipeline's own branch (GitLab's and Bitbucket's do), and then `git fetch origin <target>`
+  alone updates only `FETCH_HEAD` and `origin/<target>` stays missing.
 - **The license** in `SIFT_LICENSE` (a masked or secret variable) or a file named by
   `SIFT_LICENSE_FILE`.
-  - Public repositories need none.
+  - Public repositories need none on GitLab CI (`CI_PROJECT_VISIBILITY`) and GitHub Actions. Jenkins,
+    Azure DevOps and Bitbucket do not tell Sift, so there every repository needs one.
   - Without a valid license every test runs, and the build never fails because of it.
   - On a network that cannot reach the license service, set `SIFT_LICENSE_REFRESH=off` and renew the
     license string yourself (docs/design/licensing.md).
@@ -57,7 +61,7 @@ affected-tests:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
-    - git fetch --no-tags origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - git fetch --no-tags origin "+refs/heads/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:refs/remotes/origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
     - sift test --base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --maps-dir "$SIFT_MAPS" --summary-file sift-summary.md
   artifacts:
     when: always
@@ -118,7 +122,7 @@ steps:
       SIFT_LICENSE: $(SiftLicense)          # a secret pipeline variable
   - script: |
       target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
-      git fetch --no-tags origin "$target"
+      git fetch --no-tags origin "+refs/heads/$target:refs/remotes/origin/$target"
       sift test --base "origin/$target" --maps-dir "$(SIFT_MAPS)" --summary-file "$(Agent.TempDirectory)/sift.md"
       echo "##vso[task.uploadsummary]$(Agent.TempDirectory)/sift.md"
     condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
@@ -146,7 +150,7 @@ pipelines:
     '**':
       - step:
           script:
-            - git fetch --no-tags origin "$BITBUCKET_PR_DESTINATION_BRANCH"
+            - git fetch --no-tags origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - sift test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps
 ```
