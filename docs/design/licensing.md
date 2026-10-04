@@ -245,7 +245,15 @@ container, decided later).
 Client addresses behind the host's proxy: `Licenses:TrustedProxies` lists the proxies (IPs or CIDR
 networks) whose `X-Forwarded-For` is believed, or `*` for one hop from anywhere when the proxy is the
 only way in. With none configured, the header is ignored, so nobody can pick their own address. The
-per-address limit counts an IPv6 client by its /64 network (`ClientPartition`).
+per-address limit counts an IPv6 client by its /64 network (`ClientPartition`). `Licenses:ForwardedHops` (default 1) is how many trusted proxies in a row append to the header: 2
+behind Firebase Hosting in front of Cloud Run, where Hosting appends the client and Cloud Run's front end
+appends Hosting; each hop is taken only from a trusted proxy.
+
+Secrets as files (2026-10-05): with `TESTDETTA_SECRETS=<folder>`, every file in that folder and its
+immediate subfolders is a setting named after the file (`Licenses__ConnectionString`), added last so it
+wins over environment variables and appsettings.json, so the connection string, the Polar webhook secret
+and the Resend key need not be environment variables. Subfolders exist because Cloud Run mounts one
+secret per folder. Keep the signing key's own mount (`Licenses__KeyFile`) outside that folder.
 
 TestDetta's refresh client (`TestDetta.Cli.LicenseRefresher`, same day): before each check, at most once a
 day (`~/.testdetta/license-refresh`), started next to the analysis with a 6-second timeout (2 seconds

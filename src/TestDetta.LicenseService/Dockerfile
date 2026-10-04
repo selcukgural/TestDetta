@@ -3,6 +3,8 @@
 # Build from the repository root: docker build -f src/TestDetta.LicenseService/Dockerfile .
 FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:5eda31303f8b1b852e79d89fee9f4274cc9ec0f3c96e19e1b837e49d8df288e0 AS build
 WORKDIR /source
+# Restore exactly what the committed lock files say (Directory.Build.props turns locked mode on for CI).
+ENV CI=true
 COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY src/TestDetta.Core/ src/TestDetta.Core/
 COPY src/TestDetta.LicenseService/ src/TestDetta.LicenseService/

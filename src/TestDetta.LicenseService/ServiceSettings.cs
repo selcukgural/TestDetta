@@ -32,6 +32,13 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
     /// </summary>
     public IReadOnlyList<string> TrustedProxies { get; init; } = [];
 
+    /// <summary>
+    /// How many trusted proxies in a row append to <c>X-Forwarded-For</c>: 1 behind one load balancer or
+    /// Cloud Run alone, 2 behind Firebase Hosting in front of Cloud Run, where Hosting appends the client
+    /// and Cloud Run's front end appends Hosting. Each hop is taken only from a trusted proxy.
+    /// </summary>
+    public int ForwardedHops { get; init; } = 1;
+
     /// <summary>Refresh requests one client address may make per minute.</summary>
     public int PerAddressPerMinute { get; init; } = 60;
 
@@ -64,6 +71,7 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
             MailFrom = resendApiKey is null ? section["MailFrom"] ?? "" : Required("MailFrom"),
             MailReplyTo = section["MailReplyTo"] is { Length: > 0 } replyTo ? replyTo : null,
             TrustedProxies = [.. (section["TrustedProxies"] ?? "").Split([',', ' '], StringSplitOptions.RemoveEmptyEntries)],
+            ForwardedHops = Math.Max(1, section.GetValue("ForwardedHops", 1)),
         };
     }
 }

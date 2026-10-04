@@ -7,14 +7,15 @@ using TestDetta.LicenseService;
 // refreshes over HTTP; `admin ...` manages licenses from a shell on the host instead (no admin web UI).
 if (args is ["admin", .. var adminArgs])
 {
-    var configuration = new ConfigurationBuilder()
+    var configuration = SecretFiles.Add(new ConfigurationBuilder()
         .AddJsonFile("appsettings.json", optional: true)
-        .AddEnvironmentVariables()
+        .AddEnvironmentVariables(), Environment.GetEnvironmentVariable(SecretFiles.Variable))
         .Build();
     return await AdminCommand.RunAsync(adminArgs, ServiceSettings.From(configuration), Console.Out, Console.Error);
 }
 
 var builder = WebApplication.CreateBuilder(args);
+SecretFiles.Add(builder.Configuration, Environment.GetEnvironmentVariable(SecretFiles.Variable));
 var settings = ServiceSettings.From(builder.Configuration);
 
 // Requests carry no body today; a small limit keeps it that way (webhooks set their own when added).
@@ -70,7 +71,7 @@ if (!app.Environment.IsDevelopment())
 if (settings.TrustedProxies.Count > 0)
 {
     // Before the rate limiter, which partitions by the client's address.
-    var forwarded = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, ForwardLimit = 1 };
+    var forwarded = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, ForwardLimit = settings.ForwardedHops };
     forwarded.KnownIPNetworks.Clear();
     forwarded.KnownProxies.Clear();
     foreach (var proxy in settings.TrustedProxies.Where(static p => p != "*"))

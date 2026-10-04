@@ -60,8 +60,9 @@ public sealed class LicenseServiceTests : IAsyncLifetime
 
     private Dictionary<string, byte[]> Trusted => new() { ["k1"] = _key.ExportSubjectPublicKeyInfo() };
 
-    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600, int perAddressPerMinute = 60, string? trustedProxies = null, ILicenseMailer? mailer = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600, int perAddressPerMinute = 60, string? trustedProxies = null, ILicenseMailer? mailer = null, int forwardedHops = 1) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
     {
+        host.UseSetting("Licenses:ForwardedHops", forwardedHops.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (mailer is not null)
         {
             host.ConfigureTestServices(services => services.AddSingleton(mailer));
@@ -533,6 +534,49 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         // Another address gets its own budget only when the header is believed.
         Assert.Equal(separate ? HttpStatusCode.OK : HttpStatusCode.TooManyRequests, await From("203.0.113.2"));
         Assert.Equal(HttpStatusCode.TooManyRequests, await From("203.0.113.2"));
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, true)]
+    public async Task Behind_two_proxies_the_client_is_the_second_address_from_the_right(int hops, bool separate)
+    {
+        using var service = Service(perAddressPerMinute: 1, trustedProxies: "*", forwardedHops: hops);
+        using var client = service.CreateClient();
+        async Task<HttpStatusCode> From(string client1)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/healthz");
+            // As Firebase Hosting in front of Cloud Run sends it: the client, then Hosting's own address.
+            request.Headers.Add("X-Forwarded-For", $"{client1}, 192.0.2.50");
+            using var response = await client.SendAsync(request);
+            return response.StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.OK, await From("203.0.113.1"));
+        Assert.Equal(separate ? HttpStatusCode.OK : HttpStatusCode.TooManyRequests, await From("203.0.113.2"));
+    }
+
+    [Fact]
+    public void Secret_files_set_settings_and_win_over_other_sources()
+    {
+        var root = Directory.CreateTempSubdirectory("testdetta-secrets-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "db"));
+            File.WriteAllText(Path.Combine(root, "db", "Licenses__ConnectionString"), "Host=from-file");
+            File.WriteAllText(Path.Combine(root, "Licenses__ResendApiKey"), "re_file");
+            var builder = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Licenses:ConnectionString"] = "Host=from-env" });
+
+            var configuration = TestDetta.LicenseService.SecretFiles.Add(builder, root).Build();
+
+            Assert.Equal("Host=from-file", configuration["Licenses:ConnectionString"]);
+            Assert.Equal("re_file", configuration["Licenses:ResendApiKey"]);
+            Assert.Same(builder, TestDetta.LicenseService.SecretFiles.Add(builder, null));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Theory]
