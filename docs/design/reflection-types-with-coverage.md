@@ -93,7 +93,7 @@ A whole-project reason now ends with the chain that brought the type in
 
 ## Results
 
-Measured on round-2 maps with `sift-eval --explain` and `attribute.py`, with no missed mutant in
+Measured on round-2 maps with `testdetta-eval --explain` and `attribute.py`, with no missed mutant in
 any of the three repositories:
 
 - NodaTime and MimeKit: unchanged. MimeKit's rule is driven by a type changed directly.

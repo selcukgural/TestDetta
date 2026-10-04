@@ -158,7 +158,7 @@ coverage*.info
 # Visual Studio code coverage results
 *.coverage
 # The rule above also matches this project directory on case-insensitive file systems.
-!/src/Sift.Coverage/
+!/src/TestDetta.Coverage/
 *.coveragexml
 
 # NCrunch
@@ -483,5 +483,5 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# Sift coverage maps are tied to one commit; they are recorded, not committed.
-.sift/
+# TestDetta coverage maps are tied to one commit; they are recorded, not committed.
+.testdetta/

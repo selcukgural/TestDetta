@@ -1,6 +1,6 @@
 name: Nightly corpus
 
-# A small synthetic evaluation of real repositories every night: Sift must miss no failing test, and
+# A small synthetic evaluation of real repositories every night: TestDetta must miss no failing test, and
 # the summary compares the night with the previous successful one (comparison.md).
 # Kept to about 30-40 minutes on a 2-core runner and run once a week (Monday night) so the private
 # repository's Actions minutes last; the full corpus runs on a dedicated machine. A miss or an
@@ -35,7 +35,7 @@ jobs:
           global-json-file: global.json
 
       - name: Build the evaluation tool
-        run: dotnet build tools/Sift.Eval -c Release
+        run: dotnet build tools/TestDetta.Eval -c Release
 
       - name: Fetch the previous night's report
         env:
@@ -52,7 +52,7 @@ jobs:
       # (read-only here, since GitHub sets CI=true).
       - name: Evaluate the smoke corpus
         run: >
-          dotnet tools/Sift.Eval/bin/Release/net10.0/Sift.Eval.dll
+          dotnet tools/TestDetta.Eval/bin/Release/net10.0/TestDetta.Eval.dll
           --corpus eval/corpus.json
           --only scriban,fluid,carter
           --synthetic 20

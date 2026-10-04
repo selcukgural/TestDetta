@@ -34,8 +34,8 @@ method helped build. No pattern list is needed: a value built by any code is cre
   their type is a user type), excluding `const` and compiler-generated fields of state machines and
   closures, which hold a flow's locals rather than shared values. Field ids are assigned like
   method ids and stored in the map.
-- **Store probe**: before every `stsfld`/`stfld` of a tracked field, `SiftTracker.Stored(fieldId)`.
-- **Read probe**: after every `ldsfld`/`ldfld` of a tracked field, `SiftTracker.Read(fieldId)`
+- **Store probe**: before every `stsfld`/`stfld` of a tracked field, `TestDettaTracker.Stored(fieldId)`.
+- **Read probe**: after every `ldsfld`/`ldfld` of a tracked field, `TestDettaTracker.Read(fieldId)`
   (one call; the bucket bit for the field is set like a method hit).
 - Methods of the declaring type's own static constructor and instance constructors store their
   fields too; a field stored in a constructor of a per-test instance is read by that test's own

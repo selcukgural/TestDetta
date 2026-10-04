@@ -1,18 +1,18 @@
-# Sift
+# TestDetta
 
 Run only the .NET tests a change can affect.
 
-Sift compares your branch with its base, works out which test projects and which test classes can
+TestDetta compares your branch with its base, works out which test projects and which test classes can
 observe the change, and runs just those. When it cannot be sure, it runs more, never less.
 
 ```
-$ sift test --base origin/main
-sift: 1 changed file(s), 2 affected test project(s).
+$ td test --base origin/main
+td: 1 changed file(s), 2 affected test project(s).
 Tests to run:
   filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
   skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)
 ...
-sift summary:
+td summary:
   passed  tests/Shop.Tests/Shop.Tests.csproj  (3 class(es), 4.1 s)
 1 project(s) run, 0 failed, 1 skipped.
 ```
@@ -23,8 +23,8 @@ sift summary:
    Build-wide files (`Directory.Build.props`, `global.json`, `.editorconfig`, ...) affect every
    project below them.
 2. **Symbols.** For C# files, the old and new syntax trees are compared. Comment and whitespace
-   edits select nothing; otherwise Sift knows which types and members changed.
-3. **Coverage** (after `sift record`). A map of which test class ran which method, recorded at the
+   edits select nothing; otherwise TestDetta knows which types and members changed.
+3. **Coverage** (after `td record`). A map of which test class ran which method, recorded at the
    base commit, gives the test classes for changed methods, properties and constructors directly.
 4. **Names.** What coverage cannot see (new code, fields, constants) is traced through the source by
    name until it reaches test classes or code the coverage map knows.
@@ -32,17 +32,17 @@ sift summary:
    project (`appsettings.json`, `.csproj`, `.resx`), global usings and assembly attributes, and types
    a framework discovers through reflection (controllers, message handlers, EF configurations).
 
-A filter that matches no test is treated as a Sift bug: the project is run again without it.
+A filter that matches no test is treated as a TestDetta bug: the project is run again without it.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `sift affected [--format text\|json\|paths\|commands]` | Print what a change affects and why. |
-| `sift test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
-| `sift record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.sift/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. |
-| `sift license status` | Check the license and show what it covers. |
-| `sift license install <license\|file>` | Store a license in `~/.sift/license`, for machines where no CI secret can hold it. |
+| `td affected [--format text\|json\|paths\|commands]` | Print what a change affects and why. |
+| `td test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
+| `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. |
+| `td license status` | Check the license and show what it covers. |
+| `td license install <license\|file>` | Store a license in `~/.testdetta/license`, for machines where no CI secret can hold it. |
 
 Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `--maps-dir <dir>` (coverage
 maps outside the repository, see [docs/ci.md](docs/ci.md)), `-v` for debug logs on stderr,
@@ -51,11 +51,11 @@ invalid command line, `3` tests failed.
 
 Coverage maps are best recorded at the merge base of your branch. A map recorded up to 50 commits
 earlier (`--max-map-age`) is still used: code changed in between could have created calls the map
-does not know, so Sift also selects the classes that ran any changed-since member that can reach
+does not know, so TestDetta also selects the classes that ran any changed-since member that can reach
 your change, and traces new code by name. When something in between cannot be described by members
 (a build file, `appsettings.json`), the affected test projects run completely; `--drift-fallback name`
 decides them by name instead, as without a map (faster, but blind to calls wired by configuration).
-Add `.sift/` to `.gitignore`.
+Add `.testdetta/` to `.gitignore`.
 
 ## GitHub Actions
 
@@ -78,7 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7 # pin to a commit SHA
         with:
-          fetch-depth: 0 # Sift compares with the merge base
+          fetch-depth: 0 # TestDetta compares with the merge base
           persist-credentials: false
 
       - uses: actions/setup-dotnet@v6 # pin to a commit SHA
@@ -88,20 +88,20 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: <owner>/sift@<sha>
+        uses: <owner>/testdetta@<sha>
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: <owner>/sift@<sha>
+        uses: <owner>/testdetta@<sha>
         with:
           mode: test
           dotnet-test-args: --logger trx
 ```
 
-Maps are stored in the Actions cache under `sift-coverage-<commit>`. Pull requests can read caches
+Maps are stored in the Actions cache under `testdetta-coverage-<commit>`. Pull requests can read caches
 of their base branch. A pull request uses the map of its merge base, or the newest one recorded
 up to `max-map-age` commits before it (finding that one lists the caches, which needs
 `actions: read`). Without a map, `mode: test` still works, deciding by name only.
@@ -118,20 +118,20 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `max-map-age` | `50` | test mode: commits a map may be behind the merge base (0: only an exact map) |
 | `drift-fallback` | `all` | test mode: `all` runs test projects completely when the changes since an older map include a build file or configuration; `name` decides them by name |
 | `github-token` | `github.token` | test mode: lists the Actions caches to find the newest map |
-| `license` | | test mode: the Sift license, from a secret such as `SIFT_LICENSE`; public repositories need none |
+| `license` | | test mode: the TestDetta license, from a secret such as `TESTDETTA_LICENSE`; public repositories need none |
 | `working-directory` | `.` | any directory inside the repository |
-| `setup-dotnet` | `true` | install the .NET 10 SDK Sift runs on |
+| `setup-dotnet` | `true` | install the .NET 10 SDK TestDetta runs on |
 
 ## License
 
 Public repositories need no license on GitHub Actions and GitLab CI, which say whether a repository
 is public; on other CI systems and on developer machines every repository counts as private. Private
-ones pass the license string in `SIFT_LICENSE` (or a file named by `SIFT_LICENSE_FILE`); in GitHub
+ones pass the license string in `TESTDETTA_LICENSE` (or a file named by `TESTDETTA_LICENSE_FILE`); in GitHub
 Actions, through the `license` input from a secret. Only `affected` and `test` check the license;
 `record` runs every test anyway.
-`sift license status` shows what a license covers. Without a valid license every test runs and the
+`td license status` shows what a license covers. Without a valid license every test runs and the
 build never fails because of it. Machines that cannot reach the license service set
-`SIFT_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).
+`TESTDETTA_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).
 
 ## Other CI systems
 
@@ -159,7 +159,7 @@ and the details are in [docs/ci.md](docs/ci.md).
   `ConditionalWeakTable`, `IMemoryCache.GetOrCreate`), and to constructors and static members that
   only one test class per recording process ran, are traced by name instead. A cache written by
   hand (a `Dictionary` checked with `TryGetValue`) can still hide its users. Keep running the full suite on the default branch; recording does that.
-- Project files are evaluated by MSBuild (one `dotnet msbuild` call, cached in `.sift/cache`) for
+- Project files are evaluated by MSBuild (one `dotnet msbuild` call, cached in `.testdetta/cache`) for
   references, compiled and embedded items, assembly names and target frameworks, in the default
   configuration and without a restore. Items only a package's props add, or only a `Release`
   condition adds, are not seen. A project MSBuild cannot evaluate is read as XML, as are imports;
@@ -171,7 +171,7 @@ and the details are in [docs/ci.md](docs/ci.md).
   selected on another platform (it may run there) and skipped on the recording platform. Tests
   skipped for other reasons, such as a missing Docker daemon, are covered only by recording where
   the tests run.
-- Code written by source generators is not in the source tree; `sift record` reads it from the
+- Code written by source generators is not in the source tree; `td record` reads it from the
   PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the
   map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.
 - F# and Visual Basic projects are part of the project graph, but their code is not analysed: when

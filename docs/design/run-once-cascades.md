@@ -4,7 +4,7 @@ Status: A and C implemented 2026-10-03 (B measured and dropped); D proposed. Pre
 
 ## Problem
 
-On NodaTime, 83% of the classes Sift selects do not fail, and 76% of those come from "ran a member
+On NodaTime, 83% of the classes TestDetta selects do not fail, and 76% of those come from "ran a member
 the change reaches by name". The selection share is 42.6%. The cause is a chain reaction in the
 coverage trace (the spread that stops wherever a coverage map knows the tests):
 
@@ -44,7 +44,7 @@ Two patterns stand out:
 
 ## Proposals
 
-Ordered by expected gain per risk. Each one is measured on the corpus with `sift-eval --explain` and
+Ordered by expected gain per risk. Each one is measured on the corpus with `testdetta-eval --explain` and
 `eval/precision/attribute.py`, and it ships only if no mutant is missed.
 
 ### A. Name lookups only reach projects that can see the member (sound)
@@ -131,7 +131,7 @@ could also have removed a type-wide answer that cascades lean on today. The casc
 
 ## As built: C (2026-10-03)
 
-Recording (`SiftTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
+Recording (`TestDettaTracker`, `AssemblyInstrumenter`, `CoverageRecorder`):
 
 - **Scopes.** `EnterCache`, `EnterTypeInitializer` and third-party callbacks push a scope that
   remembers where it started in the thread's ring of recent hits. A fill whose target field is known
@@ -313,7 +313,7 @@ deletes what test runs leave in its clone before it analyses (`EvalGit.RemoveUnt
 
 ### Measurement
 
-- Precision on the four precision repositories with `sift-eval --explain` on new recordings, then
+- Precision on the four precision repositories with `testdetta-eval --explain` on new recordings, then
   the corpus with the outcome caches.
 - Recording time on the three heavy repositories.
 - Expected: NodaTime's cascade (37 of 100 changes) mostly gone. The gain is only worth it with no

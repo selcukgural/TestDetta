@@ -12,7 +12,7 @@ earlier class had already proxied, so it never ran the hook. The map correctly s
 mutant in the hook changes the cached proxy type every later class uses. Six classes failed, none
 were selected.
 
-Sift's run-once rules (static constructors, `Lazy`, caches in fields and collections, pools) see
+TestDetta's run-once rules (static constructors, `Lazy`, caches in fields and collections, pools) see
 caches in the repository's code. This cache is in a third-party library, where nothing is
 instrumented.
 
@@ -29,7 +29,7 @@ instrumented.
   unrelated overload, which is the safe direction. A contract that cannot be loaded counts as
   matching.
 - **Recording.** An external callback's body is wrapped in the cache-fill scope
-  (`SiftTracker.EnterCache`/`ExitCache`), like a `GetOrAdd` call. The callback and everything it
+  (`TestDettaTracker.EnterCache`/`ExitCache`), like a `GetOrAdd` call. The callback and everything it
   runs are recorded as initialization, so the private helpers count as run-once code too (the
   second NSubstitute mutant was in one). The ids are also kept in the map as `externalCallbacks`.
   That covers callbacks no test ran, and lets a type-level change see that the type has one.
@@ -47,7 +47,7 @@ either. The between-tests rules cover DI singletons built outside tests.
 
 ## Results
 
-NSubstitute, the round-2 commit, a fresh recording, 100 mutants, `sift-eval --explain`:
+NSubstitute, the round-2 commit, a fresh recording, 100 mutants, `testdetta-eval --explain`:
 
 | | Missed | Mean selected share |
 |---|---|---|

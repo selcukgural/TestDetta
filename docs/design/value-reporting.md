@@ -1,4 +1,4 @@
-# Value reporting: what Sift saved, and why it was safe
+# Value reporting: what TestDetta saved, and why it was safe
 
 Status: first slice implemented 2026-10-02 (backlog "Next" item 4). This document covers the first slice, decisions
 per test class. Measured savings and reports over time follow in later slices.
@@ -40,7 +40,7 @@ Every test class of an affected test project gets a decision and its evidence.
 
 ### Output
 
-- JSON (`sift affected --format json`): `tests[].decisions[]`.
+- JSON (`td affected --format json`): `tests[].decisions[]`.
 - Markdown summary: per project, a collapsed `<details>` list of selected classes with their
   evidence, and the count of skipped classes. The summary already carries the time estimate.
 - Text: `-v` prints the same lines; the normal text output stays as it is.

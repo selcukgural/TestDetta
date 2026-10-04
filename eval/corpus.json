@@ -1,4 +1,4 @@
-// Repositories sift-eval measures Sift on: sift-eval --corpus eval/corpus.json --out <dir>.
+// Repositories testdetta-eval measures TestDetta on: testdetta-eval --corpus eval/corpus.json --out <dir>.
 // Tags say what a repository exercises; the summary reports results per tag. Keep each entry's
 // settings next to it: what it needs to build and test on a plain macOS/Linux machine.
 {

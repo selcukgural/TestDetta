@@ -8,13 +8,13 @@ marked **(decided)** were made with the user.
 - Any CI works the same way: GitHub Actions, GitLab, Jenkins, Bitbucket/Bamboo, Azure DevOps,
   TeamCity, and on-premises installations with no outbound network at all. Legacy setups at large
   companies are the expected case, not an edge case **(decided)**.
-- A licensing problem never breaks a customer's build. Without a valid license, Sift runs every
+- A licensing problem never breaks a customer's build. Without a valid license, TestDetta runs every
   test and says why **(decided)**.
 - Not tied to a payment provider. Polar.sh, Paddle and direct invoices (Turkish corporate customers
   paying in TL) all produce the same license (docs: payments research, 2026-10-02).
 - No personal data leaves the customer's machines: committer emails are only counted locally.
 
-Not a goal: stopping a determined attacker. Sift is a .NET tool and can be decompiled. Licensing
+Not a goal: stopping a determined attacker. TestDetta is a .NET tool and can be decompiled. Licensing
 keeps honest customers honest and makes paying the easy path.
 
 ## Pricing unit and free use
@@ -26,8 +26,8 @@ keeps honest customers honest and makes paying the easy path.
 
 ## The license
 
-A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into .NET, unlike Ed25519). It is passed to Sift as one string:
-`sift1.<base64url payload>.<base64url signature>`.
+A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into .NET, unlike Ed25519). It is passed to TestDetta as one string:
+`testdetta1.<base64url payload>.<base64url signature>`.
 
 ```json
 {
@@ -47,8 +47,8 @@ A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into 
 ```
 
 - **Signature.** Only the license service holds the private key: a cloud KMS or secrets manager,
-  never in a repository or in CI. Sift embeds the public keys by key id (`kid`), so a key can be
-  rotated: new Sift versions trust the new key, and licenses are reissued under it.
+  never in a repository or in CI. TestDetta embeds the public keys by key id (`kid`), so a key can be
+  rotated: new TestDetta versions trust the new key, and licenses are reissued under it.
 - **Kinds:**
   - `subscription`: valid for the billing period plus 7 days, renewed by refresh;
   - `annual`: offline customers, valid for the term plus 30 days;
@@ -56,19 +56,19 @@ A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into 
 - **Scopes** are patterns over normalised git remote URLs: host and path, without scheme, user,
   password or `.git`. An air-gapped company's license names its internal git server.
 
-## Verification in Sift (every run, offline)
+## Verification in TestDetta (every run, offline)
 
 1. **Find the license.** In order:
-   - `SIFT_LICENSE` (the string);
-   - `SIFT_LICENSE_FILE` (a path);
-   - the refreshed copy in `~/.sift/license` (see below);
-   - `.sift/license` in the repository (allowed, though a secret variable is recommended).
+   - `TESTDETTA_LICENSE` (the string);
+   - `TESTDETTA_LICENSE_FILE` (a path);
+   - the refreshed copy in `~/.testdetta/license` (see below);
+   - `.testdetta/license` in the repository (allowed, though a secret variable is recommended).
    Every CI has a way to pass a secret variable or file: GitHub/GitLab secrets, Jenkins
    credentials, Bitbucket and Azure DevOps secret variables, TeamCity parameters.
 2. **Check the signature** against the embedded key for `kid`.
 3. **Check the scope.** The repository identity is the `origin` remote, normalised. Credentials
    embedded in the URL (common with Jenkins) are stripped before matching, and never logged.
-   `SIFT_LICENSE_SCOPE` overrides the identity when there is no usable remote. One of the license's
+   `TESTDETTA_LICENSE_SCOPE` overrides the identity when there is no usable remote. One of the license's
    scopes must match.
 4. **Check the time.** The current time is the later of the system clock and the newest commit's
    committer date on HEAD. Moving the clock back does not bring an expired license back while
@@ -80,7 +80,7 @@ A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into 
    Either way, the reason goes to the log, the Markdown summary and the JSON output (`license`
    field): valid, expiring in N days, over seats, expired, wrong scope, invalid, missing.
 
-A **public repository** needs no license. Sift knows that only where the CI says so: on GitHub
+A **public repository** needs no license. TestDetta knows that only where the CI says so: on GitHub
 Actions, `repository.private` in the event payload (`GITHUB_EVENT_PATH`); on GitLab,
 `CI_PROJECT_VISIBILITY`. Anywhere else, a repository counts as private.
 
@@ -99,8 +99,8 @@ within the last 30 days, among the commits reachable from the analysed HEAD.
   - GitHub `*[bot]`, `dependabot`, `renovate`, `github-actions`;
   - GitLab `project_*_bot*` and `group_*_bot*`;
   - common CI service accounts (`jenkins`, `buildbot`).
-  A customer can add patterns in `.sift/license.json` (`"bots": [...]`). The list is shown in
-  `sift license status`, so it cannot hide people quietly.
+  A customer can add patterns in `.testdetta/license.json` (`"bots": [...]`). The list is shown in
+  `td license status`, so it cannot hide people quietly.
 - **Per pipeline:** each run counts its own HEAD. Unmerged branches are counted by their own
   pipelines. Across an organisation's repositories, the count is per repository. The
   organisation-wide total is settled by a yearly declaration (true-up), which enterprise customers
@@ -111,7 +111,7 @@ within the last 30 days, among the commits reachable from the analysed HEAD.
 
 1. **Tolerance:** up to 20% over `seats`, at least one person, is fine. Holidays, an intern, an
    outside contributor.
-2. **Warning period, 30 days:** above the tolerance, Sift keeps selecting and warns in every
+2. **Warning period, 30 days:** above the tolerance, TestDetta keeps selecting and warns in every
    summary, for example: "6 active committers in the last 30 days; the license covers 5. Add seats:
    <link>". How long the count has been over is computed from the history on every run: for
    each of the last days, the 30-day window ending that day is counted (60 days of author dates).
@@ -130,17 +130,17 @@ secret) carries the new `seats`, and the warning disappears.
 
 ## Refresh (decided: automatic, optional)
 
-A license carries its `refresh` URL. At most once a day, Sift asks for the current version of the
+A license carries its `refresh` URL. At most once a day, TestDetta asks for the current version of the
 license:
 
-- `GET <refresh>` with the license id in the path and `Authorization: Sift <current license string>`.
+- `GET <refresh>` with the license id in the path and `Authorization: TestDetta <current license string>`.
   The license string never goes into a URL or a query string.
 - A 2-second timeout and no retries: an offline or blocked network costs at most 2 seconds a day.
-  `SIFT_LICENSE_REFRESH=off` disables it, which offline customers set. `HTTPS_PROXY` is honoured.
+  `TESTDETTA_LICENSE_REFRESH=off` disables it, which offline customers set. `HTTPS_PROXY` is honoured.
 - The response is a newer signed license. It is checked exactly like the original and stored in
-  `~/.sift/license` together with the time of the attempt. Persistent agents (common on-premises)
+  `~/.testdetta/license` together with the time of the attempt. Persistent agents (common on-premises)
   keep it between runs. Ephemeral runners refresh again, within the 2-second budget.
-- A failed refresh changes nothing: Sift uses the best valid license it has. The service is an
+- A failed refresh changes nothing: TestDetta uses the best valid license it has. The service is an
   update channel, not a gate. That is why `subscription` licenses include 7 days of slack.
 
 Offline customers get `annual` licenses. Renewals and seat changes are delivered as a new license
@@ -170,17 +170,17 @@ A small web service, the only holder of the signing key.
 
 ## CLI
 
-- `sift license status`: the license found, its validity, scopes, the active committer count and
+- `td license status`: the license found, its validity, scopes, the active committer count and
   the bot patterns. It shows no identities, since its output may end up in CI logs.
-- `sift license install <string|file>`: stores a license in `~/.sift/license` for machines without
+- `td license install <string|file>`: stores a license in `~/.testdetta/license` for machines without
   a secret mechanism.
-- The GitHub Action gets a `license` input that maps to `SIFT_LICENSE`. Other CIs set the variable.
+- The GitHub Action gets a `license` input that maps to `TESTDETTA_LICENSE`. Other CIs set the variable.
 
 ## Tests (when implemented)
 
 - Signature: valid, tampered payload, unknown `kid`, rotated key.
 - Scopes: normalisation of https, ssh, scp-style, and credential-bearing URLs; wildcards; no
-  remote with `SIFT_LICENSE_SCOPE`.
+  remote with `TESTDETTA_LICENSE_SCOPE`.
 - Committers:
   - the long-lived branch case (old authors merged now are not counted);
   - squash, rebase and cherry-pick;
@@ -192,21 +192,21 @@ A small web service, the only holder of the signing key.
 
 ## As built (phase 1, 2026-10-03)
 
-- `Sift.Core.Licensing`:
+- `TestDetta.Core.Licensing`:
   - `License`: signing and verifying, ECDSA P-256, key ids;
   - `RepositoryIdentity`: remote normalisation and scope matching;
   - `ActiveCommitters`: author-date window, built-in and custom bots, days over;
   - `LicenseCheck` and `LicenseStatus`: every outcome above;
   - `LicenseInputs`: variables, files, CI public flags; git output for remotes and authors is never logged.
-- `Sift.Cli.LicenseGate` applies the status to `sift affected` and `sift test`. It is recorded on the
+- `TestDetta.Cli.LicenseGate` applies the status to `td affected` and `td test`. It is recorded on the
   analysis and in the JSON output (`license`). When enforced and not covering, every test project of
   the repository runs completely, and the text, plan and Markdown summary say why. The analysis
-  itself (`AnalysisPipeline`) knows nothing of licenses, so `sift-eval` and the corpus measurements
+  itself (`AnalysisPipeline`) knows nothing of licenses, so `testdetta-eval` and the corpus measurements
   are unaffected.
-- `sift license status`, `sift license install`, and the action's `license` input.
+- `td license status`, `td license install`, and the action's `license` input.
 - **Not enforced yet:** `LicenseKeys.Trusted` is empty until the license service makes the first
   production key, and `LicenseKeys.Enforced` is false. Until then the status is checked and appears
-  only in the JSON output, the debug log and `sift license status`, so nobody's runs change or get
+  only in the JSON output, the debug log and `td license status`, so nobody's runs change or get
   noisy before launch.
 - Refresh is phase 2: it needs the service.
 - Tests: `LicensingTests` and `LicenseGateTests`, sabotage-checked:
@@ -218,7 +218,7 @@ A small web service, the only holder of the signing key.
 
 ## As built (phase 2, first part, 2026-10-03)
 
-`src/Sift.LicenseService`: ASP.NET Core with Postgres through Npgsql and plain SQL, deployed as a
+`src/TestDetta.LicenseService`: ASP.NET Core with Postgres through Npgsql and plain SQL, deployed as a
 container (`Dockerfile`: images pinned by digest, the image's non-root user, the signing key mounted
 as a file and never baked in or passed as a variable). The host is not chosen yet (user decision:
 container, decided later).
@@ -228,26 +228,26 @@ container, decided later).
 - **Signing:** `SigningKey` loads the ECDSA P-256 key from a PEM file and never logs it. A cloud KMS
   can replace it behind the same members. `LicenseIssuer` adds the slack: 7 days for a subscription,
   30 for annual, none for a trial.
-- **Refresh:** `GET /v1/licenses/{id}` with `Authorization: Sift <license>`. The presented license
+- **Refresh:** `GET /v1/licenses/{id}` with `Authorization: TestDetta <license>`. The presented license
   must be genuine (current or retired key) and for the same id; it may have expired. Unknown,
   revoked, mismatched and unproven requests get the same 404. The response is `no-store`. There is
   a rate limit per client address and per license, and the request body is limited to 16 KiB.
-- **Admin:** `dotnet Sift.LicenseService.dll admin issue|update|revoke|show|list|public-key`, run
+- **Admin:** `dotnet TestDetta.LicenseService.dll admin issue|update|revoke|show|list|public-key`, run
   from a shell on the host. There is no admin web UI. `public-key` prints what goes into
   `LicenseKeys.Trusted`.
-- **Tests:** `tests/Sift.LicenseService.Tests` against a real Postgres, one database per test,
+- **Tests:** `tests/TestDetta.LicenseService.Tests` against a real Postgres, one database per test,
   through the real HTTP pipeline; sabotage-checked. CI runs a Postgres service container
-  (`SIFT_TEST_POSTGRES`).
+  (`TESTDETTA_TEST_POSTGRES`).
 
 Client addresses behind the host's proxy: `Licenses:TrustedProxies` lists the proxies (IPs or CIDR
 networks) whose `X-Forwarded-For` is believed, or `*` for one hop from anywhere when the proxy is the
 only way in. With none configured, the header is ignored, so nobody can pick their own address. The
 per-address limit counts an IPv6 client by its /64 network (`ClientPartition`).
 
-Sift's refresh client (`Sift.Cli.LicenseRefresher`, same day): before each check, at most once a
-day (`~/.sift/license-refresh`), with a 2-second timeout and no retries. It is `https` only and
-honours `SIFT_LICENSE_REFRESH=off` and `HTTPS_PROXY`. The license goes in the header only. A
-response is stored in `~/.sift/license` only when it is a genuine, newer version (`issued`) of the
+TestDetta's refresh client (`TestDetta.Cli.LicenseRefresher`, same day): before each check, at most once a
+day (`~/.testdetta/license-refresh`), with a 2-second timeout and no retries. It is `https` only and
+honours `TESTDETTA_LICENSE_REFRESH=off` and `HTTPS_PROXY`. The license goes in the header only. A
+response is stored in `~/.testdetta/license` only when it is a genuine, newer version (`issued`) of the
 same license; every failure is ignored. Licenses carry `issued`. Of the genuine versions found (the
 CI secret, the refreshed copy), the newest of the first license counts (`LicenseCheck.Best`). A
 seat reduction is a newer license with fewer seats. Before launch no key is trusted, so no request
@@ -326,8 +326,8 @@ later; e-mail is enough for the first sales.
 
 ## Phases
 
-1. Format, verification, committer counting and degradation in Sift, with a locally signed test
-   key. `sift license status`.
+1. Format, verification, committer counting and degradation in TestDetta, with a locally signed test
+   key. `td license status`.
 2. The license service with manual issuance, the refresh endpoint and the portal.
 3. Polar webhooks and checkout (primary), then Paddle.
 4. Trials and the public-repository detection.

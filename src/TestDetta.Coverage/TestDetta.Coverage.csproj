@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <!-- IL rewriting is far from a small job; Cecil is the standard tool for it. -->
+    <PackageReference Include="Mono.Cecil" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TestDetta.Core\TestDetta.Core.csproj" />
+    <ProjectReference Include="..\TestDetta.Coverage.Runtime\TestDetta.Coverage.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TestDetta.Tests" />
+    <InternalsVisibleTo Include="TestDetta.Eval" />
+  </ItemGroup>
+
+</Project>

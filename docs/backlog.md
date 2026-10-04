@@ -33,7 +33,7 @@ that report numbers (value reporting) only once the numbers are proven right.
   type's own declaration is also reached by its own name (`IEquatable<LocalDate>`). Needs a design:
   answer run-once code through the values it built (field-read probes, builtValues) instead of
   names, and limit what a type-name spread may reach when maps exist.
-- **Precision: MimeKit FailedWhileRecording (28% of its extra)** is the machine, not Sift: 8
+- **Precision: MimeKit FailedWhileRecording (28% of its extra)** is the machine, not TestDetta: 8
   S/MIME classes need System.Data.SQLite's native library, which has no osx-arm64 build, so they
   fail in every run and are always selected. On Linux/Windows CI they pass.
 - ~~**Precision: attribute polyfills reached by the name spread**~~ (done 2026-10-03): an
@@ -86,7 +86,7 @@ that report numbers (value reporting) only once the numbers are proven right.
   map for Polly.Core.Tests). Each instrumented module now gets that reference at the test host's
   version, read from the test assembly's target framework: Roslyn accepts exactly that version (any
   other gives CS1705 or CS1701). 13 of the 15 protobuf-net classes now record; the other 2
-  (`Should*DefaultCodeFixProviderTests`) fail without Sift too on a Turkish-locale machine (a code
+  (`Should*DefaultCodeFixProviderTests`) fail without TestDetta too on a Turkish-locale machine (a code
   fix formats `2.2m` as "2,2") and pass under en-US.
 - ~~**A test class the map never saw running is skipped**~~ (done 2026-10-04,
   docs/design/unrecorded-classes.md): a map recorded on a Turkish-locale machine names Markdig's
@@ -106,9 +106,9 @@ that report numbers (value reporting) only once the numbers are proven right.
   run); protobuf-net's two `Should*DefaultCodeFixProviderTests` fail outright. CI runs under en-US.
   Run corpus evaluations with `LC_ALL=en_US.UTF-8` (pool scripts, or an evaluation default), so
   numbers match CI and do not move with the machine.
-- **Microsoft code coverage next to Sift's recording** (Polly, 2026-10-04): with the fix above
+- **Microsoft code coverage next to TestDetta's recording** (Polly, 2026-10-04): with the fix above
   Polly.Core.Tests records fully (124 classes, none failed), but with some builds of
-  Sift.Coverage.Runtime one of five shards still crashes at start ("Index not found", 0x80131124)
+  TestDetta.Coverage.Runtime one of five shards still crashes at start ("Index not found", 0x80131124)
   and is rerun by the fallback. Two builds of the same source (same methods, IL sizes and references,
   different MVID) behaved differently in four runs each, so it lies in the profiler's handling of
   the loaded modules. Running two coverage tools at once is waste anyway: find a way to keep
@@ -118,7 +118,7 @@ that report numbers (value reporting) only once the numbers are proven right.
   docs/design/reflection-types-with-coverage.md "Direct metadata changes"): the change detector
   reports `MetadataChanged` when a declaration's attributes or parameter defaults changed (or a
   using of its file). Such a change keeps the classes the map names and is traced through its type.
-- ~~Stable mutant sample across Sift versions~~ (done, 99347df): each candidate's place and
+- ~~Stable mutant sample across TestDetta versions~~ (done, 99347df): each candidate's place and
   kind come from a hash of the member and the seed, so adding or dropping a candidate (a graph
   fix) changes at most that pick and stored outcomes stay usable. Samples differ from round 1's.
 - **x64-only test projects are left out on Apple silicon** (Vogen's SnapshotTests: "Could not find
@@ -144,8 +144,8 @@ Interim fixes that are safe for the common case; come back for the complete solu
   complete fix needs to know when the framework is between tests (exit probes on test methods, or
   the frameworks' own hooks) and credit that code to the class it builds for.
 - ~~Recording can hang on a lingering MSBuild node~~ (done, 2cbf3bf). The cause was not node
-  reuse but how Sift waited: after dotnet exited, it waited for its output to close, and a child
-  left behind (MSBuild node, compiler server, a test's background process) kept it open. Sift now
+  reuse but how TestDetta waited: after dotnet exited, it waited for its output to close, and a child
+  left behind (MSBuild node, compiler server, a test's background process) kept it open. TestDetta now
   waits for the process only and reads its output for 10 more seconds at most; node reuse stays on,
   since it speeds builds up.
 - ~~Linked files whose path needs evaluation~~: done with MSBuild evaluation (docs/design/msbuild-evaluation.md); the XML reading
@@ -157,7 +157,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `[assembly: AssemblyFixture(typeof(X))]`, `[ModuleInitializer]` in test assemblies, and TUnit
   `[Before(Assembly|TestSession|TestDiscovery)]` and `[BeforeEvery(...)]` hooks record under a setup
   scope that selects every class of the namespace or assembly. Still ambient: discovery-time data
-  and setup of custom frameworks Sift does not know; classify ambient code by what entered it if
+  and setup of custom frameworks TestDetta does not know; classify ambient code by what entered it if
   the corpus shows such cases.
 - ~~Static constructors~~ (interim 7cd8528, completed by field-read probes, docs/design/field-read-probes.md):
   a value a static initializer stores is credited to every bucket that reads the field. Still by
@@ -194,9 +194,9 @@ Interim fixes that are safe for the common case; come back for the complete solu
 - ~~Files rewritten for other tools match the SDK byte for byte~~ (interim 911e519, completed):
   a test rewrites a real SDK-written `deps.json` and gets every byte back; an entry the SDK wrote
   for the runtime (a project that references it) is now kept instead of replaced. `deps.json` is
-  the only text file Sift rewrites; assemblies go through Cecil.
+  the only text file TestDetta rewrites; assemblies go through Cecil.
 - ~~TUnit projects were not recorded or filtered~~ (found 2026-10-02): TUnit ignores the VSTest
-  `--filter` and runs no test at all, and runs none either when given a run settings file. Sift now
+  `--filter` and runs no test at all, and runs none either when given a run settings file. TestDetta now
   uses `--treenode-filter /*/*/(Class)|(Other)/**` (namespace left open, so classes sharing a simple
   name across namespaces go together) and `--maximum-parallel-tests 1` while recording. Add a TUnit
   repository to the corpus.
@@ -208,7 +208,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
   (`--env` for one repository), and protobuf-net sets `DOTNET_DefaultStackSize`, with which the
   class passes. Still left out and named: other hosts that die before running a test.
 - ~~Recording suites that only pass in parallel~~ (completed): when the one-process recording
-  crashes too, the project is recorded with the suite's own parallelism (`SIFT_PARALLEL_FLOWS`):
+  crashes too, the project is recorded with the suite's own parallelism (`TESTDETTA_PARALLEL_FLOWS`):
   code inside a test flow counts for its class, code outside every flow counts as ambient instead of
   for the class entered last, and the map has no class times. To be checked on NLog in round 2.
 
@@ -218,13 +218,13 @@ Reliability is shown (round 1: 3 misses of 2941 failing mutants, all fixed; roun
 and the rest of this file is mostly precision, which keeps growing. v1 is the finish line:
 
 1. Round 2c (every corpus repository, build of main, en-US) without a real miss.
-2. A customer can install and use Sift: README and docs/ci.md checked end to end, the GitHub Action
+2. A customer can install and use TestDetta: README and docs/ci.md checked end to end, the GitHub Action
    (`action.yml`) run on a real repository from a fresh clone. Status 2026-10-04: README brought up
-   to date (MSBuild evaluation, symbols, license); the action runs on Sift itself (record mode
+   to date (MSBuild evaluation, symbols, license); the action runs on TestDetta itself (record mode
    2026-10-03, pull request path 2026-09-30). Open: how customers get the action and the tool while
    the repository is private (public action repository, released binaries or a NuGet tool).
 3. A licence can be bought and works: purchase through the Merchant of Record, key installed,
-   `sift license status` green (see "Licensing independent of the payment provider"). Status: the
+   `td license status` green (see "Licensing independent of the payment provider"). Status: the
    format, the check, the service, refresh and Polar webhooks are built
    (docs/design/licensing.md), and the license string is e-mailed to the buyer through Resend
    (2026-10-04; the portal comes later). Open: where the service runs, the production key, the
@@ -240,6 +240,13 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
+- **Job summary evidence for classes the name spread selects** (seen 2026-10-04 on Spectre.Console,
+  a refactor of `Calendar.GetWeekdays`, map at 01027ef): 15 classes were selected, but the map
+  records only CalendarTests and TreeTests running `GetWeekdays`. The debug log shows the name
+  spread going through `Emoji._emojis` ("names Calendar", an emoji constant with the type's name),
+  yet the summary says of every class "ran Spectre.Console.Calendar.GetWeekdays(), which changed".
+  The selection is safe (more, not less); find where the coverage evidence comes from for the
+  other 13 and make the text name the real reason. The name collision is precision, after v1.
 
 0. **Fast, reliable evaluation environment (top priority, user and Claude agreed 2026-10-02).**
    Every other item (precision round, static bridge, dotnet-tia comparison) and every release after
@@ -252,12 +259,12 @@ repositories a change touches; the full corpus runs at milestones.
      to be set from the measurements in the design doc.
    - ~~Stable sample + outcome cache~~: done (f12e713, 99347df).
    - ~~Cache recordings~~: done (7f38a58), keyed by commit, recording settings and the contents
-     of Sift's core, coverage and tracker assemblies, so any Sift change records again. Baselines
+     of TestDetta's core, coverage and tracker assemblies, so any TestDetta change records again. Baselines
      are not cached: one or two suite runs per commit, and they also measure the time limits and
      anchor the schema and parallel checks.
    - ~~Tiers~~: nightly smoke corpus on GitHub done (6a1a57e; Scriban, Fluid, Carter, 20 mutants each,
      about 18 minutes on a 2-core runner; first run 0 of 47 missed). User chose nightly over per-commit
-     and kept the repository private (Actions minutes). On 2026-10-03 Sift had used 1,635 of the
+     and kept the repository private (Actions minutes). On 2026-10-03 TestDetta had used 1,635 of the
      3,000 monthly minutes in three days, so the smoke corpus and the coverage recording became
      weekly (Monday) or by hand; a push runs only the quick job (no Slow tests, under 3 minutes). A run is compared with an earlier one
      (`--compare`, comparison.md: failures, new misses, wider or narrower selection and changed
@@ -272,7 +279,7 @@ repositories a change touches; the full corpus runs at milestones.
      only the parallel check catches.
    - **Watchdogs and clean failure**: done for the evaluation: time limits on builds (30 min), test
      runs (adaptive, scaled with parallel mutants), recording, and each analysis (bb5b676, reports a
-     hang in Sift); no wait on a child's output (2cbf3bf); the queue's fast-failure guard. Still:
+     hang in TestDetta); no wait on a child's output (2cbf3bf); the queue's fast-failure guard. Still:
      a heartbeat over the queue and an incident log, with the runner work below.
    - ~~Dashboard~~: done. `--history <dir>` keeps every corpus run's summary.json and redraws a static
      `dashboard.html` (per repository: status, commit, misses, selected share, precision, time,
@@ -290,14 +297,14 @@ repositories a change touches; the full corpus runs at milestones.
    implementation. Safety rule unchanged: when the bridge is unsure, select more.
 2. **Compare with the tools teams actually use, then with dotnet-tia.** Market check 2026-10-02:
    dotnet-affected (project-level, 408 stars, 4.15 M NuGet downloads) is the free tool .NET teams
-   use today, so the first comparison is Sift vs dotnet-affected on the same synthetic changes
+   use today, so the first comparison is TestDetta vs dotnet-affected on the same synthetic changes
    (selected share and time; both should miss nothing). From round 2 every synthetic run measures
-   project-level selection (the `ProjectLevel` selector: whole affected test projects, from Sift's
-   own MSBuild graph and impact) next to Sift's, per mutant and per repository in summary.md;
+   project-level selection (the `ProjectLevel` selector: whole affected test projects, from TestDetta's
+   own MSBuild graph and impact) next to TestDetta's, per mutant and per repository in summary.md;
    confirming with the real dotnet-affected tool on a few repositories is the next step: built
    (`--compare-affected <dotnet-affected executable>`, version 6.2.0, run without `--from` so the
    working tree is compared with HEAD, report written outside the clone since v6 counts files in it
-   as changes); on a two-project probe it matched the ProjectLevel selector exactly (56% vs Sift 33%). Datadog Test Impact Analysis is the
+   as changes); on a two-project probe it matched the ProjectLevel selector exactly (56% vs TestDetta 33%). Datadog Test Impact Analysis is the
    commercial one (SaaS, needs an account; later). dotnet-tia (3 stars, 541 downloads, created
    2026-07) is not a market player but the best open-source example of the static-analysis
    approach, so it stays as a technical check of "why record coverage", at low priority; the
@@ -311,7 +318,7 @@ repositories a change touches; the full corpus runs at milestones.
 3. **Precision round**: safety fixes made selection broader (NodaTime 16% → 34%); measure where
    the extra classes come from and narrow without losing safety (override names scoped to their
    hierarchy, run-once rules, name spreading through common member names like `Initialize`).
-4. **Value reporting: show exactly what Sift saved, and why it was safe.** Not "you saved five
+4. **Value reporting: show exactly what TestDetta saved, and why it was safe.** Not "you saved five
    minutes" but the breakdown behind it, in formats people and tools use. First slice done
    (2026-10-02, docs/design/value-reporting.md): a decision and its evidence per test class in JSON
    and the Markdown summary. Still to do:
@@ -353,5 +360,5 @@ repositories a change touches; the full corpus runs at milestones.
 
 - Windows: build, record and select on Windows; path and process differences.
 - CI in practice: map cache hit rates and end-to-end times in a real pipeline.
-- Product name before any public launch (Sift is taken on the Marketplace and NuGet).
+- Product name before any public launch (TestDetta is taken on the Marketplace and NuGet).
 - Paid tier: hosted map store and ROI history.

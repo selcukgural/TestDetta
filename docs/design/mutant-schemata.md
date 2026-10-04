@@ -27,18 +27,18 @@ After the commit is recorded and built, the sampled targets (all of them) are in
 test outputs **once**. Each mutated method gets a guarded prologue instead of an unconditional one:
 
 ```
-if (<SiftMutantSwitch>.Active == 17) { <mutation of kind K> }
+if (<TestDettaMutantSwitch>.Active == 17) { <mutation of kind K> }
 <original body>
 ```
 
-- `<SiftMutantSwitch>` is an internal static class added to every rewritten assembly, so the output
+- `<TestDettaMutantSwitch>` is an internal static class added to every rewritten assembly, so the output
   folder needs no extra file. `Active` is a `static readonly int` read once from the environment
-  variable `SIFT_MUTANT` (0 or missing: no mutant). A static readonly int compare per call is the
+  variable `TESTDETTA_MUTANT` (0 or missing: no mutant). A static readonly int compare per call is the
   whole cost when no mutant is active; tiered JIT folds it after warm-up.
-- Every test process gets `SIFT_MUTANT=<id>` (or nothing) from the evaluation. Lifting a mutant for
+- Every test process gets `TESTDETTA_MUTANT=<id>` (or nothing) from the evaluation. Lifting a mutant for
   a control run is running without the variable; nothing on disk changes during the evaluation.
 - Mutation kinds as guarded code:
-  - **Throw**: `if (active) throw new InvalidOperationException("Sift mutant: T.M");`
+  - **Throw**: `if (active) throw new InvalidOperationException("TestDetta mutant: T.M");`
   - **ReturnDefault**: `if (active) return default;` (void: `return;`; by-reference returns are not
     mutated, as today).
   - **FlipBranch**: the first two-way conditional branch is preceded by a switch: when the mutant is
@@ -66,7 +66,7 @@ schemata are turned off for the commit and the evaluation falls back to one-at-a
 - `--mutant-parallelism <n>` (corpus: `mutantParallelism`, default 1 until measured; repositories
   with a cleanup command or tagged with fixed ports stay at 1).
 - Mutants are evaluated by n workers; each worker runs its mutant's projects, confirmation and
-  control runs with its own `SIFT_MUTANT`. Results are collected and reported in sample order, so a
+  control runs with its own `TESTDETTA_MUTANT`. Results are collected and reported in sample order, so a
   report does not depend on scheduling.
 - `TestExecutor` becomes safe for concurrent runs: run ids, log and TRX names are already unique;
   the per-project longest-time table and the cleanup command move behind a lock; test outputs are
@@ -103,7 +103,7 @@ Copies are removed at the end of the commit.
 ### 4. Equivalence, before switching the default
 
 - Unit tests: for each kind, a small compiled assembly is rewritten with schemata; loading it in a
-  collectible load context with `SIFT_MUTANT` unset behaves like the original, and with the id set
+  collectible load context with `TESTDETTA_MUTANT` unset behaves like the original, and with the id set
   behaves like today's rewrite mutant (same exception, return value, branch, field value).
 - The existing slow evaluation tests (mutant kinds, confirmation, unreported projects, crashes,
   outcome cache) run unchanged on schemata and must pass.

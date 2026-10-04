@@ -2,10 +2,10 @@
 
 ## Corpus round 1 (2026-09-30 → 2026-10-02)
 
-`sift-eval --corpus eval/corpus.json`: per repository, coverage is recorded at the default branch's
-head, then up to 100 sampled members are changed one at a time (source edit for Sift, a `throw` in
+`testdetta-eval --corpus eval/corpus.json`: per repository, coverage is recorded at the default branch's
+head, then up to 100 sampled members are changed one at a time (source edit for TestDetta, a `throw` in
 the compiled member for the tests) and every test class that fails because of the mutant must be in
-Sift's selection. A missed class is confirmed by running it alone with and without the mutant.
+TestDetta's selection. A missed class is confirmed by running it alone with and without the mutant.
 macOS arm64, .NET SDK 10.0.401 (+ ASP.NET Core 8.0.31 for net8.0 suites). Durations were measured
 with several repositories running at once and are noisy; selection shares and misses are not.
 
@@ -72,7 +72,7 @@ added after round 1 (first TUnit suite).
 
   The round-1 maps of these runs lack initialization and field-read data, and with them the NodaTime
   miss still reproduces. So each change was checked again on a fresh recording at the same commit
-  with the current Sift (2026-10-02):
+  with the current TestDetta (2026-10-02):
   - NodaTime: all 7 classes are selected (the test project runs whole).
   - FluentValidation: all 4 are selected.
   - CommunityToolkit: all 3 projects select the class, by coverage. It was a real dependency: with
@@ -95,8 +95,8 @@ precision round's starting point, measured again on round 2's data.
 
 ## Pilot: history mode (2026-09-30)
 
-State on 2026-09-30, Sift at `2a657c3`. Every run used `sift-eval`: for each of the latest
-first-parent commits it records coverage at the parent, lets Sift select, runs the selection and
+State on 2026-09-30, TestDetta at `2a657c3`. Every run used `testdetta-eval`: for each of the latest
+first-parent commits it records coverage at the parent, lets TestDetta select, runs the selection and
 the full suite, checks the selection against coverage recorded after the commit, and injects
 mutants (a `throw` in a changed member) to see whether a failing test class was left out.
 macOS arm64, .NET SDK 10.0.401, `-f net10.0`, `--parallel 4`, 2 mutants per commit.
@@ -108,7 +108,7 @@ FSharp.Data ran before them and should be rerun.
 
 ## Results
 
-| Repository | Commits | Full suite | With Sift | Saved | Mutants caught / missed | Notes |
+| Repository | Commits | Full suite | With TestDetta | Saved | Mutants caught / missed | Notes |
 |---|---|---|---|---|---|---|
 | AfterApply (own, xUnit v2, Testcontainers) | 8 | 8 m 5 s | 3 m 22 s | 58% | 11 / 0 | mutants from the first run, times from the second |
 | Polly (MTP, xUnit v3) | 20 | 3 m 13 s | 1 m 19 s | 59% | 0 / 0 | few commits touch library code |
@@ -147,7 +147,7 @@ ASP.NET Core app with integration tests like AfterApply.
 - Earlier in the evaluation: central package bumps narrowed past test packages added from
   `eng/$(ProjectType).targets` (Polly, a real miss, `a42419b`); a directory-wide
   `Directory.Packages.props` wrongly treated as a hidden project input; projects named `*Test` that
-  run no tests; several `sift-eval` false positives (symlinked temp roots, same type names in
+  run no tests; several `testdetta-eval` false positives (symlinked temp roots, same type names in
   unrelated assemblies, reused report directories, artifacts output layout, crashed test hosts).
 
 ## Known limitations
@@ -166,6 +166,6 @@ ASP.NET Core app with integration tests like AfterApply.
 - Test projects are also recognised by a `*.Tests`/`*.Test` name; false positives are skipped at
   run time.
 - Repositories that run Microsoft's code coverage in every test run (Polly: `--coverage` in
-  `eng/Test.targets`) abort at test host exit while Sift records (exit 134, `BadImageFormatException`).
-  The maps are complete (each shard writes its results before the abort), but `sift record` reports
+  `eng/Test.targets`) abort at test host exit while TestDetta records (exit 134, `BadImageFormatException`).
+  The maps are complete (each shard writes its results before the abort), but `td record` reports
   the run as failed.

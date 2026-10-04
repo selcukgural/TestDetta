@@ -1,4 +1,4 @@
-name: Sift
+name: TestDetta
 description: Run only the .NET tests a change affects on pull requests, and record coverage maps on the default branch.
 branding:
   icon: filter
@@ -45,7 +45,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   license:
-    description: "Test mode only. The Sift license string, passed from a repository or organization secret such as SIFT_LICENSE. Public repositories need none. Without a valid license every test runs; the job never fails because of it."
+    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none. Without a valid license every test runs; the job never fails because of it."
     required: false
     default: ''
   working-directory:
@@ -53,7 +53,7 @@ inputs:
     required: false
     default: '.'
   setup-dotnet:
-    description: Install the .NET 10 SDK that Sift itself runs on. Set to 'false' if the job already has it.
+    description: Install the .NET 10 SDK that TestDetta itself runs on. Set to 'false' if the job already has it.
     required: false
     default: 'true'
 
@@ -65,22 +65,22 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: |
         if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-          echo "::error::Sift compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0."
+          echo "::error::TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0."
           exit 1
         fi
 
-    - name: Set up .NET for Sift
+    - name: Set up .NET for TestDetta
       if: inputs.setup-dotnet == 'true'
       uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
       with:
         dotnet-version: 10.0.x
 
-    - name: Build Sift
+    - name: Build TestDetta
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
-        SIFT_OUT: ${{ runner.temp }}/sift
-      run: dotnet build src/Sift.Cli/Sift.Cli.csproj -c Release -o "$SIFT_OUT" --nologo -v quiet
+        TESTDETTA_OUT: ${{ runner.temp }}/testdetta
+      run: dotnet build src/TestDetta.Cli/TestDetta.Cli.csproj -c Release -o "$TESTDETTA_OUT" --nologo -v quiet
 
     - name: Find comparison base
       if: inputs.mode == 'test'
@@ -128,14 +128,14 @@ runs:
           exit 1
         fi
         echo "max-age=$MAX_MAP_AGE" >> "$GITHUB_OUTPUT"
-        key="sift-coverage-$MERGE_BASE"
+        key="testdetta-coverage-$MERGE_BASE"
         # Restore keys match by prefix and pick the newest cache, not the newest ancestor, so the
         # caches are listed and matched against the merge base's first-parent history here.
         if [ "$MAX_MAP_AGE" != 0 ]; then
-          if keys=$(gh cache list --key sift-coverage- --limit 1000 --json key --jq '.[].key' 2> cache-list.err); then
+          if keys=$(gh cache list --key testdetta-coverage- --limit 1000 --json key --jq '.[].key' 2> cache-list.err); then
             for sha in $(git rev-list --first-parent -n "$((MAX_MAP_AGE + 1))" "$MERGE_BASE"); do
-              if grep -qx "sift-coverage-$sha" <<< "$keys"; then
-                key="sift-coverage-$sha"
+              if grep -qx "testdetta-coverage-$sha" <<< "$keys"; then
+                key="testdetta-coverage-$sha"
                 break
               fi
             done
@@ -150,7 +150,7 @@ runs:
       if: inputs.mode == 'test'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ inputs.working-directory }}/.sift/coverage
+        path: ${{ inputs.working-directory }}/.testdetta/coverage
         key: ${{ steps.map.outputs.key }}
 
     - name: Run affected tests
@@ -158,16 +158,16 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        SIFT: ${{ runner.temp }}/sift/Sift.Cli.dll
+        TESTDETTA: ${{ runner.temp }}/testdetta/TestDetta.Cli.dll
         BASE_REF: ${{ steps.base.outputs.ref }}
         CONFIGURATION: ${{ inputs.configuration }}
         EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
         MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
-        SIFT_LICENSE: ${{ inputs.license }}
+        TESTDETTA_LICENSE: ${{ inputs.license }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
-        dotnet "$SIFT" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+        dotnet "$TESTDETTA" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
 
     - name: Record coverage map
       if: inputs.mode == 'record'
@@ -175,7 +175,7 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        SIFT: ${{ runner.temp }}/sift/Sift.Cli.dll
+        TESTDETTA: ${{ runner.temp }}/testdetta/TestDetta.Cli.dll
         CONFIGURATION: ${{ inputs.configuration }}
         PROJECTS: ${{ inputs.projects }}
         PARALLEL: ${{ inputs.parallel }}
@@ -191,7 +191,7 @@ runs:
           if [ -n "$project" ]; then args+=(--project "$project"); fi
         done <<< "$PROJECTS"
         status=0
-        dotnet "$SIFT" record -c "$CONFIGURATION" "${args[@]}" || status=$?
+        dotnet "$TESTDETTA" record -c "$CONFIGURATION" "${args[@]}" || status=$?
         echo "status=$status" >> "$GITHUB_OUTPUT"
         # 3 means some tests failed; the map is still valid, so it is saved before the job fails.
         if [ "$status" != 0 ] && [ "$status" != 3 ]; then exit "$status"; fi
@@ -200,8 +200,8 @@ runs:
       if: inputs.mode == 'record'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ inputs.working-directory }}/.sift/coverage
-        key: sift-coverage-${{ github.sha }}
+        path: ${{ inputs.working-directory }}/.testdetta/coverage
+        key: testdetta-coverage-${{ github.sha }}
 
     - name: Fail on test failures while recording
       if: inputs.mode == 'record' && steps.record.outputs.status == '3'

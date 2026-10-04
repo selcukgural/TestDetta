@@ -45,7 +45,7 @@ apart from one that is only built (user decision, 2026-10-03).
 
 ## Results
 
-Round-2 maps, 100 mutants each, `sift-eval --explain` and `attribute.py`:
+Round-2 maps, 100 mutants each, `testdetta-eval --explain` and `attribute.py`:
 
 | Repository | Selected share before | After | Missed |
 |---|---|---|---|

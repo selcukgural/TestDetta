@@ -37,19 +37,19 @@ right.
 
 ### Evaluation
 
-- `IProjectEvaluator` in Sift.Core (`Evaluate(repoRoot, projects) → evaluated projects or null`),
-  implemented in Sift.Coverage with `DotnetProcess`, so Core stays free of process code and tests
+- `IProjectEvaluator` in TestDetta.Core (`Evaluate(repoRoot, projects) → evaluated projects or null`),
+  implemented in TestDetta.Coverage with `DotnetProcess`, so Core stays free of process code and tests
   can fake it.
 - One process: `dotnet msbuild <driver.proj> -nologo -v:q -m -nodeReuse:false -restore:false`,
   where a generated driver calls the `MSBuild` task on every project with
   `ContinueOnError=true` and the global properties `CustomAfterMicrosoftCommonTargets` and
-  `CustomAfterMicrosoftCommonCrossTargetingTargets` pointing to a generated `sift-graph.targets`.
+  `CustomAfterMicrosoftCommonCrossTargetingTargets` pointing to a generated `testdetta-graph.targets`.
   Driver, targets and output live in a temporary directory, never in the repository.
 - The target returns, per project and per target framework (inner builds for `TargetFrameworks`):
   `IsTestProject`, `AssemblyName`, `TargetFramework(s)`, the full paths of `ProjectReference`,
   `PackageReference` names, and the full paths of the build items that affect the output
   (`Compile`, `EmbeddedResource`, `Content`, `None`, `AdditionalFiles`). Output is one tab-separated
-  line per item, written with `WriteLinesToFile`, parsed by Sift.
+  line per item, written with `WriteLinesToFile`, parsed by TestDetta.
 - Global properties: none besides the hooks (the default `Configuration`). Items conditioned on
   `Release` are a known limit (see below).
 
@@ -78,9 +78,9 @@ graph is the XML graph, as today, with a warning.
 
 ### Cache
 
-Evaluations are cached in `.sift/cache/graph/<key>.json` (and in memory for the process). The key
+Evaluations are cached in `.testdetta/cache/graph/<key>.json` (and in memory for the process). The key
 hashes: the evaluator version, the SDK version (`dotnet --version` in the repository root), the
-contents of every MSBuild input Sift knows (project files, their XML imports, `Directory.Build.*`,
+contents of every MSBuild input TestDetta knows (project files, their XML imports, `Directory.Build.*`,
 `Directory.Packages.props`, `global.json`, `NuGet.config`), and the sorted list of all file paths
 in the repository outside `bin`/`obj`/`.git`, since globs depend on which files exist. Editing a
 source file keeps the key (an evaluation reads no source file); adding, removing or renaming one,
@@ -94,7 +94,7 @@ hundred edits per commit, evaluates once.
   repository.
 - One configuration (the default one, normally `Debug`).
 - Each evaluation runs the repository's MSBuild logic (property functions, SDK resolvers), as
-  `dotnet build` does; Sift runs where the build runs.
+  `dotnet build` does; TestDetta runs where the build runs.
 
 ## Corpus check (2026-10-02)
 

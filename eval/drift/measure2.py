@@ -1,7 +1,7 @@
 """Measurement 2 of docs/design/map-drift-bridge.md: per map age k and selector, over the failing
 mutants every selector was judged on, the mutants with a missed class, the missed classes and the
 mean selected share. Reads <root>/drift-k<k>/<repo>/synthetic.json written by
-`sift-eval --corpus ... --map-age k`. Usage: measure2.py ~/sift-corpus [repo ...]"""
+`testdetta-eval --corpus ... --map-age k`. Usage: measure2.py ~/sift-corpus [repo ...]"""
 import json, os, sys, glob, re
 
 root = os.path.expanduser(sys.argv[1])

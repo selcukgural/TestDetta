@@ -36,7 +36,7 @@ for, and with two such classes the bucket count no longer marks the code as run-
   - it is marked as initialization, the existing run-once evidence: the selection traces it by
     name as well as selecting the classes the map knows.
 - Fixture and setup-scope buckets are unchanged: their code already serves their users. Suites
-  recorded with their own parallelism (`SIFT_PARALLEL_FLOWS`) keep crediting out-of-flow code to
+  recorded with their own parallelism (`TESTDETTA_PARALLEL_FLOWS`) keep crediting out-of-flow code to
   start-up; between-tests detection needs tests one at a time.
 
 ### Selection: a constructor serves every user of the instance
@@ -64,7 +64,7 @@ case.
 
 ## As built
 
-- `SiftTracker`: `EnterTestCode`/`ExitTestCode`/`ExitTestCodeWhenComplete`/`PrepareTestInstance`,
+- `TestDettaTracker`: `EnterTestCode`/`ExitTestCode`/`ExitTestCodeWhenComplete`/`PrepareTestInstance`,
   `IsBetweenTests` on every hit and field read, `BetweenBits` taken by the next class entered
   (`TakeBetweenTests`, also when the same class is entered again for its next test), between-tests
   hits also marked as initialization.

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Development tool: measures TestDetta on real repositories. Not shipped. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TestDetta.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TestDetta.Core\TestDetta.Core.csproj" />
+    <ProjectReference Include="..\..\src\TestDetta.Coverage\TestDetta.Coverage.csproj" />
+    <ProjectReference Include="..\..\src\TestDetta.Cli\TestDetta.Cli.csproj" />
+  </ItemGroup>
+
+</Project>

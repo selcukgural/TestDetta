@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>td</ToolCommandName>
+    <PackageId>TestDetta.Cli</PackageId>
+    <RootNamespace>TestDetta.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TestDetta.Core\TestDetta.Core.csproj" />
+    <ProjectReference Include="..\TestDetta.Coverage\TestDetta.Coverage.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TestDetta.Tests" />
+    <InternalsVisibleTo Include="TestDetta.Eval" />
+  </ItemGroup>
+
+</Project>

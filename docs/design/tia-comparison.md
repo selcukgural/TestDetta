@@ -13,7 +13,7 @@ by static analysis only:
 
 It reports zero misses on its own mutation gate for NodaTime (20 samples) and FluentValidation
 (16), and mean selections of 35.5% (NodaTime), 51% (FluentValidation) and 30% (MediatR) over
-replayed history. Sift's claim is that recorded coverage is both safer (dispatch the static
+replayed history. TestDetta's claim is that recorded coverage is both safer (dispatch the static
 graph cannot see: DI, reflection, serializers, run-once code) and narrower (type-insensitive
 interface hops select whole hierarchies). Only the same mutants on the same repositories can
 settle that.
@@ -26,8 +26,8 @@ more selector:
 
 - After the change's source edit is applied, and before the files are restored, run
   `dotnet tia analyze --base <sha> --json --path <clone> [--solution <sln>]`. Its diff is against
-  the working tree, as Sift's is.
-- Read the report into a class-level selection that can be compared with Sift's:
+  the working tree, as TestDetta's is.
+- Read the report into a class-level selection that can be compared with TestDetta's:
   - `mode: full` selects everything.
   - Each project in `projects[]` is matched to an evaluated test project by path. When `filtered`
     is false, the whole project runs. Otherwise its `tests[]` (fully qualified test names) are
@@ -38,7 +38,7 @@ more selector:
   compare at class level, which is what the evaluator can prove a miss at.
 - A failing class that any selector left out is confirmed alone, as for the drift modes. Misses
   and selected share are reported per selector on the same mutants.
-- Time: dotnet-tia's `elapsedSeconds` per analysis, next to Sift's. The first analysis of a
+- Time: dotnet-tia's `elapsedSeconds` per analysis, next to TestDetta's. The first analysis of a
   repository builds dotnet-tia's graph cold. It is reported separately, and the warm cache
   (`.tia/`) is kept in the clone between mutants, since only the edited project is rebuilt.
 
@@ -52,7 +52,7 @@ more selector:
   and reported with its reason, never dropped.
 - Its widening rules stay on and `--type-flow` stays off (its default; documented as not changing
   selection).
-- Mutants Sift cannot see (`Detected = false`) still count for dotnet-tia.
+- Mutants TestDetta cannot see (`Detected = false`) still count for dotnet-tia.
 
 ## Implementation
 
@@ -83,14 +83,14 @@ more selector:
   judged on the same confirmed failures. synthetic.json now names them `others` (was `drift`).
 - `TiaSelector`:
   - runs `dotnet <Tia.Cli.dll> analyze --base <sha> --json --path <clone> --coverage-threshold 1`
-    (filter whenever possible, like Sift), with `--solution` from `tiaSolution`;
-  - excludes `/.tia/` through `.git/info/exclude`, so Sift never sees the cache as an untracked change;
+    (filter whenever possible, like TestDetta), with `--solution` from `tiaSolution`;
+  - excludes `/.tia/` through `.git/info/exclude`, so TestDetta never sees the cache as an untracked change;
   - reads the report: a full run selects everything; a listed project runs its tests' classes, or
     all when unfiltered; an unlisted project runs nothing;
   - a failure of the tool is recorded as a full run with its reason, never as a miss.
 - Options: `--compare-tia <dll>` (single and corpus runs), `--tia-solution`, corpus field
   `tiaSolution`.
-- `synthetic.md` gets a "dotnet-tia" table: Sift vs dotnet-tia misses, share and precision, the
+- `synthetic.md` gets a "dotnet-tia" table: TestDetta vs dotnet-tia misses, share and precision, the
   full-run count and the median analysis time. JSON has `others.tia.{missed, selectedShare,
   fullRun, seconds}`.
 - Tests: `TiaSelectorTests` (report reading, options); `EvalMapAgeTests` covers the shared machinery.

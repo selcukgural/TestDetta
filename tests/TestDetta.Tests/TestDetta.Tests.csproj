@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TestDetta.Core\TestDetta.Core.csproj" />
+    <ProjectReference Include="..\..\src\TestDetta.Cli\TestDetta.Cli.csproj" />
+    <ProjectReference Include="..\..\src\TestDetta.Coverage\TestDetta.Coverage.csproj" />
+    <ProjectReference Include="..\..\tools\TestDetta.Eval\TestDetta.Eval.csproj" />
+  </ItemGroup>
+
+</Project>

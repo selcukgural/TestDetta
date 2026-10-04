@@ -1,0 +1,210 @@
+using Microsoft.Extensions.Logging;
+
+namespace TestDetta.Core;
+
+/// <summary>
+/// Maps changed files to the projects they can affect. When unsure it selects more, not less:
+/// a missed test is a bug, an extra test only costs CI time.
+/// </summary>
+/// <param name="logger">Receives one debug line per changed file and per propagated dependency.</param>
+public sealed partial class ImpactAnalyzer(ILogger<ImpactAnalyzer> logger)
+{
+
+    /// <summary>Returns the projects affected by <paramref name="changedFiles"/>.</summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="repoRoot">Repository root that <paramref name="changedFiles"/> are relative to.</param>
+    /// <param name="changedFiles">Changed file paths relative to <paramref name="repoRoot"/>, as git prints them.</param>
+    /// <param name="codeChanges">
+    /// Code-level changes of the C# files among <paramref name="changedFiles"/>. Files reported as
+    /// cosmetic are skipped; C# files without an entry are treated as changed.
+    /// </param>
+    /// <param name="packageChanges">
+    /// Changes of central package version files. A file whose change is narrowed to packages affects
+    /// only the projects below it that reference one of them; any other change of it affects all.
+    /// </param>
+    public ImpactResult Analyze(
+        ProjectGraph graph,
+        string repoRoot,
+        IEnumerable<string> changedFiles,
+        IReadOnlyList<CodeChange> codeChanges,
+        IReadOnlyList<PackageVersionChange>? packageChanges = null)
+    {
+        var root = Paths.Normalize(repoRoot);
+        var reasons = new Dictionary<string, ImpactReason>(Paths.Comparer);
+        var unmapped = new List<string>();
+        var cosmetic = new HashSet<string>(StringComparer.Ordinal);
+        var relevantChanges = new List<CodeChange>(codeChanges.Count);
+
+        foreach (var change in codeChanges)
+        {
+            if (change.IsCosmetic)
+            {
+                cosmetic.Add(change.Path);
+            }
+            else
+            {
+                relevantChanges.Add(change);
+            }
+        }
+
+        foreach (var relative in changedFiles)
+        {
+            if (cosmetic.Contains(relative))
+            {
+                LogCosmetic(relative);
+                continue;
+            }
+
+            var file = Paths.Normalize(Path.Combine(root, relative));
+
+            if (BuildFiles.IsDirectoryWide(file))
+            {
+                var packages = packageChanges?.FirstOrDefault(c => c.Path == relative)?.Packages;
+                MarkBuildConfiguration(graph, file, reasons, packages);
+                continue;
+            }
+
+            var owners = graph.ResolveFile(file);
+            if (owners.Count == 0)
+            {
+                LogUnmapped(relative);
+                unmapped.Add(relative);
+                continue;
+            }
+
+            foreach (var owner in owners)
+            {
+                if (owner.Role == FileRole.BuildInput)
+                {
+                    LogImported(relative, owner.Project.Path);
+                    Mark(reasons, owner.Project.Path, ImpactReason.BuildConfiguration);
+                }
+                else
+                {
+                    LogDirectChange(relative, owner.Project.Path);
+                    Mark(reasons, owner.Project.Path, ImpactReason.DirectChange);
+                }
+            }
+        }
+
+        PropagateToDependents(graph, reasons);
+
+        var affected = reasons
+            .Select(kv => new AffectedProject(graph[kv.Key], kv.Value))
+            .OrderBy(static a => a.Project.Path, Paths.Comparer)
+            .ToList();
+
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var testCount = 0;
+            foreach (var a in affected)
+            {
+                if (a.Project.IsTestProject)
+                {
+                    testCount++;
+                }
+            }
+
+            LogSummary(affected.Count, testCount, unmapped.Count);
+        }
+
+        return new ImpactResult(affected, unmapped, [.. cosmetic.Order(StringComparer.Ordinal)], relevantChanges);
+    }
+
+    /// <summary>Marks every project in or below the directory of a build-wide <paramref name="file"/>.</summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="file">Normalized path of the changed build-wide file.</param>
+    /// <param name="reasons">Selected projects so far; updated in place.</param>
+    /// <param name="packages">
+    /// For a central package versions file whose change is only package versions, the changed
+    /// packages; only projects referencing one of them are marked. Null marks every project below.
+    /// </param>
+    private void MarkBuildConfiguration(
+        ProjectGraph graph,
+        string file,
+        Dictionary<string, ImpactReason> reasons,
+        IReadOnlySet<string>? packages)
+    {
+        var dir = Paths.Normalize(Path.GetDirectoryName(file)!);
+        var count = 0;
+
+        foreach (var project in graph.Projects)
+        {
+            if (!Paths.IsUnder(project.Directory, dir))
+            {
+                continue;
+            }
+
+            // A project with unresolved inputs may reference the package from a file TestDetta could not find.
+            if (packages is not null && !project.HasUnresolvedInputs && !packages.Overlaps(project.PackageReferences))
+            {
+                continue;
+            }
+
+            Mark(reasons, project.Path, ImpactReason.BuildConfiguration);
+            count++;
+        }
+
+        LogBuildConfiguration(file, count);
+    }
+
+    /// <summary>
+    /// Records why <paramref name="project"/> is affected. A build configuration change outranks a
+    /// direct change, whatever order the files come in, because it is what makes test selection run
+    /// the whole project.
+    /// </summary>
+    /// <param name="reasons">Selected projects so far; updated in place.</param>
+    /// <param name="project">Normalized project path.</param>
+    /// <param name="reason">Reason from the file at hand.</param>
+    private static void Mark(Dictionary<string, ImpactReason> reasons, string project, ImpactReason reason)
+    {
+        if (!reasons.TryGetValue(project, out var existing) || reason == ImpactReason.BuildConfiguration && existing != reason)
+        {
+            reasons[project] = reason;
+        }
+    }
+
+    /// <summary>Adds, breadth first, every project that transitively references an already selected one.</summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="reasons">Selected projects so far; updated in place.</param>
+    private void PropagateToDependents(ProjectGraph graph, Dictionary<string, ImpactReason> reasons)
+    {
+        var queue = new Queue<string>(reasons.Keys);
+
+        while (queue.TryDequeue(out var project))
+        {
+            foreach (var dependent in graph.DependentsOf(project))
+            {
+                if (!reasons.TryAdd(dependent, ImpactReason.Dependency))
+                {
+                    continue;
+                }
+
+                LogDependency(dependent, project);
+                queue.Enqueue(dependent);
+            }
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} is imported by the build of {Project}")]
+    private partial void LogImported(string file, string project);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} belongs to {Project}")]
+    private partial void LogDirectChange(string file, string project);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} has only whitespace or comment changes, ignored")]
+    private partial void LogCosmetic(string file);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} is outside every project, ignored")]
+    private partial void LogUnmapped(string file);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} is build-wide configuration, affects {Count} project(s)")]
+    private partial void LogBuildConfiguration(string file, int count);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Project} is affected because it references {Dependency}")]
+    private partial void LogDependency(string project, string dependency);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "{AffectedCount} affected project(s), {TestCount} of them tests, {UnmappedCount} unmapped file(s)")]
+    private partial void LogSummary(int affectedCount, int testCount, int unmappedCount);
+}

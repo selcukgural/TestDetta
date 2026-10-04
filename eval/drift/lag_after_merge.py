@@ -4,7 +4,7 @@ policy, and how many .cs files those commits change (the diff a static bridge mu
 import subprocess, sys, os, statistics, json, bisect
 from datetime import datetime, timezone, timedelta
 
-RUNS = os.path.expanduser(os.environ.get("SIFT_CORPUS_RUNS", "~/sift-corpus/runs"))
+RUNS = os.path.expanduser(os.environ.get("TESTDETTA_CORPUS_RUNS", "~/sift-corpus/runs"))
 DAYS = 365
 RECORDING = timedelta(minutes=30)
 HOURS = {"hourly": 1, "6-hourly": 6, "nightly": 24, "weekly": 168}

@@ -4,7 +4,7 @@ The newest usable map is the newest recorded commit, at or before the tip, whose
 finished before that moment."""
 import subprocess, os, json, statistics, sys
 from datetime import datetime, timezone, timedelta
-RUNS = os.path.expanduser(os.environ.get("SIFT_CORPUS_RUNS", "~/sift-corpus/runs")); DAYS = 365
+RUNS = os.path.expanduser(os.environ.get("TESTDETTA_CORPUS_RUNS", "~/sift-corpus/runs")); DAYS = 365
 def git(repo, *a): return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True, check=True).stdout
 def pct(xs, p): xs = sorted(xs); return xs[min(len(xs)-1, int(round(p/100*(len(xs)-1))))]
 POL = {"every-commit+30m": (None, 30), "every-commit+120m": (None, 120), "hourly+30m": (1, 30), "nightly+60m": (24, 60), "weekly+60m": (168, 60)}

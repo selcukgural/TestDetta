@@ -1,0 +1,395 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using TestDetta.Core;
+using TestDetta.Coverage;
+
+namespace TestDetta.Tests;
+
+/// <summary>
+/// Run-once code whose result is stored into a field is answered through the values it built, not
+/// traced by name (docs/design/run-once-cascades.md, C). Code whose result leaves another way stays
+/// run-once.
+/// </summary>
+[Trait("Category", "Slow")]
+public sealed class LinkedInitializationTests : IDisposable
+{
+    private readonly GitRepoFixture _repo = new();
+
+    /// <summary>How RateService keeps the rate Build computes.</summary>
+    /// <param name="cache">One of the cache shapes below.</param>
+    private static string RateService(string cache) => cache switch
+    {
+        // A static cache filled with GetOrAdd: linked to the field.
+        "getoradd" => """
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
+            public decimal For(string country) => Cache.GetOrAdd(country, Build);
+            """,
+        // A Lazy<T> in a field: linked to the field.
+        "lazy" => """
+            private static readonly System.Lazy<decimal> Turkey = new(() => new RateService().Build("tr"));
+            public decimal For(string country) => Turkey.Value;
+            """,
+        // Linked in one fill and unlinked in another: one unseen path keeps it run-once.
+        "mixed" => """
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
+            private static System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Shared() => Cache;
+            public decimal For(string country)
+            {
+                Shared().GetOrAdd(country + "!", Build);
+                return Cache.GetOrAdd(country, Build);
+            }
+            """,
+        // A fill longer than the tracker's ring of recent hits (NodaTime parses all of TZDB in one):
+        // the rate is built first, then overwritten in the ring by the rest of the work.
+        "long" => """
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
+            private static void Step() { }
+            public decimal For(string country) => Cache.GetOrAdd(country, c =>
+            {
+                var rate = Build(c);
+                for (var i = 0; i < 70_000; i++)
+                {
+                    Step();
+                }
+
+                return rate;
+            });
+            """,
+        // A hand-rolled cache: looked up with TryGetValue, filled through the indexer (NodaTime's
+        // DateTimeZoneCache). The value built on a miss is linked to the dictionary's field.
+        "pool" => """
+            private static readonly System.Collections.Generic.Dictionary<string, Holder> Cache = [];
+            public sealed class Holder(decimal value) { public decimal Value { get; } = value; }
+            public decimal For(string country)
+            {
+                if (!Cache.TryGetValue(country, out var holder))
+                {
+                    holder = new Holder(Build(country));
+                    Cache[country] = holder;
+                }
+
+                return holder.Value;
+            }
+            """,
+        // A value type built by the static constructor (NodaTime's Offset.Zero): linked to its field.
+        "struct" => """
+            private static readonly Holder Turkey = new(new RateService().Build("tr"));
+            public readonly struct Holder(decimal value) { public decimal Value { get; } = value; }
+            public decimal For(string country) => Turkey.Value;
+            """,
+        // An array in a field filled element by element (NodaTime's CalendarByOrdinal[ordinal] = this):
+        // the element store stores the value for the array's readers.
+        "array" => """
+            private static readonly decimal[] Seen = new decimal[1];
+            public decimal For(string country)
+            {
+                if (Seen[0] == 0)
+                {
+                    Seen[0] = Build(country);
+                }
+
+                return Seen[0];
+            }
+            """,
+        // A list in a field added to outside any fill: the add stores the value for the list's readers.
+        "list" => """
+            private static readonly System.Collections.Generic.List<decimal> Seen = [];
+            public decimal For(string country)
+            {
+                if (Seen.Count == 0)
+                {
+                    Seen.Add(Build(country));
+                }
+
+                return Seen[0];
+            }
+            """,
+        // A second cache built from the first: its users depend on what built the first.
+        "derived" => """
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Labels = new();
+            public decimal For(string country) => Cache.GetOrAdd(country, Build);
+            public string Label(string country) => Labels.GetOrAdd(country, static c => "rate " + new RateService().For(c).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            """,
+        // An object that registers itself in its constructor (NodaTime's CalendarSystem in
+        // CalendarByOrdinal), built in a holder's static constructor from an argument built before
+        // the constructor ran. Readers of the registry depend on what built the argument.
+        "registry" => Registry("""
+            public Entry(decimal rate)
+            {
+                Rate = rate;
+                Registry[0] = this;
+            }
+            """, """
+            internal static readonly Entry Turkey = new(new RateService().Build("tr"));
+            """),
+        // The same with the argument built into a local first (NodaTime's ISO calendar and its
+        // calculator), after unrelated work that is not the registry's.
+        "registry-local" => Registry("""
+            public Entry(decimal rate)
+            {
+                Rate = rate;
+                Registry[0] = this;
+            }
+            """, """
+            internal static readonly Entry Turkey;
+            static Holder()
+            {
+                var report = new Report().Build();
+                var rate = new RateService().Build("tr");
+                Turkey = new Entry(rate);
+            }
+            """),
+        // The same through a constructor chained to the one that registers.
+        "registry-chain" => Registry("""
+            public Entry(decimal rate)
+                : this(rate, "tr")
+            {
+            }
+
+            private Entry(decimal rate, string country)
+            {
+                Rate = rate;
+                Registry[0] = this;
+            }
+            """, """
+            internal static readonly Entry Turkey = new(new RateService().Build("tr"));
+            """),
+        // Two values built by one static constructor (NodaTime's NodaConstants: UnixEpoch, then
+        // BclEpoch through the calendar). Reading the first fails when building the second throws.
+        "constants" => """
+            private static class Constants
+            {
+                internal static readonly decimal Zero = 0.5m;
+                internal static readonly decimal Turkey = new RateService().Build("tr");
+            }
+            public decimal For(string country) => Constants.Turkey;
+            public static decimal Zero() => Constants.Zero;
+            """,
+        // Built by a test base class's static constructor (MimeKit's MimeEncoderTestsBase), see Record.
+        "base" => """
+            public decimal For(string country) => Build(country);
+            """,
+        // The cache comes back from a method, not a field load: the probes cannot follow it.
+        _ => """
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Cache = new();
+            private static System.Collections.Concurrent.ConcurrentDictionary<string, decimal> Shared() => Cache;
+            public decimal For(string country) => Shared().GetOrAdd(country, Build);
+            """,
+    };
+
+    /// <summary>RateService members for the registry shapes: an entry type registering itself, and a holder building one.</summary>
+    /// <param name="constructors">Constructors of the entry.</param>
+    /// <param name="holder">Members of the holder.</param>
+    private static string Registry(string constructors, string holder) => $$"""
+        private static readonly Entry?[] Registry = new Entry?[1];
+        public sealed class Entry
+        {
+            {{constructors}}
+            public decimal Rate { get; }
+        }
+        private static class Holder
+        {
+            {{holder}}
+        }
+        public decimal For(string country) => Registry[0]?.Rate ?? Holder.Turkey.Rate;
+        """;
+
+    [Theory]
+    [InlineData("getoradd", true)]
+    [InlineData("lazy", true)]
+    [InlineData("pool", true)]
+    [InlineData("long", true)]
+    [InlineData("struct", true)]
+    [InlineData("unlinked", false)]
+    [InlineData("mixed", false)]
+    public void A_cache_kept_in_a_field_is_answered_through_its_readers_and_starts_no_name_trace(string cache, bool linked)
+    {
+        var map = Record(cache);
+        var rate = map.Methods.ToList().IndexOf(new CoveredMethod("App.Table", "Rate"));
+        Assert.Contains(rate, map.Initialization);
+        Assert.True(linked == map.LinkedInitialization!.Contains(rate),
+            $"init=[{string.Join(",", map.Initialization.Select(i => map.Methods[i]))}] linked=[{string.Join(",", map.LinkedInitialization!.Select(i => map.Methods[i]))}]");
+
+        _repo.Replace("src/App/Rates.cs", "0.2m : 0.1m", "0.25m : 0.1m");
+        var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();
+
+        // Linked: the classes that ran the fill or read its field. Unlinked: the name trace as before,
+        // which also reaches ReportTests through the shared name.
+        Assert.Equal(
+            linked ? ["App.Tests.AlphaTests", "App.Tests.BetaTests"] : ["App.Tests.AlphaTests", "App.Tests.BetaTests", "App.Tests.ReportTests"],
+            selection.TestClasses);
+    }
+
+    /// <summary>Writes the repository with <paramref name="cache"/>, records its map, stores it and returns it.</summary>
+    /// <param name="cache">Cache shape, see <see cref="RateService"/>.</param>
+    private CoverageMap Record(string cache)
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
+        _repo.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        _repo.Write("src/App/Rates.cs", $$"""
+            namespace App;
+            public sealed class RateService
+            {
+                {{RateService(cache)}}
+                public decimal Build(string country) => Table.Rate(country);
+            }
+            public static class Table { public static decimal Rate(string country) => country == "tr" ? 0.2m : 0.1m; }
+            // Shares the name Build with RateService: only a name trace reaches it.
+            public sealed class Report { public string Build() => "report"; }
+            """);
+        _repo.Write("tests/App.Tests/App.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+                <ProjectReference Include="../../src/App/App.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/App.Tests/Tests.cs", """
+            using Xunit;
+            namespace App.Tests;
+            // Alpha fills the cache; Beta only reads what Alpha's run built.
+            public class AlphaTests { [Fact] public void Turkey() => Assert.Equal(0.2m, new App.RateService().For("tr")); }
+            public class BetaTests { [Fact] public void Turkey_again() => Assert.Equal(0.2m, new App.RateService().For("tr")); }
+            public class ReportTests { [Fact] public void Builds() => Assert.Equal("report", new App.Report().Build()); }
+            public class PlainTests { [Fact] public void Holds() => Assert.True(true); }
+            """ + (cache == "derived" ? """
+
+            // Aaa fills both caches, the rates first; Gamma only reads the labels, built from the rates.
+            public class AaaTests
+            {
+                [Fact]
+                public void Rate_then_label()
+                {
+                    // The rate is built and cached first; the label is built later from the cached rate.
+                    Assert.Equal(0.2m, new App.RateService().For("tr"));
+                    Assert.Equal("rate 0.2", new App.RateService().Label("tr"));
+                }
+            }
+            public class GammaTests { [Fact] public void Label() => Assert.Equal("rate 0.2", new App.RateService().Label("tr")); }
+            """ : "") + (cache == "base" ? """
+
+            // The base's static constructor builds data with the rate; Aaa uses it, Zzz never reads it
+            // but cannot even be created when the constructor throws.
+            public abstract class RatedTestsBase
+            {
+                protected static readonly decimal Turkey;
+                static RatedTestsBase() { Turkey = new App.RateService().Build("tr"); }
+            }
+            public class AaaRatedTests : RatedTestsBase { [Fact] public void Uses() => Assert.Equal(0.2m, Turkey); }
+            public class ZzzRatedTests : RatedTestsBase { [Fact] public void Holds() => Assert.True(true); }
+            """ : "") + (cache == "constants" ? """
+
+            // Runs after Alpha built the constants, and reads only the first of them.
+            public class ZeroTests { [Fact] public void Zero() => Assert.Equal(0.5m, App.RateService.Zero()); }
+            """ : ""));
+
+        if (cache is "derived" or "constants" or "base")
+        {
+            // Classes run one at a time by name, so Aaa always fills before Gamma reads, and Alpha
+            // builds the constants before Zero reads them.
+            _repo.Write("tests/App.Tests/Order.cs", """
+                [assembly: Xunit.TestCollectionOrderer("App.Tests.ByName", "App.Tests")]
+                [assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+                namespace App.Tests;
+                public sealed class ByName : Xunit.ITestCollectionOrderer
+                {
+                    public System.Collections.Generic.IEnumerable<Xunit.Abstractions.ITestCollection> OrderTestCollections(System.Collections.Generic.IEnumerable<Xunit.Abstractions.ITestCollection> collections) =>
+                        System.Linq.Enumerable.OrderBy(collections, static c => c.DisplayName, System.StringComparer.Ordinal);
+                }
+                """);
+        }
+
+        _repo.Commit("base");
+
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var testProject = graph.Projects.Single(p => p.IsTestProject);
+        var (map, passed) = new CoverageRecorder(NullLoggerFactory.Instance)
+            .Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: 1)), TextWriter.Null);
+        Assert.True(passed);
+        CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
+        return map;
+    }
+
+    [Fact]
+    public void A_value_built_from_another_built_value_depends_on_what_built_that_one()
+    {
+        Record("derived");
+
+        _repo.Replace("src/App/Rates.cs", "0.2m : 0.1m", "0.25m : 0.1m");
+        var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();
+
+        // Gamma never ran Build nor read the rates' cache: only the labels, which were built from them.
+        Assert.Contains("App.Tests.GammaTests", selection.TestClasses);
+        Assert.Contains("App.Tests.AaaTests", selection.TestClasses);
+    }
+
+    [Theory]
+    [InlineData("list")]
+    [InlineData("array")]
+    public void A_value_added_to_a_collection_in_a_field_is_credited_to_the_collections_readers(string cache)
+    {
+        var map = Record(cache);
+
+        // Alpha built the value; Beta only read the list, and depends on what built it all the same.
+        var built = map.BuiltValues!.Classes["App.Tests.BetaTests"].Select(i => map.Methods[i]).ToList();
+        Assert.Contains(new CoveredMethod("App.Table", "Rate"), built);
+        Assert.Contains(new CoveredMethod("App.RateService", "Build"), built);
+    }
+
+    [Fact]
+    public void A_static_field_depends_on_everything_its_static_constructor_ran()
+    {
+        var map = Record("constants");
+
+        // Zero read only the first constant, built before the second; had building the second thrown,
+        // the type would not have been usable, and reading the first would have failed too.
+        var zero = map.Classes["App.Tests.ZeroTests"].Concat(map.BuiltValues!.Classes["App.Tests.ZeroTests"])
+            .Where(i => i < map.Methods.Count)
+            .Select(i => map.Methods[i]);
+        Assert.Contains(new CoveredMethod("App.Table", "Rate"), zero);
+    }
+
+    [Fact]
+    public void A_class_using_a_type_depends_on_everything_its_static_constructor_ran()
+    {
+        var map = Record("base");
+
+        // Zzz never read what the base's static constructor built, but creating it runs that
+        // constructor first; had it thrown, every test of Zzz would have failed.
+        var zzz = map.Classes["App.Tests.ZzzRatedTests"].Concat(map.BuiltValues!.Classes["App.Tests.ZzzRatedTests"])
+            .Where(i => i < map.Methods.Count)
+            .Select(i => map.Methods[i]);
+        Assert.Contains(new CoveredMethod("App.Table", "Rate"), zzz);
+    }
+
+    [Theory]
+    [InlineData("registry")]
+    [InlineData("registry-local")]
+    [InlineData("registry-chain")]
+    public void An_object_registered_by_its_constructor_carries_what_built_its_arguments(string cache)
+    {
+        var map = Record(cache);
+        var rate = new CoveredMethod("App.Table", "Rate");
+
+        // Whichever of Alpha and Beta came second only read the registry; the rate was built as an
+        // argument before the registering constructor ran, inside the holder's static constructor.
+        string[] classes = ["App.Tests.AlphaTests", "App.Tests.BetaTests"];
+        var reader = classes.Single(c => !map.Classes[c].Where(i => i < map.Methods.Count).Select(i => map.Methods[i]).Contains(rate));
+        var built = map.BuiltValues!.Classes[reader].Select(i => map.Methods[i]).ToList();
+        Assert.Contains(rate, built);
+
+        // Only what built the arguments: the holder's work before them is not the registry's.
+        Assert.DoesNotContain(new CoveredMethod("App.Report", "Build"), built);
+    }
+
+    public void Dispose() => _repo.Dispose();
+}

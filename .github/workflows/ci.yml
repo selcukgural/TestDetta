@@ -33,7 +33,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      SIFT_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
+      TESTDETTA_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,7 +66,7 @@ jobs:
   # The pass/fail signal within three minutes on every push. The Slow tests build and run real
   # projects; they run in the weekly recording above and before every push locally. It runs under a
   # Turkish locale (dotted and dotless i, comma decimals), where culture-sensitive code breaks first:
-  # customers run Sift on any locale, and the weekly job keeps the runner's default one covered.
+  # customers run TestDetta on any locale, and the weekly job keeps the runner's default one covered.
   quick:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      SIFT_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
+      TESTDETTA_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
       CI: 'true'
       LC_ALL: tr_TR.UTF-8
       LANG: tr_TR.UTF-8

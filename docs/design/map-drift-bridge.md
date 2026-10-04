@@ -8,7 +8,7 @@ and the size cap.
 
 A coverage map is used only when it was recorded exactly at the merge base
 (`AnalysisPipeline.LoadCoverageMaps`; in CI the action restores only the cache key
-`sift-coverage-<merge-base>`). When the map was recorded at an earlier commit, Sift ignores it.
+`testdetta-coverage-<merge-base>`). When the map was recorded at an earlier commit, TestDetta ignores it.
 For that test project it then falls back to the name-only trace, not to the full suite (the backlog
 text said "full suite", which was wrong). The name trace follows simple names through the
 working tree's syntax, so it is broad. Its blind spots (reflection, strings, DI by convention) are
@@ -132,7 +132,7 @@ unchanged.
 Decided 2026-10-02 (user): safety first, with a choice. By default (`--drift-fallback all`, action
 input `drift-fallback`) those test projects run completely: a configuration-only change in the
 drift, such as one that wires a new DI registration, is a call neither the map nor the name trace
-can see. `--drift-fallback name` decides them by name instead, as Sift did before the bridge with no
+can see. `--drift-fallback name` decides them by name instead, as TestDetta did before the bridge with no
 usable map: faster, with that blind spot. Only test projects that use the older map are affected;
 projects without any map are decided by name either way.
 
@@ -144,7 +144,7 @@ projects without any map are decided by name either way.
 - **Size cap**: when the drift changes more than a set number of members, propagating each one
   costs more than the name trace saves. The test projects then take the no-map path. The number
   is set from measurement 2; a bulk edit should not be bridged member by member.
-- **One map commit per run**: maps are restored together, so all maps in `.sift/coverage` normally
+- **One map commit per run**: maps are restored together, so all maps in `.testdetta/coverage` normally
   come from the same `A`. Maps with different commits each get their own drift (computed once per
   distinct commit); bridged members are resolved against every map, which only adds classes.
 - **Timings**: map timings at `A` stay valid for estimates; new classes have none, as today.
@@ -167,7 +167,7 @@ projects without any map are decided by name either way.
    added classes. This also starts the backlog item on reporting which map a decision came from.
 5. Action (`action.yml`): instead of the exact cache key, restore the newest cache whose commit is
    a first-parent ancestor of the merge base within the cap.
-   - Run `gh cache list --key sift-coverage- --json key` (needs `actions: read`) and walk
+   - Run `gh cache list --key testdetta-coverage- --json key` (needs `actions: read`) and walk
      `git rev-list --first-parent -n <cap> <merge-base>` in order, picking the first key that
      exists.
    - Plain `restore-keys` prefixes cannot express "an ancestor of the merge base".
@@ -207,7 +207,7 @@ A bridge miss gets a complete fix and a red test, as with every other miss.
 
 ## Order of work
 
-1. Evaluator: `--map-age` and the naive/no-map/bridge modes (the Sift.Core side gets a map policy
+1. Evaluator: `--map-age` and the naive/no-map/bridge modes (the TestDetta.Core side gets a map policy
    that only the evaluator sets for "naive").
 2. `DriftReader` + bridge rule in the selector, with unit tests on small repositories built in the
    tests:
@@ -250,11 +250,11 @@ A bridge miss gets a complete fix and a red test, as with every other miss.
   has `mapAge`, `mapCommit` and per mutant `drift.{bridge,noMap,naive}.{missed,selectedShare}`;
   `synthetic.md` a "Map drift" table (missed mutants, missed classes, mean share, precision).
   With `--map-age 0` nothing changes. `EvalMapAgeTests` (end to end, sabotage-checked).
-- Action: a "Find newest coverage map" step lists `sift-coverage-*` caches with `gh cache list`
+- Action: a "Find newest coverage map" step lists `testdetta-coverage-*` caches with `gh cache list`
   (input `github-token`, default `github.token`; the job needs `actions: read`) and walks
   `git rev-list --first-parent -n <max-map-age + 1> <merge-base>` for the first commit that has
   one; without the permission it notices and falls back to the exact key. Input `max-map-age`
-  (default 50) is passed to `sift test`. Checked locally with a stub `gh` (ancestor found, 403
+  (default 50) is passed to `td test`. Checked locally with a stub `gh` (ancestor found, 403
   fallback, age limit).
 - Measurement 2 tooling: `~/sift-corpus/run-measure2.sh` (waits for round 2, then corpus runs with
   `--map-age 1/3/10/30` on opentelemetry-dotnet, fastendpoints, polly, awesomeassertions, mapperly,

@@ -1,5 +1,5 @@
 """Precision round: which rule selected the classes that did not need to run. Joins the evaluator's
-explain.json (Sift's decisions and evidence per sampled change, `sift-eval --explain`) with the
+explain.json (TestDetta's decisions and evidence per sampled change, `testdetta-eval --explain`) with the
 corpus run's synthetic.json (which classes really failed per mutant), and attributes every selected
 class that did not fail to the kind of evidence that selected it.
 Usage: attribute.py <explain.json> <synthetic.json> [--top N]"""

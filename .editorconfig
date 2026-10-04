@@ -1,4 +1,4 @@
-# Code style for Sift. Rider/ReSharper and the .NET analyzers both read this file.
+# Code style for TestDetta. Rider/ReSharper and the .NET analyzers both read this file.
 # Style rules marked ":error" fail the build (EnforceCodeStyleInBuild is on).
 root = true
 
