@@ -10,7 +10,7 @@ COPY src/TestDetta.Core/ src/TestDetta.Core/
 COPY src/TestDetta.LicenseService/ src/TestDetta.LicenseService/
 RUN dotnet publish src/TestDetta.LicenseService/TestDetta.LicenseService.csproj -c Release -o /app --nologo
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:a47e0d1ec583b8f18c72bff4191257b538958f15a830a4175c65adaaff1ae47c
+FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4
 WORKDIR /app
 COPY --from=build /app ./
 # The image's built-in unprivileged user; the signing key is mounted read-only (Licenses__KeyFile),
