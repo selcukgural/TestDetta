@@ -112,7 +112,7 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
-      "testdetta.cli": {
+      "TestDetta": {
         "type": "Project",
         "dependencies": {
           "TestDetta.Core": "[1.0.0, )",
@@ -142,7 +142,7 @@
         "type": "Project",
         "dependencies": {
           "Mono.Cecil": "[0.11.6, )",
-          "TestDetta.Cli": "[1.0.0, )",
+          "TestDetta": "[1.0.0, )",
           "TestDetta.Core": "[1.0.0, )",
           "TestDetta.Coverage": "[1.0.0, )"
         }
