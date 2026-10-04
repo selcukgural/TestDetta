@@ -1,0 +1,51 @@
+<!-- title: License; layout: docs; description: Pass the {{name}} license to CI, check what it covers, and how it renews. -->
+<h1>License</h1>
+<p class="lead">Public repositories use {{name}} for free. Private repositories pass a license string to CI. A license problem never fails a build: without a valid license, every test runs, as it did before {{name}}.</p>
+
+<h2>Public repositories</h2>
+<p>A public repository needs no license, but {{name}} only knows a repository is public where the CI says so:</p>
+<ul>
+  <li><strong>GitHub Actions:</strong> from the event payload (<code>repository.private</code>);</li>
+  <li><strong>GitLab CI:</strong> from <code>CI_PROJECT_VISIBILITY</code>.</li>
+</ul>
+<p>On Jenkins, Azure DevOps, Bitbucket, other CI systems and developer machines, every repository counts as private.</p>
+
+<h2>Passing the license</h2>
+<p>{{name}} looks for the license in this order:</p>
+<ol>
+  <li><code>SIFT_LICENSE</code>: the license string, from a masked or secret variable;</li>
+  <li><code>SIFT_LICENSE_FILE</code>: the path of a file holding it;</li>
+  <li><code>~/.sift/license</code>: written by <code>sift license install</code> and by automatic refresh;</li>
+  <li><code>.sift/license</code> in the repository.</li>
+</ol>
+<p>A secret variable is the recommended way. In GitHub Actions, pass it through the action's <code>license</code> input:</p>
+<pre><code>- uses: &lt;owner&gt;/sift@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.SIFT_LICENSE }}</code></pre>
+<p>Only <code>sift affected</code> and <code>sift test</code> check the license. <code>sift record</code> runs every test anyway and needs none.</p>
+
+<h2>Checking it</h2>
+<p><code>sift license status</code> shows what the license found covers: its validity, the repositories it covers and the active committer count, without personal data. The same state appears in the log, the job summary and the JSON output whenever it matters: valid, expiring soon, over seats, expired, wrong scope, invalid or missing.</p>
+<pre><code>sift license status</code></pre>
+
+<h2>Machines without CI secrets</h2>
+<p>Where no secret variable can hold the license, store it once per machine:</p>
+<pre><code>sift license install &lt;license|file&gt;</code></pre>
+<p>It is checked first and then written to <code>~/.sift/license</code>.</p>
+
+<h2>Automatic renewal</h2>
+<p>A license carries the address it renews from. At most once a day, {{name}} fetches the current version and keeps it in <code>~/.sift/license</code>, so renewals and added seats arrive without touching your secrets. The request sends the license in a header and nothing from your repository. It has a 2-second timeout and no retries, and any failure is ignored: an offline or blocked network costs at most 2 seconds a day. <code>HTTPS_PROXY</code> is honoured.</p>
+<p>On a network that cannot reach the license service, set <code>SIFT_LICENSE_REFRESH=off</code> and replace the license string yourself when you receive a new one.</p>
+
+<h2>Which repositories a license covers</h2>
+<p>A license names the repositories it covers, such as <code>github.com/acme/*</code>. {{name}} matches them against the repository's <code>origin</code> remote. Credentials embedded in the remote URL, common with Jenkins, are stripped before matching and never logged.</p>
+<p>When the remote does not name the repository the license covers, a local mirror for example, set <code>SIFT_LICENSE_SCOPE</code>:</p>
+<pre><code>SIFT_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
+
+<h2>Active committers</h2>
+<p>{{name}} is priced per active committer per month: a distinct commit author with at least one commit authored in the last 30 days, among the commits reachable from the analysed commit. Authors are counted locally, by email folded through <code>.mailmap</code>, and no email leaves your machines. Bots such as Dependabot, Renovate and <code>github-actions</code> are not counted; add your own patterns in <code>.sift/license.json</code>:</p>
+<pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>Up to 20% over the license's seats (at least one person) is fine. Above that, {{name}} keeps selecting for 30 days and warns in every summary, so there is time to add seats; only if the count is still over after that does every test run, as without a license. See <a href="/pricing/">Pricing</a>.</p>
+
+<div class="callout"><p>Never a red build: an expired, missing or mismatched license makes {{name}} run every test and say why. It does not fail the job.</p></div>

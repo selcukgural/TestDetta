@@ -1,0 +1,49 @@
+<!-- title: Privacy policy; description: What {{name}} and this website collect, and what they never collect. -->
+<div class="wrap legal prose">
+<h1>Privacy policy</h1>
+<p class="lead">{{name}} is built so that your code and your people's data stay on your machines. This page says exactly what is collected, by whom, and why.</p>
+<p class="muted">Last updated {{legalUpdated}}. Controller: {{licensor}}, {{licensorCountry}}. Contact: <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+
+<h2>The {{name}} tool</h2>
+<p>{{name}} runs inside your CI and on your developers' machines. It does not send source code, diffs, coverage maps, test names, test results or build output anywhere.</p>
+<ul>
+  <li><strong>Committers.</strong> To check the seat count, {{name}} counts distinct commit author emails locally. Emails and names are never sent, stored by us, or written to logs.</li>
+  <li><strong>License check.</strong> The license is verified offline, with a public key built into {{name}}.</li>
+  <li><strong>License refresh.</strong> At most once a day, {{name}} asks our license service for the current version of your license. The request carries the license itself (which names the licensee, seats and repository scopes) and, like any network request, your IP address. The address is used only to limit request rates and is not stored. Set <code>SIFT_LICENSE_REFRESH=off</code> to turn refresh off entirely.</li>
+</ul>
+
+<h2>Buying a license</h2>
+<p>Purchases are handled by {{seller}} as merchant of record. {{seller}} collects your payment details, billing address and tax information under its own privacy policy; we never see card details.</p>
+<p>From {{seller}} we receive your name or company name, the email address used at checkout, the number of seats, the repository scopes you entered, and the subscription status and dates. We use them to:</p>
+<ul>
+  <li>issue your license, which carries the licensee name, seats and scopes, never an email address;</li>
+  <li>send the license to your email address. The address is passed to our email delivery provider for that message only and is not kept in our license records;</li>
+  <li>keep a record of each license and its changes, as accounting and tax law require.</li>
+</ul>
+
+<h2>Support</h2>
+<p>When you email us, we keep the conversation in our mailbox to help you and to answer later questions. Our email provider processes those messages on our behalf.</p>
+
+<h2>This website</h2>
+<p>The site uses no cookies, no analytics and no tracking scripts. Our hosting provider processes request data such as IP addresses to serve pages and protect against abuse, and keeps it only briefly.</p>
+
+<h2>Who processes data for us</h2>
+<ul>
+  <li>{{seller}}: payments, taxes and invoices (merchant of record).</li>
+  <li>Our email delivery provider: sending license emails.</li>
+  <li>Our email and hosting providers: support mail, this website and the license service.</li>
+</ul>
+<p>Some of them operate outside {{licensorCountry}} and the EU. Where that is the case, transfers rely on the safeguards the law requires.</p>
+
+<h2>How long we keep it</h2>
+<ul>
+  <li>License records: for the life of the license and as long as tax and accounting law requires afterwards.</li>
+  <li>Support email: as long as needed to help you, then deleted on request.</li>
+</ul>
+
+<h2>Your rights</h2>
+<p>Under the GDPR, the Turkish Personal Data Protection Law (KVKK) and similar laws, you can ask for a copy of your data, its correction or deletion, and object to its use. Email <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>. You can also complain to your data protection authority.</p>
+
+<h2>Changes</h2>
+<p>We will update this page when what we collect changes, and change the date at the top.</p>
+</div>

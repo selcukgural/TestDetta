@@ -1,0 +1,107 @@
+<!-- title: {{name}}; description: {{name}} reads your git diff and runs only the .NET test classes a change can affect. When it cannot be sure, it runs more, never less. -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">Test impact analysis for .NET</span>
+      <h1>Run only the tests your change can break.</h1>
+      <p class="lead">{{name}} reads your diff, follows it through projects, symbols and recorded coverage, and runs just the test classes that can observe it. When it cannot be sure, it runs more, never less.</p>
+      <div class="hero-actions">
+        <a class="button" href="/docs/">Get started</a>
+        <a class="button button-ghost" href="/docs/how-it-works/">How it decides</a>
+      </div>
+    </div>
+    <div class="terminal" aria-label="Example output">
+      <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><span class="t-dim">$</span> sift test --base origin/main
+sift: 1 changed file(s), 2 affected test project(s).
+Tests to run:
+  <span class="t-acc">filtered</span> tests/Shop.Tests/Shop.Tests.csproj
+    <span class="t-dim">(3 of 41 test class(es) run or reference the changed code)</span>
+  <span class="t-skip">skip    </span> tests/Api.Tests/Api.Tests.csproj
+    <span class="t-dim">(no test class runs or references the changed code)</span>
+
+sift summary:
+  <span class="t-ok">passed</span>  tests/Shop.Tests/Shop.Tests.csproj  (3 class(es), 4.1 s)
+1 project(s) run, 0 failed, 1 skipped.</pre>
+    </div>
+  </div>
+</div>
+
+<section class="section-soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Measured on real code, not on demos</h2>
+      <p>We change members of popular open-source .NET libraries one at a time and check that every test class that fails is one {{name}} selected.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{corpusRepositories}}</strong><span>open-source repositories, each with its own test framework, runner and build quirks</span></div>
+      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>changes that broke at least one test</span></div>
+      <div class="stat"><strong>{{corpusMissed}} missed, all fixed</strong><span>every miss gets a test that fails without the fix, and its repository runs again until clean</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>How it decides</h2>
+      <p>Each step narrows the selection only when it has evidence. Anything it cannot trace falls back to running more.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card"><span class="step-number">1</span><h3>Projects</h3><p>Changed files map to projects and follow <code>ProjectReference</code>s. Build-wide files such as <code>Directory.Build.props</code> affect everything below them.</p></div>
+      <div class="card"><span class="step-number">2</span><h3>Symbols</h3><p>C# syntax trees are compared, so comment and whitespace edits select nothing, and {{name}} knows which members changed.</p></div>
+      <div class="card"><span class="step-number">3</span><h3>Coverage</h3><p>A map recorded on your default branch says which test class ran which method, so changed methods select their classes directly.</p></div>
+      <div class="card"><span class="step-number">4</span><h3>Names</h3><p>New code, fields and constants are traced through the source by name until they reach test classes or code the map knows.</p></div>
+      <div class="card"><span class="step-number">5</span><h3>Fallbacks</h3><p>Configuration files, global usings, reflection-discovered types: when a change cannot be traced, the whole test project runs.</p></div>
+      <div class="card"><span class="step-number">6</span><h3>Self-checks</h3><p>A filter that matches no test is treated as a bug in {{name}}, and the project runs again without it.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap grid-2">
+    <div>
+      <div class="section-head">
+        <h2>Two steps in GitHub Actions</h2>
+        <p>Record a coverage map on every push to your default branch. Pull requests restore the newest map and run only the affected tests, with a job summary that says why each class ran or was skipped.</p>
+      </div>
+      <p><a href="/docs/github-actions/">GitHub Actions guide →</a><br><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+    </div>
+<pre class="code">- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/sift@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/sift@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.SIFT_LICENSE }}</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Built for teams that can't afford a missed test</h2>
+    </div>
+    <div class="grid-3">
+      <div class="card"><h3>Your code stays with you</h3><p>{{name}} runs inside your CI. No source, coverage or test results leave your machines; committer emails are only counted locally.</p></div>
+      <div class="card"><h3>Every framework you use</h3><p>xUnit v2 and v3, NUnit, MSTest and TUnit, under both VSTest and Microsoft.Testing.Platform, including their own parallelization.</p></div>
+      <div class="card"><h3>Never blocks a build</h3><p>Without a valid license every test runs, as before. A license problem costs CI time, never a red build.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap center">
+    <div class="section-head">
+      <h2>Free for public repositories. {{trialDays}} days free for private ones.</h2>
+      <p>Then {{currency}}{{priceMonthly}} per active committer per month. No card for the trial.</p>
+    </div>
+    <div class="hero-actions">
+      <a class="button" href="/pricing/">See pricing</a>
+      <a class="button button-ghost" href="/docs/">Read the docs</a>
+    </div>
+  </div>
+</section>

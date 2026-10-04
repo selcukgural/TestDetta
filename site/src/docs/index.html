@@ -1,0 +1,83 @@
+<!-- title: Getting started; layout: docs; description: Install {{name}} in CI and run only the .NET tests a change can affect. -->
+<h1>Getting started</h1>
+<p class="lead">{{name}} compares your branch with its base, works out which test projects and which test classes can observe the change, and runs just those. When it cannot be sure, it runs more, never less.</p>
+
+<h2>Requirements</h2>
+<ul>
+  <li><strong>The .NET 10 SDK</strong> to run {{name}} itself. Your tests keep the SDK and runner your repository already uses.</li>
+  <li><strong>Full git history.</strong> {{name}} compares with the merge base of your branch and walks history to find coverage maps. Shallow clones cannot do either.</li>
+  <li><strong>The target branch fetched</strong>, so a ref such as <code>origin/main</code> exists.</li>
+  <li><strong>A test runner</strong> as <code>dotnet test</code> sees it. Both runners are supported; the runner is read from <code>global.json</code> (<code>"test": { "runner": "Microsoft.Testing.Platform" }</code>), the default being VSTest.</li>
+</ul>
+
+<h2>Quick start</h2>
+
+<h3>GitHub Actions</h3>
+<p>The GitHub Action builds {{name}} for you; there is nothing to install. Add two steps to your workflow: one records a coverage map on pushes to your default branch, the other runs only the affected tests on pull requests.</p>
+<pre><code>- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/sift@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/sift@&lt;sha&gt;
+  with:
+    mode: test</code></pre>
+<p>The full workflow, the permissions it needs and every input are in <a href="/docs/github-actions/">GitHub Actions</a>.</p>
+
+<h3>Other CI systems</h3>
+<p>GitLab CI, Jenkins, Azure DevOps, Bitbucket and on-premises setups run the same two commands, with a folder of per-commit coverage maps (<code>--maps-dir</code>) kept on a shared disk or in object storage. Install {{name}} as a .NET tool:</p>
+<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
+<div class="callout"><p>The package name is set at launch. Until then, build the tool from source with <code>dotnet build src/Sift.Cli -c Release -o sift-bin</code> and call <code>dotnet sift-bin/Sift.Cli.dll</code> wherever <code>sift</code> appears.</p></div>
+<p>Pipelines for each system are in <a href="/docs/other-ci/">Other CI systems</a>.</p>
+
+<h2>First commands</h2>
+<p>Run these from anywhere inside your repository. <code>--base</code> defaults to <code>origin/main</code>.</p>
+<pre><code># What does my branch affect, and why?
+sift affected --base origin/main
+
+# Run only the affected tests (add --dry-run to print the dotnet test commands)
+sift test --base origin/main
+
+# Run every test with coverage and write one map per test project to .sift/coverage
+sift record</code></pre>
+<p>Without a coverage map, <code>sift test</code> still works: it decides by name only, which is safe but selects more. Once <code>sift record</code> has run at the base of your branch, selection becomes precise.</p>
+<div class="callout"><p>Add <code>.sift/</code> to your <code>.gitignore</code>. It holds coverage maps and caches, never anything to commit.</p></div>
+
+<h2>Commands</h2>
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>sift affected [--format text|json|paths|commands]</code></td><td>Print what a change affects and why. <code>--tests-only</code> lists only affected test projects.</td></tr>
+    <tr><td><code>sift test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Run only the affected tests. <code>--summary-file</code> appends a Markdown summary, for example to <code>$GITHUB_STEP_SUMMARY</code>. Arguments after <code>--</code> go to every <code>dotnet test</code>, for example <code>-- -c Release</code>.</td></tr>
+    <tr><td><code>sift record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Run all tests with coverage and write one map per test project to <code>.sift/coverage</code>. <code>--parallel</code> spreads each project's test classes over n test processes; <code>--no-build</code> records the output of an earlier build with the same configuration.</td></tr>
+    <tr><td><code>sift license status</code></td><td>Check the license and show what it covers.</td></tr>
+    <tr><td><code>sift license install &lt;license|file&gt;</code></td><td>Store a license in <code>~/.sift/license</code>, for machines where no CI secret can hold it.</td></tr>
+  </tbody>
+</table>
+
+<h3>Shared options</h3>
+<table>
+  <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>--base &lt;ref&gt;</code></td><td>Git ref to compare against. Default: <code>origin/main</code>.</td></tr>
+    <tr><td><code>--repo &lt;path&gt;</code></td><td>Any path inside the repository. Default: the current directory.</td></tr>
+    <tr><td><code>--max-map-age &lt;n&gt;</code></td><td>Use coverage maps recorded up to n commits before the merge base, bridging the changes in between. Default: 50; 0 uses only exact maps. See <a href="/docs/how-it-works/">How it decides</a>.</td></tr>
+    <tr><td><code>--maps-dir &lt;dir&gt;</code></td><td>Coverage maps kept outside the repository, one folder per commit: <code>record</code> saves there, <code>affected</code> and <code>test</code> restore the newest one within <code>--max-map-age</code>. For CI systems other than GitHub Actions.</td></tr>
+    <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>When the changes since an older map include a build file, configuration or a global using: run the affected test projects completely (<code>all</code>, the default) or decide them by name (<code>name</code>).</td></tr>
+    <tr><td><code>-v</code>, <code>--verbose</code></td><td>Write debug logs to stderr: every decision a user might question, with its reason.</td></tr>
+    <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (default), <code>error</code> or <code>none</code>.</td></tr>
+  </tbody>
+</table>
+<p>Logs go to stderr; stdout carries the command's output and stays machine readable.</p>
+
+<h2>Exit codes</h2>
+<table>
+  <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td>Success.</td></tr>
+    <tr><td><code>1</code></td><td>The analysis failed.</td></tr>
+    <tr><td><code>2</code></td><td>Invalid command line.</td></tr>
+    <tr><td><code>3</code></td><td>Tests failed.</td></tr>
+  </tbody>
+</table>

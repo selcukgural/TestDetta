@@ -1,0 +1,145 @@
+<!-- title: Other CI systems; layout: docs; description: Run {{name}} on GitLab CI, Jenkins, Azure DevOps, Bitbucket and on-premises CI with a folder of coverage maps. -->
+<h1>Other CI systems</h1>
+<p class="lead">{{name}} works on any CI that runs .NET and git. Outside GitHub Actions, two commands and one folder do the job.</p>
+
+<ul>
+  <li><strong>On the default branch,</strong> <code>sift record --maps-dir &lt;maps&gt;</code> runs the whole suite once with coverage, and saves one coverage map per test project under <code>&lt;maps&gt;/&lt;commit&gt;/</code>.</li>
+  <li><strong>On a pull or merge request,</strong> <code>sift test --base origin/&lt;target&gt; --maps-dir &lt;maps&gt;</code> restores the newest map at or before the merge base. It takes the nearest one within 50 first-parent commits (<code>--max-map-age</code>) and bridges the changes in between. Then it runs only the affected tests.</li>
+</ul>
+<p><code>&lt;maps&gt;</code> is an ordinary folder. Keep it wherever your CI can keep files between pipelines:</p>
+<ul>
+  <li>a disk shared by the agents, common on-premises: <code>/srv/sift-maps/&lt;repository&gt;</code>;</li>
+  <li>object storage (S3, Azure Blob, GCS, MinIO), synced before and after.</li>
+</ul>
+<p>{{name}} itself never uses the network for maps.</p>
+
+<h2>What every setup needs</h2>
+<ul>
+  <li><strong>Full git history.</strong> {{name}} compares with the merge base and walks history to find maps. Shallow clones cannot do either.</li>
+  <li><strong>The target branch fetched</strong>, so <code>origin/&lt;target&gt;</code> exists. Fetch it with an explicit refspec, <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code>. CI clones often limit the remote's refspecs to the pipeline's own branch (GitLab's and Bitbucket's do), and then <code>git fetch origin &lt;target&gt;</code> alone updates only <code>FETCH_HEAD</code>, and <code>origin/&lt;target&gt;</code> stays missing.</li>
+  <li><strong>The license</strong> in <code>SIFT_LICENSE</code> (a masked or secret variable) or a file named by <code>SIFT_LICENSE_FILE</code>. Public repositories need none on GitLab CI and GitHub Actions; Jenkins, Azure DevOps and Bitbucket do not say whether a repository is public, so there every repository needs one. Without a valid license every test runs, and the build never fails because of it. See <a href="/docs/license/">License</a>.</li>
+  <li><strong>Exit codes:</strong> <code>0</code> success, <code>1</code> the analysis failed, <code>2</code> invalid command line, <code>3</code> tests failed.</li>
+  <li><strong>Clean-up:</strong> maps of old commits are only needed for 50 commits. Delete older folders with a scheduled job or a storage lifecycle rule.</li>
+</ul>
+
+<h2>Installing</h2>
+<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
+<div class="callout"><p>The package name is set at launch. Until then, build {{name}} from source with <code>dotnet build src/Sift.Cli -c Release -o sift-bin</code> and call <code>dotnet sift-bin/Sift.Cli.dll</code> wherever <code>sift</code> appears below.</p></div>
+
+<h2>GitLab CI</h2>
+<pre><code>variables:
+  GIT_DEPTH: "0"                    # full history
+  SIFT_MAPS: /srv/sift-maps/$CI_PROJECT_PATH   # a disk the runners share; or sync with object storage
+
+record-coverage:
+  stage: test
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - sift record --maps-dir "$SIFT_MAPS"
+
+affected-tests:
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - git fetch --no-tags origin "+refs/heads/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:refs/remotes/origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - sift test --base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --maps-dir "$SIFT_MAPS" --summary-file sift-summary.md
+  artifacts:
+    when: always
+    paths: [sift-summary.md]</code></pre>
+<p>Set <code>SIFT_LICENSE</code> under Settings → CI/CD → Variables, masked and protected as needed. {{name}} detects public projects through <code>CI_PROJECT_VISIBILITY</code>.</p>
+
+<h2>Jenkins</h2>
+<p>A declarative multibranch pipeline:</p>
+<pre><code>pipeline {
+  agent any
+  environment {
+    SIFT_LICENSE = credentials('sift-license')          // a "secret text" credential
+    SIFT_MAPS = "/srv/sift-maps/${env.JOB_NAME.split('/')[0]}"
+  }
+  options { skipDefaultCheckout() }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scmGit(branches: scm.branches, userRemoteConfigs: scm.userRemoteConfigs,
+                        extensions: [cloneOption(shallow: false, depth: 0, noTags: true, reference: '')])
+      }
+    }
+    stage('Record coverage') {
+      when { branch 'main' }
+      steps { sh 'sift record --maps-dir "$SIFT_MAPS"' }
+    }
+    stage('Affected tests') {
+      when { changeRequest() }
+      steps {
+        sh 'git fetch --no-tags origin "+refs/heads/$CHANGE_TARGET:refs/remotes/origin/$CHANGE_TARGET"'
+        sh 'sift test --base "origin/$CHANGE_TARGET" --maps-dir "$SIFT_MAPS"'
+      }
+    }
+  }
+}</code></pre>
+<p>Jenkins often clones with credentials in the remote URL. {{name}} strips them before matching the license scope and never logs them. If the remote does not name the repository the license covers (a local mirror, for example), set <code>SIFT_LICENSE_SCOPE</code>, such as <code>git.acme.corp/scm/pay/app</code>.</p>
+
+<h2>Azure DevOps Pipelines</h2>
+<pre><code>trigger: [main]
+pr: [main]
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+  - script: sift record --maps-dir "$(SIFT_MAPS)"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    env:
+      SIFT_LICENSE: $(SiftLicense)          # a secret pipeline variable
+  - script: |
+      target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+      git fetch --no-tags origin "+refs/heads/$target:refs/remotes/origin/$target"
+      sift test --base "origin/$target" --maps-dir "$(SIFT_MAPS)" --summary-file "$(Agent.TempDirectory)/sift.md"
+      echo "##vso[task.uploadsummary]$(Agent.TempDirectory)/sift.md"
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    env:
+      SIFT_LICENSE: $(SiftLicense)</code></pre>
+<p><code>SIFT_MAPS</code> points to a share on self-hosted agents. On Microsoft-hosted agents, sync it with Azure Blob storage (see <a href="#object-storage">Object storage</a>).</p>
+
+<h2>Bitbucket Pipelines</h2>
+<pre><code>clone:
+  depth: full
+
+pipelines:
+  branches:
+    main:
+      - step:
+          script:
+            - sift record --maps-dir maps
+            - ./sync-maps.sh upload maps        # see "Object storage"
+  pull-requests:
+    '**':
+      - step:
+          script:
+            - git fetch --no-tags origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - sift test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps</code></pre>
+<p>Set <code>SIFT_LICENSE</code> as a secured repository variable.</p>
+
+<h2 id="object-storage">Object storage instead of a shared disk</h2>
+<p>On hosted runners there is no shared disk. Upload the new folder after recording. Before testing, download only the folders that can be used: the merge base and up to 50 first-parent commits before it. Download them newest first, and stop at the first one that exists. An example for S3; any tool with <code>cp</code> and <code>ls</code> works the same way:</p>
+<pre><code>#!/usr/bin/env bash
+# sync-maps.sh upload &lt;maps&gt;          | after sift record on the default branch
+# sync-maps.sh download &lt;maps&gt; &lt;base&gt; | before sift test on a pull request
+set -euo pipefail
+remote="s3://my-bucket/sift-maps/my-repository"
+case "$1" in
+  upload)
+    aws s3 cp --recursive "$2/$(git rev-parse HEAD)" "$remote/$(git rev-parse HEAD)" ;;
+  download)
+    for sha in $(git rev-list --first-parent -n 51 "$(git merge-base "$3" HEAD)"); do
+      if aws s3 ls "$remote/$sha/" &gt; /dev/null 2&gt;&amp;1; then
+        aws s3 cp --recursive "$remote/$sha" "$2/$sha"
+        break
+      fi
+    done ;;
+esac</code></pre>
+
+<h2>When there is no map</h2>
+<p>The first pull requests after setting up, or ones far behind, find no map within reach. {{name}} then selects by name only, which is safe but selects more, and says so in its log. Selection becomes precise once <code>sift record</code> has run on the default branch.</p>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Collie">
+  <ellipse cx="32" cy="55" rx="23" ry="10" fill="#FFF6E8"/>
+  <path d="M15 30 L10 6 L25 17 Z" fill="#C8782E"/>
+  <path d="M49 30 L54 6 L39 17 Z" fill="#C8782E"/>
+  <path d="M10 6 L17.5 10.5 L12.6 16.6 Z" fill="#7E4317"/>
+  <path d="M54 6 L46.5 10.5 L51.4 16.6 Z" fill="#7E4317"/>
+  <path d="M32 13 C46 13 52 24 50.5 34 C49 44 41 53 32 57 C23 53 15 44 13.5 34 C12 24 18 13 32 13 Z" fill="#C8782E"/>
+  <path d="M32 17 C30.5 25 27.5 35 26 43 C27 51 37 51 38 43 C36.5 35 33.5 25 32 17 Z" fill="#FFF6E8"/>
+  <ellipse cx="32" cy="47.5" rx="8.5" ry="7" fill="#FFF6E8"/>
+  <circle cx="23.5" cy="31" r="2.6" fill="#2A1B12"/>
+  <circle cx="40.5" cy="31" r="2.6" fill="#2A1B12"/>
+  <circle cx="24.3" cy="30.1" r="0.8" fill="#FFF6E8"/>
+  <circle cx="41.3" cy="30.1" r="0.8" fill="#FFF6E8"/>
+  <ellipse cx="32" cy="43.2" rx="3.4" ry="2.5" fill="#2A1B12"/>
+  <path d="M32 45.5 L32 48 M28.8 48.6 Q32 51 35.2 48.6" stroke="#2A1B12" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+</svg>

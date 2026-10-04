@@ -1,0 +1,37 @@
+<!-- title: Limitations; layout: docs; description: What {{name}} supports, and where it falls back to running more tests. -->
+<h1>Limitations</h1>
+<p class="lead">Where {{name}} cannot see something, it selects more. This page lists those places, so you know when a selection is wider than it needs to be, and the few cases where a hand-written pattern can hide a test.</p>
+
+<h2>Test frameworks and runners</h2>
+<p>Both <code>dotnet test</code> runners are supported. The runner is read from <code>global.json</code> (<code>"test": { "runner": "Microsoft.Testing.Platform" }</code>, required for xUnit v3 on the .NET 10 SDK).</p>
+<p>Each test project is built and run in the directory of the nearest <code>global.json</code> at or above it, so a file kept next to the solution (<code>src/global.json</code>) counts as it does for a developer there. <code>--dry-run</code> prints such commands as <code>(cd src &amp;&amp; dotnet test ...)</code>.</p>
+<p>Recording and selection are tested end to end with xUnit v2 (VSTest), xUnit v3 and TUnit (Microsoft.Testing.Platform), and MSTest and NUnit under both runners, including projects that turn on their framework's own parallelization.</p>
+
+<h2>Tests that fail while recording</h2>
+<p>Test classes that fail while recording are always selected when their project is affected: a failing test stops early, so its coverage is incomplete.</p>
+<p>When tests fail and no TRX report says which (NUnit under Microsoft.Testing.Platform without <code>Microsoft.Testing.Extensions.TrxReport</code>), the map is not used and selection falls back to names.</p>
+
+<h2>Code that runs once per process</h2>
+<p>Caches, lazy singletons and EF model building run once per test process, and are credited to the first test class that triggers them. Changes to code that ran inside a static constructor or a cache-filling call (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>), and to constructors and static members that only one test class per recording process ran, are traced by name instead.</p>
+<div class="callout"><p>A cache written by hand, such as a <code>Dictionary</code> checked with <code>TryGetValue</code>, can still hide its users. Keep running the full suite on the default branch; recording does that.</p></div>
+
+<h2>Project files</h2>
+<p>Project files are evaluated by MSBuild (one <code>dotnet msbuild</code> call, cached in <code>.sift/cache</code>) for references, compiled and embedded items, assembly names and target frameworks, in the default configuration and without a restore.</p>
+<ul>
+  <li>Items only a package's props add, or only a <code>Release</code> condition adds, are not seen.</li>
+  <li>A project MSBuild cannot evaluate is read as XML, as are imports.</li>
+  <li>Changed files no project claims are assumed to affect the projects of their directory.</li>
+  <li>Test projects are also recognised by a <code>*.Tests</code> or <code>*.Test</code> name.</li>
+</ul>
+
+<h2>Preprocessor symbols</h2>
+<p>C# files are parsed with each target framework's real preprocessor symbols, and also with no symbols and with every symbol their <code>#if</code>s name, so code under any active condition is seen.</p>
+
+<h2>Skipped tests</h2>
+<p>Tests skipped while a map was recorded have no coverage. A class whose tests were all skipped is selected on another platform, where it may run, and skipped on the recording platform. Tests skipped for other reasons, such as a missing Docker daemon, are covered only by recording where the tests run.</p>
+
+<h2>Source generators</h2>
+<p>Code written by source generators is not in the source tree. <code>sift record</code> reads it from the PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.</p>
+
+<h2>F# and Visual Basic</h2>
+<p>F# and Visual Basic projects are part of the project graph, but their code is not analysed: when one is affected, everything that depends on it runs completely.</p>

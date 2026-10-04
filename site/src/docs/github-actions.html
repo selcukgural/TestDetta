@@ -1,0 +1,90 @@
+<!-- title: GitHub Actions; layout: docs; description: Record coverage maps on the default branch and run only the affected tests on pull requests with the {{name}} action. -->
+<h1>GitHub Actions</h1>
+<p class="lead">Record a map for every commit on the default branch, and let pull requests run only the tests their changes affect. The action builds {{name}} itself and keeps the maps in the Actions cache.</p>
+
+<h2>Workflow</h2>
+<pre><code>on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read # lets pull requests find the newest coverage map in the Actions cache
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7 # pin to a commit SHA
+        with:
+          fetch-depth: 0 # Sift compares with the merge base
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6 # pin to a commit SHA
+        with:
+          global-json-file: global.json
+
+      # Also the full test run of main. Leave out projects that cannot run here, such as
+      # integration tests that need a database; they are then decided by name on pull requests.
+      - if: github.event_name == 'push'
+        uses: &lt;owner&gt;/sift@&lt;sha&gt;
+        with:
+          mode: record
+          projects: |
+            tests/Shop.Tests/Shop.Tests.csproj
+
+      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/sift@&lt;sha&gt;
+        with:
+          mode: test
+          dotnet-test-args: --logger trx
+          license: ${{ secrets.SIFT_LICENSE }}</code></pre>
+
+<div class="callout"><p><strong>Full history is required.</strong> The action stops with an error on a shallow clone. Check out with <code>fetch-depth: 0</code>.</p></div>
+
+<h2>How the maps get to pull requests</h2>
+<ul>
+  <li>Record mode saves the maps in the Actions cache under <code>sift-coverage-&lt;commit&gt;</code>. Pull requests can read caches of their base branch.</li>
+  <li>A pull request uses the map of its merge base, or the newest one recorded up to <code>max-map-age</code> first-parent commits before it.</li>
+  <li>Finding that newer-than-exact map lists the repository's caches, which needs <code>actions: read</code>. Without it, only a map at the merge base is found, and the step says so in a notice.</li>
+  <li>Without any map, <code>mode: test</code> still works, deciding by name only.</li>
+</ul>
+<p>When tests fail while recording, the map is still saved before the job fails, so pull requests keep a map to work with.</p>
+
+<h2>Permissions</h2>
+<table>
+  <thead><tr><th>Permission</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>contents: read</code></td><td>Check out the repository.</td></tr>
+    <tr><td><code>actions: read</code></td><td>List the Actions caches to find the newest map within <code>max-map-age</code>.</td></tr>
+  </tbody>
+</table>
+<p>With <code>persist-credentials: false</code> a private repository cannot be fetched again later in the job; <code>fetch-depth: 0</code> already brings every branch, so the base branch is there.</p>
+
+<h2>Inputs</h2>
+<table>
+  <thead><tr><th>Input</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>mode</code></td><td></td><td><code>test</code> on pull requests (run affected tests), <code>record</code> on the default branch (record coverage maps). Required.</td></tr>
+    <tr><td><code>base</code></td><td>the PR's base branch</td><td>Branch to compare with in test mode. Outside pull requests, set it.</td></tr>
+    <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Build configuration for building and running the tests.</td></tr>
+    <tr><td><code>projects</code></td><td>all test projects</td><td>Record mode: <code>.csproj</code> paths, one per line.</td></tr>
+    <tr><td><code>parallel</code></td><td><code>1</code></td><td>Record mode: test host processes per test project; each still runs its tests one at a time. The suite must tolerate several test processes at once.</td></tr>
+    <tr><td><code>no-build</code></td><td><code>false</code></td><td>Record mode: <code>true</code> to record the build an earlier step made with the same <code>configuration</code>.</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>Test mode: extra <code>dotnet test</code> arguments, separated by spaces.</td></tr>
+    <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Test mode: commits a map may be behind the merge base; the changes in between are bridged. <code>0</code> uses only an exact map.</td></tr>
+    <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Test mode: when the changes since an older map include a build file, configuration or a global using, <code>all</code> runs the affected test projects completely; <code>name</code> decides them by name (faster, blind to calls made through configuration or reflection).</td></tr>
+    <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test mode: lists the Actions caches to find the newest map (needs <code>actions: read</code>).</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>SIFT_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it.</td></tr>
+    <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Any directory inside the repository to analyze.</td></tr>
+    <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Install the .NET 10 SDK {{name}} runs on. Set to <code>false</code> if the job already has it.</td></tr>
+  </tbody>
+</table>
+
+<h2>Job summary</h2>
+<p>In test mode, {{name}} writes its selection to the job summary: the changed files and the base it compared with, each test project with whether it ran filtered, completely or not at all and why, the test results, and the license state when it matters. Paths, class names and reasons from the repository are written as code, so file names in a pull request cannot inject links or mentions into the page.</p>
+
+<h2>Recording only part of the suite</h2>
+<p>Recording runs the whole suite once with coverage, which on the default branch is also your full test run. Leave out projects that cannot run on the runner, such as integration tests that need a database, with <code>projects</code>. Pull requests then decide those projects by name.</p>
+<p>If an earlier step already built the solution with the same configuration, set <code>no-build: true</code>. For a suite that tolerates several test processes at once, <code>parallel</code> spreads each project's test classes over that many processes.</p>

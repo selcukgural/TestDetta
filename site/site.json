@@ -1,0 +1,19 @@
+{
+  "name": "Sift",
+  "tagline": "Run only the .NET tests a change can affect.",
+  "domain": "example.com",
+  "supportEmail": "support@example.com",
+  "seller": "Polar Software, Inc.",
+  "licensor": "Selçuk Güral",
+  "licensorCountry": "Türkiye",
+  "priceMonthly": "15",
+  "priceYearly": "12",
+  "currency": "$",
+  "trialDays": "30",
+  "refundDays": "14",
+  "checkoutUrl": "#checkout",
+  "corpusRepositories": "41",
+  "corpusFailingChanges": "2,941",
+  "corpusMissed": "3",
+  "legalUpdated": "2026-10-04"
+}
