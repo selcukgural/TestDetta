@@ -50,6 +50,30 @@ public sealed class CorpusTests : IDisposable
         Assert.Equal(("sdk-10.0.401+8.0.31", null), (b.DirectoryName, b.Architecture));
     }
 
+    [Fact]
+    public void Entry_environment_adds_to_the_default_one_and_wins_on_the_same_name()
+    {
+        // The default pins the locale for every repository; an entry's own variables (protobuf-net's
+        // stack size) must not drop it.
+        var corpus = Corpus.Load(Write("""
+            {
+              "defaults": { "environment": { "LC_ALL": "en_US.UTF-8", "Shared": "default" } },
+              "repositories": [
+                { "name": "a", "url": "https://example.org/a.git", "environment": { "DOTNET_DefaultStackSize": "1000000", "Shared": "entry" } },
+                { "name": "b", "url": "https://example.org/b.git" },
+              ],
+            }
+            """));
+
+        var a = corpus.Resolve(corpus.Repositories[0]).Environment!;
+        var b = corpus.Resolve(corpus.Repositories[1]).Environment!;
+
+        Assert.Equal(
+            [("DOTNET_DefaultStackSize", "1000000"), ("LC_ALL", "en_US.UTF-8"), ("Shared", "entry")],
+            a.OrderBy(static p => p.Key, StringComparer.Ordinal).Select(static p => (p.Key, p.Value)));
+        Assert.Equal([("LC_ALL", "en_US.UTF-8"), ("Shared", "default")], b.OrderBy(static p => p.Key, StringComparer.Ordinal).Select(static p => (p.Key, p.Value)));
+    }
+
     [Theory]
     [InlineData("""{ "repositories": [] }""")]
     [InlineData("""{ "repositories": [ { "name": "a", "url": "x", "toolchain": { "sdk": "../../x" } } ] }""")]

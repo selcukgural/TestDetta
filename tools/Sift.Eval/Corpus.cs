@@ -167,8 +167,31 @@ internal sealed record Corpus
             Setup = entry.Setup ?? d.Setup,
             Cleanup = entry.Cleanup ?? d.Cleanup,
             Toolchain = entry.Toolchain ?? d.Toolchain,
-            Environment = entry.Environment ?? d.Environment,
+            Environment = Merge(d.Environment, entry.Environment),
         };
+    }
+
+    /// <summary>
+    /// The default environment with the entry's variables added, the entry winning on the same name:
+    /// a default that pins the locale for every repository (<c>LC_ALL</c>, so numbers match CI and do
+    /// not move with the machine) must survive an entry that sets variables of its own.
+    /// </summary>
+    /// <param name="defaults">The corpus default; null for none.</param>
+    /// <param name="entry">The entry's own; null for none.</param>
+    private static IReadOnlyDictionary<string, string>? Merge(IReadOnlyDictionary<string, string>? defaults, IReadOnlyDictionary<string, string>? entry)
+    {
+        if (defaults is null || entry is null)
+        {
+            return entry ?? defaults;
+        }
+
+        var merged = new Dictionary<string, string>(defaults, StringComparer.Ordinal);
+        foreach (var (name, value) in entry)
+        {
+            merged[name] = value;
+        }
+
+        return merged;
     }
 
     /// <summary>The <c>defaults</c> object: an entry without name and URL.</summary>
