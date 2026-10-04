@@ -1,98 +1,260 @@
-<!-- title: {{name}}; description: {{name}} lee tu git diff y ejecuta solo las clases de prueba de .NET que un cambio puede afectar. Cuando no puede estar seguro, ejecuta más, nunca menos.; source: be9de6a1186d -->
+<!-- title: {{name}}; description: {{name}} lee tu git diff y ejecuta solo las clases de prueba de .NET que un cambio puede afectar. Cuando no puede estar seguro, ejecuta más, nunca menos.; source: 4a7375f30257 -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
       <span class="eyebrow">Análisis de impacto de pruebas para .NET</span>
       <h1>Ejecuta solo las pruebas que tu cambio puede romper.</h1>
-      <p class="lead">{{name}} lee tu diff, lo sigue a través de proyectos, símbolos y cobertura registrada, y ejecuta solo las clases de prueba que pueden observarlo. Cuando no puede estar seguro, ejecuta más, nunca menos.</p>
+      <p class="lead">{{name}} lee tu diff y ejecuta solo las clases de prueba que pueden observarlo. Cuando no puede estar seguro, ejecuta más, nunca menos.</p>
       <div class="hero-actions">
-        <a class="button" href="/docs/">Empezar</a>
-        <a class="button button-ghost" href="/docs/how-it-works/">Cómo decide</a>
+        <a class="button button-large" href="/docs/">Empezar</a>
+        <a class="button button-ghost button-large" href="/docs/how-it-works/">Cómo decide</a>
       </div>
+      <ul class="trust-points">
+        <li>Gratis para repositorios públicos</li>
+        <li>{{trialDays}} días de prueba, sin tarjeta</li>
+        <li>Se ejecuta dentro de tu CI</li>
+      </ul>
     </div>
-    <div class="terminal replay" aria-label="Salida de td test en un cambio real de Spectre.Console">
-      <div class="terminal-bar"><span></span><span></span><span></span></div>
-<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed: 0, Passed: 156, Total: 156 - Spectre.Console.Tests.dll</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l t-dim"># un cambio real en Spectre.Console: <a href="/docs/examples/">ver la ejecución completa</a></span></pre>
-    </div>
+    <figure class="check-card" data-reveal aria-label="Una pull request real en Spectre.Console">
+      <div class="check-head">
+        <img src="/assets/favicon.svg" alt="" width="22" height="22">
+        <span class="check-title">{{name}} · check de la pull request</span>
+        <span class="badge-ok">Correcto</span>
+      </div>
+      <div class="check-body">
+        <p class="check-saving"><strong data-count>83 %</strong> menos tiempo de pruebas</p>
+        <div class="bars">
+          <div class="bar-row">
+            <span class="bar-label">Todas las pruebas</span>
+            <span class="bar-track"><span class="bar-fill bar-all"></span></span>
+            <span class="bar-value">3,4 s · 141 clases</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">{{name}}</span>
+            <span class="bar-track"><span class="bar-fill bar-selected"></span></span>
+            <span class="bar-value">0,6 s · 14 clases</span>
+          </div>
+        </div>
+        <ul class="check-list">
+          <li class="is-run"><strong>14 clases se ejecutan</strong> ejecutan o referencian el código modificado</li>
+          <li class="is-skip"><strong>127 omitidas</strong> ningún camino desde el cambio llega a ellas</li>
+          <li class="is-run"><strong>156 pruebas correctas</strong> 0 fallidas</li>
+        </ul>
+      </div>
+      <figcaption>Un cambio real en Spectre.Console. <a href="/docs/examples/">Ver la ejecución completa →</a></figcaption>
+    </figure>
   </div>
 </div>
 
-<section class="section-soft">
+<section class="logos">
   <div class="wrap">
-    <div class="section-head">
+    <p class="logos-title">Medido en {{corpusRepositories}} repositorios .NET de código abierto, entre ellos</p>
+    <div class="marquee"><div class="marquee-track">
+    <ul class="logo-list">
+      <li><img src="/assets/logos/polly.png" alt="" width="28" height="28" loading="lazy"><span>Polly</span></li><li><img src="/assets/logos/newtonsoft-json.png" alt="" width="28" height="28" loading="lazy"><span>Newtonsoft.Json</span></li><li><span>AutoMapper</span></li><li><img src="/assets/logos/spectre-console.png" alt="" width="28" height="28" loading="lazy"><span>Spectre.Console</span></li><li><img src="/assets/logos/markdig.svg" alt="" width="28" height="28" loading="lazy"><span>Markdig</span></li><li><span>Serilog</span></li><li><img src="/assets/logos/refit.svg" alt="" width="28" height="28" loading="lazy"><span>Refit</span></li><li><img src="/assets/logos/autofac.png" alt="" width="28" height="28" loading="lazy"><span>Autofac</span></li><li><span>NodaTime</span></li><li><img src="/assets/logos/fastendpoints.png" alt="" width="28" height="28" loading="lazy"><span>FastEndpoints</span></li><li><img src="/assets/logos/scriban.png" alt="" width="28" height="28" loading="lazy"><span>Scriban</span></li><li><span>FluentValidation</span></li><li><img src="/assets/logos/autofixture.svg" alt="" width="28" height="28" loading="lazy"><span>AutoFixture</span></li><li><span>OpenTelemetry</span></li>
+    </ul>
+    </div></div>
+    <p class="logos-note">Mediciones independientes. Estos proyectos no están vinculados a {{name}} ni lo respaldan.</p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="band-head" data-reveal>
       <h2>Medido en código real, no en demos</h2>
-      <p>Cambiamos miembros de bibliotecas .NET de código abierto populares, uno a uno, y comprobamos que cada clase de prueba que falla sea una que {{name}} seleccionó.</p>
+      <p>Cambiamos un miembro cada vez y comprobamos que cada clase de prueba que falla sea una que {{name}} seleccionó.</p>
     </div>
-    <div class="stats">
-      <div class="stat"><strong>{{corpusRepositories}}</strong><span>repositorios de código abierto, cada uno con su propio framework de pruebas, test runner y particularidades de compilación</span></div>
-      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>cambios que rompieron al menos una prueba</span></div>
-      <div class="stat"><strong>{{corpusMissed}} pasadas por alto, todas corregidas</strong><span>cada caso pasado por alto recibe una prueba que falla sin la corrección, y su repositorio se vuelve a ejecutar hasta quedar limpio</span></div>
+    <div class="band-stats" data-reveal>
+      <div><strong data-count>{{corpusRepositories}}</strong><span>repositorios, cada uno con sus propios frameworks y particularidades de compilación</span></div>
+      <div><strong data-count>{{corpusFailingChanges}}</strong><span>cambios que rompieron al menos una prueba</span></div>
+      <div><strong data-count>{{corpusMedianShare}}</strong><span>de sus clases de prueba se ejecutaron por cambio en el repositorio mediano</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>pruebas pasadas por alto, cada una corregida con una prueba que falla sin la corrección</span></div>
     </div>
-    <p class="stats-note">Un cambio en un solo miembro ejecutó una mediana del <strong>{{corpusMedianShare}}</strong> de las clases de prueba. <a href="/docs/examples/">Mira una ejecución real, del diff al job summary →</a></p>
+    <figure class="dist" data-reveal>
+<svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
+<title id="dist-title">Porcentaje de clases de prueba ejecutadas por cambio, una barra por repositorio</title>
+<desc id="dist-desc">Ronda 1 del corpus de evaluación: para cada uno de 40 repositorios de código abierto, el porcentaje medio de sus clases de prueba que {{name}} seleccionó para un cambio en un solo miembro, ordenado de menor a mayor. Mediana: {{corpusMedianShare}}.</desc>
+<line class="grid" x1="36" x2="720" y1="150.0" y2="150.0"/><text class="axis" x="30" y="154.0" text-anchor="end">0%</text>
+<line class="grid" x1="36" x2="720" y1="80.0" y2="80.0"/><text class="axis" x="30" y="84.0" text-anchor="end">50%</text>
+<line class="grid" x1="36" x2="720" y1="10.0" y2="10.0"/><text class="axis" x="30" y="14.0" text-anchor="end">100%</text>
+<g class="bars">
+<g class="row"><title>opentelemetry-dotnet: 6%</title><rect class="bar" x="43.2" y="141.6" width="10.5" height="8.4" rx="2"/></g>
+<g class="row"><title>polly: 7%</title><rect class="bar" x="60.2" y="140.2" width="10.5" height="9.8" rx="2"/></g>
+<g class="row"><title>roslynator: 8%</title><rect class="bar" x="77.2" y="138.8" width="10.5" height="11.2" rx="2"/></g>
+<g class="row"><title>spectre: 9%</title><rect class="bar" x="94.2" y="137.4" width="10.5" height="12.6" rx="2"/></g>
+<g class="row"><title>swashbuckle: 12%</title><rect class="bar" x="111.2" y="133.2" width="10.5" height="16.8" rx="2"/></g>
+<g class="row"><title>nsec: 13%</title><rect class="bar" x="128.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>aspnetcore-odata: 13%</title><rect class="bar" x="145.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>guardclauses: 13%</title><rect class="bar" x="162.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>mimekit: 14%</title><rect class="bar" x="179.2" y="130.4" width="10.5" height="19.6" rx="2"/></g>
+<g class="row"><title>autofixture: 16%</title><rect class="bar" x="196.2" y="127.6" width="10.5" height="22.4" rx="2"/></g>
+<g class="row"><title>communitytoolkit: 18%</title><rect class="bar" x="213.2" y="124.8" width="10.5" height="25.2" rx="2"/></g>
+<g class="row"><title>libgit2sharp: 19%</title><rect class="bar" x="230.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
+<g class="row"><title>castle-core: 19%</title><rect class="bar" x="247.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
+<g class="row"><title>serilog: 20%</title><rect class="bar" x="264.2" y="122.0" width="10.5" height="28.0" rx="2"/></g>
+<g class="row"><title>mediator: 21%</title><rect class="bar" x="281.2" y="120.6" width="10.5" height="29.4" rx="2"/></g>
+<g class="row"><title>fastendpoints: 23%</title><rect class="bar" x="298.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
+<g class="row"><title>fluid: 23%</title><rect class="bar" x="315.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
+<g class="row"><title>carter: 24%</title><rect class="bar" x="332.2" y="116.4" width="10.5" height="33.6" rx="2"/></g>
+<g class="row"><title>lamar: 26%</title><rect class="bar" x="349.2" y="113.6" width="10.5" height="36.4" rx="2"/></g>
+<g class="row"><title>awesomeassertions: 27%</title><rect class="bar" x="366.2" y="112.2" width="10.5" height="37.8" rx="2"/></g>
+<g class="row"><title>nsubstitute: 29%</title><rect class="bar" x="383.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
+<g class="row"><title>immediate-handlers: 29%</title><rect class="bar" x="400.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
+<g class="row"><title>open-xml-sdk: 30%</title><rect class="bar" x="417.2" y="108.0" width="10.5" height="42.0" rx="2"/></g>
+<g class="row"><title>fluentvalidation: 32%</title><rect class="bar" x="434.2" y="105.2" width="10.5" height="44.8" rx="2"/></g>
+<g class="row"><title>unitsnet: 34%</title><rect class="bar" x="451.2" y="102.4" width="10.5" height="47.6" rx="2"/></g>
+<g class="row"><title>vogen: 36%</title><rect class="bar" x="468.2" y="99.6" width="10.5" height="50.4" rx="2"/></g>
+<g class="row"><title>nodatime: 43%</title><rect class="bar" x="485.2" y="89.8" width="10.5" height="60.2" rx="2"/></g>
+<g class="row"><title>graphql-dotnet: 45%</title><rect class="bar" x="502.2" y="87.0" width="10.5" height="63.0" rx="2"/></g>
+<g class="row"><title>newtonsoft-json: 47%</title><rect class="bar" x="519.2" y="84.2" width="10.5" height="65.8" rx="2"/></g>
+<g class="row"><title>autofac: 49%</title><rect class="bar" x="536.2" y="81.4" width="10.5" height="68.6" rx="2"/></g>
+<g class="row"><title>scrutor: 57%</title><rect class="bar" x="553.2" y="70.2" width="10.5" height="79.8" rx="2"/></g>
+<g class="row"><title>meziantou-analyzer: 63%</title><rect class="bar" x="570.2" y="61.8" width="10.5" height="88.2" rx="2"/></g>
+<g class="row"><title>automapper: 67%</title><rect class="bar" x="587.2" y="56.2" width="10.5" height="93.8" rx="2"/></g>
+<g class="row"><title>protobuf-net: 78%</title><rect class="bar" x="604.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
+<g class="row"><title>yamldotnet: 78%</title><rect class="bar" x="621.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
+<g class="row"><title>cliwrap: 81%</title><rect class="bar" x="638.2" y="36.6" width="10.5" height="113.4" rx="2"/></g>
+<g class="row"><title>nlog: 82%</title><rect class="bar" x="655.2" y="35.2" width="10.5" height="114.8" rx="2"/></g>
+<g class="row"><title>mapperly: 89%</title><rect class="bar" x="672.2" y="25.4" width="10.5" height="124.6" rx="2"/></g>
+<g class="row"><title>markdig: 98%</title><rect class="bar" x="689.2" y="12.8" width="10.5" height="137.2" rx="2"/></g>
+<g class="row"><title>scriban: 100%</title><rect class="bar" x="706.2" y="10.0" width="10.5" height="140.0" rx="2"/></g>
+</g>
+<line class="median" x1="36" x2="720" y1="110.8" y2="110.8"/><text class="median-label" x="44" y="104.8">mediana {{corpusMedianShare}}</text>
+<text class="axis" x="40" y="172">opentelemetry-dotnet</text><text class="axis" x="720" y="172" text-anchor="end">scriban</text>
+</svg>
+      <figcaption>Cada barra es un repositorio: el porcentaje de sus clases de prueba que {{name}} ejecutó para un cambio en un solo miembro, de menor a mayor. En 18 de 40 fue una cuarta parte o menos.</figcaption>
+    </figure>
+    <p class="band-link"><a href="/docs/examples/">Mira una ejecución real, del diff al job summary →</a></p>
   </div>
 </section>
 
-<section>
+<section class="trace-section">
   <div class="wrap">
-    <div class="section-head">
+    <div class="section-head center-head" data-reveal>
       <h2>Cómo decide</h2>
-      <p>Cada paso reduce la selección solo cuando tiene pruebas de ello. Todo lo que no puede rastrear recurre a ejecutar más.</p>
+      <p>Un cambio real en Spectre.Console, seguido paso a paso. Cada paso reduce la selección solo cuando tiene pruebas de ello.</p>
     </div>
-    <div class="grid-3">
-      <div class="card"><span class="step-number">1</span><h3>Proyectos</h3><p>Los archivos modificados se asignan a proyectos y siguen sus <code>ProjectReference</code>. Los archivos que afectan a toda la compilación, como <code>Directory.Build.props</code>, afectan a todo lo que está por debajo de ellos.</p></div>
-      <div class="card"><span class="step-number">2</span><h3>Símbolos</h3><p>Se comparan los árboles de sintaxis de C#, así que los cambios en comentarios y espacios en blanco no seleccionan nada, y {{name}} sabe qué miembros cambiaron.</p></div>
-      <div class="card"><span class="step-number">3</span><h3>Cobertura</h3><p>Un mapa registrado en tu rama predeterminada indica qué clase de prueba ejecutó qué método, así que los métodos modificados seleccionan sus clases directamente.</p></div>
-      <div class="card"><span class="step-number">4</span><h3>Nombres</h3><p>El código nuevo, los campos y las constantes se rastrean por nombre a través del código fuente hasta llegar a clases de prueba o a código que el mapa conoce.</p></div>
-      <div class="card"><span class="step-number">5</span><h3>Alternativas seguras</h3><p>Archivos de configuración, global usings, tipos descubiertos por reflexión: cuando un cambio no se puede rastrear, se ejecuta el proyecto de pruebas completo.</p></div>
-      <div class="card"><span class="step-number">6</span><h3>Autocomprobaciones</h3><p>Un filtro que no coincide con ninguna prueba se trata como un error de {{name}}, y el proyecto se vuelve a ejecutar sin él.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="section-soft">
-  <div class="wrap grid-2">
-    <div>
-      <div class="section-head">
-        <h2>Dos pasos en GitHub Actions</h2>
-        <p>Registra un mapa de cobertura en cada push a tu rama predeterminada. Las pull requests restauran el mapa más reciente y ejecutan solo las pruebas afectadas, con un job summary que explica por qué se ejecutó u omitió cada clase.</p>
+    <div class="trace" data-reveal>
+      <div class="trace-col trace-change">
+        <p class="trace-label">1 · El cambio</p>
+        <pre class="trace-diff"><span class="trace-file">Widgets/Rule.cs</span>
+ var text = border.GetPart(…)…;
+<span class="diff-add">+var style = Style ?? Style.Plain;</span>
+<span class="diff-del">-new Segment(text, Style ?? Style.Plain),</span>
+<span class="diff-add">+new Segment(text, style),</span></pre>
+        <p class="trace-note">Una refactorización de una línea. Un pipeline normal ejecuta las 787 pruebas de 141 clases.</p>
       </div>
-      <p><a href="/docs/github-actions/">Guía de GitHub Actions →</a><br><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+      <div class="trace-col trace-steps">
+        <p class="trace-label">2 · Lo que determina {{name}}</p>
+        <ol>
+          <li><span class="step-name">Proyectos</span><span class="step-result">1 proyecto de pruebas afectado; Spectre.Console.Ansi.Tests ni siquiera se compila</span></li>
+          <li><span class="step-name">Símbolos</span><span class="step-result">1 miembro modificado: <code>Rule.GetLineWithoutTitle</code></span></li>
+          <li><span class="step-name">Mapa de cobertura</span><span class="step-result">14 clases de prueba lo ejecutaron en <code>main</code></span></li>
+          <li><span class="step-name">Nombres</span><span class="step-result">No hay código nuevo que rastrear</span></li>
+          <li><span class="step-name">Alternativas seguras</span><span class="step-result">No hicieron falta</span></li>
+        </ol>
+      </div>
+      <div class="trace-col trace-tests">
+        <p class="trace-label">3 · Pruebas que se ejecutan</p>
+        <div class="dots" role="img" aria-label="141 clases de prueba, 14 de ellas seleccionadas"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="trace-result">Se ejecutan <strong>14</strong> de 141 clases, 127 omitidas</p>
+        <p class="trace-note">Exactamente las 14 que fallan cuando el método se rompe. <a href="/docs/examples/#proof">Cómo lo comprobamos</a></p>
+      </div>
     </div>
-<pre class="code">- if: github.event_name == 'push'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
-  with:
-    mode: record
-
-- if: github.event_name == 'pull_request'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
-  with:
-    mode: test
-    license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+    <p class="trace-safety" data-reveal><strong>Cuando un paso no puede rastrear un cambio, se ejecuta el proyecto de pruebas completo.</strong> <a href="/docs/what-runs-everything/">Qué lo ejecuta todo →</a></p>
   </div>
 </section>
 
-<section>
-  <div class="wrap">
-    <div class="section-head">
+<section class="promises-section">
+  <div class="wrap promises">
+    <div class="promises-intro" data-reveal>
       <h2>Hecho para equipos que no pueden permitirse pasar por alto una prueba</h2>
+      <p>{{name}} se ejecuta dentro de tu CI y nunca se interpone entre tú y un lanzamiento. Si no puede estar seguro, ejecuta más.</p>
+      <p><a href="/docs/security/">Seguridad y datos →</a></p>
     </div>
-    <div class="grid-3">
-      <div class="card"><h3>Tu código se queda contigo</h3><p>{{name}} se ejecuta dentro de tu CI. Ni el código fuente, ni la cobertura, ni los resultados de las pruebas salen de tus máquinas; los correos de los autores de commits solo se cuentan localmente.</p></div>
-      <div class="card"><h3>Todos los frameworks que usas</h3><p>xUnit v2 y v3, NUnit, MSTest y TUnit, tanto con VSTest como con Microsoft.Testing.Platform, incluida su propia paralelización.</p></div>
-      <div class="card"><h3>Nunca bloquea una compilación</h3><p>Sin una licencia válida se ejecutan todas las pruebas, como antes. Un problema de licencia cuesta tiempo de CI, nunca una compilación en rojo.</p></div>
-    </div>
+    <dl class="promise-list" data-reveal>
+      <div><dt>0</dt><dd><strong>líneas de tu código salen de tu CI</strong>El análisis, los mapas de cobertura y los resultados de las pruebas se quedan en tus máquinas.</dd></div>
+      <div><dt>0</dt><dd><strong>compilaciones fallidas por un problema de licencia</strong>Sin una licencia válida se ejecutan todas las pruebas, como antes.</dd></div>
+      <div><dt>5<span>·</span>2</dt><dd><strong>frameworks de pruebas y runners</strong>xUnit v2 y v3, NUnit, MSTest y TUnit, con VSTest y Microsoft.Testing.Platform.</dd></div>
+      <div><dt>1</dt><dd><strong>llamada de red al día, opcional</strong>Una renovación de la licencia que envía la licencia y nada más.</dd></div>
+    </dl>
+  </div>
+  <div class="wrap">
+    <table class="spec" data-reveal>
+      <tr><th>Frameworks</th><td>xUnit v2 · xUnit v3 · NUnit · MSTest · TUnit</td></tr>
+      <tr><th>Runners</th><td>VSTest · Microsoft.Testing.Platform</td></tr>
+      <tr><th>CI</th><td>GitHub Actions · GitLab CI · Azure DevOps · Jenkins · Bitbucket</td></tr>
+      <tr><th>Plataformas</th><td>Linux · macOS</td></tr>
+    </table>
   </div>
 </section>
 
-<section class="section-soft">
-  <div class="wrap center">
-    <div class="section-head">
-      <h2>Gratis para repositorios públicos. {{trialDays}} días gratis para los privados.</h2>
-      <p>Después, {{currency}}{{priceMonthly}} por committer activo al mes. Sin tarjeta para la prueba.</p>
+<section class="gha-section">
+  <div class="wrap">
+    <div class="section-head center-head" data-reveal>
+      <h2>Dos pasos en GitHub Actions</h2>
+      <p>Tu rama predeterminada registra una vez. Después, cada pull request ejecuta solo lo que afecta.</p>
     </div>
+    <div class="gha" data-reveal>
+      <ol class="gha-flow">
+        <li class="gha-step gha-a">
+          <span class="gha-event">en cada push a main</span>
+          <h3>Registrar un mapa de cobertura</h3>
+          <p>Todas las pruebas se ejecutan una vez, con cobertura. El mapa se guarda en tu caché de Actions bajo su commit.</p>
+        </li>
+        <li class="gha-store">
+          <span class="gha-store-label">Caché de Actions</span>
+          <code>testdetta-coverage-&lt;sha&gt;</code>
+        </li>
+        <li class="gha-step gha-b">
+          <span class="gha-event">en cada pull request</span>
+          <h3>Ejecutar lo que afecta el cambio</h3>
+          <p>Se restaura el mapa más reciente en la merge base o antes, se ejecutan solo las clases de prueba afectadas y el job summary explica por qué se ejecutó cada una.</p>
+          <p class="gha-summary"><span class="badge-ok">Correcto</span> 14 de 141 clases · 83 % del tiempo de pruebas ahorrado</p>
+        </li>
+      </ol>
+      <figure class="editor">
+        <div class="editor-bar"><span class="editor-dots"><i></i><i></i><i></i></span><span class="editor-tab">.github/workflows/ci.yml</span></div>
+<pre class="editor-code" data-lang="yaml" data-lines data-mark="18-21:a,23-27:b">on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - if: github.event_name == 'push'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: record
+
+      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: test
+          license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+      </figure>
+    </div>
+    <p class="gha-links" data-reveal><a href="/docs/github-actions/">Guía de GitHub Actions →</a><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap center">
+    <h2>Gratis para repositorios públicos. {{trialDays}} días gratis para los privados.</h2>
+    <p>Después, {{currency}}{{priceMonthly}} por committer activo al mes. Sin tarjeta para la prueba.</p>
     <div class="hero-actions">
-      <a class="button" href="/pricing/">Ver precios</a>
-      <a class="button button-ghost" href="/docs/">Leer la documentación</a>
+      <a class="button button-large button-light" href="/pricing/">Ver precios</a>
+      <a class="button button-large button-outline-light" href="/docs/">Leer la documentación</a>
     </div>
   </div>
 </section>

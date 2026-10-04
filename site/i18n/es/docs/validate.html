@@ -1,0 +1,32 @@
+<!-- title: Valídalo en tu repositorio; layout: docs; description: Comprueba en tu propio código que {{name}} selecciona todas las pruebas que rompen tus cambios, antes de confiar en él.; source: ffcff100ded8 -->
+<h1>Valídalo en tu repositorio</h1>
+<p class="lead">Nuestra evaluación se hace sobre bibliotecas de código abierto. Tu código tiene sus propios patrones, así que comprueba {{name}} con él antes de dejar que decida qué se ejecuta. Lleva un par de semanas de pull requests normales y no cambia nada para tu equipo.</p>
+
+<h2 id="idea">La idea</h2>
+<p>Sigue usando el conjunto completo de pruebas como control. Junto a él, pregunta a {{name}} qué habría seleccionado. Cada clase de prueba que falla en la ejecución completa tiene que estar en esa selección. Si alguna no está, es una prueba pasada por alto, y queremos saberlo.</p>
+
+<h2 id="steps">Pasos</h2>
+<ol>
+  <li><strong>Registra mapas en la rama predeterminada.</strong> Con GitHub Actions, añade el paso <code>record</code> del <a href="/docs/github-actions/">workflow</a>; en otros sistemas, ejecuta <code>td record</code> en cada commit de la rama predeterminada y guarda los mapas (<a href="/docs/other-ci/">otros sistemas de CI</a>).</li>
+  <li><strong>En cada pull request, anota la selección.</strong> Sin cambiar tu paso de pruebas:
+<pre><code>td affected --format json &gt; selection.json</code></pre></li>
+  <li><strong>Ejecuta el conjunto completo como hoy</strong>, con un informe TRX para poder leer los fallos:
+<pre><code>dotnet test --logger trx --results-directory TestResults</code></pre></li>
+  <li><strong>Compara.</strong> Para cada prueba que falla, su clase tiene que estar seleccionada. Una clase está seleccionada cuando el <code>mode</code> de su proyecto es <code>All</code>, o cuando su proyecto es <code>Filtered</code> y la clase está en <code>classes</code>:
+<pre><code>jq -r '.tests[] | select(.mode == "All") | .project' selection.json      # projects that run completely
+jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # classes that run</code></pre></li>
+  <li><strong>Guarda ambos archivos</strong> de cualquier ejecución en la que una clase que falló no estuviera seleccionada, y envíalos junto con el registro de <code>-v</code> de <code>td affected</code> a <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</li>
+</ol>
+<div class="callout"><p>Solo las pruebas que fallan pueden revelar una prueba pasada por alto, y un par de semanas pueden traer pocos fallos. Puedes provocar algunos: en una rama desechable, rompe un método a propósito (que devuelva un valor incorrecto) y comprueba que se selecciona la prueba que lo detecta. No hagas merge de esa rama.</p></div>
+
+<h2 id="switch">Cuando tengas confianza</h2>
+<p>Sustituye el paso de pruebas completo por <code>td test</code>, o por el modo <code>test</code> de la acción. Sigue registrando en la rama predeterminada: allí se ejecutan todas las pruebas, así que cualquier cosa que una selección pudiera ocultar se detecta antes del lanzamiento.</p>
+
+<h2 id="how-we-test">Cómo lo probamos nosotros</h2>
+<p>La misma comprobación se ejecuta a gran escala en {{corpusRepositories}} repositorios de código abierto: los miembros se modifican de uno en uno y cada clase de prueba que falla tiene que haber sido seleccionada. De {{corpusFailingChanges}} cambios que rompieron una prueba, se pasaron por alto {{corpusMissed}}, y cada uno se corrigió con una prueba que falla sin la corrección. <a href="/docs/examples/#corpus">El corpus en cifras</a>.</p>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">Cómo decide</a></li>
+  <li><a href="/docs/time-saved/">Tiempo ahorrado</a></li>
+</ul>

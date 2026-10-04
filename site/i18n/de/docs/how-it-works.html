@@ -1,4 +1,4 @@
-<!-- title: Wie es entscheidet; layout: docs; description: Wie {{name}} aus einem Git-Diff die auszuführenden Testprojekte und Testklassen ermittelt.; source: 185c628bff1f -->
+<!-- title: Wie es entscheidet; layout: docs; description: Wie {{name}} aus einem Git-Diff die auszuführenden Testprojekte und Testklassen ermittelt.; source: 9d9623b95770 -->
 <h1>Wie es entscheidet</h1>
 <p class="lead">{{name}} grenzt die Auswahl Schritt für Schritt ein, und nur dort, wo es Belege dafür hat. Alles, was sich nicht nachverfolgen lässt, führt dazu, dass mehr ausgeführt wird.</p>
 
@@ -33,7 +33,7 @@
 <h2>Coverage-Maps</h2>
 <p><code>td record</code> führt alle Tests mit Coverage aus und schreibt eine Map pro Testprojekt. Maps werden am besten an der Merge-Base Ihres Branches aufgezeichnet, und in der CI zeichnen Sie für jeden Commit auf dem Standard-Branch eine auf.</p>
 
-<h3>Ältere Maps und die Drift-Bridge</h3>
+<h3 id="drift">Ältere Maps und die Drift-Bridge</h3>
 <p>Eine Map, die bis zu 50 Commits vor der Merge-Base aufgezeichnet wurde, wird weiterhin verwendet (<code>--max-map-age</code>, Standard 50; 0 verwendet nur eine an der Merge-Base aufgezeichnete Map). Code, der sich dazwischen geändert hat, könnte Aufrufe erzeugt haben, die die Map nicht kennt. Deshalb wählt {{name}} zusätzlich die Klassen aus, die einen seitdem geänderten Member ausgeführt haben, der Ihre Änderung erreichen kann, und verfolgt neuen Code anhand des Namens.</p>
 <p>Wenn sich etwas dazwischen nicht durch Member beschreiben lässt, etwa eine Build-Datei oder <code>appsettings.json</code>, laufen die betroffenen Testprojekte vollständig. <code>--drift-fallback name</code> entscheidet sie stattdessen anhand von Namen, wie ohne Map: schneller, aber blind für Aufrufe, die über Konfiguration oder Reflection verbunden sind.</p>
 
@@ -47,3 +47,10 @@ td: 1 changed file(s), 2 affected test project(s).
 Tests to run:
   filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
   skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>
+
+<h2 id="related">Verwandte Seiten</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Was alle Tests auslöst</a></li>
+  <li><a href="/docs/validate/">Im eigenen Repository prüfen</a></li>
+  <li><a href="/docs/limitations/">Einschränkungen</a></li>
+</ul>

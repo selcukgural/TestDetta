@@ -1,0 +1,51 @@
+<!-- title: What runs everything; layout: docs; description: The changes that make {{name}} run a whole test project, or every project below a folder, and the files it ignores. -->
+<h1>What runs everything</h1>
+<p class="lead">Most changes select a few test classes. Some cannot be narrowed down safely, so {{name}} runs a whole test project, or every project below a folder. This page lists them all, so a wide selection never comes as a surprise.</p>
+
+<h2 id="build-files">Build-wide files</h2>
+<p>These files change how every project below them builds. A change to one of them runs every test project in its folder and below it:</p>
+<table>
+  <thead><tr><th>File</th><th>Runs</th></tr></thead>
+  <tbody>
+    <tr><td><code>Directory.Build.props</code>, <code>Directory.Build.targets</code>, <code>Directory.Build.rsp</code></td><td>Every test project below it</td></tr>
+    <tr><td><code>Directory.Solution.props</code>, <code>Directory.Solution.targets</code></td><td>Every test project below it</td></tr>
+    <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Every test project below it</td></tr>
+    <tr><td><code>Directory.Packages.props</code>, only <code>PackageVersion</code> items changed</td><td>Only the test projects that reference a changed package, and those that depend on them</td></tr>
+    <tr><td><code>Directory.Packages.props</code>, anything else (a <code>GlobalPackageReference</code>, transitive pinning, properties)</td><td>Every test project below it</td></tr>
+  </tbody>
+</table>
+
+<h2 id="project">Changes that run a whole test project</h2>
+<table>
+  <thead><tr><th>Change</th><th>Why it cannot be narrowed</th></tr></thead>
+  <tbody>
+    <tr><td>The project file, or a <code>.props</code> or <code>.targets</code> file it imports</td><td>It can change how anything in the project builds.</td></tr>
+    <tr><td>Any file in the project that is not C#, such as <code>appsettings.json</code>, a <code>.resx</code> or a test data file</td><td>No coverage map says who reads it.</td></tr>
+    <tr><td>A <code>global using</code> or an assembly attribute</td><td>It applies to every file.</td></tr>
+    <tr><td>A C# change in code no declaration covers, for example under a preprocessor condition</td><td>There is no member to follow.</td></tr>
+    <tr><td>A changed type that nothing names, but that a framework could discover through reflection (controllers, message handlers, EF configurations)</td><td>Names and coverage cannot tell who finds it.</td></tr>
+    <tr><td>A change in an F# or Visual Basic project</td><td>Their code is not analysed.</td></tr>
+    <tr><td>A project used as an analyzer or source generator</td><td>Its effect is on compilation, not on calls.</td></tr>
+  </tbody>
+</table>
+<p>Each of these also runs every test project that depends on the one affected.</p>
+
+<h2 id="maps">Coverage map situations</h2>
+<ul>
+  <li><strong>An older map and build changes in between.</strong> When the map is a few commits older than your merge base and a build file or a configuration file changed in between, the affected test projects run completely. <code>--drift-fallback name</code> decides them by name instead. See <a href="/docs/how-it-works/#drift">the drift bridge</a>.</li>
+  <li><strong>Every class selected.</strong> A project whose classes are all selected runs without a filter.</li>
+  <li><strong>A filter that matches nothing.</strong> The project runs again without the filter, and {{name}} treats it as its own bug.</li>
+</ul>
+<p>No map at all does not run everything: selection falls back to tracing by name, which is wider than coverage but still narrow.</p>
+
+<h2 id="ignored">Files that are ignored</h2>
+<p>A changed file outside every project folder, such as <code>README.md</code>, files under <code>.github/</code> or a script at the root of the repository, belongs to no project and selects nothing. It is listed in the output as unmapped.</p>
+<div class="callout"><p>If your tests read a file that lives outside every project folder, a change to it will not select them. Keep such files inside the test project, where a change runs the project.</p></div>
+<p>One exception: a source or build file that no project claims (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>) counts as a build input of every project whose imports could not be fully resolved, so those run.</p>
+
+<h2 id="related">Related pages</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">How it decides</a></li>
+  <li><a href="/docs/limitations/">Limitations</a></li>
+  <li><a href="/docs/troubleshooting/#whole-project">Why did the whole project run?</a></li>
+</ul>

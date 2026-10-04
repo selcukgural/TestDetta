@@ -1,0 +1,52 @@
+<!-- title: Solución de problemas; layout: docs; description: Qué hacer cuando {{name}} selecciona más de lo esperado, no encuentra ningún mapa de cobertura o no encuentra el commit base.; source: ae48c4254831 -->
+<h1>Solución de problemas</h1>
+<p class="lead">Cada entrada parte de lo que ves. En todos los casos, <code>-v</code> escribe cada decisión y su motivo en stderr; ese registro responde a la mayoría de las preguntas y es lo que debes enviarnos.</p>
+<pre><code>td affected --base origin/main -v</code></pre>
+
+<h2 id="whole-project">Se ejecutó todo el proyecto de pruebas</h2>
+<p>Busca el proyecto en la salida: el motivo aparece a su lado. Las causas habituales son un archivo que afecta a toda la compilación, un archivo que no es de C# dentro del proyecto, un <code>global using</code> o un tipo que se encuentra por reflexión. <a href="/docs/what-runs-everything/">Qué lo ejecuta todo</a> los enumera todos. En el registro de <code>-v</code>, una línea como <code>affects whole project: True</code> nombra el archivo.</p>
+
+<h2 id="no-map">No se usó ningún mapa de cobertura</h2>
+<p>Sin un mapa, la selección rastrea nombres, lo que es más amplio. El registro indica por qué no lo había:</p>
+<ul>
+  <li><code>No coverage maps within 50 commits before the merge base</code>: no se ha registrado nada recientemente en la rama predeterminada. Registra un mapa en cada push a ella; el modo <code>record</code> de la acción lo hace.</li>
+  <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: el mapa procede de otra rama, o de antes de un force push o de una rama de larga duración. Vuelve a registrar en la rama predeterminada o aumenta <code>--max-map-age</code>.</li>
+  <li><code>--maps-dir … does not exist</code>: la carpeta con los mapas no se restauró antes de la ejecución.</li>
+  <li>En GitHub Actions, el job necesita el permiso <code>actions: read</code> para listar las entradas de caché que contienen los mapas.</li>
+</ul>
+
+<h2 id="base">No se encuentra el commit base</h2>
+<p>{{name}} compara tu rama con la merge base, así que necesita el historial de ambas. La acción se detiene con:</p>
+<pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
+<p>Haz el checkout con <code>fetch-depth: 0</code>. En otros sistemas de CI, desactiva los clones superficiales y descarga la rama de destino con un refspec explícito, como se muestra para cada sistema en <a href="/docs/other-ci/">otros sistemas de CI</a>.</p>
+
+<h2 id="fewer-skipped">Se omitieron menos pruebas de lo esperado</h2>
+<ul>
+  <li><strong>El mapa es anterior a la merge base</strong> y entretanto cambió un archivo de compilación o de configuración: los proyectos afectados se ejecutan completos. <code>--drift-fallback name</code> los reduce en su lugar por nombre.</li>
+  <li><strong>Se selecciona una clase de prueba que no toca el cambio.</strong> El rastreo por nombre es prudente: una clase que nombra el tipo modificado se selecciona aunque la cobertura la hubiera descartado. Una línea de registro como <code>is not in the coverage map of … Record the map again</code> significa que el mapa está desactualizado para ese proyecto.</li>
+  <li><strong>Cambió un helper central.</strong> El código que ejecutan la mayoría de las pruebas, como una clase base compartida o un serializador, selecciona la mayoría de las pruebas. Es lo correcto.</li>
+</ul>
+
+<h2 id="filter">El filtro no coincidió con ninguna prueba</h2>
+<p>Cuando el filtro de un proyecto no selecciona ninguna prueba, {{name}} vuelve a ejecutar el proyecto sin el filtro y registra <code>The filter for … matched no test; running it unfiltered</code>. No se pasa nada por alto, pero es un error por nuestra parte: envíanos el registro de <code>-v</code>.</p>
+
+<h2 id="git">Squash merges, rebases y force pushes</h2>
+<p>Los mapas se registran para los commits de la rama predeterminada, y una pull request encuentra el más reciente en su merge base o antes. Un squash merge o un rebase crea commits nuevos en la rama predeterminada; el siguiente push registra un mapa para ellos y, hasta entonces, las pull requests usan el mapa anterior a través del drift bridge. Un force push a la rama de una pull request no cambia nada: la merge base se vuelve a calcular.</p>
+
+<h2 id="forks">Pull requests desde forks</h2>
+<p>Los sistemas de CI no pasan secretos a las pull requests desde forks. Los repositorios públicos no necesitan licencia, así que para ellos no cambia nada. En un repositorio privado, una ejecución sin licencia ejecuta todas las pruebas, como lo haría sin {{name}}.</p>
+
+<h2 id="faq">Preguntas</h2>
+<h3>¿Es completa la cobertura de código de una ejecución seleccionada?</h3>
+<p>No. Una ejecución que omite pruebas produce una cobertura parcial. Publica la cobertura de las ejecuciones completas en la rama predeterminada; allí el registro ejecuta todas las pruebas.</p>
+<h3>¿Se pueden reintentar las pruebas?</h3>
+<p>Sí, con la opción de reintento de tu propio framework: todo lo que va después de <code>--</code> se pasa a <code>dotnet test</code> sin cambios.</p>
+<h3>¿Se pueden repartir las pruebas seleccionadas entre jobs en paralelo?</h3>
+<p><code>td affected --format commands</code> imprime un comando <code>dotnet test</code> por proyecto de pruebas, con su filtro. Reparte las líneas entre tus jobs.</p>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Qué lo ejecuta todo</a></li>
+  <li><a href="/docs/cli/">Referencia de la CLI</a></li>
+  <li><a href="/docs/limitations/">Limitaciones</a></li>
+</ul>

@@ -1,0 +1,32 @@
+<!-- title: Im eigenen Repository prüfen; layout: docs; description: Prüfen Sie an Ihrem eigenen Code, dass {{name}} jeden Test auswählt, den Ihre Änderungen brechen, bevor Sie sich darauf verlassen.; source: ffcff100ded8 -->
+<h1>Im eigenen Repository prüfen</h1>
+<p class="lead">Unsere Evaluierung läuft auf Open-Source-Bibliotheken. Ihr Code hat eigene Muster, also prüfen Sie {{name}} daran, bevor Sie es entscheiden lassen, was läuft. Das dauert ein paar Wochen mit normalen Pull Requests und ändert nichts für Ihr Team.</p>
+
+<h2 id="idea">Die Idee</h2>
+<p>Lassen Sie weiterhin die vollständige Testsuite als Gate laufen. Fragen Sie {{name}} daneben, was es ausgewählt hätte. Jede Testklasse, die im vollständigen Lauf fehlschlägt, muss in dieser Auswahl enthalten sein. Fehlt eine, ist das ein übersehener Test, und davon wollen wir erfahren.</p>
+
+<h2 id="steps">Schritte</h2>
+<ol>
+  <li><strong>Maps auf dem Standard-Branch aufzeichnen.</strong> Mit GitHub Actions fügen Sie den Schritt <code>record</code> aus dem <a href="/docs/github-actions/">Workflow</a> hinzu; anderswo führen Sie <code>td record</code> bei jedem Commit auf dem Standard-Branch aus und bewahren die Maps auf (<a href="/docs/other-ci/">Andere CI-Systeme</a>).</li>
+  <li><strong>Bei jedem Pull Request die Auswahl festhalten.</strong> Ohne Ihren Testschritt zu ändern:
+<pre><code>td affected --format json &gt; selection.json</code></pre></li>
+  <li><strong>Die vollständige Testsuite wie heute ausführen</strong>, mit einem TRX-Bericht, damit sich Fehlschläge auslesen lassen:
+<pre><code>dotnet test --logger trx --results-directory TestResults</code></pre></li>
+  <li><strong>Vergleichen.</strong> Für jeden fehlgeschlagenen Test muss seine Klasse ausgewählt sein. Eine Klasse ist ausgewählt, wenn der <code>mode</code> ihres Projekts <code>All</code> ist oder wenn ihr Projekt <code>Filtered</code> ist und die Klasse in <code>classes</code> steht:
+<pre><code>jq -r '.tests[] | select(.mode == "All") | .project' selection.json      # projects that run completely
+jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # classes that run</code></pre></li>
+  <li><strong>Beide Dateien aufbewahren</strong>, wenn in einem Lauf eine fehlgeschlagene Klasse nicht ausgewählt war, und sie zusammen mit dem <code>-v</code>-Log von <code>td affected</code> an <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> senden.</li>
+</ol>
+<div class="callout"><p>Nur fehlschlagende Tests können einen übersehenen Test zeigen, und ein paar Wochen bringen vielleicht wenige Fehlschläge. Sie können welche hinzufügen: Brechen Sie auf einem Wegwerf-Branch absichtlich eine Methode (lassen Sie sie einen falschen Wert zurückgeben) und prüfen Sie, ob der Test, der das bemerkt, ausgewählt wird. Mergen Sie diesen Branch nicht.</p></div>
+
+<h2 id="switch">Wenn Sie sicher sind</h2>
+<p>Ersetzen Sie den vollständigen Testschritt durch <code>td test</code> oder den Modus <code>test</code> der Action. Zeichnen Sie auf dem Standard-Branch weiter auf: Dort laufen alle Tests, sodass alles, was eine Auswahl je verbergen könnte, trotzdem vor dem Release auffällt.</p>
+
+<h2 id="how-we-test">Wie wir es testen</h2>
+<p>Dieselbe Prüfung läuft im großen Maßstab auf {{corpusRepositories}} Open-Source-Repositorys: Member werden einzeln geändert, und jede Testklasse, die fehlschlägt, muss ausgewählt worden sein. Von {{corpusFailingChanges}} Änderungen, die einen Test brachen, wurden {{corpusMissed}} übersehen, und jede wurde mit einem Test behoben, der ohne die Korrektur fehlschlägt. <a href="/docs/examples/#corpus">Der Korpus in Zahlen</a>.</p>
+
+<h2 id="related">Verwandte Seiten</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">Wie es entscheidet</a></li>
+  <li><a href="/docs/time-saved/">Gesparte Zeit</a></li>
+</ul>

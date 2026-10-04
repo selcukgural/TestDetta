@@ -1,0 +1,51 @@
+<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: edb2bc45715a -->
+<h1>Qué lo ejecuta todo</h1>
+<p class="lead">La mayoría de los cambios seleccionan unas pocas clases de prueba. Algunos no se pueden acotar de forma segura, así que {{name}} ejecuta un proyecto de pruebas completo o todos los proyectos bajo una carpeta. Esta página los enumera todos, para que una selección amplia nunca te sorprenda.</p>
+
+<h2 id="build-files">Archivos que afectan a toda la compilación</h2>
+<p>Estos archivos cambian cómo se compila cada proyecto que está por debajo de ellos. Un cambio en uno de ellos ejecuta todos los proyectos de pruebas de su carpeta y de las carpetas inferiores:</p>
+<table>
+  <thead><tr><th>Archivo</th><th>Ejecuta</th></tr></thead>
+  <tbody>
+    <tr><td><code>Directory.Build.props</code>, <code>Directory.Build.targets</code>, <code>Directory.Build.rsp</code></td><td>Todos los proyectos de pruebas por debajo</td></tr>
+    <tr><td><code>Directory.Solution.props</code>, <code>Directory.Solution.targets</code></td><td>Todos los proyectos de pruebas por debajo</td></tr>
+    <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Todos los proyectos de pruebas por debajo</td></tr>
+    <tr><td><code>Directory.Packages.props</code>, si solo cambiaron elementos <code>PackageVersion</code></td><td>Solo los proyectos de pruebas que hacen referencia a un paquete modificado y los que dependen de ellos</td></tr>
+    <tr><td><code>Directory.Packages.props</code>, cualquier otro cambio (una <code>GlobalPackageReference</code>, el pinning transitivo, propiedades)</td><td>Todos los proyectos de pruebas por debajo</td></tr>
+  </tbody>
+</table>
+
+<h2 id="project">Cambios que ejecutan un proyecto de pruebas completo</h2>
+<table>
+  <thead><tr><th>Cambio</th><th>Por qué no se puede acotar</th></tr></thead>
+  <tbody>
+    <tr><td>El archivo de proyecto, o un archivo <code>.props</code> o <code>.targets</code> que importa</td><td>Puede cambiar cómo se compila cualquier cosa del proyecto.</td></tr>
+    <tr><td>Cualquier archivo del proyecto que no sea de C#, como <code>appsettings.json</code>, un <code>.resx</code> o un archivo de datos de prueba</td><td>Ningún mapa de cobertura indica quién lo lee.</td></tr>
+    <tr><td>Un <code>global using</code> o un atributo de ensamblado</td><td>Se aplica a todos los archivos.</td></tr>
+    <tr><td>Un cambio de C# en código que ninguna declaración abarca, por ejemplo bajo una condición del preprocesador</td><td>No hay ningún miembro que seguir.</td></tr>
+    <tr><td>Un tipo modificado que nada nombra, pero que un framework podría descubrir por reflexión (controladores, manejadores de mensajes, configuraciones de EF)</td><td>Ni los nombres ni la cobertura pueden decir quién lo encuentra.</td></tr>
+    <tr><td>Un cambio en un proyecto de F# o Visual Basic</td><td>Su código no se analiza.</td></tr>
+    <tr><td>Un proyecto usado como analizador o generador de código fuente</td><td>Su efecto está en la compilación, no en las llamadas.</td></tr>
+  </tbody>
+</table>
+<p>Cada uno de estos casos ejecuta además todos los proyectos de pruebas que dependen del proyecto afectado.</p>
+
+<h2 id="maps">Situaciones con mapas de cobertura</h2>
+<ul>
+  <li><strong>Un mapa más antiguo con cambios de compilación entremedias.</strong> Cuando el mapa es unos commits anterior a tu merge base y entretanto cambió un archivo de compilación o de configuración, los proyectos de pruebas afectados se ejecutan completos. <code>--drift-fallback name</code> los decide en su lugar por nombre. Consulta <a href="/docs/how-it-works/#drift">el drift bridge</a>.</li>
+  <li><strong>Todas las clases seleccionadas.</strong> Un proyecto cuyas clases están todas seleccionadas se ejecuta sin filtro.</li>
+  <li><strong>Un filtro que no coincide con nada.</strong> El proyecto se vuelve a ejecutar sin el filtro, y {{name}} lo trata como un error propio.</li>
+</ul>
+<p>No tener ningún mapa no lo ejecuta todo: la selección recurre al rastreo por nombre, que es más amplio que la cobertura pero sigue siendo acotado.</p>
+
+<h2 id="ignored">Archivos que se ignoran</h2>
+<p>Un archivo modificado fuera de todas las carpetas de proyecto, como <code>README.md</code>, los archivos bajo <code>.github/</code> o un script en la raíz del repositorio, no pertenece a ningún proyecto y no selecciona nada. Aparece en la salida como no asignado.</p>
+<div class="callout"><p>Si tus pruebas leen un archivo que está fuera de todas las carpetas de proyecto, un cambio en él no las seleccionará. Mantén esos archivos dentro del proyecto de pruebas, donde un cambio ejecuta el proyecto.</p></div>
+<p>Una excepción: un archivo de código fuente o de compilación que ningún proyecto reclama (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>) cuenta como entrada de compilación de todos los proyectos cuyos imports no se pudieron resolver por completo, así que esos se ejecutan.</p>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">Cómo decide</a></li>
+  <li><a href="/docs/limitations/">Limitaciones</a></li>
+  <li><a href="/docs/troubleshooting/#whole-project">¿Por qué se ejecutó todo el proyecto?</a></li>
+</ul>

@@ -33,7 +33,7 @@
 <h2>Coverage maps</h2>
 <p><code>td record</code> runs every test with coverage and writes one map per test project. Maps are best recorded at the merge base of your branch, and in CI you record one for every commit on the default branch.</p>
 
-<h3>Older maps and the drift bridge</h3>
+<h3 id="drift">Older maps and the drift bridge</h3>
 <p>A map recorded up to 50 commits before the merge base is still used (<code>--max-map-age</code>, default 50; 0 uses only a map recorded at the merge base). Code changed in between could have created calls the map does not know, so {{name}} also selects the classes that ran any changed-since member that can reach your change, and traces new code by name.</p>
 <p>When something in between cannot be described by members, such as a build file or <code>appsettings.json</code>, the affected test projects run completely. <code>--drift-fallback name</code> decides them by name instead, as without a map: faster, but blind to calls wired by configuration or reflection.</p>
 
@@ -47,3 +47,10 @@ td: 1 changed file(s), 2 affected test project(s).
 Tests to run:
   filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
   skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>
+
+<h2 id="related">Related pages</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">What runs everything</a></li>
+  <li><a href="/docs/validate/">Validate on your repository</a></li>
+  <li><a href="/docs/limitations/">Limitations</a></li>
+</ul>

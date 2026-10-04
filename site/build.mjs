@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { join, dirname, relative, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { highlight } from "./highlight.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const src = join(root, "src");
@@ -26,16 +27,23 @@ const site = JSON.parse(readFileSync(join(root, "site.json"), "utf8"));
 // English first: it is the source and is served at the root; the others under /<code>/.
 const languages = ["en", "tr", "de", "ja", "es"];
 
-// Docs navigation, in reading order: [path, string key of its title].
+// Docs navigation, in reading order: [path, string key of its title, string key of its group]. The
+// sidebar shows a heading wherever the group changes; the pager walks the list in this order.
 const docsNav = [
-  ["/docs/", "docGettingStarted"],
-  ["/docs/examples/", "docExamples"],
-  ["/docs/how-it-works/", "docHowItWorks"],
-  ["/docs/github-actions/", "docGitHubActions"],
-  ["/docs/other-ci/", "docOtherCi"],
-  ["/docs/cli/", "docCli"],
-  ["/docs/license/", "docLicense"],
-  ["/docs/limitations/", "docLimitations"],
+  ["/docs/", "docGettingStarted", "navGroupStart"],
+  ["/docs/examples/", "docExamples", "navGroupStart"],
+  ["/docs/validate/", "docValidate", "navGroupStart"],
+  ["/docs/how-it-works/", "docHowItWorks", "navGroupConcepts"],
+  ["/docs/what-runs-everything/", "docWhatRunsEverything", "navGroupConcepts"],
+  ["/docs/time-saved/", "docTimeSaved", "navGroupConcepts"],
+  ["/docs/github-actions/", "docGitHubActions", "navGroupSetup"],
+  ["/docs/other-ci/", "docOtherCi", "navGroupSetup"],
+  ["/docs/compatibility/", "docCompatibility", "navGroupSetup"],
+  ["/docs/cli/", "docCli", "navGroupReference"],
+  ["/docs/troubleshooting/", "docTroubleshooting", "navGroupReference"],
+  ["/docs/security/", "docSecurity", "navGroupReference"],
+  ["/docs/license/", "docLicense", "navGroupReference"],
+  ["/docs/limitations/", "docLimitations", "navGroupReference"],
 ];
 
 const escapeHtml = (text) =>
@@ -82,7 +90,12 @@ const localizeLinks = (html, lang) =>
 
 function docsSidebar(url, strings) {
   return docsNav
-    .map(([href, key]) => `<li><a href="${href}"${href === url ? ' aria-current="page"' : ""}>${escapeHtml(strings[key])}</a></li>`)
+    .map(([href, key, group], index) => {
+      const heading = index === 0 || docsNav[index - 1][2] !== group
+        ? `<li class="nav-group">${escapeHtml(strings[group])}</li>`
+        : "";
+      return `${heading}<li><a href="${href}"${href === url ? ' aria-current="page"' : ""}>${escapeHtml(strings[key])}</a></li>`;
+    })
     .join("\n          ");
 }
 
@@ -206,7 +219,7 @@ function build({ allowStale }) {
         ? join(outDir, url, "index.html")
         : join(outDir, relativePath);
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, html);
+      writeFileSync(target, highlight(html));
     }
   }
 

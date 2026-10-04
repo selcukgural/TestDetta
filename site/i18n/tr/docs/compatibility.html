@@ -1,0 +1,56 @@
+<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: f22588066dde -->
+<h1>Uyumluluk</h1>
+<p class="lead">{{name}}'nın neye ihtiyaç duyduğu ve neyle test edildiği. Bu tabloların dışında kalan bir şey desteklenmiyor demek değildir, ancak uçtan uca test edilmemiştir.</p>
+
+<h2 id="requirements">Gereksinimler</h2>
+<table>
+  <thead><tr><th>Öğe</th><th>Gereksinim</th></tr></thead>
+  <tbody>
+    <tr><td>.NET SDK</td><td>{{name}}'nın kendisini .NET 10 SDK çalıştırır. Testleriniz, deponuzun zaten kullandığı SDK ve runner ile çalışmaya devam eder.</td></tr>
+    <tr><td>Git geçmişi</td><td>Merge base'in bulunabilmesi için branch'inizin ve hedef branch'inin tam geçmişi. Shallow clone'larla çalışmaz.</td></tr>
+    <tr><td>İşletim sistemi</td><td>Linux ve macOS, x64 ve arm64. Windows henüz test edilmedi.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="frameworks">Test framework'leri ve runner'lar</h2>
+<p><code>dotnet test</code>'in her iki runner'ı da çalışır. Runner, tıpkı <code>dotnet test</code>'in yaptığı gibi <code>global.json</code> dosyasından okunur. Aşağıdaki kombinasyonlar kayıt dahil uçtan uca, her framework'ün kendi paralelleştirmesi açıkken de test edilmiştir:</p>
+<table>
+  <thead><tr><th>Framework</th><th>VSTest</th><th>Microsoft.Testing.Platform</th></tr></thead>
+  <tbody>
+    <tr><td>xUnit v2</td><td>Test edildi</td><td>–</td></tr>
+    <tr><td>xUnit v3</td><td>–</td><td>Test edildi (.NET 10 SDK üzerinde xUnit v3 için gereklidir)</td></tr>
+    <tr><td>NUnit</td><td>Test edildi</td><td>Test edildi; kayıt sırasında başarısız testlerin bilinmesi için <code>Microsoft.Testing.Extensions.TrxReport</code> ekleyin</td></tr>
+    <tr><td>MSTest</td><td>Test edildi</td><td>Test edildi</td></tr>
+    <tr><td>TUnit</td><td>–</td><td>Test edildi</td></tr>
+  </tbody>
+</table>
+<p><a href="/docs/examples/#corpus">Değerlendirme korpusundaki</a> test projeleri .NET 8 ile .NET 10 arasını hedefler. .NET Framework test projeleri bu korpusa dahil değildir.</p>
+
+<h2 id="languages">Diller</h2>
+<table>
+  <thead><tr><th>Dil</th><th>Değişiklikler nasıl ele alınır</th></tr></thead>
+  <tbody>
+    <tr><td>C#</td><td>Üye düzeyine kadar analiz edilir: söz dizimi ağaçları, kapsam haritaları ve isim izleme.</td></tr>
+    <tr><td>F#, Visual Basic</td><td>Proje grafiğinin bir parçasıdır, ancak analiz edilmez: bu projelerden biri etkilendiğinde, ona bağımlı her şey tamamen çalışır.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="ci">CI sistemleri</h2>
+<p>Her CI aynı üç şeye ihtiyaç duyar: tam geçmiş, fetch edilmiş hedef branch ve kapsam haritalarını varsayılan branch ile pull request'ler arasında tutacak bir yer.</p>
+<table>
+  <thead><tr><th>CI</th><th>Kurulum</th><th>Haritaların tutulduğu yer</th><th>Özet</th></tr></thead>
+  <tbody>
+    <tr><td>GitHub Actions</td><td><a href="/docs/github-actions/">Action</a>, iki adım</td><td>Actions önbelleği, commit başına bir kayıt</td><td>Job summary, sizin için yazılır</td></tr>
+    <tr><td>GitLab CI</td><td rowspan="4"><a href="/docs/other-ci/"><code>td</code> aracı</a>, <code>td record</code> ve <code>td test</code></td><td rowspan="4"><code>--maps-dir</code> aracılığıyla paylaşılan bir klasör ya da nesne depolama</td><td rowspan="4"><code>--summary-file</code>, Markdown gösterebilen her CI için Markdown yazar</td></tr>
+    <tr><td>Jenkins</td></tr>
+    <tr><td>Azure DevOps</td></tr>
+    <tr><td>Bitbucket Pipelines</td></tr>
+  </tbody>
+</table>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a></li>
+  <li><a href="/docs/limitations/">Sınırlamalar</a></li>
+  <li><a href="/docs/troubleshooting/">Sorun giderme</a></li>
+</ul>

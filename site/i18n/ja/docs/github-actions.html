@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: 356b3c4f84a4 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: e497d189cf09 -->
 <h1>GitHub Actions</h1>
 <p class="lead">既定のブランチのコミットごとにマップを記録し、プルリクエストでは変更が影響するテストだけを実行します。アクションが {{name}} 自体をビルドし、マップを Actions のキャッシュに保持します。</p>
 
@@ -88,3 +88,10 @@ jobs:
 <h2>テストスイートの一部だけを記録する</h2>
 <p>記録ではテストスイート全体をカバレッジ付きで 1 回実行します。既定のブランチでは、これがそのまま完全なテスト実行にもなります。データベースが必要な統合テストなど、ランナー上で実行できないプロジェクトは <code>projects</code> で除外してください。プルリクエストでは、それらのプロジェクトは名前で判断されます。</p>
 <p>前のステップですでに同じ構成でソリューションをビルドしている場合は、<code>no-build: true</code> を設定します。複数のテストプロセスの同時実行に耐えられるテストスイートでは、<code>parallel</code> によって各プロジェクトのテストクラスを指定した数のプロセスに分散できます。</p>
+
+<h2 id="related">関連ページ</h2>
+<ul>
+  <li><a href="/docs/compatibility/#ci">互換性</a></li>
+  <li><a href="/docs/troubleshooting/">トラブルシューティング</a></li>
+  <li><a href="/docs/time-saved/">短縮された時間</a></li>
+</ul>

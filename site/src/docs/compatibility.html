@@ -1,0 +1,56 @@
+<!-- title: Compatibility; layout: docs; description: The test frameworks, runners, languages, operating systems and CI systems {{name}} supports. -->
+<h1>Compatibility</h1>
+<p class="lead">What {{name}} needs, and what it has been tested with. Anything outside these tables is not necessarily unsupported, but it has not been tested end to end.</p>
+
+<h2 id="requirements">Requirements</h2>
+<table>
+  <thead><tr><th>Item</th><th>Requirement</th></tr></thead>
+  <tbody>
+    <tr><td>.NET SDK</td><td>The .NET 10 SDK runs {{name}} itself. Your tests keep the SDK and runner your repository already uses.</td></tr>
+    <tr><td>Git history</td><td>The full history of your branch and its target branch, so the merge base can be found. Shallow clones cannot work.</td></tr>
+    <tr><td>Operating system</td><td>Linux and macOS, x64 and arm64. Windows has not been tested yet.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="frameworks">Test frameworks and runners</h2>
+<p>Both runners of <code>dotnet test</code> work. The runner is read from <code>global.json</code>, as <code>dotnet test</code> reads it. These combinations are tested end to end, recording included, also with each framework's own parallelization turned on:</p>
+<table>
+  <thead><tr><th>Framework</th><th>VSTest</th><th>Microsoft.Testing.Platform</th></tr></thead>
+  <tbody>
+    <tr><td>xUnit v2</td><td>Tested</td><td>–</td></tr>
+    <tr><td>xUnit v3</td><td>–</td><td>Tested (required for xUnit v3 on the .NET 10 SDK)</td></tr>
+    <tr><td>NUnit</td><td>Tested</td><td>Tested; add <code>Microsoft.Testing.Extensions.TrxReport</code> so failed tests are known while recording</td></tr>
+    <tr><td>MSTest</td><td>Tested</td><td>Tested</td></tr>
+    <tr><td>TUnit</td><td>–</td><td>Tested</td></tr>
+  </tbody>
+</table>
+<p>Test projects in the <a href="/docs/examples/#corpus">evaluation corpus</a> target .NET 8 to .NET 10. .NET Framework test projects are not part of it.</p>
+
+<h2 id="languages">Languages</h2>
+<table>
+  <thead><tr><th>Language</th><th>How changes are handled</th></tr></thead>
+  <tbody>
+    <tr><td>C#</td><td>Analysed down to members: syntax trees, coverage maps and name tracing.</td></tr>
+    <tr><td>F#, Visual Basic</td><td>Part of the project graph, but not analysed: when one of these projects is affected, everything that depends on it runs completely.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="ci">CI systems</h2>
+<p>Every CI needs the same three things: the full history, the target branch fetched, and a place to keep coverage maps between the default branch and pull requests.</p>
+<table>
+  <thead><tr><th>CI</th><th>Setup</th><th>Where maps are kept</th><th>Summary</th></tr></thead>
+  <tbody>
+    <tr><td>GitHub Actions</td><td><a href="/docs/github-actions/">The action</a>, two steps</td><td>The Actions cache, one entry per commit</td><td>Job summary, written for you</td></tr>
+    <tr><td>GitLab CI</td><td rowspan="4"><a href="/docs/other-ci/">The <code>td</code> tool</a>, <code>td record</code> and <code>td test</code></td><td rowspan="4">A shared folder or object storage, through <code>--maps-dir</code></td><td rowspan="4"><code>--summary-file</code> writes Markdown for any CI that shows it</td></tr>
+    <tr><td>Jenkins</td></tr>
+    <tr><td>Azure DevOps</td></tr>
+    <tr><td>Bitbucket Pipelines</td></tr>
+  </tbody>
+</table>
+
+<h2 id="related">Related pages</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">What runs everything</a></li>
+  <li><a href="/docs/limitations/">Limitations</a></li>
+  <li><a href="/docs/troubleshooting/">Troubleshooting</a></li>
+</ul>

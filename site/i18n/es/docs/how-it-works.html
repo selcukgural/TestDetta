@@ -1,4 +1,4 @@
-<!-- title: Cómo decide; layout: docs; description: Cómo convierte {{name}} un git diff en los proyectos de pruebas y las clases de prueba que hay que ejecutar.; source: 185c628bff1f -->
+<!-- title: Cómo decide; layout: docs; description: Cómo convierte {{name}} un git diff en los proyectos de pruebas y las clases de prueba que hay que ejecutar.; source: 9d9623b95770 -->
 <h1>Cómo decide</h1>
 <p class="lead">{{name}} reduce la selección paso a paso, y solo donde tiene pruebas de ello. Todo lo que no puede rastrear recurre a ejecutar más.</p>
 
@@ -33,7 +33,7 @@
 <h2>Mapas de cobertura</h2>
 <p><code>td record</code> ejecuta todas las pruebas con cobertura y escribe un mapa por proyecto de pruebas. Lo ideal es registrar los mapas en la merge base de tu rama, y en CI se registra uno por cada commit de la rama predeterminada.</p>
 
-<h3>Mapas más antiguos y el drift bridge</h3>
+<h3 id="drift">Mapas más antiguos y el drift bridge</h3>
 <p>Un mapa registrado hasta 50 commits antes de la merge base se sigue usando (<code>--max-map-age</code>, predeterminado 50; 0 usa solo un mapa registrado en la merge base). El código modificado entretanto podría haber creado llamadas que el mapa no conoce, así que {{name}} también selecciona las clases que ejecutaron cualquier miembro modificado desde entonces que pueda llegar a tu cambio, y rastrea el código nuevo por nombre.</p>
 <p>Cuando algo intermedio no se puede describir en términos de miembros, como un archivo de compilación o <code>appsettings.json</code>, los proyectos de pruebas afectados se ejecutan completos. <code>--drift-fallback name</code> decide en su lugar por nombre, como sin mapa: más rápido, pero ciego a las llamadas conectadas mediante configuración o reflexión.</p>
 
@@ -47,3 +47,10 @@ td: 1 changed file(s), 2 affected test project(s).
 Tests to run:
   filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
   skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Qué lo ejecuta todo</a></li>
+  <li><a href="/docs/validate/">Valídalo en tu repositorio</a></li>
+  <li><a href="/docs/limitations/">Limitaciones</a></li>
+</ul>

@@ -1,0 +1,44 @@
+<!-- title: Security and data; layout: docs; description: What {{name}} stores, where it keeps it, and the one network call it makes. -->
+<h1>Security and data</h1>
+<p class="lead">{{name}} runs in your CI and on your machines. Your source code, coverage maps and test results never leave them. This page lists everything it stores and every network call it makes.</p>
+
+<h2 id="stays">What stays in your CI</h2>
+<ul>
+  <li>The analysis of your diff and source code.</li>
+  <li>Coverage maps: which test class ran which method, and how long each class took. They name your types, methods and test classes, so treat them like build artifacts.</li>
+  <li>Test runs and their results.</li>
+  <li>The count of active committers. Author emails are read from git history to count them, on your machine; no names or emails are sent anywhere.</li>
+</ul>
+
+<h2 id="files">Where it keeps files</h2>
+<table>
+  <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td><code>.testdetta/coverage/</code></td><td>Coverage maps of the current commit, one per test project</td></tr>
+    <tr><td><code>.testdetta/cache/</code></td><td>A cache of the evaluated project graph</td></tr>
+    <tr><td><code>.testdetta/license.json</code></td><td>Optional: extra bot accounts to leave out of the committer count</td></tr>
+    <tr><td><code>~/.testdetta/license</code></td><td>A license installed with <code>td license install</code>, or renewed automatically</td></tr>
+    <tr><td><code>~/.testdetta/license-refresh</code></td><td>When the last renewal was attempted</td></tr>
+    <tr><td><code>--maps-dir</code> folder</td><td>Maps of earlier commits, one folder per commit, kept where you choose</td></tr>
+  </tbody>
+</table>
+<p>On GitHub Actions, maps are stored in your repository's Actions cache. <code>.testdetta/coverage/</code> and <code>.testdetta/cache/</code> are generated; keep them out of version control.</p>
+
+<h2 id="network">The one network call</h2>
+<p>With a subscription license, {{name}} asks the license service for a renewed license at most once a day, so that renewals reach CI without anyone updating a secret.</p>
+<ul>
+  <li>It sends the license itself, nothing else: no repository name, code, paths or counts.</li>
+  <li>It waits at most 2 seconds and never retries. If the service cannot be reached, the current license keeps working.</li>
+  <li><code>HTTPS_PROXY</code> is honoured.</li>
+  <li><code>TESTDETTA_LICENSE_REFRESH=off</code> turns it off. Offline and enterprise licenses never call home.</li>
+</ul>
+<p>Public repositories need no license and make no call.</p>
+
+<h2 id="license-check">How the license is checked</h2>
+<p>A license is a signed string, verified on your machine with a public key built into {{name}}. It names the repositories it covers, matched against the <code>origin</code> remote with any credentials removed first. A license problem never fails a build: every test runs instead, as before {{name}}. <a href="/docs/license/">More about licenses</a>.</p>
+
+<h2 id="us">What we keep</h2>
+<p>For a subscription: the licensee name, the repositories it covers, the number of seats and its period. The payment and the email address it is sent to are handled by {{seller}}, our merchant of record. See the <a href="/legal/privacy/">privacy policy</a>.</p>
+
+<h2 id="report">Reporting a vulnerability</h2>
+<p>Email <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>. Please give us time to fix it before you publish.</p>

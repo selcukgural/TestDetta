@@ -1,0 +1,51 @@
+<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: edb2bc45715a -->
+<h1>Neler her şeyi çalıştırır</h1>
+<p class="lead">Değişikliklerin çoğu birkaç test sınıfı seçer. Bazıları güvenli bir şekilde daraltılamaz; bu yüzden {{name}} bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırır. Bu sayfa hepsini listeler; böylece geniş bir seçim asla sürpriz olmaz.</p>
+
+<h2 id="build-files">Derlemenin geneline etki eden dosyalar</h2>
+<p>Bu dosyalar altlarındaki her projenin nasıl derlendiğini değiştirir. Bunlardan birindeki değişiklik, bulunduğu klasördeki ve altındaki her test projesini çalıştırır:</p>
+<table>
+  <thead><tr><th>Dosya</th><th>Çalıştırdığı</th></tr></thead>
+  <tbody>
+    <tr><td><code>Directory.Build.props</code>, <code>Directory.Build.targets</code>, <code>Directory.Build.rsp</code></td><td>Altındaki her test projesi</td></tr>
+    <tr><td><code>Directory.Solution.props</code>, <code>Directory.Solution.targets</code></td><td>Altındaki her test projesi</td></tr>
+    <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Altındaki her test projesi</td></tr>
+    <tr><td><code>Directory.Packages.props</code>, yalnızca <code>PackageVersion</code> öğeleri değiştiyse</td><td>Yalnızca değişen bir paketi referans alan test projeleri ve onlara bağımlı olanlar</td></tr>
+    <tr><td><code>Directory.Packages.props</code>, başka herhangi bir şey (bir <code>GlobalPackageReference</code>, transitive pinning, property'ler)</td><td>Altındaki her test projesi</td></tr>
+  </tbody>
+</table>
+
+<h2 id="project">Bir test projesinin tamamını çalıştıran değişiklikler</h2>
+<table>
+  <thead><tr><th>Değişiklik</th><th>Neden daraltılamaz</th></tr></thead>
+  <tbody>
+    <tr><td>Proje dosyası ya da onun import ettiği bir <code>.props</code> veya <code>.targets</code> dosyası</td><td>Projedeki herhangi bir şeyin nasıl derlendiğini değiştirebilir.</td></tr>
+    <tr><td>Projedeki C# olmayan herhangi bir dosya, örneğin <code>appsettings.json</code>, bir <code>.resx</code> ya da bir test verisi dosyası</td><td>Hiçbir kapsam haritası onu kimin okuduğunu söylemez.</td></tr>
+    <tr><td>Bir <code>global using</code> ya da bir assembly attribute'u</td><td>Her dosyaya uygulanır.</td></tr>
+    <tr><td>Hiçbir bildirimin kapsamadığı koddaki bir C# değişikliği, örneğin bir önişlemci koşulunun altında</td><td>İzlenecek bir üye yoktur.</td></tr>
+    <tr><td>Hiçbir yerde adı geçmeyen, ancak bir framework'ün reflection ile keşfedebileceği değişmiş bir tip (controller'lar, mesaj handler'ları, EF yapılandırmaları)</td><td>İsimler ve kapsam verisi onu kimin bulduğunu söyleyemez.</td></tr>
+    <tr><td>Bir F# ya da Visual Basic projesindeki değişiklik</td><td>Bunların kodu analiz edilmez.</td></tr>
+    <tr><td>Analyzer ya da source generator olarak kullanılan bir proje</td><td>Etkisi çağrılar üzerinde değil, derleme üzerindedir.</td></tr>
+  </tbody>
+</table>
+<p>Bunların her biri, etkilenen projeye bağımlı her test projesini de çalıştırır.</p>
+
+<h2 id="maps">Kapsam haritası durumları</h2>
+<ul>
+  <li><strong>Daha eski bir harita ve aradaki derleme değişiklikleri.</strong> Harita merge base'inizden birkaç commit daha eskiyse ve aradaki süreçte bir derleme ya da yapılandırma dosyası değiştiyse, etkilenen test projeleri tamamen çalışır. <code>--drift-fallback name</code> ise bunlar için isimlere göre karar verir. Bkz. <a href="/docs/how-it-works/#drift">drift bridge</a>.</li>
+  <li><strong>Her sınıf seçildi.</strong> Tüm sınıfları seçilen bir proje filtresiz çalışır.</li>
+  <li><strong>Hiçbir şeyle eşleşmeyen bir filtre.</strong> Proje filtresiz olarak yeniden çalışır ve {{name}} bunu kendi hatası olarak ele alır.</li>
+</ul>
+<p>Hiç harita olmaması her şeyi çalıştırmaz: seçim isimle izlemeye geri döner; bu, kapsam verisinden daha geniştir ama yine de dardır.</p>
+
+<h2 id="ignored">Yok sayılan dosyalar</h2>
+<p>Hiçbir proje klasörünün içinde olmayan değişmiş bir dosya, örneğin <code>README.md</code>, <code>.github/</code> altındaki dosyalar ya da depo kökündeki bir script, hiçbir projeye ait değildir ve hiçbir şey seçmez. Çıktıda eşlenmemiş (unmapped) olarak listelenir.</p>
+<div class="callout"><p>Testleriniz hiçbir proje klasörünün içinde olmayan bir dosyayı okuyorsa, o dosyadaki bir değişiklik onları seçmez. Bu tür dosyaları, bir değişikliğin projeyi çalıştırdığı test projesinin içinde tutun.</p></div>
+<p>Bir istisna: hiçbir projenin sahiplenmediği bir kaynak ya da derleme dosyası (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>), import'ları tam olarak çözümlenemeyen her projenin derleme girdisi sayılır; dolayısıyla o projeler çalışır.</p>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">Nasıl karar verir</a></li>
+  <li><a href="/docs/limitations/">Sınırlamalar</a></li>
+  <li><a href="/docs/troubleshooting/#whole-project">Neden projenin tamamı çalıştı?</a></li>
+</ul>

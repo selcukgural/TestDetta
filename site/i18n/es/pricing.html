@@ -1,4 +1,4 @@
-<!-- title: Precios; description: Gratis para repositorios públicos, {{trialDays}} días gratis para los privados y después un precio por committer activo.; source: d120e134a447 -->
+<!-- title: Precios; description: Gratis para repositorios públicos, {{trialDays}} días gratis para los privados y después un precio por committer activo.; source: 39129ae026e2 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -48,6 +48,37 @@
         <a class="button button-ghost" href="mailto:{{supportEmail}}">Contáctanos</a>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="calc-section" id="savings">
+  <div class="wrap">
+    <div class="section-head center-head" data-reveal>
+      <h2>Lo que te ahorra</h2>
+      <p>Introduce tus propias cifras. La estimación supone que tu tiempo de pruebas baja como lo hizo en el repositorio mediano de nuestra evaluación, donde un cambio ejecutó el {{corpusMedianShare}} de las clases de prueba. Tu repositorio será distinto; <a href="/docs/validate/">mídelo con tu propio código</a>.</p>
+    </div>
+    <form class="calc" data-calc data-share="{{corpusMedianShare}}" data-seat="{{priceMonthly}}" data-reveal>
+      <div class="calc-inputs">
+        <label><span>Committers activos</span><input type="number" name="committers" min="1" step="1" value="10" inputmode="numeric"></label>
+        <label><span>Ejecuciones de pull requests por día laborable</span><input type="number" name="runs" min="0" step="1" value="30" inputmode="numeric"></label>
+        <label><span>Minutos de pruebas por ejecución</span><input type="number" name="minutes" min="0" step="0.5" value="12" inputmode="decimal"></label>
+        <label><span>Jobs en paralelo por ejecución (matriz de SO o framework)</span><input type="number" name="jobs" min="1" step="1" value="1" inputmode="numeric"></label>
+        <label><span>Precio del runner por minuto ({{currency}})</span><input type="number" name="price" min="0" step="0.001" value="0.006" inputmode="decimal"></label>
+        <label><span>Coste de un desarrollador por hora ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
+      </div>
+      <div class="calc-results" aria-live="polite">
+        <div class="calc-hero"><output name="hours">91 h</output><span>menos de espera de resultados de pruebas al mes</span></div>
+        <dl>
+          <div><dt>Minutos de pruebas ahorrados por ejecución</dt><dd><output name="perRun">8,6 min</output></dd></div>
+          <div><dt>Minutos de runner ahorrados al mes</dt><dd><output name="ciMinutes">5443</output></dd></div>
+          <div><dt>Coste de runner ahorrado al mes</dt><dd><output name="ciCost">33 US$</output></dd></div>
+          <div><dt>Tiempo de desarrollo ahorrado al mes</dt><dd><output name="devCost">5443 US$</output></dd></div>
+          <div><dt>{{name}} al mes</dt><dd><output name="cost">150 US$</output></dd></div>
+          <div class="calc-net"><dt>Ahorro neto al mes</dt><dd><output name="net">5326 US$</output></dd></div>
+        </dl>
+        <p class="calc-note">21 días laborables al mes. Solo se cuenta el tiempo de pruebas: las compilaciones se ejecutan de todos modos.</p>
+      </div>
+    </form>
   </div>
 </section>
 

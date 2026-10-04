@@ -1,0 +1,40 @@
+<!-- title: Tiempo ahorrado; layout: docs; description: Cómo informa {{name}} del tiempo de pruebas que ahorró en cada ejecución y cómo sumarlo a lo largo de semanas sin enviar datos a ninguna parte.; source: a0b828a29737 -->
+<h1>Tiempo ahorrado</h1>
+<p class="lead">Cada ejecución indica cuánto tiempo de pruebas ahorró. Las cifras se quedan en tu CI, así que sumarlas a lo largo de un mes son unas pocas líneas de script, no un panel en el que tengas que confiar.</p>
+
+<h2 id="per-run">En cada ejecución</h2>
+<p>Un mapa de cobertura registra cuánto tardó cada clase de prueba. Antes de ejecutar nada, {{name}} suma el tiempo registrado de todo el conjunto de pruebas y el de las clases que seleccionó:</p>
+<pre><code>Recorded test time: 0.6 s of 3.4 s (83% saved).</code></pre>
+<p>La misma línea aparece en el job summary de GitHub y en el Markdown que <code>--summary-file</code> escribe para otros sistemas de CI. Solo cuenta el tiempo de pruebas. La compilación y el restore se hacen de todos modos, salvo en los proyectos de pruebas que se omiten por completo: esos ni siquiera se compilan, lo que ahorra más de lo que muestra la línea.</p>
+<p>Los proyectos sin tiempos, por ejemplo porque todavía no se ha registrado ningún mapa para ellos, quedan fuera de ambas cifras; el JSON los enumera en <code>projectsWithoutTimings</code>.</p>
+
+<h2 id="json">En JSON</h2>
+<p><code>td affected --format json</code> incluye las mismas cifras para scripts, para toda la ejecución y para cada proyecto de pruebas:</p>
+<pre><code>{
+  "estimate": {
+    "fullSeconds": 3.4,
+    "selectedSeconds": 0.6,
+    "savedSeconds": 2.8,
+    "projectsWithoutTimings": []
+  }
+}</code></pre>
+
+<h2 id="totals">Sumarlo todo</h2>
+<p>Guarda el JSON de cada ejecución de pull request como artefacto de compilación. Sumar <code>savedSeconds</code> en cualquier periodo da el tiempo de pruebas ahorrado, sin que nada salga de tu CI:</p>
+<pre><code>td affected --format json &gt; testdetta.json      # in each pull request run
+
+# later, over the files of a month:
+jq -s 'map(.estimate.savedSeconds // 0) | add / 3600' runs/*.json   # hours saved</code></pre>
+<p>Multiplica por el número de jobs en paralelo que ejecutan las pruebas (una matriz de SO o framework) para obtener los minutos de runner, y por el precio por minuto de tu runner para obtener el coste. La <a href="/pricing/#savings">calculadora de ahorro</a> hace lo mismo con estimaciones.</p>
+
+<h2 id="honest">Qué significan las cifras</h2>
+<ul>
+  <li>Los tiempos proceden de la ejecución de registro, donde las pruebas se ejecutan de una en una con cobertura. Los tiempos absolutos en una ejecución normal suelen ser más cortos; lo que se mantiene es la proporción ahorrada.</li>
+  <li>Un proyecto de pruebas que se ejecuta completo, por ejemplo tras un cambio en un archivo de compilación, no ahorra nada, y la línea lo indica.</li>
+</ul>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/examples/">Mira una ejecución real</a></li>
+  <li><a href="/docs/validate/">Valídalo en tu repositorio</a></li>
+</ul>

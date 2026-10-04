@@ -1,0 +1,56 @@
+<!-- title: Kompatibilität; layout: docs; description: Die Test-Frameworks, Test Runner, Sprachen, Betriebssysteme und CI-Systeme, die {{name}} unterstützt.; source: f22588066dde -->
+<h1>Kompatibilität</h1>
+<p class="lead">Was {{name}} benötigt und womit es getestet wurde. Was nicht in diesen Tabellen steht, ist nicht unbedingt nicht unterstützt, wurde aber nicht durchgängig getestet.</p>
+
+<h2 id="requirements">Voraussetzungen</h2>
+<table>
+  <thead><tr><th>Bereich</th><th>Voraussetzung</th></tr></thead>
+  <tbody>
+    <tr><td>.NET SDK</td><td>Das .NET 10 SDK führt {{name}} selbst aus. Ihre Tests verwenden weiterhin das SDK und den Test Runner, die Ihr Repository bereits nutzt.</td></tr>
+    <tr><td>Git-Historie</td><td>Die vollständige Historie Ihres Branches und seines Ziel-Branches, damit die Merge-Base gefunden werden kann. Mit Shallow Clones funktioniert es nicht.</td></tr>
+    <tr><td>Betriebssystem</td><td>Linux und macOS, x64 und arm64. Windows wurde noch nicht getestet.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="frameworks">Test-Frameworks und Test Runner</h2>
+<p>Beide Test Runner von <code>dotnet test</code> funktionieren. Der Test Runner wird aus <code>global.json</code> gelesen, so wie <code>dotnet test</code> ihn liest. Diese Kombinationen werden durchgängig getestet, einschließlich der Aufzeichnung und auch mit aktivierter Parallelisierung des jeweiligen Frameworks:</p>
+<table>
+  <thead><tr><th>Framework</th><th>VSTest</th><th>Microsoft.Testing.Platform</th></tr></thead>
+  <tbody>
+    <tr><td>xUnit v2</td><td>Getestet</td><td>–</td></tr>
+    <tr><td>xUnit v3</td><td>–</td><td>Getestet (für xUnit v3 mit dem .NET 10 SDK erforderlich)</td></tr>
+    <tr><td>NUnit</td><td>Getestet</td><td>Getestet; fügen Sie <code>Microsoft.Testing.Extensions.TrxReport</code> hinzu, damit fehlgeschlagene Tests bei der Aufzeichnung bekannt sind</td></tr>
+    <tr><td>MSTest</td><td>Getestet</td><td>Getestet</td></tr>
+    <tr><td>TUnit</td><td>–</td><td>Getestet</td></tr>
+  </tbody>
+</table>
+<p>Die Testprojekte im <a href="/docs/examples/#corpus">Evaluierungskorpus</a> zielen auf .NET 8 bis .NET 10. Testprojekte für das .NET Framework gehören nicht dazu.</p>
+
+<h2 id="languages">Sprachen</h2>
+<table>
+  <thead><tr><th>Sprache</th><th>Wie Änderungen behandelt werden</th></tr></thead>
+  <tbody>
+    <tr><td>C#</td><td>Bis auf Member-Ebene analysiert: Syntaxbäume, Coverage-Maps und Namensverfolgung.</td></tr>
+    <tr><td>F#, Visual Basic</td><td>Teil des Projektgraphen, aber nicht analysiert: Ist eines dieser Projekte betroffen, läuft alles, was davon abhängt, vollständig.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="ci">CI-Systeme</h2>
+<p>Jede CI braucht dieselben drei Dinge: die vollständige Historie, den abgerufenen Ziel-Branch und einen Ort, an dem Coverage-Maps zwischen Standard-Branch und Pull Requests aufbewahrt werden.</p>
+<table>
+  <thead><tr><th>CI</th><th>Einrichtung</th><th>Ablage der Maps</th><th>Zusammenfassung</th></tr></thead>
+  <tbody>
+    <tr><td>GitHub Actions</td><td><a href="/docs/github-actions/">Die Action</a>, zwei Schritte</td><td>Der Actions-Cache, ein Eintrag pro Commit</td><td>Job Summary, wird für Sie geschrieben</td></tr>
+    <tr><td>GitLab CI</td><td rowspan="4"><a href="/docs/other-ci/">Das Tool <code>td</code></a>, <code>td record</code> und <code>td test</code></td><td rowspan="4">Ein gemeinsamer Ordner oder Objektspeicher, über <code>--maps-dir</code></td><td rowspan="4"><code>--summary-file</code> schreibt Markdown für jede CI, die es anzeigt</td></tr>
+    <tr><td>Jenkins</td></tr>
+    <tr><td>Azure DevOps</td></tr>
+    <tr><td>Bitbucket Pipelines</td></tr>
+  </tbody>
+</table>
+
+<h2 id="related">Verwandte Seiten</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Was alle Tests auslöst</a></li>
+  <li><a href="/docs/limitations/">Einschränkungen</a></li>
+  <li><a href="/docs/troubleshooting/">Fehlerbehebung</a></li>
+</ul>

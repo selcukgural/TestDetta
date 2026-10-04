@@ -1,0 +1,40 @@
+<!-- title: Gesparte Zeit; layout: docs; description: Wie {{name}} bei jedem Lauf die gesparte Testzeit meldet und wie Sie sie über Wochen aufsummieren, ohne Daten irgendwohin zu senden.; source: a0b828a29737 -->
+<h1>Gesparte Zeit</h1>
+<p class="lead">Jeder Lauf gibt an, wie viel Testzeit er gespart hat. Die Zahlen bleiben in Ihrer CI, sodass die Summe über einen Monat ein paar Zeilen Skript ist und kein Dashboard, dem Sie vertrauen müssen.</p>
+
+<h2 id="per-run">Bei jedem Lauf</h2>
+<p>Eine Coverage-Map hält fest, wie lange jede Testklasse gebraucht hat. Bevor etwas ausgeführt wird, summiert {{name}} die aufgezeichnete Zeit der gesamten Testsuite und die der ausgewählten Klassen:</p>
+<pre><code>Recorded test time: 0.6 s of 3.4 s (83% saved).</code></pre>
+<p>Dieselbe Zeile steht in der GitHub Job Summary und im Markdown, das <code>--summary-file</code> für andere CI-Systeme schreibt. Sie zählt nur Testzeit. Build und Restore finden ohnehin statt, außer bei Testprojekten, die ganz übersprungen werden: Diese werden gar nicht gebaut, was mehr spart, als die Zeile zeigt.</p>
+<p>Projekte ohne Zeitangaben, etwa weil für sie noch keine Map aufgezeichnet wurde, fließen in keine der beiden Zahlen ein; das JSON listet sie in <code>projectsWithoutTimings</code> auf.</p>
+
+<h2 id="json">Im JSON</h2>
+<p><code>td affected --format json</code> enthält dieselben Zahlen für Skripte, für den gesamten Lauf und für jedes Testprojekt:</p>
+<pre><code>{
+  "estimate": {
+    "fullSeconds": 3.4,
+    "selectedSeconds": 0.6,
+    "savedSeconds": 2.8,
+    "projectsWithoutTimings": []
+  }
+}</code></pre>
+
+<h2 id="totals">Aufsummieren</h2>
+<p>Bewahren Sie das JSON jedes Pull-Request-Laufs als Build-Artefakt auf. Die Summe von <code>savedSeconds</code> über einen beliebigen Zeitraum ergibt die gesparte Testzeit, ohne dass etwas Ihre CI verlässt:</p>
+<pre><code>td affected --format json &gt; testdetta.json      # in each pull request run
+
+# later, over the files of a month:
+jq -s 'map(.estimate.savedSeconds // 0) | add / 3600' runs/*.json   # hours saved</code></pre>
+<p>Multiplizieren Sie mit der Anzahl paralleler Jobs, die die Tests ausführen (eine Betriebssystem- oder Framework-Matrix), um Runner-Minuten zu erhalten, und mit dem Minutenpreis Ihres Runners für die Kosten. Der <a href="/pricing/#savings">Ersparnisrechner</a> macht dasselbe mit Schätzwerten.</p>
+
+<h2 id="honest">Was die Zahlen bedeuten</h2>
+<ul>
+  <li>Die Zeiten stammen aus dem Aufzeichnungslauf, in dem Tests einzeln und mit Coverage laufen. Absolute Zeiten in einem normalen Lauf sind meist kürzer; übertragbar ist der gesparte Anteil.</li>
+  <li>Ein Testprojekt, das vollständig läuft, etwa nach einer Änderung an einer Build-Datei, spart nichts, und die Zeile sagt das auch.</li>
+</ul>
+
+<h2 id="related">Verwandte Seiten</h2>
+<ul>
+  <li><a href="/docs/examples/">Einen echten Lauf ansehen</a></li>
+  <li><a href="/docs/validate/">Im eigenen Repository prüfen</a></li>
+</ul>

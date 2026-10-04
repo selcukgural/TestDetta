@@ -1,0 +1,52 @@
+<!-- title: Troubleshooting; layout: docs; description: What to do when {{name}} selects more than expected, finds no coverage map, or cannot find the base commit. -->
+<h1>Troubleshooting</h1>
+<p class="lead">Each entry starts from what you see. For any of them, <code>-v</code> writes every decision and its reason to stderr; that log answers most questions, and it is what to send us.</p>
+<pre><code>td affected --base origin/main -v</code></pre>
+
+<h2 id="whole-project">The whole test project ran</h2>
+<p>Look for the project in the output: the reason is printed next to it. The usual causes are a build-wide file, a non-C# file in the project, a <code>global using</code>, or a type found through reflection. <a href="/docs/what-runs-everything/">What runs everything</a> lists them all. In the <code>-v</code> log, a line such as <code>affects whole project: True</code> names the file.</p>
+
+<h2 id="no-map">No coverage map was used</h2>
+<p>Without a map, selection traces names, which is wider. The log says why there was none:</p>
+<ul>
+  <li><code>No coverage maps within 50 commits before the merge base</code>: nothing was recorded recently on the default branch. Record a map on every push there; the action's <code>record</code> mode does it.</li>
+  <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: the map comes from another branch, or from before a force push or a long-running branch. Record again on the default branch, or raise <code>--max-map-age</code>.</li>
+  <li><code>--maps-dir … does not exist</code>: the folder with the maps was not restored before the run.</li>
+  <li>On GitHub Actions, the job needs <code>actions: read</code> permission to list the cache entries that hold the maps.</li>
+</ul>
+
+<h2 id="base">The base commit cannot be found</h2>
+<p>{{name}} compares your branch with the merge base, so it needs the history of both. The action stops with:</p>
+<pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
+<p>Check out with <code>fetch-depth: 0</code>. On other CI systems, turn off shallow clones and fetch the target branch with an explicit refspec, as shown for each system in <a href="/docs/other-ci/">other CI systems</a>.</p>
+
+<h2 id="fewer-skipped">Fewer tests were skipped than expected</h2>
+<ul>
+  <li><strong>The map is older than the merge base</strong> and a build or configuration file changed in between: the affected projects run completely. <code>--drift-fallback name</code> narrows them by name instead.</li>
+  <li><strong>A test class is selected without touching the change.</strong> Name tracing is cautious: a class that names the changed type is selected even if coverage would have ruled it out. A log line such as <code>is not in the coverage map of … Record the map again</code> means the map is out of date for that project.</li>
+  <li><strong>A central helper changed.</strong> Code that most tests run, such as a shared base class or a serializer, selects most tests. That is correct.</li>
+</ul>
+
+<h2 id="filter">The filter matched no test</h2>
+<p>When a project's filter selects no test, {{name}} runs the project again without the filter and logs <code>The filter for … matched no test; running it unfiltered</code>. Nothing is missed, but this is a bug on our side: please send the <code>-v</code> log.</p>
+
+<h2 id="git">Squash merges, rebases and force pushes</h2>
+<p>Maps are recorded for commits on the default branch, and a pull request finds the newest one at or before its merge base. A squash merge or rebase creates new commits on the default branch; the next push records a map for them, and until then pull requests use the previous map through the drift bridge. A force push to a pull request branch changes nothing: the merge base is computed again.</p>
+
+<h2 id="forks">Pull requests from forks</h2>
+<p>CI systems do not pass secrets to pull requests from forks. Public repositories need no license, so nothing changes for them. For a private repository, a run without a license runs every test, as it would without {{name}}.</p>
+
+<h2 id="faq">Questions</h2>
+<h3>Is the code coverage of a selected run complete?</h3>
+<p>No. A run that skips tests produces partial coverage. Publish coverage from the full runs on the default branch; recording runs every test there.</p>
+<h3>Can tests be retried?</h3>
+<p>Yes, with your framework's own retry option: everything after <code>--</code> goes to <code>dotnet test</code> unchanged.</p>
+<h3>Can the selected tests be split across parallel jobs?</h3>
+<p><code>td affected --format commands</code> prints one <code>dotnet test</code> command per test project, with its filter. Hand the lines out to your jobs.</p>
+
+<h2 id="related">Related pages</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">What runs everything</a></li>
+  <li><a href="/docs/cli/">CLI reference</a></li>
+  <li><a href="/docs/limitations/">Limitations</a></li>
+</ul>

@@ -1,4 +1,4 @@
-<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 185c628bff1f -->
+<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 9d9623b95770 -->
 <h1>Nasıl karar verir</h1>
 <p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediği her şeyde daha fazlasını çalıştırmaya geri döner.</p>
 
@@ -33,7 +33,7 @@
 <h2>Kapsam haritaları</h2>
 <p><code>td record</code> tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için bir harita yazar. Haritaları en iyisi branch'inizin merge base'inde kaydetmektir; CI'da ise varsayılan branch'teki her commit için bir harita kaydedersiniz.</p>
 
-<h3>Eski haritalar ve drift bridge</h3>
+<h3 id="drift">Eski haritalar ve drift bridge</h3>
 <p>Merge base'den en fazla 50 commit önce kaydedilmiş bir harita yine kullanılır (<code>--max-map-age</code>, varsayılan 50; 0 yalnızca merge base'de kaydedilmiş bir haritayı kullanır). Aradaki kod değişiklikleri haritanın bilmediği çağrılar oluşturmuş olabilir; bu yüzden {{name}}, o zamandan beri değişmiş ve sizin değişikliğinize ulaşabilen herhangi bir üyeyi çalıştırmış sınıfları da seçer ve yeni kodu isimle izler.</p>
 <p>Aradaki bir şey üyelerle ifade edilemediğinde, örneğin bir derleme dosyası ya da <code>appsettings.json</code>, etkilenen test projeleri tamamen çalışır. <code>--drift-fallback name</code> ise bunun yerine, harita yokmuş gibi isimlere göre karar verir: daha hızlıdır, ancak yapılandırma ya da reflection ile bağlanan çağrıları göremez.</p>
 
@@ -47,3 +47,10 @@ td: 1 changed file(s), 2 affected test project(s).
 Tests to run:
   filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
   skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a></li>
+  <li><a href="/docs/validate/">Kendi deponuzda doğrulayın</a></li>
+  <li><a href="/docs/limitations/">Sınırlamalar</a></li>
+</ul>

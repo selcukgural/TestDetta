@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: 356b3c4f84a4 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: e497d189cf09 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Varsayılan branch'teki her commit için bir harita kaydedin ve pull request'lerin yalnızca değişikliklerinin etkilediği testleri çalıştırmasını sağlayın. Action {{name}}'yı kendisi derler ve haritaları Actions önbelleğinde tutar.</p>
 
@@ -88,3 +88,10 @@ jobs:
 <h2>Test paketinin yalnızca bir kısmını kaydetmek</h2>
 <p>Kayıt, tüm test paketini kapsam ölçümüyle bir kez çalıştırır; bu, varsayılan branch'te aynı zamanda tam test koşunuzdur. Runner üzerinde çalışamayan projeleri, örneğin veritabanı gerektiren entegrasyon testlerini, <code>projects</code> ile dışarıda bırakın. Pull request'ler bu projeler için isimlere göre karar verir.</p>
 <p>Önceki bir adım solution'ı aynı yapılandırmayla zaten derlediyse <code>no-build: true</code> ayarlayın. Aynı anda birden fazla test sürecini kaldırabilen bir test paketi için <code>parallel</code>, her projenin test sınıflarını o sayıda sürece dağıtır.</p>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/compatibility/#ci">Uyumluluk</a></li>
+  <li><a href="/docs/troubleshooting/">Sorun giderme</a></li>
+  <li><a href="/docs/time-saved/">Kazanılan süre</a></li>
+</ul>

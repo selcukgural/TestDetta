@@ -1,0 +1,51 @@
+<!-- title: すべてが実行される変更; layout: docs; description: {{name}} がテストプロジェクト全体、またはフォルダー配下のすべてのプロジェクトを実行する変更と、無視するファイルを説明します。; source: edb2bc45715a -->
+<h1>すべてが実行される変更</h1>
+<p class="lead">ほとんどの変更では、選択されるテストクラスはわずかです。しかし安全に絞り込めない変更もあり、その場合 {{name}} はテストプロジェクト全体、またはフォルダー配下のすべてのプロジェクトを実行します。このページではそうした変更をすべて挙げているので、選択が広くなっても驚くことはありません。</p>
+
+<h2 id="build-files">ビルド全体に関わるファイル</h2>
+<p>これらのファイルは、その配下にあるすべてのプロジェクトのビルド方法を変えます。いずれかを変更すると、そのフォルダーとその配下にあるすべてのテストプロジェクトが実行されます。</p>
+<table>
+  <thead><tr><th>ファイル</th><th>実行されるもの</th></tr></thead>
+  <tbody>
+    <tr><td><code>Directory.Build.props</code>、<code>Directory.Build.targets</code>、<code>Directory.Build.rsp</code></td><td>配下のすべてのテストプロジェクト</td></tr>
+    <tr><td><code>Directory.Solution.props</code>、<code>Directory.Solution.targets</code></td><td>配下のすべてのテストプロジェクト</td></tr>
+    <tr><td><code>global.json</code>、<code>NuGet.config</code>、<code>.editorconfig</code></td><td>配下のすべてのテストプロジェクト</td></tr>
+    <tr><td><code>Directory.Packages.props</code>（<code>PackageVersion</code> 項目だけが変更された場合）</td><td>変更されたパッケージを参照するテストプロジェクトと、それに依存するテストプロジェクトだけ</td></tr>
+    <tr><td><code>Directory.Packages.props</code>（それ以外の変更：<code>GlobalPackageReference</code>、推移的なピン留め、プロパティ）</td><td>配下のすべてのテストプロジェクト</td></tr>
+  </tbody>
+</table>
+
+<h2 id="project">テストプロジェクト全体が実行される変更</h2>
+<table>
+  <thead><tr><th>変更</th><th>絞り込めない理由</th></tr></thead>
+  <tbody>
+    <tr><td>プロジェクトファイル、またはそれがインポートする <code>.props</code> や <code>.targets</code> ファイル</td><td>プロジェクト内のあらゆるもののビルド方法を変えうるため。</td></tr>
+    <tr><td>プロジェクト内の C# 以外のファイル（<code>appsettings.json</code>、<code>.resx</code>、テストデータファイルなど）</td><td>誰がそれを読み込むかを示すカバレッジマップがないため。</td></tr>
+    <tr><td><code>global using</code> またはアセンブリ属性</td><td>すべてのファイルに適用されるため。</td></tr>
+    <tr><td>どの宣言にも属さないコードでの C# の変更（プリプロセッサ条件の下にあるコードなど）</td><td>たどるべきメンバーがないため。</td></tr>
+    <tr><td>どこからも名前で参照されていないものの、フレームワークがリフレクションで検出しうる型の変更（コントローラー、メッセージハンドラー、EF の構成など）</td><td>名前からもカバレッジからも、誰がそれを見つけるかわからないため。</td></tr>
+    <tr><td>F# または Visual Basic のプロジェクトでの変更</td><td>そのコードは分析されないため。</td></tr>
+    <tr><td>アナライザーやソースジェネレーターとして使われるプロジェクト</td><td>影響が呼び出しではなくコンパイルに及ぶため。</td></tr>
+  </tbody>
+</table>
+<p>これらはいずれも、影響を受けたプロジェクトに依存するすべてのテストプロジェクトも実行します。</p>
+
+<h2 id="maps">カバレッジマップの状況</h2>
+<ul>
+  <li><strong>古いマップと、その間のビルドの変更。</strong>マップがマージベースより数コミット古く、その間にビルドファイルや構成ファイルが変更されている場合、影響を受けるテストプロジェクトは丸ごと実行されます。<code>--drift-fallback name</code> を指定すると、代わりに名前で判断します。<a href="/docs/how-it-works/#drift">ドリフトブリッジ</a>を参照してください。</li>
+  <li><strong>すべてのクラスが選択された場合。</strong>すべてのクラスが選択されたプロジェクトは、フィルターなしで実行されます。</li>
+  <li><strong>何にも一致しないフィルター。</strong>そのプロジェクトはフィルターなしで再実行され、{{name}} はこれを自身のバグとして扱います。</li>
+</ul>
+<p>マップがまったくない場合でも、すべてが実行されるわけではありません。選択は名前によるトレースにフォールバックします。カバレッジよりは広くなりますが、それでも絞り込まれた選択です。</p>
+
+<h2 id="ignored">無視されるファイル</h2>
+<p><code>README.md</code>、<code>.github/</code> 配下のファイル、リポジトリのルートにあるスクリプトなど、すべてのプロジェクトフォルダーの外にある変更ファイルは、どのプロジェクトにも属さないため、何も選択しません。出力には、どこにも対応付けられなかったファイル（unmapped）として表示されます。</p>
+<div class="callout"><p>どのプロジェクトフォルダーにも属さないファイルをテストが読み込んでいる場合、そのファイルを変更してもテストは選択されません。こうしたファイルはテストプロジェクト内に置いてください。そうすれば、変更したときにそのプロジェクトが実行されます。</p></div>
+<p>例外が 1 つあります。どのプロジェクトにも属さないソースファイルやビルドファイル（<code>.cs</code>、<code>.fs</code>、<code>.vb</code>、<code>.props</code>、<code>.targets</code>、<code>.projitems</code>）は、インポートを完全には解決できなかったすべてのプロジェクトのビルド入力とみなされ、それらのプロジェクトが実行されます。</p>
+
+<h2 id="related">関連ページ</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">選択のしくみ</a></li>
+  <li><a href="/docs/limitations/">制限事項</a></li>
+  <li><a href="/docs/troubleshooting/#whole-project">なぜプロジェクト全体が実行されたのか</a></li>
+</ul>

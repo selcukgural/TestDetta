@@ -1,4 +1,4 @@
-<!-- title: 料金; description: パブリックリポジトリは無料、プライベートリポジトリは {{trialDays}} 日間無料で、その後はアクティブなコミッター単位の料金です。; source: d120e134a447 -->
+<!-- title: 料金; description: パブリックリポジトリは無料、プライベートリポジトリは {{trialDays}} 日間無料で、その後はアクティブなコミッター単位の料金です。; source: 39129ae026e2 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -48,6 +48,37 @@
         <a class="button button-ghost" href="mailto:{{supportEmail}}">お問い合わせ</a>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="calc-section" id="savings">
+  <div class="wrap">
+    <div class="section-head center-head" data-reveal>
+      <h2>どれだけ節約できるか</h2>
+      <p>ご自身の数値を入力してください。この試算は、当社の評価における中央値のリポジトリ（1 回の変更で実行されたテストクラスが {{corpusMedianShare}}）と同じ割合でテスト時間が減ると仮定しています。実際の結果はリポジトリによって異なります。<a href="/docs/validate/">ご自身のコードで測定してください</a>。</p>
+    </div>
+    <form class="calc" data-calc data-share="{{corpusMedianShare}}" data-seat="{{priceMonthly}}" data-reveal>
+      <div class="calc-inputs">
+        <label><span>アクティブなコミッター数</span><input type="number" name="committers" min="1" step="1" value="10" inputmode="numeric"></label>
+        <label><span>1 営業日あたりのプルリクエストの実行回数</span><input type="number" name="runs" min="0" step="1" value="30" inputmode="numeric"></label>
+        <label><span>1 回の実行あたりのテスト時間（分）</span><input type="number" name="minutes" min="0" step="0.5" value="12" inputmode="decimal"></label>
+        <label><span>1 回の実行あたりの並列ジョブ数（OS やフレームワークのマトリックス）</span><input type="number" name="jobs" min="1" step="1" value="1" inputmode="numeric"></label>
+        <label><span>ランナーの 1 分あたりの料金（{{currency}}）</span><input type="number" name="price" min="0" step="0.001" value="0.006" inputmode="decimal"></label>
+        <label><span>開発者の 1 時間あたりのコスト（{{currency}}）</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
+      </div>
+      <div class="calc-results" aria-live="polite">
+        <div class="calc-hero"><output name="hours">91 h</output><span>1 か月に削減されるテスト結果の待ち時間</span></div>
+        <dl>
+          <div><dt>1 回の実行あたりに削減されるテスト時間</dt><dd><output name="perRun">8.6 min</output></dd></div>
+          <div><dt>1 か月に削減されるランナー時間（分）</dt><dd><output name="ciMinutes">5,443</output></dd></div>
+          <div><dt>1 か月に削減されるランナーコスト</dt><dd><output name="ciCost">$33</output></dd></div>
+          <div><dt>1 か月に削減される開発者の時間</dt><dd><output name="devCost">$5,443</output></dd></div>
+          <div><dt>{{name}} の月額</dt><dd><output name="cost">$150</output></dd></div>
+          <div class="calc-net"><dt>1 か月の正味の節約額</dt><dd><output name="net">$5,326</output></dd></div>
+        </dl>
+        <p class="calc-note">1 か月を 21 営業日として計算しています。数えているのはテスト時間だけです。ビルドはどちらの場合も実行されます。</p>
+      </div>
+    </form>
   </div>
 </section>
 

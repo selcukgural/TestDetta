@@ -30,8 +30,20 @@
   "docCli": "Referencia de la CLI",
   "docLicense": "Licencia",
   "docLimitations": "Limitaciones",
+  "docValidate": "Valídalo en tu repositorio",
+  "docWhatRunsEverything": "Qué lo ejecuta todo",
+  "docTimeSaved": "Tiempo ahorrado",
+  "docCompatibility": "Compatibilidad",
+  "docTroubleshooting": "Solución de problemas",
+  "docSecurity": "Seguridad y datos",
+  "navGroupStart": "Empieza aquí",
+  "navGroupConcepts": "Conceptos",
+  "navGroupSetup": "Configuración",
+  "navGroupReference": "Referencia",
   "theme": "Tema",
   "themeSystem": "sistema",
   "themeLight": "claro",
-  "themeDark": "oscuro"
+  "themeDark": "oscuro",
+  "corpusFailingChanges": "2941",
+  "corpusMedianShare": "28 %"
 }

@@ -1,4 +1,4 @@
-<!-- title: 選択のしくみ; layout: docs; description: {{name}} が git の差分から、実行するテストプロジェクトとテストクラスをどのように決めるかを説明します。; source: 185c628bff1f -->
+<!-- title: 選択のしくみ; layout: docs; description: {{name}} が git の差分から、実行するテストプロジェクトとテストクラスをどのように決めるかを説明します。; source: 9d9623b95770 -->
 <h1>選択のしくみ</h1>
 <p class="lead">{{name}} は、根拠がある場合に限り、1 ステップずつ選択を絞り込みます。追跡できないものは、多めに実行する側にフォールバックします。</p>
 
@@ -33,7 +33,7 @@
 <h2>カバレッジマップ</h2>
 <p><code>td record</code> はすべてのテストをカバレッジ付きで実行し、テストプロジェクトごとに 1 つのマップを書き込みます。マップはブランチのマージベースで記録するのが最適で、CI では既定のブランチのコミットごとに 1 つ記録します。</p>
 
-<h3>古いマップとドリフトブリッジ</h3>
+<h3 id="drift">古いマップとドリフトブリッジ</h3>
 <p>マージベースから最大 50 コミット前までに記録されたマップは引き続き使用されます（<code>--max-map-age</code>、既定値 50。0 を指定するとマージベースで記録されたマップだけを使用します）。その間に変更されたコードによって、マップが把握していない呼び出しが生まれている可能性があるため、{{name}} は、それ以降に変更されたメンバーのうち今回の変更に到達しうるものを実行したクラスも選択し、新しいコードは名前でたどります。</p>
 <p>ビルドファイルや <code>appsettings.json</code> のように、その間の変更をメンバー単位で表せない場合は、影響を受けるテストプロジェクトを丸ごと実行します。<code>--drift-fallback name</code> を指定すると、マップがない場合と同様に名前で判断します。高速ですが、構成やリフレクションによってつながった呼び出しは捉えられません。</p>
 
@@ -47,3 +47,10 @@ td: 1 changed file(s), 2 affected test project(s).
 Tests to run:
   filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
   skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>
+
+<h2 id="related">関連ページ</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">すべてが実行される変更</a></li>
+  <li><a href="/docs/validate/">自分のリポジトリで検証する</a></li>
+  <li><a href="/docs/limitations/">制限事項</a></li>
+</ul>

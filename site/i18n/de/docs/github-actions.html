@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Zeichnen Sie mit der {{name}}-Action Coverage-Maps auf dem Standard-Branch auf und führen Sie in Pull Requests nur die betroffenen Tests aus.; source: 356b3c4f84a4 -->
+<!-- title: GitHub Actions; layout: docs; description: Zeichnen Sie mit der {{name}}-Action Coverage-Maps auf dem Standard-Branch auf und führen Sie in Pull Requests nur die betroffenen Tests aus.; source: e497d189cf09 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Zeichnen Sie für jeden Commit auf dem Standard-Branch eine Map auf, und lassen Sie Pull Requests nur die Tests ausführen, die ihre Änderungen betreffen. Die Action baut {{name}} selbst und legt die Maps im Actions-Cache ab.</p>
 
@@ -88,3 +88,10 @@ jobs:
 <h2>Nur einen Teil der Testsuite aufzeichnen</h2>
 <p>Die Aufzeichnung führt die gesamte Testsuite einmal mit Coverage aus, was auf dem Standard-Branch zugleich Ihr vollständiger Testlauf ist. Projekte, die auf dem Runner nicht laufen können, etwa Integrationstests, die eine Datenbank benötigen, lassen Sie mit <code>projects</code> weg. Pull Requests entscheiden diese Projekte dann anhand von Namen.</p>
 <p>Wenn ein früherer Schritt die Solution bereits mit derselben Konfiguration gebaut hat, setzen Sie <code>no-build: true</code>. Für eine Testsuite, die mehrere gleichzeitige Testprozesse verträgt, verteilt <code>parallel</code> die Testklassen jedes Projekts auf entsprechend viele Prozesse.</p>
+
+<h2 id="related">Verwandte Seiten</h2>
+<ul>
+  <li><a href="/docs/compatibility/#ci">Kompatibilität</a></li>
+  <li><a href="/docs/troubleshooting/">Fehlerbehebung</a></li>
+  <li><a href="/docs/time-saved/">Gesparte Zeit</a></li>
+</ul>

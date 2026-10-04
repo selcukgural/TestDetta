@@ -1,8 +1,8 @@
-// Theme switch: system → light → dark. The choice is kept in localStorage, which may be unavailable
-// (private windows, blocked storage); the page then simply follows the system setting.
+// Theme switch: light (the default, whatever the system prefers) ↔ dark. The choice is kept in
+// localStorage, which may be unavailable (private windows, blocked storage); the page then stays light.
 (() => {
   const root = document.documentElement;
-  const modes = ["system", "light", "dark"];
+  const modes = ["light", "dark"];
   let current = null;
   const read = () => {
     if (current) {
@@ -10,17 +10,13 @@
     }
     try {
       const saved = localStorage.getItem("theme");
-      return modes.includes(saved) ? saved : "system";
+      return modes.includes(saved) ? saved : "light";
     } catch {
-      return "system";
+      return "light";
     }
   };
   const apply = (mode) => {
-    if (mode === "system") {
-      root.removeAttribute("data-theme");
-    } else {
-      root.setAttribute("data-theme", mode);
-    }
+    root.setAttribute("data-theme", mode);
     for (const button of document.querySelectorAll(".theme-toggle")) {
       button.dataset.mode = mode;
       button.setAttribute("aria-label", `${button.dataset.label}: ${button.dataset[mode]}`);

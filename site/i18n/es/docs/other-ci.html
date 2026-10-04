@@ -1,4 +1,4 @@
-<!-- title: Otros sistemas de CI; layout: docs; description: Ejecuta {{name}} en GitLab CI, Jenkins, Azure DevOps, Bitbucket y CI on-premises con una carpeta de mapas de cobertura.; source: ce15ca657ac0 -->
+<!-- title: Otros sistemas de CI; layout: docs; description: Ejecuta {{name}} en GitLab CI, Jenkins, Azure DevOps, Bitbucket y CI on-premises con una carpeta de mapas de cobertura.; source: b5076b20f4bb -->
 <h1>Otros sistemas de CI</h1>
 <p class="lead">{{name}} funciona en cualquier CI que ejecute .NET y git. Fuera de GitHub Actions, bastan dos comandos y una carpeta.</p>
 
@@ -143,3 +143,10 @@ esac</code></pre>
 
 <h2>Cuando no hay mapa</h2>
 <p>Las primeras pull requests tras la configuración, o las que están muy atrasadas, no encuentran ningún mapa a su alcance. {{name}} selecciona entonces solo por nombre, lo cual es seguro pero selecciona más, y lo indica en su registro. La selección se vuelve precisa en cuanto <code>td record</code> se ha ejecutado en la rama predeterminada.</p>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/compatibility/#ci">Compatibilidad</a></li>
+  <li><a href="/docs/troubleshooting/#base">No se encuentra el commit base</a></li>
+  <li><a href="/docs/time-saved/">Tiempo ahorrado</a></li>
+</ul>

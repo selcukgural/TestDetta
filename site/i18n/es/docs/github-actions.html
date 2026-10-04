@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 356b3c4f84a4 -->
+<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: e497d189cf09 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Registra un mapa por cada commit de la rama predeterminada y deja que las pull requests ejecuten solo las pruebas que sus cambios afectan. La acción compila {{name}} por sí misma y guarda los mapas en la caché de Actions.</p>
 
@@ -88,3 +88,10 @@ jobs:
 <h2>Registrar solo una parte del conjunto de pruebas</h2>
 <p>El registro ejecuta una vez todo el conjunto de pruebas con cobertura, lo que en la rama predeterminada es también tu ejecución completa de pruebas. Excluye con <code>projects</code> los proyectos que no pueden ejecutarse en el runner, como las pruebas de integración que necesitan una base de datos. Las pull requests deciden entonces esos proyectos por nombre.</p>
 <p>Si un paso anterior ya compiló la solución con la misma configuración, define <code>no-build: true</code>. Para un conjunto de pruebas que tolera varios procesos de prueba a la vez, <code>parallel</code> reparte las clases de prueba de cada proyecto entre esa cantidad de procesos.</p>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/compatibility/#ci">Compatibilidad</a></li>
+  <li><a href="/docs/troubleshooting/">Solución de problemas</a></li>
+  <li><a href="/docs/time-saved/">Tiempo ahorrado</a></li>
+</ul>

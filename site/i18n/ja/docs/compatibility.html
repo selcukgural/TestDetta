@@ -1,0 +1,56 @@
+<!-- title: 互換性; layout: docs; description: {{name}} が対応しているテストフレームワーク、テストランナー、言語、オペレーティングシステム、CI システムを説明します。; source: f22588066dde -->
+<h1>互換性</h1>
+<p class="lead">{{name}} に必要なものと、動作を確認済みの環境です。これらの表にないものが対応していないとは限りませんが、エンドツーエンドではテストされていません。</p>
+
+<h2 id="requirements">要件</h2>
+<table>
+  <thead><tr><th>項目</th><th>要件</th></tr></thead>
+  <tbody>
+    <tr><td>.NET SDK</td><td>{{name}} 自体の実行には .NET 10 SDK を使用します。テストは、リポジトリで現在使用している SDK とテストランナーのまま実行されます。</td></tr>
+    <tr><td>Git の履歴</td><td>マージベースを見つけられるよう、ブランチとそのターゲットブランチの完全な履歴が必要です。シャロークローンでは動作しません。</td></tr>
+    <tr><td>オペレーティングシステム</td><td>Linux と macOS（x64 と arm64）。Windows はまだテストしていません。</td></tr>
+  </tbody>
+</table>
+
+<h2 id="frameworks">テストフレームワークとテストランナー</h2>
+<p><code>dotnet test</code> の両方のテストランナーに対応しています。テストランナーは、<code>dotnet test</code> と同じように <code>global.json</code> から読み取られます。次の組み合わせは、記録を含めてエンドツーエンドでテストされており、各フレームワーク独自の並列実行を有効にした場合も確認しています。</p>
+<table>
+  <thead><tr><th>フレームワーク</th><th>VSTest</th><th>Microsoft.Testing.Platform</th></tr></thead>
+  <tbody>
+    <tr><td>xUnit v2</td><td>テスト済み</td><td>–</td></tr>
+    <tr><td>xUnit v3</td><td>–</td><td>テスト済み（.NET 10 SDK で xUnit v3 を使う場合は必須）</td></tr>
+    <tr><td>NUnit</td><td>テスト済み</td><td>テスト済み。記録中に失敗したテストを把握できるよう、<code>Microsoft.Testing.Extensions.TrxReport</code> を追加してください</td></tr>
+    <tr><td>MSTest</td><td>テスト済み</td><td>テスト済み</td></tr>
+    <tr><td>TUnit</td><td>–</td><td>テスト済み</td></tr>
+  </tbody>
+</table>
+<p><a href="/docs/examples/#corpus">評価用コーパス</a>のテストプロジェクトは .NET 8 〜 .NET 10 をターゲットにしています。.NET Framework のテストプロジェクトは含まれていません。</p>
+
+<h2 id="languages">言語</h2>
+<table>
+  <thead><tr><th>言語</th><th>変更の扱い</th></tr></thead>
+  <tbody>
+    <tr><td>C#</td><td>構文ツリー、カバレッジマップ、名前によるトレースで、メンバー単位まで分析します。</td></tr>
+    <tr><td>F#、Visual Basic</td><td>プロジェクトグラフには含まれますが、分析はされません。これらのプロジェクトが影響を受けた場合、それに依存するものはすべて丸ごと実行されます。</td></tr>
+  </tbody>
+</table>
+
+<h2 id="ci">CI システム</h2>
+<p>どの CI でも必要なものは同じ 3 つです。完全な履歴、ターゲットブランチのフェッチ、そして既定のブランチとプルリクエストの間でカバレッジマップを保持する場所です。</p>
+<table>
+  <thead><tr><th>CI</th><th>セットアップ</th><th>マップの保存先</th><th>サマリー</th></tr></thead>
+  <tbody>
+    <tr><td>GitHub Actions</td><td><a href="/docs/github-actions/">アクション</a>、2 ステップ</td><td>Actions のキャッシュ（コミットごとに 1 エントリ）</td><td>ジョブサマリーを自動で書き込み</td></tr>
+    <tr><td>GitLab CI</td><td rowspan="4"><a href="/docs/other-ci/"><code>td</code> ツール</a>、<code>td record</code> と <code>td test</code></td><td rowspan="4"><code>--maps-dir</code> で指定する共有フォルダーまたはオブジェクトストレージ</td><td rowspan="4"><code>--summary-file</code> が、表示に対応したあらゆる CI 向けに Markdown を書き込み</td></tr>
+    <tr><td>Jenkins</td></tr>
+    <tr><td>Azure DevOps</td></tr>
+    <tr><td>Bitbucket Pipelines</td></tr>
+  </tbody>
+</table>
+
+<h2 id="related">関連ページ</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">すべてが実行される変更</a></li>
+  <li><a href="/docs/limitations/">制限事項</a></li>
+  <li><a href="/docs/troubleshooting/">トラブルシューティング</a></li>
+</ul>

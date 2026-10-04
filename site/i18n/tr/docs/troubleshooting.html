@@ -1,0 +1,52 @@
+<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: ae48c4254831 -->
+<h1>Sorun giderme</h1>
+<p class="lead">Her başlık gördüğünüz durumdan yola çıkar. Hepsi için <code>-v</code>, her kararı gerekçesiyle birlikte stderr'e yazar; bu log çoğu soruyu yanıtlar ve bize göndermeniz gereken de odur.</p>
+<pre><code>td affected --base origin/main -v</code></pre>
+
+<h2 id="whole-project">Test projesinin tamamı çalıştı</h2>
+<p>Çıktıda projeyi bulun: gerekçe yanında yazılıdır. Olağan nedenler derlemenin geneline etki eden bir dosya, projedeki C# dışı bir dosya, bir <code>global using</code> ya da reflection ile bulunan bir tiptir. <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a> sayfası hepsini listeler. <code>-v</code> logunda <code>affects whole project: True</code> gibi bir satır dosyanın adını verir.</p>
+
+<h2 id="no-map">Hiçbir kapsam haritası kullanılmadı</h2>
+<p>Harita olmadan seçim isimleri izler ve bu daha geniştir. Log, neden harita olmadığını söyler:</p>
+<ul>
+  <li><code>No coverage maps within 50 commits before the merge base</code>: varsayılan branch'te yakın zamanda hiçbir şey kaydedilmemiş. Oradaki her push'ta bir harita kaydedin; action'ın <code>record</code> modu bunu yapar.</li>
+  <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: harita başka bir branch'ten, ya da bir force push'tan veya uzun süre yaşamış bir branch'ten öncesinden geliyor. Varsayılan branch'te yeniden kaydedin ya da <code>--max-map-age</code> değerini yükseltin.</li>
+  <li><code>--maps-dir … does not exist</code>: haritaları içeren klasör koşudan önce geri yüklenmemiş.</li>
+  <li>GitHub Actions'ta, haritaları tutan önbellek kayıtlarını listeleyebilmek için job'un <code>actions: read</code> iznine ihtiyacı vardır.</li>
+</ul>
+
+<h2 id="base">Base commit bulunamıyor</h2>
+<p>{{name}} branch'inizi merge base ile karşılaştırır; bu yüzden ikisinin de geçmişine ihtiyaç duyar. Action şu mesajla durur:</p>
+<pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
+<p>Checkout'u <code>fetch-depth: 0</code> ile yapın. Diğer CI sistemlerinde shallow clone'ları kapatın ve hedef branch'i açık bir refspec ile fetch edin; her sistem için nasıl yapılacağı <a href="/docs/other-ci/">Diğer CI sistemleri</a> sayfasında gösterilmiştir.</p>
+
+<h2 id="fewer-skipped">Beklenenden az test atlandı</h2>
+<ul>
+  <li><strong>Harita merge base'den daha eski</strong> ve aradaki süreçte bir derleme ya da yapılandırma dosyası değişmiş: etkilenen projeler tamamen çalışır. <code>--drift-fallback name</code> ise bunları isimlere göre daraltır.</li>
+  <li><strong>Bir test sınıfı değişikliğe dokunmadan seçiliyor.</strong> İsim izleme temkinlidir: değişen tipin adını anan bir sınıf, kapsam verisi onu eleyecek olsa bile seçilir. <code>is not in the coverage map of … Record the map again</code> gibi bir log satırı, haritanın o proje için güncel olmadığı anlamına gelir.</li>
+  <li><strong>Merkezi bir yardımcı değişti.</strong> Paylaşılan bir base class ya da bir serializer gibi testlerin çoğunun çalıştırdığı kod, testlerin çoğunu seçer. Bu doğrudur.</li>
+</ul>
+
+<h2 id="filter">Filtre hiçbir testle eşleşmedi</h2>
+<p>Bir projenin filtresi hiçbir test seçmediğinde {{name}} projeyi filtresiz olarak yeniden çalıştırır ve <code>The filter for … matched no test; running it unfiltered</code> loglar. Hiçbir şey kaçırılmaz, ancak bu bizim tarafımızdaki bir hatadır: lütfen <code>-v</code> logunu gönderin.</p>
+
+<h2 id="git">Squash merge'ler, rebase'ler ve force push'lar</h2>
+<p>Haritalar varsayılan branch'teki commit'ler için kaydedilir ve bir pull request, merge base'indeki ya da ondan önceki en yeni haritayı bulur. Bir squash merge ya da rebase, varsayılan branch'te yeni commit'ler oluşturur; bir sonraki push onlar için bir harita kaydeder, o zamana kadar pull request'ler önceki haritayı drift bridge üzerinden kullanır. Bir pull request branch'ine yapılan force push hiçbir şeyi değiştirmez: merge base yeniden hesaplanır.</p>
+
+<h2 id="forks">Fork'lardan gelen pull request'ler</h2>
+<p>CI sistemleri fork'lardan gelen pull request'lere secret iletmez. Açık depolar lisansa ihtiyaç duymadığından onlar için hiçbir şey değişmez. Özel bir depoda lisanssız bir koşu, tıpkı {{name}} olmadan olacağı gibi tüm testleri çalıştırır.</p>
+
+<h2 id="faq">Sorular</h2>
+<h3>Seçimli bir koşunun code coverage'ı eksiksiz mi?</h3>
+<p>Hayır. Testleri atlayan bir koşu kısmi coverage üretir. Coverage'ı varsayılan branch'teki tam koşulardan yayımlayın; kayıt orada tüm testleri çalıştırır.</p>
+<h3>Testler yeniden denenebilir mi?</h3>
+<p>Evet, framework'ünüzün kendi yeniden deneme seçeneğiyle: <code>--</code> sonrasındaki her şey <code>dotnet test</code>'e değiştirilmeden iletilir.</p>
+<h3>Seçilen testler paralel job'lara bölünebilir mi?</h3>
+<p><code>td affected --format commands</code>, her test projesi için filtresiyle birlikte bir <code>dotnet test</code> komutu yazdırır. Satırları job'larınıza dağıtın.</p>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a></li>
+  <li><a href="/docs/cli/">CLI referansı</a></li>
+  <li><a href="/docs/limitations/">Sınırlamalar</a></li>
+</ul>

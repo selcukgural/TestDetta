@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TestDetta">
+  <rect width="64" height="64" rx="14" fill="#14171a"/>
+  <g transform="translate(7.5 7.5) scale(0.765)">
+    <g fill="#f7f5f0"><rect x="4" y="8" width="25" height="10"/><rect x="11.5" y="8" width="10" height="48"/></g>
+    <g fill="#7fd6b0"><path d="M31 8 H38 A24 24 0 0 1 38 56 H31 V46 H38 A14 14 0 0 0 38 18 H31 Z"/></g>
+  </g>
+</svg>

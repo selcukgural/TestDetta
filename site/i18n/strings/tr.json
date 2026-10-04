@@ -30,8 +30,20 @@
   "docCli": "CLI referansı",
   "docLicense": "Lisans",
   "docLimitations": "Sınırlamalar",
+  "docValidate": "Kendi deponuzda doğrulayın",
+  "docWhatRunsEverything": "Neler her şeyi çalıştırır",
+  "docTimeSaved": "Kazanılan süre",
+  "docCompatibility": "Uyumluluk",
+  "docTroubleshooting": "Sorun giderme",
+  "docSecurity": "Güvenlik ve veri",
+  "navGroupStart": "Buradan başlayın",
+  "navGroupConcepts": "Kavramlar",
+  "navGroupSetup": "Kurulum",
+  "navGroupReference": "Başvuru",
   "theme": "Tema",
   "themeSystem": "sistem",
   "themeLight": "açık",
-  "themeDark": "koyu"
+  "themeDark": "koyu",
+  "corpusFailingChanges": "2.941",
+  "corpusMedianShare": "%28"
 }

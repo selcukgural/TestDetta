@@ -1,0 +1,32 @@
+<!-- title: Kendi deponuzda doğrulayın; layout: docs; description: {{name}}'ya güvenmeden önce, değişikliklerinizin bozduğu her testi seçtiğini kendi kodunuzda kontrol edin.; source: ffcff100ded8 -->
+<h1>Kendi deponuzda doğrulayın</h1>
+<p class="lead">Değerlendirmemiz açık kaynak kütüphaneler üzerinde çalışır. Sizin kodunuzun kendine özgü kalıpları vardır; bu yüzden neyin çalışacağına karar vermesine izin vermeden önce {{name}}'yı kendi kodunuzda kontrol edin. Bu, birkaç haftalık olağan pull request akışı sürer ve ekibiniz için hiçbir şeyi değiştirmez.</p>
+
+<h2 id="idea">Fikir</h2>
+<p>Kapı olarak tüm test paketini çalıştırmaya devam edin. Yanında da {{name}}'ya neyi seçmiş olacağını sorun. Tam koşuda başarısız olan her test sınıfı o seçimin içinde olmalıdır. Biri içinde değilse bu bir kaçırmadır ve bunu duymak isteriz.</p>
+
+<h2 id="steps">Adımlar</h2>
+<ol>
+  <li><strong>Varsayılan branch'te haritaları kaydedin.</strong> GitHub Actions'ta <code>record</code> adımını <a href="/docs/github-actions/">workflow</a> örneğinden alıp ekleyin; başka yerlerde varsayılan branch'e yapılan her commit'te <code>td record</code> çalıştırın ve haritaları saklayın (<a href="/docs/other-ci/">Diğer CI sistemleri</a>).</li>
+  <li><strong>Her pull request'te seçimi kaydedin.</strong> Test adımınızı değiştirmeden:
+<pre><code>td affected --format json &gt; selection.json</code></pre></li>
+  <li><strong>Tüm test paketini bugün yaptığınız gibi çalıştırın</strong>; başarısızlıkların okunabilmesi için bir TRX raporuyla:
+<pre><code>dotnet test --logger trx --results-directory TestResults</code></pre></li>
+  <li><strong>Karşılaştırın.</strong> Başarısız olan her testin sınıfı seçilmiş olmalıdır. Bir sınıf, projesinin <code>mode</code> değeri <code>All</code> olduğunda ya da projesi <code>Filtered</code> olup sınıf <code>classes</code> içinde yer aldığında seçilmiştir:
+<pre><code>jq -r '.tests[] | select(.mode == "All") | .project' selection.json      # projects that run completely
+jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # classes that run</code></pre></li>
+  <li>Başarısız bir sınıfın seçilmediği her koşunun <strong>iki dosyasını da saklayın</strong> ve bunları <code>td affected</code>'in <code>-v</code> loguyla birlikte <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> adresine gönderin.</li>
+</ol>
+<div class="callout"><p>Bir kaçırmayı yalnızca başarısız olan testler gösterebilir ve birkaç hafta az sayıda başarısızlık getirebilir. Kendiniz de ekleyebilirsiniz: geçici bir branch'te bir metodu bilerek bozun (yanlış bir değer döndürsün) ve onu yakalayan testin seçildiğini kontrol edin. O branch'i merge etmeyin.</p></div>
+
+<h2 id="switch">Emin olduğunuzda</h2>
+<p>Tam test adımını <code>td test</code> ile ya da action'ın <code>test</code> moduyla değiştirin. Varsayılan branch'te kayda devam edin: kayıt orada tüm testleri çalıştırır; böylece bir seçimin gizleyebileceği her şey sürümden önce yine yakalanır.</p>
+
+<h2 id="how-we-test">Biz nasıl test ediyoruz</h2>
+<p>Aynı kontrol {{corpusRepositories}} açık kaynak depo üzerinde büyük ölçekte çalışır: üyeler tek tek değiştirilir ve başarısız olan her test sınıfının seçilmiş olması gerekir. Bir testi bozan {{corpusFailingChanges}} değişiklikten {{corpusMissed}} tanesi kaçırıldı ve her biri, düzeltme olmadan başarısız olan bir testle düzeltildi. <a href="/docs/examples/#corpus">Rakamlarla korpus</a>.</p>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">Nasıl karar verir</a></li>
+  <li><a href="/docs/time-saved/">Kazanılan süre</a></li>
+</ul>

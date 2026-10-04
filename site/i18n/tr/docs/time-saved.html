@@ -1,0 +1,40 @@
+<!-- title: Kazanılan süre; layout: docs; description: {{name}} her koşuda kazandırdığı test süresini nasıl raporlar ve hiçbir veri göndermeden haftalar boyunca bunu nasıl toplarsınız.; source: a0b828a29737 -->
+<h1>Kazanılan süre</h1>
+<p class="lead">Her koşu ne kadar test süresi kazandırdığını söyler. Rakamlar CI'ınızda kalır; bu yüzden bir aylık toplamı almak, güvenmek zorunda olduğunuz bir dashboard değil, birkaç satırlık bir script'tir.</p>
+
+<h2 id="per-run">Her koşuda</h2>
+<p>Bir kapsam haritası, her test sınıfının ne kadar sürdüğünü kaydeder. {{name}} herhangi bir şey çalıştırmadan önce tüm test paketinin ve seçtiği sınıfların kayıtlı sürelerini toplar:</p>
+<pre><code>Recorded test time: 0.6 s of 3.4 s (83% saved).</code></pre>
+<p>Aynı satır GitHub job summary'sinde ve <code>--summary-file</code>'ın diğer CI sistemleri için yazdığı Markdown'da da bulunur. Yalnızca test süresini sayar. Derleme ve restore her iki durumda da yapılır; tamamen atlanan test projeleri bunun istisnasıdır: onlar hiç derlenmez, bu da satırın gösterdiğinden daha fazla kazanç demektir.</p>
+<p>Süre bilgisi olmayan projeler, örneğin henüz onlar için bir harita kaydedilmediğinden, her iki rakamın da dışında bırakılır; JSON bunları <code>projectsWithoutTimings</code> içinde listeler.</p>
+
+<h2 id="json">JSON'da</h2>
+<p><code>td affected --format json</code>, aynı rakamları script'ler için hem koşunun tamamı hem de her test projesi için taşır:</p>
+<pre><code>{
+  "estimate": {
+    "fullSeconds": 3.4,
+    "selectedSeconds": 0.6,
+    "savedSeconds": 2.8,
+    "projectsWithoutTimings": []
+  }
+}</code></pre>
+
+<h2 id="totals">Toplamı almak</h2>
+<p>Her pull request koşusunun JSON çıktısını bir derleme artifact'ı olarak saklayın. Herhangi bir dönem boyunca <code>savedSeconds</code> değerlerini toplamak, hiçbir şey CI'ınızdan çıkmadan kazanılan test süresini verir:</p>
+<pre><code>td affected --format json &gt; testdetta.json      # in each pull request run
+
+# later, over the files of a month:
+jq -s 'map(.estimate.savedSeconds // 0) | add / 3600' runs/*.json   # hours saved</code></pre>
+<p>Runner dakikaları için testleri çalıştıran paralel job sayısıyla (bir işletim sistemi ya da framework matrisi), maliyet için de runner'ınızın dakika fiyatıyla çarpın. <a href="/pricing/#savings">Tasarruf hesaplayıcısı</a> aynısını tahminlerle yapar.</p>
+
+<h2 id="honest">Rakamlar ne anlama gelir</h2>
+<ul>
+  <li>Süreler, testlerin kapsam ölçümüyle tek tek çalıştığı kayıt koşusundan gelir. Normal bir koşudaki mutlak süreler genellikle daha kısadır; aynı kalan, kazanılan orandır.</li>
+  <li>Tamamen çalışan bir test projesi, örneğin bir derleme dosyası değiştikten sonra, hiçbir şey kazandırmaz ve satır bunu belirtir.</li>
+</ul>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/examples/">Gerçek bir koşuyu görün</a></li>
+  <li><a href="/docs/validate/">Kendi deponuzda doğrulayın</a></li>
+</ul>

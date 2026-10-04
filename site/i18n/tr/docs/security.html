@@ -1,0 +1,44 @@
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 948f6a01c35e -->
+<h1>Güvenlik ve veri</h1>
+<p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz, kapsam haritalarınız ve test sonuçlarınız oradan hiç çıkmaz. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
+
+<h2 id="stays">CI'ınızda kalanlar</h2>
+<ul>
+  <li>Diff'inizin ve kaynak kodunuzun analizi.</li>
+  <li>Kapsam haritaları: hangi test sınıfının hangi metodu çalıştırdığı ve her sınıfın ne kadar sürdüğü. Tiplerinizi, metotlarınızı ve test sınıflarınızı adlandırırlar; bu yüzden onlara derleme artifact'ları gibi davranın.</li>
+  <li>Test koşuları ve sonuçları.</li>
+  <li>Aktif committer sayısı. Sayım için yazar e-postaları git geçmişinden sizin makinenizde okunur; hiçbir isim ya da e-posta bir yere gönderilmez.</li>
+</ul>
+
+<h2 id="files">Dosyaları nerede tutar</h2>
+<table>
+  <thead><tr><th>Yol</th><th>İçerik</th></tr></thead>
+  <tbody>
+    <tr><td><code>.testdetta/coverage/</code></td><td>Geçerli commit'in kapsam haritaları, test projesi başına bir tane</td></tr>
+    <tr><td><code>.testdetta/cache/</code></td><td>Değerlendirilmiş proje grafiğinin önbelleği</td></tr>
+    <tr><td><code>.testdetta/license.json</code></td><td>İsteğe bağlı: committer sayımının dışında bırakılacak ek bot hesapları</td></tr>
+    <tr><td><code>~/.testdetta/license</code></td><td><code>td license install</code> ile kurulmuş ya da otomatik olarak yenilenmiş bir lisans</td></tr>
+    <tr><td><code>~/.testdetta/license-refresh</code></td><td>Son yenilemenin ne zaman denendiği</td></tr>
+    <tr><td><code>--maps-dir</code> klasörü</td><td>Önceki commit'lerin haritaları, commit başına bir klasör, sizin seçtiğiniz yerde tutulur</td></tr>
+  </tbody>
+</table>
+<p>GitHub Actions'ta haritalar deponuzun Actions önbelleğinde saklanır. <code>.testdetta/coverage/</code> ve <code>.testdetta/cache/</code> otomatik üretilir; bunları sürüm kontrolünün dışında tutun.</p>
+
+<h2 id="network">Tek ağ çağrısı</h2>
+<p>Abonelik lisansıyla {{name}}, lisans servisinden günde en fazla bir kez yenilenmiş bir lisans ister; böylece yenilemeler, kimsenin bir secret'ı güncellemesi gerekmeden CI'a ulaşır.</p>
+<ul>
+  <li>Yalnızca lisansın kendisini gönderir, başka hiçbir şeyi değil: depo adı, kod, yollar ya da sayılar gönderilmez.</li>
+  <li>En fazla 2 saniye bekler ve asla yeniden denemez. Servise ulaşılamazsa mevcut lisans çalışmaya devam eder.</li>
+  <li><code>HTTPS_PROXY</code> dikkate alınır.</li>
+  <li><code>TESTDETTA_LICENSE_REFRESH=off</code> bu çağrıyı kapatır. Çevrimdışı ve kurumsal lisanslar hiçbir zaman dışarıya çağrı yapmaz.</li>
+</ul>
+<p>Açık depolar lisansa ihtiyaç duymaz ve hiçbir çağrı yapmaz.</p>
+
+<h2 id="license-check">Lisans nasıl kontrol edilir</h2>
+<p>Lisans imzalı bir dizedir ve {{name}}'ya gömülü bir açık anahtarla sizin makinenizde doğrulanır. Kapsadığı depoları adlandırır; bunlar, içindeki kimlik bilgileri önce çıkarılarak <code>origin</code> remote'uyla eşleştirilir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: bunun yerine, tıpkı {{name}}'dan önceki gibi tüm testler çalışır. <a href="/docs/license/">Lisanslar hakkında daha fazlası</a>.</p>
+
+<h2 id="us">Bizim tuttuklarımız</h2>
+<p>Bir abonelik için: lisans sahibinin adı, kapsadığı depolar, koltuk sayısı ve süresi. Ödeme ve lisansın gönderildiği e-posta adresi, satış aracımız (merchant of record) {{seller}} tarafından yönetilir. Bkz. <a href="/legal/privacy/">gizlilik politikası</a>.</p>
+
+<h2 id="report">Bir güvenlik açığını bildirmek</h2>
+<p><a href="mailto:{{supportEmail}}">{{supportEmail}}</a> adresine e-posta gönderin. Lütfen yayımlamadan önce açığı düzeltmemiz için bize zaman tanıyın.</p>

@@ -1,0 +1,56 @@
+<!-- title: Compatibilidad; layout: docs; description: Los frameworks de pruebas, runners, lenguajes, sistemas operativos y sistemas de CI que admite {{name}}.; source: f22588066dde -->
+<h1>Compatibilidad</h1>
+<p class="lead">Qué necesita {{name}} y con qué se ha probado. Lo que no aparece en estas tablas no tiene por qué ser incompatible, pero no se ha probado de extremo a extremo.</p>
+
+<h2 id="requirements">Requisitos</h2>
+<table>
+  <thead><tr><th>Elemento</th><th>Requisito</th></tr></thead>
+  <tbody>
+    <tr><td>SDK de .NET</td><td>El SDK de .NET 10 ejecuta el propio {{name}}. Tus pruebas siguen usando el SDK y el runner que ya usa tu repositorio.</td></tr>
+    <tr><td>Historial de git</td><td>El historial completo de tu rama y de su rama de destino, para poder encontrar la merge base. Los clones superficiales (shallow) no funcionan.</td></tr>
+    <tr><td>Sistema operativo</td><td>Linux y macOS, x64 y arm64. Windows todavía no se ha probado.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="frameworks">Frameworks de pruebas y runners</h2>
+<p>Funcionan ambos runners de <code>dotnet test</code>. El runner se lee de <code>global.json</code>, igual que lo lee <code>dotnet test</code>. Estas combinaciones se prueban de extremo a extremo, registro incluido, también con la paralelización propia de cada framework activada:</p>
+<table>
+  <thead><tr><th>Framework</th><th>VSTest</th><th>Microsoft.Testing.Platform</th></tr></thead>
+  <tbody>
+    <tr><td>xUnit v2</td><td>Probado</td><td>–</td></tr>
+    <tr><td>xUnit v3</td><td>–</td><td>Probado (obligatorio para xUnit v3 con el SDK de .NET 10)</td></tr>
+    <tr><td>NUnit</td><td>Probado</td><td>Probado; añade <code>Microsoft.Testing.Extensions.TrxReport</code> para que se sepa qué pruebas fallan durante el registro</td></tr>
+    <tr><td>MSTest</td><td>Probado</td><td>Probado</td></tr>
+    <tr><td>TUnit</td><td>–</td><td>Probado</td></tr>
+  </tbody>
+</table>
+<p>Los proyectos de pruebas del <a href="/docs/examples/#corpus">corpus de evaluación</a> tienen como destino de .NET 8 a .NET 10. Los proyectos de pruebas de .NET Framework no forman parte de él.</p>
+
+<h2 id="languages">Lenguajes</h2>
+<table>
+  <thead><tr><th>Lenguaje</th><th>Cómo se tratan los cambios</th></tr></thead>
+  <tbody>
+    <tr><td>C#</td><td>Se analizan hasta el nivel de miembros: árboles de sintaxis, mapas de cobertura y rastreo por nombre.</td></tr>
+    <tr><td>F#, Visual Basic</td><td>Forman parte del grafo de proyectos, pero no se analizan: cuando uno de estos proyectos se ve afectado, todo lo que depende de él se ejecuta completo.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="ci">Sistemas de CI</h2>
+<p>Todo CI necesita las mismas tres cosas: el historial completo, la rama de destino descargada y un lugar donde guardar los mapas de cobertura entre la rama predeterminada y las pull requests.</p>
+<table>
+  <thead><tr><th>CI</th><th>Configuración</th><th>Dónde se guardan los mapas</th><th>Resumen</th></tr></thead>
+  <tbody>
+    <tr><td>GitHub Actions</td><td><a href="/docs/github-actions/">La acción</a>, dos pasos</td><td>La caché de Actions, una entrada por commit</td><td>Job summary, escrito automáticamente</td></tr>
+    <tr><td>GitLab CI</td><td rowspan="4"><a href="/docs/other-ci/">La herramienta <code>td</code></a>, <code>td record</code> y <code>td test</code></td><td rowspan="4">Una carpeta compartida o almacenamiento de objetos, mediante <code>--maps-dir</code></td><td rowspan="4"><code>--summary-file</code> escribe Markdown para cualquier CI que lo muestre</td></tr>
+    <tr><td>Jenkins</td></tr>
+    <tr><td>Azure DevOps</td></tr>
+    <tr><td>Bitbucket Pipelines</td></tr>
+  </tbody>
+</table>
+
+<h2 id="related">Páginas relacionadas</h2>
+<ul>
+  <li><a href="/docs/what-runs-everything/">Qué lo ejecuta todo</a></li>
+  <li><a href="/docs/limitations/">Limitaciones</a></li>
+  <li><a href="/docs/troubleshooting/">Solución de problemas</a></li>
+</ul>

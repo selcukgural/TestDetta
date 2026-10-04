@@ -1,0 +1,32 @@
+<!-- title: Validate on your repository; layout: docs; description: Check that {{name}} selects every test your changes break, on your own code, before you rely on it. -->
+<h1>Validate on your repository</h1>
+<p class="lead">Our evaluation runs on open-source libraries. Your code has its own patterns, so check {{name}} on it before you let it decide what runs. This takes a couple of weeks of normal pull requests and changes nothing for your team.</p>
+
+<h2 id="idea">The idea</h2>
+<p>Keep running the full suite as the gate. Next to it, ask {{name}} what it would have selected. Every test class that fails in the full run must be in that selection. If one is not, that is a miss, and we want to hear about it.</p>
+
+<h2 id="steps">Steps</h2>
+<ol>
+  <li><strong>Record maps on the default branch.</strong> With GitHub Actions, add the <code>record</code> step from the <a href="/docs/github-actions/">workflow</a>; elsewhere, run <code>td record</code> on every commit to the default branch and keep the maps (<a href="/docs/other-ci/">other CI systems</a>).</li>
+  <li><strong>On every pull request, write down the selection.</strong> Without changing your test step:
+<pre><code>td affected --format json &gt; selection.json</code></pre></li>
+  <li><strong>Run the full suite as you do today</strong>, with a TRX report so failures can be read:
+<pre><code>dotnet test --logger trx --results-directory TestResults</code></pre></li>
+  <li><strong>Compare.</strong> For every failed test, its class must be selected. A class is selected when its project's <code>mode</code> is <code>All</code>, or when its project is <code>Filtered</code> and the class is in <code>classes</code>:
+<pre><code>jq -r '.tests[] | select(.mode == "All") | .project' selection.json      # projects that run completely
+jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # classes that run</code></pre></li>
+  <li><strong>Keep both files</strong> of any run where a failed class was not selected, and send them with the <code>-v</code> log of <code>td affected</code> to <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</li>
+</ol>
+<div class="callout"><p>Only failing tests can show a miss, and a couple of weeks may bring few failures. You can add some: on a scratch branch, break a method on purpose (return a wrong value) and check that the test that catches it is selected. Do not merge that branch.</p></div>
+
+<h2 id="switch">When you are confident</h2>
+<p>Replace the full test step with <code>td test</code>, or the action's <code>test</code> mode. Keep recording on the default branch: it runs every test there, so anything a selection could ever hide is still caught before release.</p>
+
+<h2 id="how-we-test">How we test it</h2>
+<p>The same check runs at scale on {{corpusRepositories}} open-source repositories: members are changed one at a time and every test class that fails must have been selected. Out of {{corpusFailingChanges}} changes that broke a test, {{corpusMissed}} were missed, and each was fixed with a test that fails without the fix. <a href="/docs/examples/#corpus">The corpus in numbers</a>.</p>
+
+<h2 id="related">Related pages</h2>
+<ul>
+  <li><a href="/docs/how-it-works/">How it decides</a></li>
+  <li><a href="/docs/time-saved/">Time saved</a></li>
+</ul>

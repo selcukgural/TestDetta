@@ -16,6 +16,24 @@ records the English page it was made from (`source: <hash>` in its front matter;
 page changed since, and lists them; `--allow-stale` builds anyway with English in their place, for
 local previews only. Code, command output, option names and placeholders are never translated.
 
+## Images
+
+`art/` holds the sources of the raster images, which are not served themselves. After changing
+one, render it again with librsvg (`brew install librsvg`; the social card also needs the IBM Plex
+Sans font installed):
+
+```sh
+rsvg-convert -w 1200 -h 630 art/og.svg -o src/assets/og.png
+rsvg-convert -w 180 -h 180 art/apple-touch-icon.svg -o src/assets/apple-touch-icon.png
+rsvg-convert -w 32 -h 32 src/assets/favicon.svg -o src/assets/favicon-32.png
+```
+
+The logo is the TD monogram: `src/assets/logo.svg` in fixed colours, `src/assets/favicon.svg` on an
+ink tile, and inline in the header and footer, where it follows the theme.
+
+Project logos in the "measured on" strip are used only where their license allows it; the sources
+and licenses are in `src/assets/logos/SOURCES.md`.
+
 ## Hosting
 
 Firebase Hosting. `firebase.json` holds the hosting settings, the security headers among them (the

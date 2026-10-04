@@ -1,98 +1,260 @@
-<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: be9de6a1186d -->
+<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 4a7375f30257 -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
       <span class="eyebrow">.NET のためのテスト影響分析</span>
       <h1>変更で壊れる可能性のあるテストだけを実行します。</h1>
-      <p class="lead">{{name}} は差分を読み取り、プロジェクト、シンボル、記録済みのカバレッジをたどって、その変更を検出できるテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。</p>
+      <p class="lead">{{name}} は差分を読み取り、その変更を検出できるテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。</p>
       <div class="hero-actions">
-        <a class="button" href="/docs/">はじめる</a>
-        <a class="button button-ghost" href="/docs/how-it-works/">選択のしくみ</a>
+        <a class="button button-large" href="/docs/">はじめる</a>
+        <a class="button button-ghost button-large" href="/docs/how-it-works/">選択のしくみ</a>
       </div>
+      <ul class="trust-points">
+        <li>パブリックリポジトリは無料</li>
+        <li>{{trialDays}} 日間の無料トライアル、カード不要</li>
+        <li>お使いの CI の中で動作</li>
+      </ul>
     </div>
-    <div class="terminal replay" aria-label="実際の Spectre.Console の変更に対する td test の出力">
-      <div class="terminal-bar"><span></span><span></span><span></span></div>
-<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed: 0, Passed: 156, Total: 156 - Spectre.Console.Tests.dll</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l t-dim"># Spectre.Console への実際の変更: <a href="/docs/examples/">実行の全体を見る</a></span></pre>
-    </div>
+    <figure class="check-card" data-reveal aria-label="Spectre.Console に対する実際のプルリクエスト">
+      <div class="check-head">
+        <img src="/assets/favicon.svg" alt="" width="22" height="22">
+        <span class="check-title">{{name}} · プルリクエストのチェック</span>
+        <span class="badge-ok">成功</span>
+      </div>
+      <div class="check-body">
+        <p class="check-saving">テスト時間を <strong data-count>83%</strong> 削減</p>
+        <div class="bars">
+          <div class="bar-row">
+            <span class="bar-label">すべてのテスト</span>
+            <span class="bar-track"><span class="bar-fill bar-all"></span></span>
+            <span class="bar-value">3.4 秒 · 141 クラス</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">{{name}}</span>
+            <span class="bar-track"><span class="bar-fill bar-selected"></span></span>
+            <span class="bar-value">0.6 秒 · 14 クラス</span>
+          </div>
+        </div>
+        <ul class="check-list">
+          <li class="is-run"><strong>14 クラスを実行</strong> 変更されたコードを実行または参照しています</li>
+          <li class="is-skip"><strong>127 クラスをスキップ</strong> 変更からたどり着く経路がありません</li>
+          <li class="is-run"><strong>156 件のテストが成功</strong> 失敗 0 件</li>
+        </ul>
+      </div>
+      <figcaption>Spectre.Console への実際の変更です。<a href="/docs/examples/">実行の全体を見る →</a></figcaption>
+    </figure>
   </div>
 </div>
 
-<section class="section-soft">
+<section class="logos">
   <div class="wrap">
-    <div class="section-head">
+    <p class="logos-title">{{corpusRepositories}} 件のオープンソースの .NET リポジトリで計測しています。その一部：</p>
+    <div class="marquee"><div class="marquee-track">
+    <ul class="logo-list">
+      <li><img src="/assets/logos/polly.png" alt="" width="28" height="28" loading="lazy"><span>Polly</span></li><li><img src="/assets/logos/newtonsoft-json.png" alt="" width="28" height="28" loading="lazy"><span>Newtonsoft.Json</span></li><li><span>AutoMapper</span></li><li><img src="/assets/logos/spectre-console.png" alt="" width="28" height="28" loading="lazy"><span>Spectre.Console</span></li><li><img src="/assets/logos/markdig.svg" alt="" width="28" height="28" loading="lazy"><span>Markdig</span></li><li><span>Serilog</span></li><li><img src="/assets/logos/refit.svg" alt="" width="28" height="28" loading="lazy"><span>Refit</span></li><li><img src="/assets/logos/autofac.png" alt="" width="28" height="28" loading="lazy"><span>Autofac</span></li><li><span>NodaTime</span></li><li><img src="/assets/logos/fastendpoints.png" alt="" width="28" height="28" loading="lazy"><span>FastEndpoints</span></li><li><img src="/assets/logos/scriban.png" alt="" width="28" height="28" loading="lazy"><span>Scriban</span></li><li><span>FluentValidation</span></li><li><img src="/assets/logos/autofixture.svg" alt="" width="28" height="28" loading="lazy"><span>AutoFixture</span></li><li><span>OpenTelemetry</span></li>
+    </ul>
+    </div></div>
+    <p class="logos-note">独自に行った計測です。これらのプロジェクトは {{name}} とは関係がなく、{{name}} を推奨しているわけでもありません。</p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="band-head" data-reveal>
       <h2>デモではなく、実際のコードで計測しています</h2>
-      <p>人気のあるオープンソースの .NET ライブラリのメンバーを 1 つずつ変更し、失敗したテストクラスがすべて {{name}} によって選択されていたことを確認しています。</p>
+      <p>メンバーを 1 つずつ変更し、失敗したテストクラスがすべて {{name}} によって選択されていたことを確認しています。</p>
     </div>
-    <div class="stats">
-      <div class="stat"><strong>{{corpusRepositories}}</strong><span>件のオープンソースのリポジトリ。テストフレームワーク、テストランナー、ビルドの癖はそれぞれ異なります</span></div>
-      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>件の、少なくとも 1 つのテストを失敗させた変更</span></div>
-      <div class="stat"><strong>見逃し {{corpusMissed}} 件、すべて修正済み</strong><span>見逃しのたびに、修正なしでは失敗するテストを追加し、そのリポジトリを問題がなくなるまで再実行します</span></div>
+    <div class="band-stats" data-reveal>
+      <div><strong data-count>{{corpusRepositories}}</strong><span>件のリポジトリ。フレームワークもビルドの癖もそれぞれ異なります</span></div>
+      <div><strong data-count>{{corpusFailingChanges}}</strong><span>件の、少なくとも 1 つのテストを失敗させた変更</span></div>
+      <div><strong data-count>{{corpusMedianShare}}</strong><span>中央値のリポジトリで、1 回の変更あたりに実行されたテストクラスの割合</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>件の見逃し。それぞれ、修正なしでは失敗するテストを添えて修正済み</span></div>
     </div>
-    <p class="stats-note">1 つのメンバーへの変更で実行されたテストクラスの割合は、中央値で <strong>{{corpusMedianShare}}</strong> でした。<a href="/docs/examples/">差分からジョブサマリーまで、実際の実行例を見る →</a></p>
+    <figure class="dist" data-reveal>
+<svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
+<title id="dist-title">1 回の変更あたりに実行されたテストクラスの割合（リポジトリごとに 1 本の棒）</title>
+<desc id="dist-desc">評価コーパスの第 1 ラウンド：40 件のオープンソースのリポジトリそれぞれについて、1 つのメンバーへの変更に対して {{name}} が選択したテストクラスの平均の割合を、小さい順に並べたものです。中央値は {{corpusMedianShare}} です。</desc>
+<line class="grid" x1="36" x2="720" y1="150.0" y2="150.0"/><text class="axis" x="30" y="154.0" text-anchor="end">0%</text>
+<line class="grid" x1="36" x2="720" y1="80.0" y2="80.0"/><text class="axis" x="30" y="84.0" text-anchor="end">50%</text>
+<line class="grid" x1="36" x2="720" y1="10.0" y2="10.0"/><text class="axis" x="30" y="14.0" text-anchor="end">100%</text>
+<g class="bars">
+<g class="row"><title>opentelemetry-dotnet: 6%</title><rect class="bar" x="43.2" y="141.6" width="10.5" height="8.4" rx="2"/></g>
+<g class="row"><title>polly: 7%</title><rect class="bar" x="60.2" y="140.2" width="10.5" height="9.8" rx="2"/></g>
+<g class="row"><title>roslynator: 8%</title><rect class="bar" x="77.2" y="138.8" width="10.5" height="11.2" rx="2"/></g>
+<g class="row"><title>spectre: 9%</title><rect class="bar" x="94.2" y="137.4" width="10.5" height="12.6" rx="2"/></g>
+<g class="row"><title>swashbuckle: 12%</title><rect class="bar" x="111.2" y="133.2" width="10.5" height="16.8" rx="2"/></g>
+<g class="row"><title>nsec: 13%</title><rect class="bar" x="128.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>aspnetcore-odata: 13%</title><rect class="bar" x="145.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>guardclauses: 13%</title><rect class="bar" x="162.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>mimekit: 14%</title><rect class="bar" x="179.2" y="130.4" width="10.5" height="19.6" rx="2"/></g>
+<g class="row"><title>autofixture: 16%</title><rect class="bar" x="196.2" y="127.6" width="10.5" height="22.4" rx="2"/></g>
+<g class="row"><title>communitytoolkit: 18%</title><rect class="bar" x="213.2" y="124.8" width="10.5" height="25.2" rx="2"/></g>
+<g class="row"><title>libgit2sharp: 19%</title><rect class="bar" x="230.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
+<g class="row"><title>castle-core: 19%</title><rect class="bar" x="247.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
+<g class="row"><title>serilog: 20%</title><rect class="bar" x="264.2" y="122.0" width="10.5" height="28.0" rx="2"/></g>
+<g class="row"><title>mediator: 21%</title><rect class="bar" x="281.2" y="120.6" width="10.5" height="29.4" rx="2"/></g>
+<g class="row"><title>fastendpoints: 23%</title><rect class="bar" x="298.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
+<g class="row"><title>fluid: 23%</title><rect class="bar" x="315.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
+<g class="row"><title>carter: 24%</title><rect class="bar" x="332.2" y="116.4" width="10.5" height="33.6" rx="2"/></g>
+<g class="row"><title>lamar: 26%</title><rect class="bar" x="349.2" y="113.6" width="10.5" height="36.4" rx="2"/></g>
+<g class="row"><title>awesomeassertions: 27%</title><rect class="bar" x="366.2" y="112.2" width="10.5" height="37.8" rx="2"/></g>
+<g class="row"><title>nsubstitute: 29%</title><rect class="bar" x="383.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
+<g class="row"><title>immediate-handlers: 29%</title><rect class="bar" x="400.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
+<g class="row"><title>open-xml-sdk: 30%</title><rect class="bar" x="417.2" y="108.0" width="10.5" height="42.0" rx="2"/></g>
+<g class="row"><title>fluentvalidation: 32%</title><rect class="bar" x="434.2" y="105.2" width="10.5" height="44.8" rx="2"/></g>
+<g class="row"><title>unitsnet: 34%</title><rect class="bar" x="451.2" y="102.4" width="10.5" height="47.6" rx="2"/></g>
+<g class="row"><title>vogen: 36%</title><rect class="bar" x="468.2" y="99.6" width="10.5" height="50.4" rx="2"/></g>
+<g class="row"><title>nodatime: 43%</title><rect class="bar" x="485.2" y="89.8" width="10.5" height="60.2" rx="2"/></g>
+<g class="row"><title>graphql-dotnet: 45%</title><rect class="bar" x="502.2" y="87.0" width="10.5" height="63.0" rx="2"/></g>
+<g class="row"><title>newtonsoft-json: 47%</title><rect class="bar" x="519.2" y="84.2" width="10.5" height="65.8" rx="2"/></g>
+<g class="row"><title>autofac: 49%</title><rect class="bar" x="536.2" y="81.4" width="10.5" height="68.6" rx="2"/></g>
+<g class="row"><title>scrutor: 57%</title><rect class="bar" x="553.2" y="70.2" width="10.5" height="79.8" rx="2"/></g>
+<g class="row"><title>meziantou-analyzer: 63%</title><rect class="bar" x="570.2" y="61.8" width="10.5" height="88.2" rx="2"/></g>
+<g class="row"><title>automapper: 67%</title><rect class="bar" x="587.2" y="56.2" width="10.5" height="93.8" rx="2"/></g>
+<g class="row"><title>protobuf-net: 78%</title><rect class="bar" x="604.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
+<g class="row"><title>yamldotnet: 78%</title><rect class="bar" x="621.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
+<g class="row"><title>cliwrap: 81%</title><rect class="bar" x="638.2" y="36.6" width="10.5" height="113.4" rx="2"/></g>
+<g class="row"><title>nlog: 82%</title><rect class="bar" x="655.2" y="35.2" width="10.5" height="114.8" rx="2"/></g>
+<g class="row"><title>mapperly: 89%</title><rect class="bar" x="672.2" y="25.4" width="10.5" height="124.6" rx="2"/></g>
+<g class="row"><title>markdig: 98%</title><rect class="bar" x="689.2" y="12.8" width="10.5" height="137.2" rx="2"/></g>
+<g class="row"><title>scriban: 100%</title><rect class="bar" x="706.2" y="10.0" width="10.5" height="140.0" rx="2"/></g>
+</g>
+<line class="median" x1="36" x2="720" y1="110.8" y2="110.8"/><text class="median-label" x="44" y="104.8">中央値 {{corpusMedianShare}}</text>
+<text class="axis" x="40" y="172">opentelemetry-dotnet</text><text class="axis" x="720" y="172" text-anchor="end">scriban</text>
+</svg>
+      <figcaption>各棒は 1 つのリポジトリを表し、1 つのメンバーへの変更に対して {{name}} が実行したテストクラスの割合を小さい順に並べています。40 件中 18 件では 4 分の 1 以下でした。</figcaption>
+    </figure>
+    <p class="band-link"><a href="/docs/examples/">差分からジョブサマリーまで、実際の実行例を見る →</a></p>
   </div>
 </section>
 
-<section>
+<section class="trace-section">
   <div class="wrap">
-    <div class="section-head">
+    <div class="section-head center-head" data-reveal>
       <h2>選択のしくみ</h2>
-      <p>各ステップは、根拠がある場合にのみ選択を絞り込みます。追跡できないものは、多めに実行する側にフォールバックします。</p>
+      <p>Spectre.Console への実際の変更を 1 ステップずつ追います。各ステップは、根拠がある場合にのみ選択を絞り込みます。</p>
     </div>
-    <div class="grid-3">
-      <div class="card"><span class="step-number">1</span><h3>プロジェクト</h3><p>変更されたファイルをプロジェクトに対応付け、<code>ProjectReference</code> をたどります。<code>Directory.Build.props</code> のようなビルド全体に関わるファイルは、その配下のすべてに影響します。</p></div>
-      <div class="card"><span class="step-number">2</span><h3>シンボル</h3><p>C# の構文ツリーを比較するため、コメントや空白の編集では何も選択されず、{{name}} はどのメンバーが変更されたかを把握できます。</p></div>
-      <div class="card"><span class="step-number">3</span><h3>カバレッジ</h3><p>既定のブランチで記録したマップが、どのテストクラスがどのメソッドを実行したかを示すため、変更されたメソッドから対応するクラスを直接選択できます。</p></div>
-      <div class="card"><span class="step-number">4</span><h3>名前</h3><p>新しいコード、フィールド、定数は、テストクラスかマップが把握しているコードに到達するまで、ソース内を名前でたどります。</p></div>
-      <div class="card"><span class="step-number">5</span><h3>フォールバック</h3><p>構成ファイル、グローバル using、リフレクションで検出される型など、変更を追跡できない場合はテストプロジェクト全体を実行します。</p></div>
-      <div class="card"><span class="step-number">6</span><h3>自己チェック</h3><p>どのテストにも一致しないフィルターは {{name}} のバグとして扱い、フィルターなしでそのプロジェクトを再実行します。</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="section-soft">
-  <div class="wrap grid-2">
-    <div>
-      <div class="section-head">
-        <h2>GitHub Actions なら 2 ステップ</h2>
-        <p>既定のブランチへのプッシュごとにカバレッジマップを記録します。プルリクエストでは最新のマップを復元して影響を受けるテストだけを実行し、各クラスが実行された理由やスキップされた理由をジョブサマリーに示します。</p>
+    <div class="trace" data-reveal>
+      <div class="trace-col trace-change">
+        <p class="trace-label">1 · 変更</p>
+        <pre class="trace-diff"><span class="trace-file">Widgets/Rule.cs</span>
+ var text = border.GetPart(…)…;
+<span class="diff-add">+var style = Style ?? Style.Plain;</span>
+<span class="diff-del">-new Segment(text, Style ?? Style.Plain),</span>
+<span class="diff-add">+new Segment(text, style),</span></pre>
+        <p class="trace-note">1 行のリファクタリングです。通常のパイプラインでは、141 クラスの 787 件のテストをすべて実行します。</p>
       </div>
-      <p><a href="/docs/github-actions/">GitHub Actions ガイド →</a><br><a href="/docs/other-ci/">GitLab CI、Jenkins、Azure DevOps、Bitbucket →</a></p>
+      <div class="trace-col trace-steps">
+        <p class="trace-label">2 · {{name}} が割り出すこと</p>
+        <ol>
+          <li><span class="step-name">プロジェクト</span><span class="step-result">影響を受けるテストプロジェクトは 1 つ。Spectre.Console.Ansi.Tests はビルドすらされません</span></li>
+          <li><span class="step-name">シンボル</span><span class="step-result">変更されたメンバーは 1 つ：<code>Rule.GetLineWithoutTitle</code></span></li>
+          <li><span class="step-name">カバレッジマップ</span><span class="step-result"><code>main</code> で 14 のテストクラスがこれを実行</span></li>
+          <li><span class="step-name">名前</span><span class="step-result">たどるべき新しいコードはなし</span></li>
+          <li><span class="step-name">フォールバック</span><span class="step-result">不要</span></li>
+        </ol>
+      </div>
+      <div class="trace-col trace-tests">
+        <p class="trace-label">3 · 実行するテスト</p>
+        <div class="dots" role="img" aria-label="141 のテストクラスのうち 14 を選択"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="trace-result">141 クラス中 <strong>14</strong> クラスを実行、127 クラスをスキップ</p>
+        <p class="trace-note">メソッドを壊したときに失敗する 14 クラスと完全に一致します。<a href="/docs/examples/#proof">確認方法</a></p>
+      </div>
     </div>
-<pre class="code">- if: github.event_name == 'push'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
-  with:
-    mode: record
-
-- if: github.event_name == 'pull_request'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
-  with:
-    mode: test
-    license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+    <p class="trace-safety" data-reveal><strong>どのステップでも変更を追跡できない場合は、テストプロジェクト全体を実行します。</strong> <a href="/docs/what-runs-everything/">すべてが実行される変更 →</a></p>
   </div>
 </section>
 
-<section>
-  <div class="wrap">
-    <div class="section-head">
+<section class="promises-section">
+  <div class="wrap promises">
+    <div class="promises-intro" data-reveal>
       <h2>テストの見逃しが許されないチームのために</h2>
+      <p>{{name}} は CI の中で動作し、リリースの妨げになることはありません。確信が持てないときは、多めに実行します。</p>
+      <p><a href="/docs/security/">セキュリティとデータ →</a></p>
     </div>
-    <div class="grid-3">
-      <div class="card"><h3>コードは手元にとどまります</h3><p>{{name}} は CI の中で動作します。ソース、カバレッジ、テスト結果がお使いのマシンの外に出ることはなく、コミッターのメールアドレスはローカルで数えるだけです。</p></div>
-      <div class="card"><h3>お使いのすべてのフレームワークに対応</h3><p>xUnit v2 と v3、NUnit、MSTest、TUnit に、VSTest と Microsoft.Testing.Platform の両方で対応し、それぞれの並列実行にも対応しています。</p></div>
-      <div class="card"><h3>ビルドを止めません</h3><p>有効なライセンスがない場合は、これまでどおりすべてのテストを実行します。ライセンスの問題で増えるのは CI の時間だけで、ビルドが失敗することはありません。</p></div>
-    </div>
+    <dl class="promise-list" data-reveal>
+      <div><dt>0</dt><dd><strong>行のコードも CI の外に出ません</strong>分析、カバレッジマップ、テスト結果はお使いのマシンにとどまります。</dd></div>
+      <div><dt>0</dt><dd><strong>件：ライセンスの問題によるビルドの失敗</strong>有効なライセンスがない場合は、これまでどおりすべてのテストを実行します。</dd></div>
+      <div><dt>5<span>·</span>2</dt><dd><strong>テストフレームワークとテストランナー</strong>xUnit v2 と v3、NUnit、MSTest、TUnit に、VSTest と Microsoft.Testing.Platform の両方で対応しています。</dd></div>
+      <div><dt>1</dt><dd><strong>回：1 日あたりのネットワーク通信（任意）</strong>ライセンスの更新で、送信するのはライセンスだけです。</dd></div>
+    </dl>
+  </div>
+  <div class="wrap">
+    <table class="spec" data-reveal>
+      <tr><th>フレームワーク</th><td>xUnit v2 · xUnit v3 · NUnit · MSTest · TUnit</td></tr>
+      <tr><th>テストランナー</th><td>VSTest · Microsoft.Testing.Platform</td></tr>
+      <tr><th>CI</th><td>GitHub Actions · GitLab CI · Azure DevOps · Jenkins · Bitbucket</td></tr>
+      <tr><th>プラットフォーム</th><td>Linux · macOS</td></tr>
+    </table>
   </div>
 </section>
 
-<section class="section-soft">
-  <div class="wrap center">
-    <div class="section-head">
-      <h2>パブリックリポジトリは無料。プライベートリポジトリは {{trialDays}} 日間無料。</h2>
-      <p>その後はアクティブなコミッター 1 人あたり月額 {{currency}}{{priceMonthly}} です。試用にカードは不要です。</p>
+<section class="gha-section">
+  <div class="wrap">
+    <div class="section-head center-head" data-reveal>
+      <h2>GitHub Actions なら 2 ステップ</h2>
+      <p>既定のブランチで一度記録すれば、以降のプルリクエストでは影響を受けるテストだけを実行します。</p>
     </div>
+    <div class="gha" data-reveal>
+      <ol class="gha-flow">
+        <li class="gha-step gha-a">
+          <span class="gha-event">main へのプッシュ時</span>
+          <h3>カバレッジマップを記録</h3>
+          <p>すべてのテストをカバレッジ付きで 1 回実行します。マップはコミットごとに Actions のキャッシュに保存されます。</p>
+        </li>
+        <li class="gha-store">
+          <span class="gha-store-label">Actions のキャッシュ</span>
+          <code>testdetta-coverage-&lt;sha&gt;</code>
+        </li>
+        <li class="gha-step gha-b">
+          <span class="gha-event">プルリクエスト時</span>
+          <h3>変更が影響するテストを実行</h3>
+          <p>マージベース時点またはそれ以前の最新のマップを復元して、影響を受けるテストクラスだけを実行し、それぞれが実行された理由をジョブサマリーに示します。</p>
+          <p class="gha-summary"><span class="badge-ok">成功</span> 141 クラス中 14 クラス · テスト時間を 83% 削減</p>
+        </li>
+      </ol>
+      <figure class="editor">
+        <div class="editor-bar"><span class="editor-dots"><i></i><i></i><i></i></span><span class="editor-tab">.github/workflows/ci.yml</span></div>
+<pre class="editor-code" data-lang="yaml" data-lines data-mark="18-21:a,23-27:b">on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - if: github.event_name == 'push'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: record
+
+      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: test
+          license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+      </figure>
+    </div>
+    <p class="gha-links" data-reveal><a href="/docs/github-actions/">GitHub Actions ガイド →</a><a href="/docs/other-ci/">GitLab CI、Jenkins、Azure DevOps、Bitbucket →</a></p>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap center">
+    <h2>パブリックリポジトリは無料。プライベートリポジトリは {{trialDays}} 日間無料。</h2>
+    <p>その後はアクティブなコミッター 1 人あたり月額 {{currency}}{{priceMonthly}} です。試用にカードは不要です。</p>
     <div class="hero-actions">
-      <a class="button" href="/pricing/">料金を見る</a>
-      <a class="button button-ghost" href="/docs/">ドキュメントを読む</a>
+      <a class="button button-large button-light" href="/pricing/">料金を見る</a>
+      <a class="button button-large button-outline-light" href="/docs/">ドキュメントを読む</a>
     </div>
   </div>
 </section>

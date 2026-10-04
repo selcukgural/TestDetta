@@ -51,6 +51,37 @@
   </div>
 </section>
 
+<section class="calc-section" id="savings">
+  <div class="wrap">
+    <div class="section-head center-head" data-reveal>
+      <h2>What it saves you</h2>
+      <p>Enter your own numbers. The estimate assumes your test time falls the way it did for the median repository in our evaluation, where a change ran {{corpusMedianShare}} of the test classes. Your repository will differ; <a href="/docs/validate/">measure it on your own code</a>.</p>
+    </div>
+    <form class="calc" data-calc data-share="{{corpusMedianShare}}" data-seat="{{priceMonthly}}" data-reveal>
+      <div class="calc-inputs">
+        <label><span>Active committers</span><input type="number" name="committers" min="1" step="1" value="10" inputmode="numeric"></label>
+        <label><span>Pull request runs per working day</span><input type="number" name="runs" min="0" step="1" value="30" inputmode="numeric"></label>
+        <label><span>Test minutes per run</span><input type="number" name="minutes" min="0" step="0.5" value="12" inputmode="decimal"></label>
+        <label><span>Parallel jobs per run (OS or framework matrix)</span><input type="number" name="jobs" min="1" step="1" value="1" inputmode="numeric"></label>
+        <label><span>Runner price per minute ({{currency}})</span><input type="number" name="price" min="0" step="0.001" value="0.006" inputmode="decimal"></label>
+        <label><span>Developer cost per hour ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
+      </div>
+      <div class="calc-results" aria-live="polite">
+        <div class="calc-hero"><output name="hours">91 h</output><span>of waiting for test results saved per month</span></div>
+        <dl>
+          <div><dt>Test minutes saved per run</dt><dd><output name="perRun">8.6 min</output></dd></div>
+          <div><dt>Runner minutes saved per month</dt><dd><output name="ciMinutes">5,443</output></dd></div>
+          <div><dt>Runner cost saved per month</dt><dd><output name="ciCost">$33</output></dd></div>
+          <div><dt>Developer time saved per month</dt><dd><output name="devCost">$5,443</output></dd></div>
+          <div><dt>{{name}} per month</dt><dd><output name="cost">$150</output></dd></div>
+          <div class="calc-net"><dt>Net saving per month</dt><dd><output name="net">$5,326</output></dd></div>
+        </dl>
+        <p class="calc-note">21 working days a month. Only test time is counted: builds run either way.</p>
+      </div>
+    </form>
+  </div>
+</section>
+
 <section class="section-soft">
   <div class="wrap faq">
     <div class="section-head">

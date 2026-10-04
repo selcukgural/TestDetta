@@ -1,4 +1,4 @@
-<!-- title: Fiyatlandırma; description: Açık depolar için ücretsiz, özel depolar için {{trialDays}} gün ücretsiz, ardından aktif committer başına fiyatlandırma.; source: d120e134a447 -->
+<!-- title: Fiyatlandırma; description: Açık depolar için ücretsiz, özel depolar için {{trialDays}} gün ücretsiz, ardından aktif committer başına fiyatlandırma.; source: 39129ae026e2 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -48,6 +48,37 @@
         <a class="button button-ghost" href="mailto:{{supportEmail}}">Bize ulaşın</a>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="calc-section" id="savings">
+  <div class="wrap">
+    <div class="section-head center-head" data-reveal>
+      <h2>Size ne kazandırır</h2>
+      <p>Kendi rakamlarınızı girin. Tahmin, test sürenizin değerlendirmemizdeki medyan depodaki gibi azaldığını varsayar; orada bir değişiklik test sınıflarının {{corpusMedianShare}} kadarını çalıştırdı. Sizin deponuz farklı olacaktır; <a href="/docs/validate/">bunu kendi kodunuzda ölçün</a>.</p>
+    </div>
+    <form class="calc" data-calc data-share="{{corpusMedianShare}}" data-seat="{{priceMonthly}}" data-reveal>
+      <div class="calc-inputs">
+        <label><span>Aktif committer sayısı</span><input type="number" name="committers" min="1" step="1" value="10" inputmode="numeric"></label>
+        <label><span>İş günü başına pull request koşusu</span><input type="number" name="runs" min="0" step="1" value="30" inputmode="numeric"></label>
+        <label><span>Koşu başına test dakikası</span><input type="number" name="minutes" min="0" step="0.5" value="12" inputmode="decimal"></label>
+        <label><span>Koşu başına paralel job (işletim sistemi ya da framework matrisi)</span><input type="number" name="jobs" min="1" step="1" value="1" inputmode="numeric"></label>
+        <label><span>Runner'ın dakika fiyatı ({{currency}})</span><input type="number" name="price" min="0" step="0.001" value="0.006" inputmode="decimal"></label>
+        <label><span>Geliştiricinin saatlik maliyeti ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
+      </div>
+      <div class="calc-results" aria-live="polite">
+        <div class="calc-hero"><output name="hours">91 sa.</output><span>test sonuçlarını bekleme süresi her ay kazanılır</span></div>
+        <dl>
+          <div><dt>Koşu başına kazanılan test dakikası</dt><dd><output name="perRun">8,6 dk.</output></dd></div>
+          <div><dt>Aylık kazanılan runner dakikası</dt><dd><output name="ciMinutes">5.443</output></dd></div>
+          <div><dt>Aylık runner maliyeti tasarrufu</dt><dd><output name="ciCost">$33</output></dd></div>
+          <div><dt>Aylık kazanılan geliştirici zamanı</dt><dd><output name="devCost">$5.443</output></dd></div>
+          <div><dt>Aylık {{name}} maliyeti</dt><dd><output name="cost">$150</output></dd></div>
+          <div class="calc-net"><dt>Aylık net tasarruf</dt><dd><output name="net">$5.326</output></dd></div>
+        </dl>
+        <p class="calc-note">Ayda 21 iş günü. Yalnızca test süresi sayılır: derlemeler her iki durumda da çalışır.</p>
+      </div>
+    </form>
   </div>
 </section>
 

@@ -1,98 +1,260 @@
-<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: be9de6a1186d -->
+<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 4a7375f30257 -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
       <span class="eyebrow">.NET için test etki analizi</span>
       <h1>Yalnızca değişikliğinizin bozabileceği testleri çalıştırın.</h1>
-      <p class="lead">{{name}} diff'inizi okur, onu projeler, semboller ve kaydedilmiş kapsam verisi üzerinden izler ve yalnızca değişikliği gözlemleyebilecek test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.</p>
+      <p class="lead">{{name}} diff'inizi okur ve yalnızca onu gözlemleyebilecek test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.</p>
       <div class="hero-actions">
-        <a class="button" href="/docs/">Başlayın</a>
-        <a class="button button-ghost" href="/docs/how-it-works/">Nasıl karar verir</a>
+        <a class="button button-large" href="/docs/">Başlayın</a>
+        <a class="button button-ghost button-large" href="/docs/how-it-works/">Nasıl karar verir</a>
       </div>
+      <ul class="trust-points">
+        <li>Açık depolar için ücretsiz</li>
+        <li>{{trialDays}} günlük deneme, kart gerekmez</li>
+        <li>CI'ınızın içinde çalışır</li>
+      </ul>
     </div>
-    <div class="terminal replay" aria-label="Gerçek bir Spectre.Console değişikliğinde td test çıktısı">
-      <div class="terminal-bar"><span></span><span></span><span></span></div>
-<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed: 0, Passed: 156, Total: 156 - Spectre.Console.Tests.dll</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l t-dim"># Spectre.Console'da gerçek bir değişiklik: <a href="/docs/examples/">koşunun tamamını görün</a></span></pre>
-    </div>
+    <figure class="check-card" data-reveal aria-label="Spectre.Console'da gerçek bir pull request">
+      <div class="check-head">
+        <img src="/assets/favicon.svg" alt="" width="22" height="22">
+        <span class="check-title">{{name}} · pull request kontrolü</span>
+        <span class="badge-ok">Başarılı</span>
+      </div>
+      <div class="check-body">
+        <p class="check-saving"><strong data-count>%83</strong> daha az test süresi</p>
+        <div class="bars">
+          <div class="bar-row">
+            <span class="bar-label">Tüm testler</span>
+            <span class="bar-track"><span class="bar-fill bar-all"></span></span>
+            <span class="bar-value">3,4 sn · 141 sınıf</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">{{name}}</span>
+            <span class="bar-track"><span class="bar-fill bar-selected"></span></span>
+            <span class="bar-value">0,6 sn · 14 sınıf</span>
+          </div>
+        </div>
+        <ul class="check-list">
+          <li class="is-run"><strong>14 sınıf çalışır</strong> değişen kodu çalıştırıyor ya da ona referans veriyorlar</li>
+          <li class="is-skip"><strong>127 atlandı</strong> değişiklikten onlara ulaşan bir yol yok</li>
+          <li class="is-run"><strong>156 test başarılı</strong> 0 başarısız</li>
+        </ul>
+      </div>
+      <figcaption>Spectre.Console'da gerçek bir değişiklik. <a href="/docs/examples/">Koşunun tamamını görün →</a></figcaption>
+    </figure>
   </div>
 </div>
 
-<section class="section-soft">
+<section class="logos">
   <div class="wrap">
-    <div class="section-head">
+    <p class="logos-title">{{corpusRepositories}} açık kaynak .NET deposunda ölçüldü; aralarında şunlar var</p>
+    <div class="marquee"><div class="marquee-track">
+    <ul class="logo-list">
+      <li><img src="/assets/logos/polly.png" alt="" width="28" height="28" loading="lazy"><span>Polly</span></li><li><img src="/assets/logos/newtonsoft-json.png" alt="" width="28" height="28" loading="lazy"><span>Newtonsoft.Json</span></li><li><span>AutoMapper</span></li><li><img src="/assets/logos/spectre-console.png" alt="" width="28" height="28" loading="lazy"><span>Spectre.Console</span></li><li><img src="/assets/logos/markdig.svg" alt="" width="28" height="28" loading="lazy"><span>Markdig</span></li><li><span>Serilog</span></li><li><img src="/assets/logos/refit.svg" alt="" width="28" height="28" loading="lazy"><span>Refit</span></li><li><img src="/assets/logos/autofac.png" alt="" width="28" height="28" loading="lazy"><span>Autofac</span></li><li><span>NodaTime</span></li><li><img src="/assets/logos/fastendpoints.png" alt="" width="28" height="28" loading="lazy"><span>FastEndpoints</span></li><li><img src="/assets/logos/scriban.png" alt="" width="28" height="28" loading="lazy"><span>Scriban</span></li><li><span>FluentValidation</span></li><li><img src="/assets/logos/autofixture.svg" alt="" width="28" height="28" loading="lazy"><span>AutoFixture</span></li><li><span>OpenTelemetry</span></li>
+    </ul>
+    </div></div>
+    <p class="logos-note">Bağımsız ölçümlerdir. Bu projelerin {{name}} ile bir bağlantısı yoktur ve {{name}}'yı onaylamazlar.</p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="band-head" data-reveal>
       <h2>Demolarda değil, gerçek kodda ölçüldü</h2>
-      <p>Popüler açık kaynak .NET kütüphanelerindeki üyeleri tek tek değiştiriyor ve başarısız olan her test sınıfının {{name}} tarafından seçilmiş olduğunu doğruluyoruz.</p>
+      <p>Üyeleri tek tek değiştiriyor ve başarısız olan her test sınıfının {{name}} tarafından seçilmiş olduğunu doğruluyoruz.</p>
     </div>
-    <div class="stats">
-      <div class="stat"><strong>{{corpusRepositories}}</strong><span>açık kaynak depo; her birinin kendi test framework'ü, test runner'ı ve derleme tuhaflıkları var</span></div>
-      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>en az bir testi bozan değişiklik</span></div>
-      <div class="stat"><strong>{{corpusMissed}} kaçırma, hepsi düzeltildi</strong><span>her kaçırma için düzeltme olmadan başarısız olan bir test yazılır ve ilgili depo temiz çıkana kadar yeniden çalıştırılır</span></div>
+    <div class="band-stats" data-reveal>
+      <div><strong data-count>{{corpusRepositories}}</strong><span>depo; her birinin kendi framework'leri ve derleme tuhaflıkları var</span></div>
+      <div><strong data-count>{{corpusFailingChanges}}</strong><span>en az bir testi bozan değişiklik</span></div>
+      <div><strong data-count>{{corpusMedianShare}}</strong><span>medyan depoda değişiklik başına çalışan test sınıfı oranı</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>kaçırma; her biri, düzeltme olmadan başarısız olan bir testle düzeltildi</span></div>
     </div>
-    <p class="stats-note">Tek bir üyedeki değişiklik, test sınıflarının medyan <strong>{{corpusMedianShare}}</strong> kadarını çalıştırdı. <a href="/docs/examples/">Diff'ten job summary'ye gerçek bir koşuyu görün →</a></p>
+    <figure class="dist" data-reveal>
+<svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
+<title id="dist-title">Değişiklik başına çalıştırılan test sınıflarının oranı, depo başına bir çubuk</title>
+<desc id="dist-desc">Değerlendirme korpusunun 1. turu: 40 açık kaynak deponun her biri için, tek bir üyedeki değişiklikte {{name}} tarafından seçilen test sınıflarının ortalama oranı, küçükten büyüğe sıralı. Medyan {{corpusMedianShare}}.</desc>
+<line class="grid" x1="36" x2="720" y1="150.0" y2="150.0"/><text class="axis" x="30" y="154.0" text-anchor="end">0%</text>
+<line class="grid" x1="36" x2="720" y1="80.0" y2="80.0"/><text class="axis" x="30" y="84.0" text-anchor="end">50%</text>
+<line class="grid" x1="36" x2="720" y1="10.0" y2="10.0"/><text class="axis" x="30" y="14.0" text-anchor="end">100%</text>
+<g class="bars">
+<g class="row"><title>opentelemetry-dotnet: 6%</title><rect class="bar" x="43.2" y="141.6" width="10.5" height="8.4" rx="2"/></g>
+<g class="row"><title>polly: 7%</title><rect class="bar" x="60.2" y="140.2" width="10.5" height="9.8" rx="2"/></g>
+<g class="row"><title>roslynator: 8%</title><rect class="bar" x="77.2" y="138.8" width="10.5" height="11.2" rx="2"/></g>
+<g class="row"><title>spectre: 9%</title><rect class="bar" x="94.2" y="137.4" width="10.5" height="12.6" rx="2"/></g>
+<g class="row"><title>swashbuckle: 12%</title><rect class="bar" x="111.2" y="133.2" width="10.5" height="16.8" rx="2"/></g>
+<g class="row"><title>nsec: 13%</title><rect class="bar" x="128.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>aspnetcore-odata: 13%</title><rect class="bar" x="145.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>guardclauses: 13%</title><rect class="bar" x="162.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
+<g class="row"><title>mimekit: 14%</title><rect class="bar" x="179.2" y="130.4" width="10.5" height="19.6" rx="2"/></g>
+<g class="row"><title>autofixture: 16%</title><rect class="bar" x="196.2" y="127.6" width="10.5" height="22.4" rx="2"/></g>
+<g class="row"><title>communitytoolkit: 18%</title><rect class="bar" x="213.2" y="124.8" width="10.5" height="25.2" rx="2"/></g>
+<g class="row"><title>libgit2sharp: 19%</title><rect class="bar" x="230.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
+<g class="row"><title>castle-core: 19%</title><rect class="bar" x="247.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
+<g class="row"><title>serilog: 20%</title><rect class="bar" x="264.2" y="122.0" width="10.5" height="28.0" rx="2"/></g>
+<g class="row"><title>mediator: 21%</title><rect class="bar" x="281.2" y="120.6" width="10.5" height="29.4" rx="2"/></g>
+<g class="row"><title>fastendpoints: 23%</title><rect class="bar" x="298.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
+<g class="row"><title>fluid: 23%</title><rect class="bar" x="315.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
+<g class="row"><title>carter: 24%</title><rect class="bar" x="332.2" y="116.4" width="10.5" height="33.6" rx="2"/></g>
+<g class="row"><title>lamar: 26%</title><rect class="bar" x="349.2" y="113.6" width="10.5" height="36.4" rx="2"/></g>
+<g class="row"><title>awesomeassertions: 27%</title><rect class="bar" x="366.2" y="112.2" width="10.5" height="37.8" rx="2"/></g>
+<g class="row"><title>nsubstitute: 29%</title><rect class="bar" x="383.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
+<g class="row"><title>immediate-handlers: 29%</title><rect class="bar" x="400.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
+<g class="row"><title>open-xml-sdk: 30%</title><rect class="bar" x="417.2" y="108.0" width="10.5" height="42.0" rx="2"/></g>
+<g class="row"><title>fluentvalidation: 32%</title><rect class="bar" x="434.2" y="105.2" width="10.5" height="44.8" rx="2"/></g>
+<g class="row"><title>unitsnet: 34%</title><rect class="bar" x="451.2" y="102.4" width="10.5" height="47.6" rx="2"/></g>
+<g class="row"><title>vogen: 36%</title><rect class="bar" x="468.2" y="99.6" width="10.5" height="50.4" rx="2"/></g>
+<g class="row"><title>nodatime: 43%</title><rect class="bar" x="485.2" y="89.8" width="10.5" height="60.2" rx="2"/></g>
+<g class="row"><title>graphql-dotnet: 45%</title><rect class="bar" x="502.2" y="87.0" width="10.5" height="63.0" rx="2"/></g>
+<g class="row"><title>newtonsoft-json: 47%</title><rect class="bar" x="519.2" y="84.2" width="10.5" height="65.8" rx="2"/></g>
+<g class="row"><title>autofac: 49%</title><rect class="bar" x="536.2" y="81.4" width="10.5" height="68.6" rx="2"/></g>
+<g class="row"><title>scrutor: 57%</title><rect class="bar" x="553.2" y="70.2" width="10.5" height="79.8" rx="2"/></g>
+<g class="row"><title>meziantou-analyzer: 63%</title><rect class="bar" x="570.2" y="61.8" width="10.5" height="88.2" rx="2"/></g>
+<g class="row"><title>automapper: 67%</title><rect class="bar" x="587.2" y="56.2" width="10.5" height="93.8" rx="2"/></g>
+<g class="row"><title>protobuf-net: 78%</title><rect class="bar" x="604.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
+<g class="row"><title>yamldotnet: 78%</title><rect class="bar" x="621.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
+<g class="row"><title>cliwrap: 81%</title><rect class="bar" x="638.2" y="36.6" width="10.5" height="113.4" rx="2"/></g>
+<g class="row"><title>nlog: 82%</title><rect class="bar" x="655.2" y="35.2" width="10.5" height="114.8" rx="2"/></g>
+<g class="row"><title>mapperly: 89%</title><rect class="bar" x="672.2" y="25.4" width="10.5" height="124.6" rx="2"/></g>
+<g class="row"><title>markdig: 98%</title><rect class="bar" x="689.2" y="12.8" width="10.5" height="137.2" rx="2"/></g>
+<g class="row"><title>scriban: 100%</title><rect class="bar" x="706.2" y="10.0" width="10.5" height="140.0" rx="2"/></g>
+</g>
+<line class="median" x1="36" x2="720" y1="110.8" y2="110.8"/><text class="median-label" x="44" y="104.8">medyan {{corpusMedianShare}}</text>
+<text class="axis" x="40" y="172">opentelemetry-dotnet</text><text class="axis" x="720" y="172" text-anchor="end">scriban</text>
+</svg>
+      <figcaption>Her çubuk bir depodur: tek bir üyedeki değişiklik için {{name}}'nın çalıştırdığı test sınıflarının oranı, küçükten büyüğe. 40 deponun 18'inde bu oran dörtte bir ya da daha azdı.</figcaption>
+    </figure>
+    <p class="band-link"><a href="/docs/examples/">Diff'ten job summary'ye gerçek bir koşuyu görün →</a></p>
   </div>
 </section>
 
-<section>
+<section class="trace-section">
   <div class="wrap">
-    <div class="section-head">
+    <div class="section-head center-head" data-reveal>
       <h2>Nasıl karar verir</h2>
-      <p>Her adım seçimi yalnızca kanıtı olduğunda daraltır. İzleyemediği her şeyde daha fazlasını çalıştırmaya geri döner.</p>
+      <p>Spectre.Console'daki gerçek bir değişiklik, adım adım izleniyor. Her adım seçimi yalnızca kanıtı olduğunda daraltır.</p>
     </div>
-    <div class="grid-3">
-      <div class="card"><span class="step-number">1</span><h3>Projeler</h3><p>Değişen dosyalar projelere eşlenir ve <code>ProjectReference</code>'lar izlenir. <code>Directory.Build.props</code> gibi derlemenin geneline etki eden dosyalar altlarındaki her şeyi etkiler.</p></div>
-      <div class="card"><span class="step-number">2</span><h3>Semboller</h3><p>C# söz dizimi ağaçları karşılaştırılır; böylece yorum ve boşluk değişiklikleri hiçbir şey seçmez ve {{name}} hangi üyelerin değiştiğini bilir.</p></div>
-      <div class="card"><span class="step-number">3</span><h3>Kapsam</h3><p>Varsayılan branch'inizde kaydedilen bir kapsam haritası hangi test sınıfının hangi metodu çalıştırdığını söyler; böylece değişen metotlar kendi sınıflarını doğrudan seçer.</p></div>
-      <div class="card"><span class="step-number">4</span><h3>İsimler</h3><p>Yeni kod, alanlar ve sabitler, test sınıflarına ya da haritanın bildiği koda ulaşana kadar kaynak kodda isimleriyle izlenir.</p></div>
-      <div class="card"><span class="step-number">5</span><h3>Geri dönüşler</h3><p>Yapılandırma dosyaları, global using'ler, reflection ile keşfedilen tipler: bir değişiklik izlenemediğinde test projesinin tamamı çalışır.</p></div>
-      <div class="card"><span class="step-number">6</span><h3>Öz denetimler</h3><p>Hiçbir testle eşleşmeyen bir filtre {{name}} içinde bir hata olarak ele alınır ve proje filtresiz olarak yeniden çalıştırılır.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="section-soft">
-  <div class="wrap grid-2">
-    <div>
-      <div class="section-head">
-        <h2>GitHub Actions'ta iki adım</h2>
-        <p>Varsayılan branch'inize yapılan her push'ta bir kapsam haritası kaydedin. Pull request'ler en yeni haritayı geri yükler ve yalnızca etkilenen testleri çalıştırır; job summary her sınıfın neden çalıştırıldığını ya da atlandığını açıklar.</p>
+    <div class="trace" data-reveal>
+      <div class="trace-col trace-change">
+        <p class="trace-label">1 · Değişiklik</p>
+        <pre class="trace-diff"><span class="trace-file">Widgets/Rule.cs</span>
+ var text = border.GetPart(…)…;
+<span class="diff-add">+var style = Style ?? Style.Plain;</span>
+<span class="diff-del">-new Segment(text, Style ?? Style.Plain),</span>
+<span class="diff-add">+new Segment(text, style),</span></pre>
+        <p class="trace-note">Tek satırlık bir refactoring. Normal bir pipeline 141 sınıftaki 787 testin hepsini çalıştırır.</p>
       </div>
-      <p><a href="/docs/github-actions/">GitHub Actions rehberi →</a><br><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+      <div class="trace-col trace-steps">
+        <p class="trace-label">2 · {{name}}'nın çıkardığı sonuç</p>
+        <ol>
+          <li><span class="step-name">Projeler</span><span class="step-result">1 test projesi etkilendi; Spectre.Console.Ansi.Tests derlenmiyor bile</span></li>
+          <li><span class="step-name">Semboller</span><span class="step-result">1 üye değişti: <code>Rule.GetLineWithoutTitle</code></span></li>
+          <li><span class="step-name">Kapsam haritası</span><span class="step-result">Onu <code>main</code> üzerinde 14 test sınıfı çalıştırdı</span></li>
+          <li><span class="step-name">İsimler</span><span class="step-result">İzlenecek yeni kod yok</span></li>
+          <li><span class="step-name">Geri dönüşler</span><span class="step-result">Gerek kalmadı</span></li>
+        </ol>
+      </div>
+      <div class="trace-col trace-tests">
+        <p class="trace-label">3 · Çalıştırılacak testler</p>
+        <div class="dots" role="img" aria-label="141 test sınıfı, 14'ü seçildi"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="trace-result">141 sınıftan <strong>14</strong>'ü çalışır, 127'si atlanır</p>
+        <p class="trace-note">Tam olarak, metot bozulduğunda başarısız olan 14 sınıf. <a href="/docs/examples/#proof">Nasıl kontrol ettik</a></p>
+      </div>
     </div>
-<pre class="code">- if: github.event_name == 'push'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
-  with:
-    mode: record
-
-- if: github.event_name == 'pull_request'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
-  with:
-    mode: test
-    license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+    <p class="trace-safety" data-reveal><strong>Bir adım bir değişikliği izleyemediğinde test projesinin tamamı çalışır.</strong> <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır →</a></p>
   </div>
 </section>
 
-<section>
-  <div class="wrap">
-    <div class="section-head">
+<section class="promises-section">
+  <div class="wrap promises">
+    <div class="promises-intro" data-reveal>
       <h2>Tek bir testin bile kaçmasını göze alamayan ekipler için</h2>
+      <p>{{name}} CI'ınızın içinde çalışır ve sizinle bir sürüm arasına asla girmez. Emin olamadığında daha fazlasını çalıştırır.</p>
+      <p><a href="/docs/security/">Güvenlik ve veri →</a></p>
     </div>
-    <div class="grid-3">
-      <div class="card"><h3>Kodunuz sizde kalır</h3><p>{{name}} sizin CI'ınızda çalışır. Hiçbir kaynak kod, kapsam verisi ya da test sonucu makinelerinizden çıkmaz; committer e-postaları yalnızca yerel olarak sayılır.</p></div>
-      <div class="card"><h3>Kullandığınız her framework</h3><p>xUnit v2 ve v3, NUnit, MSTest ve TUnit; hem VSTest hem Microsoft.Testing.Platform altında, kendi paralelleştirmeleri dahil.</p></div>
-      <div class="card"><h3>Hiçbir derlemeyi engellemez</h3><p>Geçerli bir lisans yoksa eskisi gibi tüm testler çalışır. Bir lisans sorunu size CI süresine mal olur, asla kırmızı bir derlemeye değil.</p></div>
-    </div>
+    <dl class="promise-list" data-reveal>
+      <div><dt>0</dt><dd><strong>satır kodunuz CI'ınızın dışına çıkar</strong>Analiz, kapsam haritaları ve test sonuçları makinelerinizde kalır.</dd></div>
+      <div><dt>0</dt><dd><strong>derleme bir lisans sorunu yüzünden başarısız olur</strong>Geçerli bir lisans olmadan, eskisi gibi tüm testler çalışır.</dd></div>
+      <div><dt>5<span>·</span>2</dt><dd><strong>test framework'ü ve runner</strong>VSTest ve Microsoft.Testing.Platform üzerinde xUnit v2 ve v3, NUnit, MSTest ve TUnit.</dd></div>
+      <div><dt>1</dt><dd><strong>günlük ağ çağrısı, isteğe bağlı</strong>Lisansın kendisinden başka hiçbir şey göndermeyen bir lisans yenilemesi.</dd></div>
+    </dl>
+  </div>
+  <div class="wrap">
+    <table class="spec" data-reveal>
+      <tr><th>Framework'ler</th><td>xUnit v2 · xUnit v3 · NUnit · MSTest · TUnit</td></tr>
+      <tr><th>Runner'lar</th><td>VSTest · Microsoft.Testing.Platform</td></tr>
+      <tr><th>CI</th><td>GitHub Actions · GitLab CI · Azure DevOps · Jenkins · Bitbucket</td></tr>
+      <tr><th>Platformlar</th><td>Linux · macOS</td></tr>
+    </table>
   </div>
 </section>
 
-<section class="section-soft">
-  <div class="wrap center">
-    <div class="section-head">
-      <h2>Açık depolar için ücretsiz. Özel depolar için {{trialDays}} gün ücretsiz.</h2>
-      <p>Ardından aktif committer başına aylık {{currency}}{{priceMonthly}}. Deneme için kart gerekmez.</p>
+<section class="gha-section">
+  <div class="wrap">
+    <div class="section-head center-head" data-reveal>
+      <h2>GitHub Actions'ta iki adım</h2>
+      <p>Varsayılan branch'iniz bir kez kaydeder. Ardından her pull request yalnızca etkilediği şeyleri çalıştırır.</p>
     </div>
+    <div class="gha" data-reveal>
+      <ol class="gha-flow">
+        <li class="gha-step gha-a">
+          <span class="gha-event">main'e push yapıldığında</span>
+          <h3>Bir kapsam haritası kaydedin</h3>
+          <p>Her test kapsam ölçümüyle bir kez çalışır. Harita, Actions önbelleğinize kendi commit'i altında kaydedilir.</p>
+        </li>
+        <li class="gha-store">
+          <span class="gha-store-label">Actions önbelleği</span>
+          <code>testdetta-coverage-&lt;sha&gt;</code>
+        </li>
+        <li class="gha-step gha-b">
+          <span class="gha-event">pull request'te</span>
+          <h3>Değişikliğin etkilediklerini çalıştırın</h3>
+          <p>Merge base'deki ya da ondan önceki en yeni harita geri yüklenir, yalnızca etkilenen test sınıfları çalışır ve job summary her birinin neden çalıştığını söyler.</p>
+          <p class="gha-summary"><span class="badge-ok">Başarılı</span> 141 sınıftan 14'ü · test süresinin %83'ü kazanıldı</p>
+        </li>
+      </ol>
+      <figure class="editor">
+        <div class="editor-bar"><span class="editor-dots"><i></i><i></i><i></i></span><span class="editor-tab">.github/workflows/ci.yml</span></div>
+<pre class="editor-code" data-lang="yaml" data-lines data-mark="18-21:a,23-27:b">on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - if: github.event_name == 'push'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: record
+
+      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: test
+          license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+      </figure>
+    </div>
+    <p class="gha-links" data-reveal><a href="/docs/github-actions/">GitHub Actions rehberi →</a><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap center">
+    <h2>Açık depolar için ücretsiz. Özel depolar için {{trialDays}} gün ücretsiz.</h2>
+    <p>Ardından aktif committer başına aylık {{currency}}{{priceMonthly}}. Deneme için kart gerekmez.</p>
     <div class="hero-actions">
-      <a class="button" href="/pricing/">Fiyatları görün</a>
-      <a class="button button-ghost" href="/docs/">Dokümantasyonu okuyun</a>
+      <a class="button button-large button-light" href="/pricing/">Fiyatları görün</a>
+      <a class="button button-large button-outline-light" href="/docs/">Dokümantasyonu okuyun</a>
     </div>
   </div>
 </section>
