@@ -80,6 +80,9 @@ public sealed class UnrecordedClassTests : IDisposable
         {
             Classes = { ["Shop.Tests.TaxTests"] = ["Tax"], [TurkishInlines] = ["Tax"], ["Shop.Tests.TestBlocksSpec"] = ["Make"] },
             Locations = { [TurkishInlines] = (Specs, 5), ["Shop.Tests.TestBlocksSpec"] = (Specs, 10) },
+            Timings = new CoverageTimings(
+                new Dictionary<string, double> { ["Shop.Tests.TaxTests"] = 1, [TurkishInlines] = 2, ["Shop.Tests.TestBlocksSpec"] = 4 },
+                new Dictionary<string, double>()),
         });
         _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
 
@@ -92,6 +95,10 @@ public sealed class UnrecordedClassTests : IDisposable
         Assert.EndsWith($"; recorded as {TurkishInlines}", inlines.Evidence, StringComparison.Ordinal);
         Assert.DoesNotContain(selection.Decisions, static d => d.TestClass == TurkishInlines);
         Assert.False(selection.Decisions.Single(static d => d.TestClass == "Shop.Tests.TestBlocksSpec").Selected);
+
+        // Its recorded time counts for the selection too.
+        Assert.Equal(3.0, selection.Estimate!.SelectedSeconds);
+        Assert.Equal(7.0, selection.Estimate.FullSeconds);
     }
 
     [Fact]
@@ -329,6 +336,9 @@ public sealed class UnrecordedClassTests : IDisposable
         /// <summary>Platform the map was recorded on.</summary>
         public string Platform { get; init; } = RuntimeInformation.RuntimeIdentifier;
 
+        /// <summary>Recorded times, or null for none.</summary>
+        public CoverageTimings? Timings { get; init; }
+
         /// <summary>Test class to its file and first line.</summary>
         public Dictionary<string, (string File, int Line)> Locations { get; } = [];
     }
@@ -343,7 +353,7 @@ public sealed class UnrecordedClassTests : IDisposable
 
         CoverageMap Map(string commit) =>
             new(new CoverageMapHeader("tests/Shop.Tests/Shop.Tests.csproj", commit, DateTimeOffset.UtcNow), methods,
-                new CoverageHits(byClass, new Dictionary<string, IReadOnlyList<int>>(), []))
+                new CoverageHits(byClass, new Dictionary<string, IReadOnlyList<int>>(), []), spec.Timings)
             {
                 SkippedClasses = spec.Skipped,
                 Platform = spec.Platform,

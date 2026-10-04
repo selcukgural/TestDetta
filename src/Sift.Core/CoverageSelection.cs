@@ -147,9 +147,11 @@ internal sealed partial class CoverageSelection
     {
         var selected = new HashSet<string>(classes, StringComparer.Ordinal);
         var seconds = 0d;
+        var aliases = Matches(project).Aliases;
         foreach (var testClass in selected)
         {
-            seconds += timings.ClassSeconds.GetValueOrDefault(testClass);
+            // A class the map recorded under another name has its time under that name.
+            seconds += timings.ClassSeconds.GetValueOrDefault(aliases.GetValueOrDefault(testClass) ?? testClass);
         }
 
         foreach (var (fixture, fixtureSeconds) in timings.FixtureSeconds)
