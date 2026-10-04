@@ -1,4 +1,4 @@
-<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: 948f6a01c35e -->
+<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: c45bba69f56d -->
 <h1>Seguridad y datos</h1>
 <p class="lead">{{name}} se ejecuta en tu CI y en tus máquinas. Tu código fuente, tus mapas de cobertura y los resultados de tus pruebas nunca salen de ellos. Esta página enumera todo lo que guarda y cada llamada de red que hace.</p>
 
@@ -28,7 +28,7 @@
 <p>Con una licencia de suscripción, {{name}} pide al servicio de licencias una licencia renovada como máximo una vez al día, para que las renovaciones lleguen al CI sin que nadie tenga que actualizar un secreto.</p>
 <ul>
   <li>Envía la propia licencia y nada más: ni el nombre del repositorio, ni código, ni rutas, ni recuentos.</li>
-  <li>Espera como máximo 2 segundos y nunca reintenta. Si no se puede acceder al servicio, la licencia actual sigue funcionando.</li>
+  <li>Se ejecuta junto al análisis y espera como máximo 6 segundos. Un fallo que puede ser pasajero se reintenta al cabo de una hora; si no se puede acceder al servicio, la licencia actual sigue funcionando.</li>
   <li>Se respeta <code>HTTPS_PROXY</code>.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> la desactiva. Las licencias sin conexión y de empresa nunca se conectan con nosotros.</li>
 </ul>

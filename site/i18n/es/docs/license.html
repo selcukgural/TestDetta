@@ -1,4 +1,4 @@
-<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: db51e1c29635 -->
+<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: c0da757212f2 -->
 <h1>Licencia</h1>
 <p class="lead">Los repositorios públicos usan {{name}} gratis. Los repositorios privados pasan una cadena de licencia al CI. Un problema de licencia nunca hace fallar una compilación: sin una licencia válida se ejecutan todas las pruebas, como antes de {{name}}.</p>
 
@@ -35,7 +35,7 @@
 <p>Primero se comprueba y después se escribe en <code>~/.testdetta/license</code>.</p>
 
 <h2>Renovación automática</h2>
-<p>Una licencia incluye la dirección desde la que se renueva. Como máximo una vez al día, {{name}} obtiene la versión actual y la guarda en <code>~/.testdetta/license</code>, así que las renovaciones y los puestos añadidos llegan sin tocar tus secretos. La solicitud envía la licencia en una cabecera y nada de tu repositorio. Tiene un tiempo de espera de 2 segundos y ningún reintento, y cualquier fallo se ignora: una red sin conexión o bloqueada cuesta como mucho 2 segundos al día. Se respeta <code>HTTPS_PROXY</code>.</p>
+<p>Una licencia incluye la dirección desde la que se renueva. Como máximo una vez al día, {{name}} obtiene la versión actual y la guarda en <code>~/.testdetta/license</code>, así que las renovaciones y los puestos añadidos llegan sin tocar tus secretos. La solicitud envía la licencia en una cabecera y nada de tu repositorio. Se ejecuta a la vez que el análisis, con un tiempo de espera de 6 segundos, y cualquier fallo se ignora. Un fallo que puede ser pasajero (sin respuesta, un tiempo de espera agotado, un error del servidor) se reintenta al cabo de una hora, así que una red bloqueada cuesta como mucho unos segundos por hora, casi siempre ocultos tras el análisis; define <code>TESTDETTA_LICENSE_REFRESH=off</code> donde no se pueda acceder al servicio. Se respeta <code>HTTPS_PROXY</code>.</p>
 <p>En una red que no puede acceder al servicio de licencias, define <code>TESTDETTA_LICENSE_REFRESH=off</code> y sustituye tú mismo la cadena de licencia cuando recibas una nueva.</p>
 
 <h2>Qué repositorios cubre una licencia</h2>

@@ -1,4 +1,4 @@
-<!-- title: Sicherheit und Daten; layout: docs; description: Was {{name}} speichert, wo es die Daten ablegt und welchen einen Netzwerkaufruf es macht.; source: 948f6a01c35e -->
+<!-- title: Sicherheit und Daten; layout: docs; description: Was {{name}} speichert, wo es die Daten ablegt und welchen einen Netzwerkaufruf es macht.; source: c45bba69f56d -->
 <h1>Sicherheit und Daten</h1>
 <p class="lead">{{name}} läuft in Ihrer CI und auf Ihren Rechnern. Ihr Quellcode, Ihre Coverage-Maps und Testergebnisse verlassen diese nie. Diese Seite listet alles auf, was es speichert, und jeden Netzwerkaufruf, den es macht.</p>
 
@@ -28,7 +28,7 @@
 <p>Mit einer Abonnement-Lizenz fragt {{name}} höchstens einmal am Tag beim Lizenzdienst eine erneuerte Lizenz ab, damit Verlängerungen die CI erreichen, ohne dass jemand ein Secret aktualisieren muss.</p>
 <ul>
   <li>Gesendet wird nur die Lizenz selbst, sonst nichts: kein Repository-Name, kein Code, keine Pfade oder Zahlen.</li>
-  <li>Es wartet höchstens 2 Sekunden und wiederholt nie. Ist der Dienst nicht erreichbar, funktioniert die aktuelle Lizenz weiter.</li>
+  <li>Es läuft parallel zur Analyse und wartet höchstens 6 Sekunden. Ein Fehler, der vorübergehen kann, wird nach einer Stunde erneut versucht; ist der Dienst nicht erreichbar, funktioniert die aktuelle Lizenz weiter.</li>
   <li><code>HTTPS_PROXY</code> wird berücksichtigt.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> schaltet ihn ab. Offline- und Enterprise-Lizenzen nehmen nie Kontakt auf.</li>
 </ul>

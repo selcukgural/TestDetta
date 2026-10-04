@@ -35,7 +35,7 @@
 <p>It is checked first and then written to <code>~/.testdetta/license</code>.</p>
 
 <h2>Automatic renewal</h2>
-<p>A license carries the address it renews from. At most once a day, {{name}} fetches the current version and keeps it in <code>~/.testdetta/license</code>, so renewals and added seats arrive without touching your secrets. The request sends the license in a header and nothing from your repository. It has a 2-second timeout and no retries, and any failure is ignored: an offline or blocked network costs at most 2 seconds a day. <code>HTTPS_PROXY</code> is honoured.</p>
+<p>A license carries the address it renews from. At most once a day, {{name}} fetches the current version and keeps it in <code>~/.testdetta/license</code>, so renewals and added seats arrive without touching your secrets. The request sends the license in a header and nothing from your repository. It runs while the analysis does, with a 6-second timeout, and any failure is ignored. A failure that may pass (no answer, a timeout, a server error) is tried again after an hour, so a blocked network costs at most a few seconds an hour, mostly hidden behind the analysis; set <code>TESTDETTA_LICENSE_REFRESH=off</code> where the service cannot be reached. <code>HTTPS_PROXY</code> is honoured.</p>
 <p>On a network that cannot reach the license service, set <code>TESTDETTA_LICENSE_REFRESH=off</code> and replace the license string yourself when you receive a new one.</p>
 
 <h2>Which repositories a license covers</h2>

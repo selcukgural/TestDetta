@@ -8,8 +8,10 @@ namespace TestDetta.Cli;
 /// <summary>
 /// Fetches the newest version of the license in use from the URL it carries, at most once a day,
 /// and stores it in <c>~/.testdetta/license</c> (docs/design/licensing.md, "Refresh"). An update channel,
-/// never a gate: a 2-second timeout, no retries, every failure ignored, so an offline or blocked network
-/// costs at most 2 seconds a day. <c>TESTDETTA_LICENSE_REFRESH=off</c> turns it off; <c>HTTPS_PROXY</c> is
+/// never a gate: started next to the analysis (<see cref="LicenseGate.Refresh"/>), so its wait mostly
+/// overlaps work that is done anyway; a 6-second timeout, every failure ignored. A failure that may pass
+/// (no answer, a timeout, a server error) is tried again after an hour, so one cold start of the service
+/// does not cost a persistent runner a day. <c>TESTDETTA_LICENSE_REFRESH=off</c> turns it off; <c>HTTPS_PROXY</c> is
 /// honoured by the default handler. The license string goes in a header, never in the URL, and nothing
 /// of it is logged.
 /// </summary>
@@ -23,8 +25,14 @@ internal sealed partial class LicenseRefresher(HttpMessageHandler handler, Func<
     /// <summary>Shortest time between two attempts.</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromDays(1);
 
-    /// <summary>Longest an attempt may take.</summary>
-    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(2);
+    /// <summary>
+    /// Longest an attempt may take: enough for the service to start from idle, and mostly hidden behind
+    /// the analysis it runs next to.
+    /// </summary>
+    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(6);
+
+    /// <summary>How soon an attempt that failed in a way that may pass is made again.</summary>
+    public static readonly TimeSpan RetryAfterFailure = TimeSpan.FromHours(1);
 
     /// <summary>When the last attempt was made: <c>~/.testdetta/license-refresh</c>.</summary>
     private string StatePath => Path.Combine(home, ".testdetta", "license-refresh");
@@ -54,6 +62,11 @@ internal sealed partial class LicenseRefresher(HttpMessageHandler handler, Func<
             if (!response.IsSuccessStatusCode)
             {
                 LogNotRefreshed(logger, (int)response.StatusCode);
+                if ((int)response.StatusCode >= 500 || response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    await RetrySoonAsync();
+                }
+
                 return;
             }
 
@@ -74,6 +87,28 @@ internal sealed partial class LicenseRefresher(HttpMessageHandler handler, Func<
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException)
         {
             // The exception holds the service's address and the failure, never the license.
+            LogFailed(logger, ex);
+            if (ex is HttpRequestException or TaskCanceledException)
+            {
+                await RetrySoonAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Dates the last attempt back so the next one is due after <see cref="RetryAfterFailure"/> instead
+    /// of a day; the stamp is written before the request, so parallel jobs still try once.
+    /// </summary>
+    private async Task RetrySoonAsync()
+    {
+        try
+        {
+            var stamp = clock.GetUtcNow() - Interval + RetryAfterFailure;
+            await File.WriteAllTextAsync(StatePath, stamp.ToString("O", CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Not stored: the next attempt waits the full interval, as before.
             LogFailed(logger, ex);
         }
     }

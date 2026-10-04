@@ -7,26 +7,47 @@ namespace TestDetta.Cli;
 /// <summary>
 /// Applies the license to a run of <c>td affected</c> or <c>td test</c> (docs/design/licensing.md):
 /// without a covering license every test project runs completely and the run says why. Never fails
-/// the build, and never uses the network.
+/// the build; its only network use is the optional refresh, which runs next to the analysis.
 /// </summary>
 internal static partial class LicenseGate
 {
+    /// <summary>
+    /// Starts the daily license refresh (<see cref="LicenseRefresher"/>) in the background, so that it
+    /// runs while the analysis does; <see cref="Check"/> waits for it. Never throws: a failure here is
+    /// met again, and reported, by <see cref="Check"/>.
+    /// </summary>
+    /// <param name="repoPath">Repository path, or a folder inside it.</param>
+    /// <param name="loggerFactory">Creates the loggers.</param>
+    /// <param name="environment">Reads environment variables.</param>
+    /// <param name="home">The user's home directory.</param>
+    public static Task Refresh(string repoPath, ILoggerFactory loggerFactory, Func<string, string?> environment, string home) => Task.Run(async () =>
+    {
+        try
+        {
+            var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
+            var inputs = new LicenseInputs(git, environment, home);
+            using var handler = new SocketsHttpHandler();
+            await new LicenseRefresher(handler, environment, home, TimeProvider.System, loggerFactory.CreateLogger<LicenseRefresher>())
+                .RefreshAsync(inputs.FindLicenses(git.TopLevel(repoPath)), LicenseKeys.Trusted);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException)
+        {
+            // git or the file system failed; Check reads the same inputs and says so.
+        }
+    });
+
     /// <summary>Checks the license for the repository at <paramref name="repoRoot"/>.</summary>
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="loggerFactory">Creates the git client's logger.</param>
     /// <param name="environment">Reads environment variables.</param>
     /// <param name="home">The user's home directory.</param>
-    public static LicenseStatus Check(string repoRoot, ILoggerFactory loggerFactory, Func<string, string?> environment, string home)
+    /// <param name="refresh">The refresh <see cref="Refresh"/> started earlier; null starts one now and waits for it.</param>
+    public static LicenseStatus Check(string repoRoot, ILoggerFactory loggerFactory, Func<string, string?> environment, string home, Task? refresh = null)
     {
         try
         {
+            (refresh ?? Refresh(repoRoot, loggerFactory, environment, home)).GetAwaiter().GetResult();
             var inputs = new LicenseInputs(new GitClient(loggerFactory.CreateLogger<GitClient>()), environment, home);
-            using (var handler = new SocketsHttpHandler())
-            {
-                new LicenseRefresher(handler, environment, home, TimeProvider.System, loggerFactory.CreateLogger<LicenseRefresher>())
-                    .RefreshAsync(inputs.FindLicenses(repoRoot), LicenseKeys.Trusted).GetAwaiter().GetResult();
-            }
-
             return LicenseCheck.Check(inputs.Gather(repoRoot, DateTimeOffset.UtcNow), LicenseKeys.Trusted);
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException)

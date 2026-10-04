@@ -98,8 +98,40 @@ public sealed class LicenseRefresherTests : IDisposable
 
         await Refresh(handler, Sign(5, Start));
 
-        Assert.InRange(watch.Elapsed.TotalSeconds, 1.5, 6);
+        Assert.InRange(watch.Elapsed.TotalSeconds, LicenseRefresher.Timeout.TotalSeconds - 0.5, LicenseRefresher.Timeout.TotalSeconds + 4);
         Assert.Null(Stored);
+    }
+
+    [Fact]
+    public async Task A_failure_that_may_pass_is_tried_again_after_an_hour()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var license = Sign(5, Start);
+
+        await Refresh(handler, license);
+        _clock.Now = Start.AddMinutes(59);
+        await Refresh(handler, license);
+        Assert.Single(handler.Requests);
+
+        _clock.Now = Start.Add(LicenseRefresher.RetryAfterFailure);
+        await Refresh(handler, license);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task A_refusal_waits_the_full_day()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        var license = Sign(5, Start);
+
+        await Refresh(handler, license);
+        _clock.Now = Start.AddHours(2);
+        await Refresh(handler, license);
+        Assert.Single(handler.Requests);
+
+        _clock.Now = Start.AddDays(1);
+        await Refresh(handler, license);
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     public void Dispose()

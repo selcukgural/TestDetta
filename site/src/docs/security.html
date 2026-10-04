@@ -28,7 +28,7 @@
 <p>With a subscription license, {{name}} asks the license service for a renewed license at most once a day, so that renewals reach CI without anyone updating a secret.</p>
 <ul>
   <li>It sends the license itself, nothing else: no repository name, code, paths or counts.</li>
-  <li>It waits at most 2 seconds and never retries. If the service cannot be reached, the current license keeps working.</li>
+  <li>It runs next to the analysis and waits at most 6 seconds. A failure that may pass is tried again after an hour; if the service cannot be reached, the current license keeps working.</li>
   <li><code>HTTPS_PROXY</code> is honoured.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> turns it off. Offline and enterprise licenses never call home.</li>
 </ul>

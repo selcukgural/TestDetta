@@ -1,4 +1,4 @@
-<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: db51e1c29635 -->
+<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: c0da757212f2 -->
 <h1>Lisans</h1>
 <p class="lead">Açık depolar {{name}}'yı ücretsiz kullanır. Özel depolar CI'a bir lisans dizesi iletir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: geçerli bir lisans olmadan, tıpkı {{name}}'dan önceki gibi tüm testler çalışır.</p>
 
@@ -35,7 +35,7 @@
 <p>Lisans önce kontrol edilir, ardından <code>~/.testdetta/license</code> dosyasına yazılır.</p>
 
 <h2>Otomatik yenileme</h2>
-<p>Bir lisans, yenilendiği adresi kendi içinde taşır. {{name}} günde en fazla bir kez güncel sürümü indirir ve <code>~/.testdetta/license</code> içinde tutar; böylece yenilemeler ve eklenen koltuklar secret'larınıza dokunmadan gelir. İstek, lisansı bir header içinde gönderir ve deponuzdan hiçbir şey göndermez. 2 saniyelik bir zaman aşımı vardır, yeniden deneme yapılmaz ve her hata yok sayılır: çevrimdışı ya da engellenmiş bir ağ günde en fazla 2 saniyeye mal olur. <code>HTTPS_PROXY</code> dikkate alınır.</p>
+<p>Bir lisans, yenilendiği adresi kendi içinde taşır. {{name}} günde en fazla bir kez güncel sürümü indirir ve <code>~/.testdetta/license</code> içinde tutar; böylece yenilemeler ve eklenen koltuklar secret'larınıza dokunmadan gelir. İstek, lisansı bir header içinde gönderir ve deponuzdan hiçbir şey göndermez. Analizle aynı anda çalışır, zaman aşımı 6 saniyedir ve her hata yok sayılır. Geçebilecek bir hata (yanıt yok, zaman aşımı, sunucu hatası) bir saat sonra yeniden denenir; böylece engellenmiş bir ağ saatte en fazla birkaç saniyeye mal olur ve bu süre çoğunlukla analizin arkasında kalır. Servise ulaşılamayan yerlerde <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın. <code>HTTPS_PROXY</code> dikkate alınır.</p>
 <p>Lisans servisine erişemeyen bir ağda <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın ve yeni bir lisans aldığınızda lisans dizesini kendiniz değiştirin.</p>
 
 <h2>Bir lisansın kapsadığı depolar</h2>

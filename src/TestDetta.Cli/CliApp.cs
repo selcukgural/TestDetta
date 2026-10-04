@@ -50,6 +50,9 @@ internal static partial class CliApp
             return LicenseCommand(options, loggerFactory, stdout, stderr);
         }
 
+        // The license refresh waits on the network while the analysis works; the check below waits for it.
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var refresh = LicenseGate.Refresh(options.Analysis.RepoPath, loggerFactory, Environment.GetEnvironmentVariable, home);
         AnalysisResult analysis;
         try
         {
@@ -72,7 +75,7 @@ internal static partial class CliApp
             return Failure;
         }
 
-        var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, Environment.GetEnvironmentVariable, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, Environment.GetEnvironmentVariable, home, refresh);
         analysis = LicenseGate.Apply(analysis, license, TestDetta.Core.Licensing.LicenseKeys.Enforced, logger);
 
         if (options.Command == CliCommand.Test)

@@ -135,11 +135,14 @@ license:
 
 - `GET <refresh>` with the license id in the path and `Authorization: TestDetta <current license string>`.
   The license string never goes into a URL or a query string.
-- A 2-second timeout and no retries: an offline or blocked network costs at most 2 seconds a day.
+- It runs next to the analysis with a 6-second timeout, so its wait mostly overlaps work done anyway. A
+  failure that may pass (no answer, a timeout, 5xx or 429) is tried again after an hour; a refusal
+  waits the day. A blocked network costs at most a few seconds an hour.
   `TESTDETTA_LICENSE_REFRESH=off` disables it, which offline customers set. `HTTPS_PROXY` is honoured.
 - The response is a newer signed license. It is checked exactly like the original and stored in
   `~/.testdetta/license` together with the time of the attempt. Persistent agents (common on-premises)
-  keep it between runs. Ephemeral runners refresh again, within the 2-second budget.
+  keep it between runs. Ephemeral runners refresh again on every run, which is why the service must answer
+  within the timeout from idle (a cold start counts).
 - A failed refresh changes nothing: TestDetta uses the best valid license it has. The service is an
   update channel, not a gate. That is why `subscription` licenses include 7 days of slack.
 
@@ -245,7 +248,8 @@ only way in. With none configured, the header is ignored, so nobody can pick the
 per-address limit counts an IPv6 client by its /64 network (`ClientPartition`).
 
 TestDetta's refresh client (`TestDetta.Cli.LicenseRefresher`, same day): before each check, at most once a
-day (`~/.testdetta/license-refresh`), with a 2-second timeout and no retries. It is `https` only and
+day (`~/.testdetta/license-refresh`), started next to the analysis with a 6-second timeout (2 seconds
+until 2026-10-05, too short for a service starting from idle); transient failures retry after an hour. It is `https` only and
 honours `TESTDETTA_LICENSE_REFRESH=off` and `HTTPS_PROXY`. The license goes in the header only. A
 response is stored in `~/.testdetta/license` only when it is a genuine, newer version (`issued`) of the
 same license; every failure is ignored. Licenses carry `issued`. Of the genuine versions found (the

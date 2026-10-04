@@ -1,4 +1,4 @@
-<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 948f6a01c35e -->
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: c45bba69f56d -->
 <h1>Güvenlik ve veri</h1>
 <p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz, kapsam haritalarınız ve test sonuçlarınız oradan hiç çıkmaz. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
 
@@ -28,7 +28,7 @@
 <p>Abonelik lisansıyla {{name}}, lisans servisinden günde en fazla bir kez yenilenmiş bir lisans ister; böylece yenilemeler, kimsenin bir secret'ı güncellemesi gerekmeden CI'a ulaşır.</p>
 <ul>
   <li>Yalnızca lisansın kendisini gönderir, başka hiçbir şeyi değil: depo adı, kod, yollar ya da sayılar gönderilmez.</li>
-  <li>En fazla 2 saniye bekler ve asla yeniden denemez. Servise ulaşılamazsa mevcut lisans çalışmaya devam eder.</li>
+  <li>Analizle birlikte çalışır ve en fazla 6 saniye bekler. Geçebilecek bir hata bir saat sonra yeniden denenir; servise ulaşılamazsa mevcut lisans çalışmaya devam eder.</li>
   <li><code>HTTPS_PROXY</code> dikkate alınır.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> bu çağrıyı kapatır. Çevrimdışı ve kurumsal lisanslar hiçbir zaman dışarıya çağrı yapmaz.</li>
 </ul>
