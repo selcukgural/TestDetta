@@ -1,0 +1,102 @@
+name: Release
+
+# A version tag (v1.2.3) publishes the td tool to nuget.org and builds the bundle of the public action
+# repository (docs/release.md). Publishing waits until the one-time setup is done: the NUGET_USER variable
+# and nuget.org's trusted publishing policy for this workflow; until then only the package is built.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Test
+        env:
+          CI: 'true'
+        run: dotnet test --filter "Category!=Slow" -c Release --nologo
+
+      - name: Pack
+        env:
+          CI: 'true'
+        run: dotnet pack src/TestDetta.Cli/TestDetta.Cli.csproj -c Release -o out --nologo -p:Version="${GITHUB_REF_NAME#v}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package
+          path: out/*.nupkg
+          retention-days: 7
+
+  # Only this job can get a nuget.org key: a short-lived one, through trusted publishing (GitHub OIDC),
+  # so no long-lived API key exists anywhere.
+  publish:
+    needs: pack
+    if: vars.NUGET_USER != ''
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package
+          path: out
+
+      - id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push to nuget.org
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push out/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
+
+  # The public action needs the SHA-512 of the package as nuget.org serves it (nuget.org signs every
+  # package, so it differs from the file pushed). The bundle is uploaded as an artifact; copy it into the
+  # action repository and tag it (docs/release.md).
+  action-bundle:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Wait for the package and pin it
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          url="https://api.nuget.org/v3-flatcontainer/testdetta/$version/testdetta.$version.nupkg"
+          for attempt in $(seq 1 40); do
+            if curl -fsSL "$url" -o package.nupkg; then break; fi
+            echo "not indexed yet ($attempt)"; sleep 30
+          done
+          test -s package.nupkg
+          mkdir -p bundle
+          echo "$version $(sha512sum package.nupkg | cut -d' ' -f1)" > bundle/tool.lock
+          cp action.yml bundle/action.yml
+          cp dist/action/README.md bundle/README.md
+          cp dist/LICENSE.txt bundle/LICENSE.txt
+          cat bundle/tool.lock
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: action-bundle
+          path: bundle/
+          retention-days: 30

@@ -4,9 +4,24 @@
     <OutputType>Exe</OutputType>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>td</ToolCommandName>
-    <PackageId>TestDetta.Cli</PackageId>
+    <PackageId>TestDetta</PackageId>
     <RootNamespace>TestDetta.Cli</RootNamespace>
+    <Authors>TestDetta</Authors>
+    <Description>Run only the .NET tests a change can affect: test impact analysis from your git diff, project graph and per-test-class coverage, inside your CI.</Description>
+    <PackageTags>testing;test-impact-analysis;ci;dotnet-tool;xunit;nunit;mstest;tunit</PackageTags>
+    <PackageProjectUrl>https://testdetta.com</PackageProjectUrl>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
+
+  <!-- The package page on nuget.org: icon, README and the license notice live in dist/. -->
+  <ItemGroup>
+    <None Include="..\..\dist\nuget\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\dist\nuget\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\dist\LICENSE.txt" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TestDetta.Core\TestDetta.Core.csproj" />

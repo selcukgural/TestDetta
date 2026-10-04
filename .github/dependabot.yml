@@ -8,3 +8,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: docker
+    directory: /src/TestDetta.LicenseService
+    schedule:
+      interval: weekly

@@ -75,12 +75,29 @@ runs:
       with:
         dotnet-version: 10.0.x
 
-    - name: Build TestDetta
+    # From source where the action has it (this repository's own workflows use it from the checkout);
+    # otherwise the TestDetta package that tool.lock pins, checked against its SHA-512 before use.
+    - name: Get TestDetta
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
         TESTDETTA_OUT: ${{ runner.temp }}/testdetta
-      run: dotnet build src/TestDetta.Cli/TestDetta.Cli.csproj -c Release -o "$TESTDETTA_OUT" --nologo -v quiet
+      run: |
+        if [ -f src/TestDetta.Cli/TestDetta.Cli.csproj ]; then
+          dotnet build src/TestDetta.Cli/TestDetta.Cli.csproj -c Release -o "$TESTDETTA_OUT" --nologo -v quiet
+          exit 0
+        fi
+        read -r version sha512 < tool.lock
+        package="$RUNNER_TEMP/testdetta.$version.nupkg"
+        curl -fsSL --retry 3 "https://api.nuget.org/v3-flatcontainer/testdetta/$version/testdetta.$version.nupkg" -o "$package"
+        if command -v sha512sum > /dev/null; then actual=$(sha512sum "$package" | cut -d' ' -f1); else actual=$(shasum -a 512 "$package" | cut -d' ' -f1); fi
+        if [ "$actual" != "$sha512" ]; then
+          echo "::error::The TestDetta $version package does not match the SHA-512 in tool.lock; it was not run."
+          exit 1
+        fi
+        rm -rf "$RUNNER_TEMP/testdetta-package" && mkdir -p "$TESTDETTA_OUT"
+        unzip -q -o "$package" 'tools/net10.0/any/*' -d "$RUNNER_TEMP/testdetta-package"
+        cp -R "$RUNNER_TEMP/testdetta-package/tools/net10.0/any/." "$TESTDETTA_OUT/"
 
     - name: Find comparison base
       if: inputs.mode == 'test'
