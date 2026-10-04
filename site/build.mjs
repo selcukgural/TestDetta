@@ -1,10 +1,19 @@
-// Builds the static product site into dist/. No dependencies: every page in src/ is a fragment with
-// a front-matter comment, wrapped in a layout from partials/, and {{key}} is replaced from site.json,
-// so the product name, prices and contact details change in one place.
+// Builds the static product site into dist/, in every language. No dependencies.
 //
-//   node build.mjs            build into dist/
-//   node build.mjs --serve    build, then serve dist/ on http://localhost:4321
+// English pages in src/ are the source: HTML fragments with a front-matter comment, wrapped in a
+// layout from partials/. Each other language has the same pages under i18n/<lang>/, and its
+// interface strings in i18n/strings/<lang>.json. {{key}} is replaced from site.json (product name,
+// prices, contact) and the language's strings, so the name and prices change in one place.
+//
+// A translation records the English page it was made from (`source: <hash>` in its front matter).
+// The build fails when a translation is missing or its English page changed since, so no language
+// can fall behind unnoticed. `--allow-stale` builds anyway, using English for those pages.
+//
+//   node build.mjs                 build into dist/
+//   node build.mjs --serve         build, then serve dist/ on http://localhost:4321
+//   node build.mjs --hashes        print the source hash of every English page
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, statSync, copyFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { join, dirname, relative, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,42 +23,40 @@ const src = join(root, "src");
 const dist = join(root, "dist");
 const site = JSON.parse(readFileSync(join(root, "site.json"), "utf8"));
 
-// Docs navigation, in reading order: [path, title].
+// English first: it is the source and is served at the root; the others under /<code>/.
+const languages = ["en", "tr", "de", "ja", "es"];
+
+// Docs navigation, in reading order: [path, string key of its title].
 const docsNav = [
-  ["/docs/", "Getting started"],
-  ["/docs/how-it-works/", "How it decides"],
-  ["/docs/github-actions/", "GitHub Actions"],
-  ["/docs/other-ci/", "Other CI systems"],
-  ["/docs/license/", "License"],
-  ["/docs/limitations/", "Limitations"],
+  ["/docs/", "docGettingStarted"],
+  ["/docs/examples/", "docExamples"],
+  ["/docs/how-it-works/", "docHowItWorks"],
+  ["/docs/github-actions/", "docGitHubActions"],
+  ["/docs/other-ci/", "docOtherCi"],
+  ["/docs/cli/", "docCli"],
+  ["/docs/license/", "docLicense"],
+  ["/docs/limitations/", "docLimitations"],
 ];
 
 const escapeHtml = (text) =>
   String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-// Replaces {{key}} with the escaped site.json value; an unknown key fails the build rather than ship "{{key}}".
-const fill = (text, values, file) =>
+// Replaces {{key}}; an unknown key fails the build rather than ship "{{key}}". `escape` is false for
+// front-matter values, which the shell escapes once more on the way in.
+const fill = (text, values, file, escape = true) =>
   text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     if (!(key in values)) {
       throw new Error(`${file}: unknown placeholder {{${key}}}`);
     }
-    return escapeHtml(values[key]);
+    return escape ? escapeHtml(values[key]) : String(values[key]);
   });
 
-// As fill, unescaped: for front-matter values that the shell escapes once more on the way in.
-const fillRaw = (text, values, file) =>
-  text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    if (!(key in values)) {
-      throw new Error(`${file}: unknown placeholder {{${key}}}`);
-    }
-    return String(values[key]);
-  });
+const hash = (text) => createHash("sha256").update(text).digest("hex").slice(0, 12);
 
 // Front matter: a first-line comment such as <!-- title: Pricing; layout: page; description: ... -->.
-function parse(file) {
-  const text = readFileSync(file, "utf8");
+function parse(text) {
   const match = text.match(/^<!--([\s\S]*?)-->\s*/);
-  const meta = { layout: "page", title: site.name, description: site.tagline };
+  const meta = { layout: "page" };
   if (match) {
     for (const part of match[1].split(";")) {
       const at = part.indexOf(":");
@@ -67,20 +74,49 @@ function urlFor(relativePath) {
   return path.endsWith("/index.html") ? path.slice(0, -"index.html".length) : path.replace(/\.html$/, "/");
 }
 
-function docsSidebar(url) {
+const prefix = (lang) => (lang === "en" ? "" : `/${lang}`);
+
+// Site-absolute links of a page in another language point into that language; assets stay shared.
+const localizeLinks = (html, lang) =>
+  lang === "en" ? html : html.replace(/href="\/(?!assets\/|\/)/g, `href="${prefix(lang)}/`);
+
+function docsSidebar(url, strings) {
   return docsNav
-    .map(([href, title]) => `<li><a href="${href}"${href === url ? ' aria-current="page"' : ""}>${escapeHtml(title)}</a></li>`)
+    .map(([href, key]) => `<li><a href="${href}"${href === url ? ' aria-current="page"' : ""}>${escapeHtml(strings[key])}</a></li>`)
     .join("\n          ");
 }
 
-function docsPager(url) {
+function docsPager(url, strings) {
   const at = docsNav.findIndex(([href]) => href === url);
   if (at < 0) {
     return "";
   }
-  const previous = at > 0 ? `<a class="pager-prev" href="${docsNav[at - 1][0]}"><span>Previous</span>${escapeHtml(docsNav[at - 1][1])}</a>` : "<span></span>";
-  const next = at < docsNav.length - 1 ? `<a class="pager-next" href="${docsNav[at + 1][0]}"><span>Next</span>${escapeHtml(docsNav[at + 1][1])}</a>` : "<span></span>";
-  return `<nav class="pager" aria-label="Docs pages">${previous}${next}</nav>`;
+  const link = (index, cls, label) =>
+    `<a class="${cls}" href="${docsNav[index][0]}"><span>${escapeHtml(label)}</span>${escapeHtml(strings[docsNav[index][1]])}</a>`;
+  const previous = at > 0 ? link(at - 1, "pager-prev", strings.previous) : "<span></span>";
+  const next = at < docsNav.length - 1 ? link(at + 1, "pager-next", strings.next) : "<span></span>";
+  return `<nav class="pager" aria-label="${escapeHtml(strings.docsPagesLabel)}">${previous}${next}</nav>`;
+}
+
+// The language menu: the same page in every language, in a native popover, which closes on a click
+// outside it or on Escape without any script.
+function languageMenu(url, lang, allStrings) {
+  const items = languages
+    .map((code) => `<li><a href="${prefix(code)}${url}" hreflang="${code}" lang="${code}"${code === lang ? ' aria-current="true"' : ""}>${escapeHtml(allStrings[code].langName)}</a></li>`)
+    .join("");
+  const label = escapeHtml(allStrings[lang].language);
+  return `<button type="button" class="header-control" popovertarget="languages" aria-label="${label}" title="${label}">${code(lang)}</button>`
+    + `<div id="languages" class="lang-popover" popover><ul>${items}</ul></div>`;
+}
+
+const code = (lang) => lang.toUpperCase();
+
+function alternates(url) {
+  const base = `https://${site.domain}`;
+  return [
+    ...languages.map((lang) => `  <link rel="alternate" hreflang="${lang}" href="${base}${prefix(lang)}${url}">`),
+    `  <link rel="alternate" hreflang="x-default" href="${base}${url}">`,
+  ].join("\n");
 }
 
 function walk(directory) {
@@ -90,11 +126,28 @@ function walk(directory) {
   });
 }
 
-function build() {
+function loadStrings() {
+  const all = {};
+  for (const lang of languages) {
+    const raw = JSON.parse(readFileSync(join(root, "i18n", "strings", `${lang}.json`), "utf8"));
+    const missing = Object.keys(JSON.parse(readFileSync(join(root, "i18n", "strings", "en.json"), "utf8"))).filter((k) => !(k in raw));
+    if (missing.length > 0) {
+      throw new Error(`i18n/strings/${lang}.json lacks ${missing.join(", ")}`);
+    }
+    // Strings may use site.json values ({{seller}}), filled before the page sees them.
+    all[lang] = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, fill(v, site, `${lang}.json`, false)]));
+  }
+  return all;
+}
+
+function build({ allowStale }) {
   rmSync(dist, { recursive: true, force: true });
   const partial = (name) => readFileSync(join(root, "partials", name), "utf8");
   const shell = partial("shell.html");
   const layouts = { page: partial("page.html"), docs: partial("docs.html") };
+  const allStrings = loadStrings();
+  const problems = [];
+
   for (const file of walk(src)) {
     const relativePath = relative(src, file);
     if (extname(file) !== ".html") {
@@ -104,37 +157,77 @@ function build() {
       continue;
     }
 
-    const { meta, body } = parse(file);
-    const url = meta.url ?? urlFor(relativePath);
-    const layout = layouts[meta.layout];
-    if (!layout) {
-      throw new Error(`${relativePath}: unknown layout ${meta.layout}`);
-    }
+    const english = readFileSync(file, "utf8");
+    const sourceHash = hash(english);
+    for (const lang of languages) {
+      let text = english;
+      if (lang !== "en") {
+        const translated = join(root, "i18n", lang, relativePath);
+        const translation = existsSync(translated) ? readFileSync(translated, "utf8") : null;
+        const recorded = translation === null ? null : parse(translation).meta.source;
+        if (translation === null || recorded !== sourceHash) {
+          problems.push(`${lang}/${relativePath}: ${translation === null ? "missing" : `stale (made from ${recorded ?? "?"}, English is now ${sourceHash})`}`);
+          if (!allowStale) {
+            continue;
+          }
+        } else {
+          text = translation;
+        }
+      }
 
-    const values = { ...site, year: new Date().getFullYear() };
-    const page = layout
-      .replace("<!--content-->", fill(body, values, relativePath))
-      .replace("<!--sidebar-->", docsSidebar(url))
-      .replace("<!--pager-->", docsPager(url));
-    const pageName = fillRaw(meta.title, values, relativePath);
-    const title = pageName === site.name ? `${site.name} — ${site.tagline}` : `${pageName} · ${site.name}`;
-    const description = fillRaw(meta.description, values, relativePath);
-    const html = fill(shell, { ...values, pageTitle: title, pageDescription: description }, "shell.html")
-      .replace("<!--header-->", fill(partial("header.html"), values, "header.html"))
-      .replace("<!--footer-->", fill(partial("footer.html"), values, "footer.html"))
-      .replace("<!--page-->", page)
-      .replace(/<a href="([^"]+)"(?![^>]*aria-current)([^>]*class="nav-link")/g, (all, href, rest) =>
-        url.startsWith(href) && href !== "/" ? `<a href="${href}" aria-current="page"${rest}` : all);
-    const target = url.endsWith("/") && meta.url === undefined && relativePath !== "404.html"
-      ? join(dist, url, "index.html")
-      : join(dist, relativePath);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, html);
+      const { meta, body } = parse(text);
+      const strings = allStrings[lang];
+      const values = { ...site, ...strings, year: new Date().getFullYear() };
+      const url = meta.url ?? urlFor(relativePath);
+      const layout = layouts[meta.layout];
+      if (!layout) {
+        throw new Error(`${relativePath}: unknown layout ${meta.layout}`);
+      }
+
+      const page = fill(layout, values, `${meta.layout}.html`)
+        .replace("<!--content-->", fill(body, values, relativePath))
+        .replace("<!--sidebar-->", docsSidebar(url, strings))
+        .replace("<!--pager-->", docsPager(url, strings));
+      const pageName = meta.title ? fill(meta.title, values, relativePath, false) : site.name;
+      const title = pageName === site.name ? `${site.name} — ${strings.tagline}` : `${pageName} · ${site.name}`;
+      const description = fill(meta.description ?? strings.tagline, values, relativePath, false);
+      const header = fill(partial("header.html"), values, "header.html");
+      let html = fill(shell, { ...values, pageTitle: title, pageDescription: description }, "shell.html")
+        .replace("<!--header-->", header)
+        .replace("<!--footer-->", fill(partial("footer.html"), values, "footer.html"))
+        .replace("<!--page-->", page)
+        .replace(/<a href="([^"]+)"(?![^>]*aria-current)([^>]*class="nav-link")/g, (all, href, rest) =>
+          url.startsWith(href) && href !== "/" ? `<a href="${href}" aria-current="page"${rest}` : all);
+      // The language menu and alternates go in after the page's own links point into its language.
+      html = localizeLinks(html, lang).replace("<!--languages-->", languageMenu(url, lang, allStrings))
+        .replace("<!--alternates-->", alternates(url));
+      const outDir = join(dist, prefix(lang).slice(1));
+      const target = url.endsWith("/") && meta.url === undefined
+        ? join(outDir, url, "index.html")
+        : join(outDir, relativePath);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, html);
+    }
   }
-  console.log(`built ${relative(process.cwd(), dist) || "dist"}`);
+
+  if (problems.length > 0) {
+    const report = `Translations to update (${problems.length}):\n  ${problems.join("\n  ")}`;
+    if (!allowStale) {
+      throw new Error(`${report}\nUpdate them from the English page and set their source hash (node build.mjs --hashes), or build with --allow-stale.`);
+    }
+    console.warn(`${report}\nBuilt with English in their place (--allow-stale).`);
+  }
+  console.log(`built ${relative(process.cwd(), dist) || "dist"} in ${languages.length} languages`);
 }
 
-build();
+if (process.argv.includes("--hashes")) {
+  for (const file of walk(src).filter((f) => extname(f) === ".html")) {
+    console.log(`${hash(readFileSync(file, "utf8"))}  ${relative(src, file)}`);
+  }
+  process.exit(0);
+}
+
+build({ allowStale: process.argv.includes("--allow-stale") });
 
 if (process.argv.includes("--serve")) {
   const types = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".svg": "image/svg+xml", ".js": "text/javascript", ".png": "image/png", ".ico": "image/x-icon" };
@@ -142,7 +235,8 @@ if (process.argv.includes("--serve")) {
     const path = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
     let file = join(dist, path.endsWith("/") ? path + "index.html" : path);
     if (!file.startsWith(dist) || !existsSync(file)) {
-      file = join(dist, "404.html");
+      const lang = path.split("/")[1];
+      file = join(dist, languages.includes(lang) && lang !== "en" ? lang : "", "404.html");
       response.statusCode = 404;
     }
     response.setHeader("Content-Type", types[extname(file)] ?? "application/octet-stream");

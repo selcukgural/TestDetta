@@ -1,0 +1,51 @@
+<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: db51e1c29635 -->
+<h1>Lisans</h1>
+<p class="lead">Açık depolar {{name}}'yı ücretsiz kullanır. Özel depolar CI'a bir lisans dizesi iletir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: geçerli bir lisans olmadan, tıpkı {{name}}'dan önceki gibi tüm testler çalışır.</p>
+
+<h2>Açık depolar</h2>
+<p>Açık bir depo lisansa ihtiyaç duymaz, ancak {{name}} bir deponun açık olduğunu yalnızca CI bunu bildirdiğinde bilir:</p>
+<ul>
+  <li><strong>GitHub Actions:</strong> event payload'undan (<code>repository.private</code>);</li>
+  <li><strong>GitLab CI:</strong> <code>CI_PROJECT_VISIBILITY</code> değişkeninden.</li>
+</ul>
+<p>Jenkins, Azure DevOps, Bitbucket, diğer CI sistemleri ve geliştirici makinelerinde her depo özel sayılır.</p>
+
+<h2>Lisansı iletmek</h2>
+<p>{{name}} lisansı şu sırayla arar:</p>
+<ol>
+  <li><code>TESTDETTA_LICENSE</code>: maskelenmiş ya da secret bir değişkenden gelen lisans dizesi;</li>
+  <li><code>TESTDETTA_LICENSE_FILE</code>: lisansı içeren dosyanın yolu;</li>
+  <li><code>~/.testdetta/license</code>: <code>td license install</code> ve otomatik yenileme tarafından yazılır;</li>
+  <li>depodaki <code>.testdetta/license</code>.</li>
+</ol>
+<p>Önerilen yol bir secret değişkendir. GitHub Actions'ta onu action'ın <code>license</code> girdisi üzerinden iletin:</p>
+<pre><code>- uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
+<p>Lisansı yalnızca <code>td affected</code> ve <code>td test</code> kontrol eder. <code>td record</code> zaten tüm testleri çalıştırır ve lisansa ihtiyaç duymaz.</p>
+
+<h2>Kontrol etmek</h2>
+<p><code>td license status</code>, bulunan lisansın neyi kapsadığını gösterir: geçerliliğini, kapsadığı depoları ve aktif committer sayısını, kişisel veri olmadan. Aynı durum, önemli olduğu her an log'da, job summary'de ve JSON çıktısında görünür: geçerli, yakında sona erecek, koltuk sayısı aşıldı, süresi doldu, yanlış kapsam, geçersiz ya da bulunamadı.</p>
+<pre><code>td license status</code></pre>
+
+<h2>CI secret'ı olmayan makineler</h2>
+<p>Lisansı hiçbir secret değişkenin tutamadığı yerlerde, onu makine başına bir kez kaydedin:</p>
+<pre><code>td license install &lt;license|file&gt;</code></pre>
+<p>Lisans önce kontrol edilir, ardından <code>~/.testdetta/license</code> dosyasına yazılır.</p>
+
+<h2>Otomatik yenileme</h2>
+<p>Bir lisans, yenilendiği adresi kendi içinde taşır. {{name}} günde en fazla bir kez güncel sürümü indirir ve <code>~/.testdetta/license</code> içinde tutar; böylece yenilemeler ve eklenen koltuklar secret'larınıza dokunmadan gelir. İstek, lisansı bir header içinde gönderir ve deponuzdan hiçbir şey göndermez. 2 saniyelik bir zaman aşımı vardır, yeniden deneme yapılmaz ve her hata yok sayılır: çevrimdışı ya da engellenmiş bir ağ günde en fazla 2 saniyeye mal olur. <code>HTTPS_PROXY</code> dikkate alınır.</p>
+<p>Lisans servisine erişemeyen bir ağda <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın ve yeni bir lisans aldığınızda lisans dizesini kendiniz değiştirin.</p>
+
+<h2>Bir lisansın kapsadığı depolar</h2>
+<p>Bir lisans, kapsadığı depoları adlandırır, örneğin <code>github.com/acme/*</code>. {{name}} bunları deponun <code>origin</code> remote'uyla eşleştirir. Remote URL'sine gömülü kimlik bilgileri (Jenkins'te yaygındır) eşleştirmeden önce çıkarılır ve hiçbir zaman loglanmaz.</p>
+<p>Remote, lisansın kapsadığı depoyu adlandırmıyorsa (örneğin yerel bir mirror), <code>TESTDETTA_LICENSE_SCOPE</code> ayarlayın:</p>
+<pre><code>TESTDETTA_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
+
+<h2>Aktif committer'lar</h2>
+<p>{{name}}, aktif committer başına aylık olarak fiyatlandırılır: analiz edilen commit'ten erişilebilen commit'ler arasında, son 30 günde yazarı olduğu en az bir commit bulunan her farklı commit yazarı. Yazarlar yerel olarak, <code>.mailmap</code> ile birleştirilmiş e-postaya göre sayılır ve hiçbir e-posta makinelerinizden çıkmaz. Dependabot, Renovate ve <code>github-actions</code> gibi botlar sayılmaz; kendi kalıplarınızı <code>.testdetta/license.json</code> dosyasına ekleyin:</p>
+<pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>Lisansın koltuk sayısının %20'sine kadar aşım (en az bir kişi) sorun değildir. Bunun üzerinde {{name}} 30 gün boyunca seçim yapmaya devam eder ve her özette uyarı verir; böylece koltuk eklemek için zaman olur. Ancak bu sürenin sonunda sayı hâlâ aşımdaysa, lisans yokmuş gibi tüm testler çalışır. Bkz. <a href="/pricing/">Fiyatlandırma</a>.</p>
+
+<div class="callout"><p>Asla kırmızı derleme yok: süresi dolmuş, bulunamayan ya da eşleşmeyen bir lisans, {{name}}'nın tüm testleri çalıştırmasına ve nedenini söylemesine yol açar. Job'u başarısız kılmaz.</p></div>

@@ -1,0 +1,37 @@
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 6da41d9f69cb -->
+<h1>Sınırlamalar</h1>
+<p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
+
+<h2>Test framework'leri ve runner'lar</h2>
+<p>Her iki <code>dotnet test</code> runner'ı da desteklenir. Runner <code>global.json</code> dosyasından okunur (<code>"test": { "runner": "Microsoft.Testing.Platform" }</code>; .NET 10 SDK üzerinde xUnit v3 için gereklidir).</p>
+<p>Her test projesi, kendisinin bulunduğu ya da üstündeki en yakın <code>global.json</code> dosyasının dizininde derlenir ve çalıştırılır; böylece solution'ın yanında tutulan bir dosya (<code>src/global.json</code>), orada çalışan bir geliştirici için nasıl geçerliyse öyle hesaba katılır. <code>--dry-run</code> bu tür komutları <code>(cd src &amp;&amp; dotnet test ...)</code> şeklinde yazdırır.</p>
+<p>Kayıt ve seçim; xUnit v2 (VSTest), xUnit v3 ve TUnit (Microsoft.Testing.Platform) ile, MSTest ve NUnit ile ise her iki runner altında, framework'ün kendi paralelleştirmesini açan projeler dahil uçtan uca test edilmiştir.</p>
+
+<h2>Kayıt sırasında başarısız olan testler</h2>
+<p>Kayıt sırasında başarısız olan test sınıfları, projeleri etkilendiğinde her zaman seçilir: başarısız bir test erken durur, dolayısıyla kapsam verisi eksiktir.</p>
+<p>Testler başarısız olduğunda ve hangilerinin başarısız olduğunu söyleyen bir TRX raporu bulunmadığında (<code>Microsoft.Testing.Extensions.TrxReport</code> olmadan Microsoft.Testing.Platform altında NUnit), harita kullanılmaz ve seçim isimlere geri döner.</p>
+
+<h2>Süreç başına bir kez çalışan kod</h2>
+<p>Önbellekler, lazy singleton'lar ve EF model oluşturma, test süreci başına bir kez çalışır ve onları tetikleyen ilk test sınıfına yazılır. Static constructor içinde ya da önbellek dolduran bir çağrıda (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>) çalışmış koddaki değişiklikler ve her kayıt sürecinde yalnızca tek bir test sınıfının çalıştırdığı constructor'lar ile static üyelerdeki değişiklikler bunun yerine isimle izlenir.</p>
+<div class="callout"><p><code>TryGetValue</code> ile kontrol edilen bir <code>Dictionary</code> gibi elle yazılmış bir önbellek, kullanıcılarını yine de gizleyebilir. Varsayılan branch'te tüm test paketini çalıştırmaya devam edin; kayıt bunu zaten yapar.</p></div>
+
+<h2>Proje dosyaları</h2>
+<p>Proje dosyaları; referanslar, derlenen ve gömülü öğeler, assembly adları ve hedef framework'ler için varsayılan yapılandırmada ve restore yapılmadan MSBuild ile değerlendirilir (tek bir <code>dotnet msbuild</code> çağrısı, <code>.testdetta/cache</code> içinde önbelleğe alınır).</p>
+<ul>
+  <li>Yalnızca bir paketin props dosyalarının eklediği ya da yalnızca bir <code>Release</code> koşulunun eklediği öğeler görülmez.</li>
+  <li>MSBuild'in değerlendiremediği bir proje, import'ları gibi XML olarak okunur.</li>
+  <li>Hiçbir projenin sahiplenmediği değişen dosyaların, bulundukları dizinin projelerini etkilediği varsayılır.</li>
+  <li>Test projeleri ayrıca <code>*.Tests</code> ya da <code>*.Test</code> adından da tanınır.</li>
+</ul>
+
+<h2>Önişlemci sembolleri</h2>
+<p>C# dosyaları her hedef framework'ün gerçek önişlemci sembolleriyle, ayrıca hiç sembol olmadan ve <code>#if</code>'lerinin andığı tüm sembollerle ayrıştırılır; böylece herhangi bir etkin koşul altındaki kod görülür.</p>
+
+<h2>Atlanan testler</h2>
+<p>Bir harita kaydedilirken atlanan testlerin kapsam verisi yoktur. Tüm testleri atlanmış bir sınıf, çalışabileceği başka bir platformda seçilir, kaydın yapıldığı platformda ise atlanır. Docker daemon'ının bulunmaması gibi başka nedenlerle atlanan testler, ancak testlerin çalıştığı yerde kayıt yapılarak kapsanır.</p>
+
+<h2>Source generator'lar</h2>
+<p>Source generator'ların yazdığı kod kaynak ağacında bulunmaz. <code>td record</code> bu kodu kaydedilen assembly'lerin PDB'lerinden (portable ya da embedded) okur ve andığı isimleri haritada tutar; böylece isim izleme, üretilmiş çağıranları görür. Portable PDB olmadan derlenmiş assembly'ler hiçbir şey sağlamaz.</p>
+
+<h2>F# ve Visual Basic</h2>
+<p>F# ve Visual Basic projeleri proje grafiğinin bir parçasıdır, ancak kodları analiz edilmez: bunlardan biri etkilendiğinde, ona bağımlı her şey tamamen çalışır.</p>

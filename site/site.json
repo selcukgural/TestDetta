@@ -1,8 +1,7 @@
 {
-  "name": "Sift",
-  "tagline": "Run only the .NET tests a change can affect.",
-  "domain": "example.com",
-  "supportEmail": "support@example.com",
+  "name": "TestDetta",
+  "domain": "testdetta.com",
+  "supportEmail": "support@testdetta.com",
   "seller": "Polar Software, Inc.",
   "licensor": "Selçuk Güral",
   "licensorCountry": "Türkiye",
@@ -15,5 +14,6 @@
   "corpusRepositories": "41",
   "corpusFailingChanges": "2,941",
   "corpusMissed": "3",
-  "legalUpdated": "2026-10-04"
+  "legalUpdated": "2026-10-04",
+  "corpusMedianShare": "28%"
 }

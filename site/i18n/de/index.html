@@ -1,0 +1,98 @@
+<!-- title: {{name}}; description: {{name}} liest Ihren Git-Diff und führt nur die .NET-Testklassen aus, die eine Änderung betreffen kann. Ist es sich nicht sicher, führt es mehr aus, nie weniger.; source: be9de6a1186d -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">Test Impact Analysis für .NET</span>
+      <h1>Führen Sie nur die Tests aus, die Ihre Änderung brechen kann.</h1>
+      <p class="lead">{{name}} liest Ihren Diff, verfolgt ihn über Projekte, Symbole und aufgezeichnete Coverage und führt nur die Testklassen aus, die die Änderung bemerken können. Ist es sich nicht sicher, führt es mehr aus, nie weniger.</p>
+      <div class="hero-actions">
+        <a class="button" href="/docs/">Loslegen</a>
+        <a class="button button-ghost" href="/docs/how-it-works/">Wie es entscheidet</a>
+      </div>
+    </div>
+    <div class="terminal replay" aria-label="Ausgabe von td test für eine echte Änderung an Spectre.Console">
+      <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed: 0, Passed: 156, Total: 156 - Spectre.Console.Tests.dll</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l t-dim"># eine echte Änderung an Spectre.Console: <a href="/docs/examples/">den ganzen Lauf ansehen</a></span></pre>
+    </div>
+  </div>
+</div>
+
+<section class="section-soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Gemessen an echtem Code, nicht an Demos</h2>
+      <p>Wir ändern Member verbreiteter Open-Source-Bibliotheken für .NET einzeln und prüfen, dass jede fehlschlagende Testklasse eine ist, die {{name}} ausgewählt hat.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{corpusRepositories}}</strong><span>Open-Source-Repositorys, jedes mit eigenem Test-Framework, eigenem Test Runner und eigenen Build-Eigenheiten</span></div>
+      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>Änderungen, die mindestens einen Test zum Fehlschlagen brachten</span></div>
+      <div class="stat"><strong>{{corpusMissed}} übersehen, alle behoben</strong><span>Jedes Übersehen erhält einen Test, der ohne die Korrektur fehlschlägt, und sein Repository läuft erneut, bis es sauber ist</span></div>
+    </div>
+    <p class="stats-note">Eine Änderung an einem Member führte im Median <strong>{{corpusMedianShare}}</strong> der Testklassen aus. <a href="/docs/examples/">Einen echten Lauf ansehen, vom Diff bis zur Job Summary →</a></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Wie es entscheidet</h2>
+      <p>Jeder Schritt grenzt die Auswahl nur ein, wenn er Belege dafür hat. Alles, was sich nicht nachverfolgen lässt, führt dazu, dass mehr ausgeführt wird.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card"><span class="step-number">1</span><h3>Projekte</h3><p>Geänderte Dateien werden Projekten zugeordnet und folgen den <code>ProjectReference</code>s. Build-weite Dateien wie <code>Directory.Build.props</code> betreffen alles unterhalb von ihnen.</p></div>
+      <div class="card"><span class="step-number">2</span><h3>Symbole</h3><p>C#-Syntaxbäume werden verglichen, sodass Änderungen an Kommentaren und Leerraum nichts auswählen und {{name}} weiß, welche Member sich geändert haben.</p></div>
+      <div class="card"><span class="step-number">3</span><h3>Coverage</h3><p>Eine auf Ihrem Standard-Branch aufgezeichnete Map gibt an, welche Testklasse welche Methode ausgeführt hat, sodass geänderte Methoden ihre Klassen direkt auswählen.</p></div>
+      <div class="card"><span class="step-number">4</span><h3>Namen</h3><p>Neuer Code, Felder und Konstanten werden anhand ihres Namens durch den Quellcode verfolgt, bis sie Testklassen oder Code erreichen, den die Map kennt.</p></div>
+      <div class="card"><span class="step-number">5</span><h3>Fallbacks</h3><p>Konfigurationsdateien, globale Usings, per Reflection gefundene Typen: Lässt sich eine Änderung nicht nachverfolgen, läuft das gesamte Testprojekt.</p></div>
+      <div class="card"><span class="step-number">6</span><h3>Selbstprüfungen</h3><p>Ein Filter, der keinem Test entspricht, wird als Fehler in {{name}} behandelt, und das Projekt läuft ohne ihn erneut.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap grid-2">
+    <div>
+      <div class="section-head">
+        <h2>Zwei Schritte in GitHub Actions</h2>
+        <p>Zeichnen Sie bei jedem Push auf Ihren Standard-Branch eine Coverage-Map auf. Pull Requests stellen die neueste Map wieder her und führen nur die betroffenen Tests aus, mit einer Job Summary, die angibt, warum jede Klasse ausgeführt oder übersprungen wurde.</p>
+      </div>
+      <p><a href="/docs/github-actions/">Anleitung für GitHub Actions →</a><br><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+    </div>
+<pre class="code">- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Für Teams, die sich keinen übersehenen Test leisten können</h2>
+    </div>
+    <div class="grid-3">
+      <div class="card"><h3>Ihr Code bleibt bei Ihnen</h3><p>{{name}} läuft in Ihrer CI. Weder Quellcode noch Coverage noch Testergebnisse verlassen Ihre Rechner; die E-Mail-Adressen der Committer werden nur lokal gezählt.</p></div>
+      <div class="card"><h3>Jedes Framework, das Sie verwenden</h3><p>xUnit v2 und v3, NUnit, MSTest und TUnit, sowohl unter VSTest als auch unter Microsoft.Testing.Platform, einschließlich ihrer eigenen Parallelisierung.</p></div>
+      <div class="card"><h3>Blockiert nie einen Build</h3><p>Ohne gültige Lizenz laufen wie bisher alle Tests. Ein Lizenzproblem kostet CI-Zeit, nie einen roten Build.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap center">
+    <div class="section-head">
+      <h2>Kostenlos für öffentliche Repositorys. {{trialDays}} Tage kostenlos für private.</h2>
+      <p>Danach {{currency}}{{priceMonthly}} pro aktivem Committer und Monat. Für die Testphase ist keine Kreditkarte nötig.</p>
+    </div>
+    <div class="hero-actions">
+      <a class="button" href="/pricing/">Preise ansehen</a>
+      <a class="button button-ghost" href="/docs/">Dokumentation lesen</a>
+    </div>
+  </div>
+</section>

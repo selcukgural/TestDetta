@@ -1,0 +1,145 @@
+<!-- title: Andere CI-Systeme; layout: docs; description: Führen Sie {{name}} auf GitLab CI, Jenkins, Azure DevOps, Bitbucket und On-Premises-CI mit einem Ordner von Coverage-Maps aus.; source: ce15ca657ac0 -->
+<h1>Andere CI-Systeme</h1>
+<p class="lead">{{name}} funktioniert auf jeder CI, die .NET und Git ausführt. Außerhalb von GitHub Actions genügen zwei Befehle und ein Ordner.</p>
+
+<ul>
+  <li><strong>Auf dem Standard-Branch</strong> führt <code>td record --maps-dir &lt;maps&gt;</code> die gesamte Testsuite einmal mit Coverage aus und speichert eine Coverage-Map pro Testprojekt unter <code>&lt;maps&gt;/&lt;commit&gt;/</code>.</li>
+  <li><strong>In einem Pull oder Merge Request</strong> stellt <code>td test --base origin/&lt;target&gt; --maps-dir &lt;maps&gt;</code> die neueste Map an oder vor der Merge-Base wieder her. Es nimmt die nächstgelegene innerhalb von 50 First-Parent-Commits (<code>--max-map-age</code>) und überbrückt die Änderungen dazwischen. Dann führt es nur die betroffenen Tests aus.</li>
+</ul>
+<p><code>&lt;maps&gt;</code> ist ein gewöhnlicher Ordner. Legen Sie ihn dort ab, wo Ihre CI Dateien zwischen Pipelines aufbewahren kann:</p>
+<ul>
+  <li>auf einem von den Agents gemeinsam genutzten Laufwerk, wie es On-Premises üblich ist: <code>/srv/testdetta-maps/&lt;repository&gt;</code>;</li>
+  <li>in einem Objektspeicher (S3, Azure Blob, GCS, MinIO), der vorher und nachher synchronisiert wird.</li>
+</ul>
+<p>{{name}} selbst nutzt für Maps nie das Netzwerk.</p>
+
+<h2>Was jede Einrichtung benötigt</h2>
+<ul>
+  <li><strong>Vollständige Git-Historie.</strong> {{name}} vergleicht mit der Merge-Base und durchläuft die Historie, um Maps zu finden. Shallow Clones können beides nicht.</li>
+  <li><strong>Der Ziel-Branch ist abgerufen</strong>, sodass <code>origin/&lt;target&gt;</code> existiert. Rufen Sie ihn mit einer expliziten Refspec ab: <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code>. CI-Klone beschränken die Refspecs des Remotes oft auf den eigenen Branch der Pipeline (die von GitLab und Bitbucket tun das), und dann aktualisiert <code>git fetch origin &lt;target&gt;</code> allein nur <code>FETCH_HEAD</code>, und <code>origin/&lt;target&gt;</code> fehlt weiterhin.</li>
+  <li><strong>Die Lizenz</strong> in <code>TESTDETTA_LICENSE</code> (einer maskierten oder geheimen Variable) oder in einer Datei, die <code>TESTDETTA_LICENSE_FILE</code> benennt. Öffentliche Repositorys benötigen auf GitLab CI und GitHub Actions keine; Jenkins, Azure DevOps und Bitbucket geben nicht an, ob ein Repository öffentlich ist, daher benötigt dort jedes Repository eine. Ohne gültige Lizenz laufen alle Tests, und der Build schlägt deswegen nie fehl. Siehe <a href="/docs/license/">Lizenz</a>.</li>
+  <li><strong>Exitcodes:</strong> <code>0</code> Erfolg, <code>1</code> Analyse fehlgeschlagen, <code>2</code> ungültige Befehlszeile, <code>3</code> Tests fehlgeschlagen.</li>
+  <li><strong>Aufräumen:</strong> Maps alter Commits werden nur für 50 Commits benötigt. Löschen Sie ältere Ordner mit einem geplanten Job oder einer Lifecycle-Regel des Speichers.</li>
+</ul>
+
+<h2>Installation</h2>
+<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
+<div class="callout"><p>Der Paketname wird zum Launch festgelegt. Bis dahin bauen Sie {{name}} aus dem Quellcode mit <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> und rufen überall dort, wo unten <code>td</code> steht, <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> auf.</p></div>
+
+<h2>GitLab CI</h2>
+<pre><code>variables:
+  GIT_DEPTH: "0"                    # full history
+  TESTDETTA_MAPS: /srv/testdetta-maps/$CI_PROJECT_PATH   # a disk the runners share; or sync with object storage
+
+record-coverage:
+  stage: test
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - td record --maps-dir "$TESTDETTA_MAPS"
+
+affected-tests:
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - git fetch --no-tags origin "+refs/heads/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:refs/remotes/origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - td test --base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --maps-dir "$TESTDETTA_MAPS" --summary-file testdetta-summary.md
+  artifacts:
+    when: always
+    paths: [testdetta-summary.md]</code></pre>
+<p>Setzen Sie <code>TESTDETTA_LICENSE</code> unter Settings → CI/CD → Variables, je nach Bedarf maskiert und geschützt. {{name}} erkennt öffentliche Projekte über <code>CI_PROJECT_VISIBILITY</code>.</p>
+
+<h2>Jenkins</h2>
+<p>Eine deklarative Multibranch-Pipeline:</p>
+<pre><code>pipeline {
+  agent any
+  environment {
+    TESTDETTA_LICENSE = credentials('testdetta-license')          // a "secret text" credential
+    TESTDETTA_MAPS = "/srv/testdetta-maps/${env.JOB_NAME.split('/')[0]}"
+  }
+  options { skipDefaultCheckout() }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scmGit(branches: scm.branches, userRemoteConfigs: scm.userRemoteConfigs,
+                        extensions: [cloneOption(shallow: false, depth: 0, noTags: true, reference: '')])
+      }
+    }
+    stage('Record coverage') {
+      when { branch 'main' }
+      steps { sh 'td record --maps-dir "$TESTDETTA_MAPS"' }
+    }
+    stage('Affected tests') {
+      when { changeRequest() }
+      steps {
+        sh 'git fetch --no-tags origin "+refs/heads/$CHANGE_TARGET:refs/remotes/origin/$CHANGE_TARGET"'
+        sh 'td test --base "origin/$CHANGE_TARGET" --maps-dir "$TESTDETTA_MAPS"'
+      }
+    }
+  }
+}</code></pre>
+<p>Jenkins klont oft mit Anmeldedaten in der Remote-URL. {{name}} entfernt sie, bevor es den Lizenz-Scope abgleicht, und loggt sie nie. Wenn der Remote nicht das Repository benennt, das die Lizenz abdeckt (zum Beispiel bei einem lokalen Mirror), setzen Sie <code>TESTDETTA_LICENSE_SCOPE</code>, etwa auf <code>git.acme.corp/scm/pay/app</code>.</p>
+
+<h2>Azure DevOps Pipelines</h2>
+<pre><code>trigger: [main]
+pr: [main]
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+  - script: td record --maps-dir "$(TESTDETTA_MAPS)"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    env:
+      TESTDETTA_LICENSE: $(TestDettaLicense)          # a secret pipeline variable
+  - script: |
+      target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+      git fetch --no-tags origin "+refs/heads/$target:refs/remotes/origin/$target"
+      td test --base "origin/$target" --maps-dir "$(TESTDETTA_MAPS)" --summary-file "$(Agent.TempDirectory)/testdetta.md"
+      echo "##vso[task.uploadsummary]$(Agent.TempDirectory)/testdetta.md"
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    env:
+      TESTDETTA_LICENSE: $(TestDettaLicense)</code></pre>
+<p><code>TESTDETTA_MAPS</code> verweist auf einen Netzwerkpfad auf selbst gehosteten Agents. Auf von Microsoft gehosteten Agents synchronisieren Sie den Ordner mit Azure Blob Storage (siehe <a href="#object-storage">Objektspeicher</a>).</p>
+
+<h2>Bitbucket Pipelines</h2>
+<pre><code>clone:
+  depth: full
+
+pipelines:
+  branches:
+    main:
+      - step:
+          script:
+            - td record --maps-dir maps
+            - ./sync-maps.sh upload maps        # see "Object storage"
+  pull-requests:
+    '**':
+      - step:
+          script:
+            - git fetch --no-tags origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - td test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps</code></pre>
+<p>Legen Sie <code>TESTDETTA_LICENSE</code> als geschützte Repository-Variable an.</p>
+
+<h2 id="object-storage">Objektspeicher statt gemeinsamem Laufwerk</h2>
+<p>Auf gehosteten Runnern gibt es kein gemeinsames Laufwerk. Laden Sie den neuen Ordner nach der Aufzeichnung hoch. Laden Sie vor dem Testen nur die Ordner herunter, die verwendet werden können: die Merge-Base und bis zu 50 First-Parent-Commits davor. Laden Sie sie vom neuesten an herunter und hören Sie beim ersten vorhandenen auf. Ein Beispiel für S3; jedes Werkzeug mit <code>cp</code> und <code>ls</code> funktioniert genauso:</p>
+<pre><code>#!/usr/bin/env bash
+# sync-maps.sh upload &lt;maps&gt;          | after td record on the default branch
+# sync-maps.sh download &lt;maps&gt; &lt;base&gt; | before td test on a pull request
+set -euo pipefail
+remote="s3://my-bucket/testdetta-maps/my-repository"
+case "$1" in
+  upload)
+    aws s3 cp --recursive "$2/$(git rev-parse HEAD)" "$remote/$(git rev-parse HEAD)" ;;
+  download)
+    for sha in $(git rev-list --first-parent -n 51 "$(git merge-base "$3" HEAD)"); do
+      if aws s3 ls "$remote/$sha/" &gt; /dev/null 2&gt;&amp;1; then
+        aws s3 cp --recursive "$remote/$sha" "$2/$sha"
+        break
+      fi
+    done ;;
+esac</code></pre>
+
+<h2>Wenn es keine Map gibt</h2>
+<p>Die ersten Pull Requests nach der Einrichtung oder solche, die weit zurückliegen, finden keine Map in Reichweite. {{name}} wählt dann nur anhand von Namen aus, was sicher ist, aber mehr auswählt, und vermerkt das in seinem Log. Die Auswahl wird präzise, sobald <code>td record</code> auf dem Standard-Branch gelaufen ist.</p>

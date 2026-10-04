@@ -1,0 +1,98 @@
+<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: be9de6a1186d -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">.NET için test etki analizi</span>
+      <h1>Yalnızca değişikliğinizin bozabileceği testleri çalıştırın.</h1>
+      <p class="lead">{{name}} diff'inizi okur, onu projeler, semboller ve kaydedilmiş kapsam verisi üzerinden izler ve yalnızca değişikliği gözlemleyebilecek test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.</p>
+      <div class="hero-actions">
+        <a class="button" href="/docs/">Başlayın</a>
+        <a class="button button-ghost" href="/docs/how-it-works/">Nasıl karar verir</a>
+      </div>
+    </div>
+    <div class="terminal replay" aria-label="Gerçek bir Spectre.Console değişikliğinde td test çıktısı">
+      <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed: 0, Passed: 156, Total: 156 - Spectre.Console.Tests.dll</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l t-dim"># Spectre.Console'da gerçek bir değişiklik: <a href="/docs/examples/">koşunun tamamını görün</a></span></pre>
+    </div>
+  </div>
+</div>
+
+<section class="section-soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Demolarda değil, gerçek kodda ölçüldü</h2>
+      <p>Popüler açık kaynak .NET kütüphanelerindeki üyeleri tek tek değiştiriyor ve başarısız olan her test sınıfının {{name}} tarafından seçilmiş olduğunu doğruluyoruz.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{corpusRepositories}}</strong><span>açık kaynak depo; her birinin kendi test framework'ü, test runner'ı ve derleme tuhaflıkları var</span></div>
+      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>en az bir testi bozan değişiklik</span></div>
+      <div class="stat"><strong>{{corpusMissed}} kaçırma, hepsi düzeltildi</strong><span>her kaçırma için düzeltme olmadan başarısız olan bir test yazılır ve ilgili depo temiz çıkana kadar yeniden çalıştırılır</span></div>
+    </div>
+    <p class="stats-note">Tek bir üyedeki değişiklik, test sınıflarının medyan <strong>{{corpusMedianShare}}</strong> kadarını çalıştırdı. <a href="/docs/examples/">Diff'ten job summary'ye gerçek bir koşuyu görün →</a></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Nasıl karar verir</h2>
+      <p>Her adım seçimi yalnızca kanıtı olduğunda daraltır. İzleyemediği her şeyde daha fazlasını çalıştırmaya geri döner.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card"><span class="step-number">1</span><h3>Projeler</h3><p>Değişen dosyalar projelere eşlenir ve <code>ProjectReference</code>'lar izlenir. <code>Directory.Build.props</code> gibi derlemenin geneline etki eden dosyalar altlarındaki her şeyi etkiler.</p></div>
+      <div class="card"><span class="step-number">2</span><h3>Semboller</h3><p>C# söz dizimi ağaçları karşılaştırılır; böylece yorum ve boşluk değişiklikleri hiçbir şey seçmez ve {{name}} hangi üyelerin değiştiğini bilir.</p></div>
+      <div class="card"><span class="step-number">3</span><h3>Kapsam</h3><p>Varsayılan branch'inizde kaydedilen bir kapsam haritası hangi test sınıfının hangi metodu çalıştırdığını söyler; böylece değişen metotlar kendi sınıflarını doğrudan seçer.</p></div>
+      <div class="card"><span class="step-number">4</span><h3>İsimler</h3><p>Yeni kod, alanlar ve sabitler, test sınıflarına ya da haritanın bildiği koda ulaşana kadar kaynak kodda isimleriyle izlenir.</p></div>
+      <div class="card"><span class="step-number">5</span><h3>Geri dönüşler</h3><p>Yapılandırma dosyaları, global using'ler, reflection ile keşfedilen tipler: bir değişiklik izlenemediğinde test projesinin tamamı çalışır.</p></div>
+      <div class="card"><span class="step-number">6</span><h3>Öz denetimler</h3><p>Hiçbir testle eşleşmeyen bir filtre {{name}} içinde bir hata olarak ele alınır ve proje filtresiz olarak yeniden çalıştırılır.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap grid-2">
+    <div>
+      <div class="section-head">
+        <h2>GitHub Actions'ta iki adım</h2>
+        <p>Varsayılan branch'inize yapılan her push'ta bir kapsam haritası kaydedin. Pull request'ler en yeni haritayı geri yükler ve yalnızca etkilenen testleri çalıştırır; job summary her sınıfın neden çalıştırıldığını ya da atlandığını açıklar.</p>
+      </div>
+      <p><a href="/docs/github-actions/">GitHub Actions rehberi →</a><br><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+    </div>
+<pre class="code">- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Tek bir testin bile kaçmasını göze alamayan ekipler için</h2>
+    </div>
+    <div class="grid-3">
+      <div class="card"><h3>Kodunuz sizde kalır</h3><p>{{name}} sizin CI'ınızda çalışır. Hiçbir kaynak kod, kapsam verisi ya da test sonucu makinelerinizden çıkmaz; committer e-postaları yalnızca yerel olarak sayılır.</p></div>
+      <div class="card"><h3>Kullandığınız her framework</h3><p>xUnit v2 ve v3, NUnit, MSTest ve TUnit; hem VSTest hem Microsoft.Testing.Platform altında, kendi paralelleştirmeleri dahil.</p></div>
+      <div class="card"><h3>Hiçbir derlemeyi engellemez</h3><p>Geçerli bir lisans yoksa eskisi gibi tüm testler çalışır. Bir lisans sorunu size CI süresine mal olur, asla kırmızı bir derlemeye değil.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap center">
+    <div class="section-head">
+      <h2>Açık depolar için ücretsiz. Özel depolar için {{trialDays}} gün ücretsiz.</h2>
+      <p>Ardından aktif committer başına aylık {{currency}}{{priceMonthly}}. Deneme için kart gerekmez.</p>
+    </div>
+    <div class="hero-actions">
+      <a class="button" href="/pricing/">Fiyatları görün</a>
+      <a class="button button-ghost" href="/docs/">Dokümantasyonu okuyun</a>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,49 @@
+<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 185c628bff1f -->
+<h1>Nasıl karar verir</h1>
+<p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediği her şeyde daha fazlasını çalıştırmaya geri döner.</p>
+
+<h2>Daha fazlasını seç, asla daha azını değil</h2>
+<p>Kaçırılan bir test bir hatadır; fazladan bir test yalnızca CI süresine mal olur. Aşağıdaki her kural bundan çıkar. Analiz, bir değişikliğin bir projeyi ya da sınıfı etkileyip etkilemediğinden emin olamadığında onu etkilenmiş sayar ve gerekçe çıktıda görünür.</p>
+
+<h2>Beş adım</h2>
+
+<h3>1. Projeler</h3>
+<p>Değişen dosyalar ait oldukları projelere eşlenir ve <code>ProjectReference</code>'lar üzerinden onlara bağımlı her projeye kadar izlenir. <code>Directory.Build.props</code>, <code>global.json</code> ve <code>.editorconfig</code> gibi derlemenin geneline etki eden dosyalar altlarındaki her projeyi etkiler.</p>
+
+<h3>2. Semboller</h3>
+<p>C# dosyalarında eski ve yeni söz dizimi ağaçları karşılaştırılır. Yorum ve boşluk değişiklikleri hiçbir şey seçmez; diğer durumlarda {{name}} hangi tiplerin ve üyelerin değiştiğini bilir.</p>
+
+<h3>3. Kapsam</h3>
+<p><code>td record</code> çalıştıktan sonra, base commit'te kaydedilmiş ve hangi test sınıfının hangi metodu çalıştırdığını gösteren bir harita, değişen metotlar, property'ler ve constructor'lar için test sınıflarını doğrudan verir.</p>
+
+<h3>4. İsimler</h3>
+<p>Yeni kod, alanlar ve sabitler gibi kapsam verisinin göremediği şeyler, test sınıflarına ya da kapsam haritasının bildiği koda ulaşana kadar kaynak kodda isimleriyle izlenir.</p>
+
+<h3>5. Geri dönüşler</h3>
+<p>Bir değişiklik izlenemediğinde test projesinin tamamı çalışır:</p>
+<ul>
+  <li>bir projedeki C# dışı dosyalar, örneğin <code>appsettings.json</code>, <code>.csproj</code> ya da bir <code>.resx</code>;</li>
+  <li>global using'ler ve assembly attribute'ları;</li>
+  <li>bir framework'ün reflection ile keşfettiği tipler, örneğin controller'lar, mesaj handler'ları ve EF yapılandırmaları.</li>
+</ul>
+
+<h2>Filtre öz denetimi</h2>
+<p>{{name}}, seçilen bir projeyi test sınıfları üzerinde bir filtreyle çalıştırır. Hiçbir testle eşleşmeyen bir filtre {{name}} içinde bir hata olarak ele alınır: proje filtresiz olarak yeniden çalıştırılır.</p>
+
+<h2>Kapsam haritaları</h2>
+<p><code>td record</code> tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için bir harita yazar. Haritaları en iyisi branch'inizin merge base'inde kaydetmektir; CI'da ise varsayılan branch'teki her commit için bir harita kaydedersiniz.</p>
+
+<h3>Eski haritalar ve drift bridge</h3>
+<p>Merge base'den en fazla 50 commit önce kaydedilmiş bir harita yine kullanılır (<code>--max-map-age</code>, varsayılan 50; 0 yalnızca merge base'de kaydedilmiş bir haritayı kullanır). Aradaki kod değişiklikleri haritanın bilmediği çağrılar oluşturmuş olabilir; bu yüzden {{name}}, o zamandan beri değişmiş ve sizin değişikliğinize ulaşabilen herhangi bir üyeyi çalıştırmış sınıfları da seçer ve yeni kodu isimle izler.</p>
+<p>Aradaki bir şey üyelerle ifade edilemediğinde, örneğin bir derleme dosyası ya da <code>appsettings.json</code>, etkilenen test projeleri tamamen çalışır. <code>--drift-fallback name</code> ise bunun yerine, harita yokmuş gibi isimlere göre karar verir: daha hızlıdır, ancak yapılandırma ya da reflection ile bağlanan çağrıları göremez.</p>
+
+<h3>Harita olmadan</h3>
+<p>Kurulumdan sonraki ilk pull request'ler ya da çok geride kalanlar, erişilebilir mesafede bir harita bulamaz. {{name}} bu durumda yalnızca isimlere göre seçer; bu güvenlidir ama daha fazlasını seçer ve bunu logunda belirtir. <code>td record</code> varsayılan branch'te çalıştıktan sonra seçim isabetli hale gelir.</p>
+
+<h2>Nedenini görmek</h2>
+<p><code>td affected</code> ve <code>td test --dry-run</code>, etkilenen her test projesini filtreli mi, tamamen mi yoksa hiç mi çalışacağının gerekçesiyle birlikte yazdırır; <code>td affected --format json</code> her test sınıfı için verilen kararı da ekler. <code>-v</code> her kararı stderr'e yazar; örneğin bir projenin neden etkilendiğini ya da bir sınıfın hangi değişikliği çalıştırdığını.</p>
+<pre><code>$ td test --dry-run --base origin/main
+td: 1 changed file(s), 2 affected test project(s).
+Tests to run:
+  filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
+  skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>

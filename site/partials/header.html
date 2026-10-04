@@ -1,14 +1,20 @@
 <header class="site-header">
   <div class="wrap header-row">
-    <a class="brand" href="/" aria-label="{{name}} home">
+    <a class="brand" href="/" aria-label="{{name}} {{home}}">
       <img src="/assets/collie.svg" alt="" width="30" height="30">
       <span>{{name}}</span>
     </a>
-    <nav class="main-nav" aria-label="Main">
-      <a href="/docs/" class="nav-link">Docs</a>
-      <a href="/pricing/" class="nav-link">Pricing</a>
-      <a href="/docs/github-actions/" class="nav-link nav-extra">GitHub Actions</a>
-      <a class="button button-small" href="/docs/">Get started</a>
+    <nav class="main-nav" aria-label="{{navMain}}">
+      <a href="/docs/" class="nav-link">{{navDocs}}</a>
+      <a href="/pricing/" class="nav-link">{{navPricing}}</a>
+      <a href="/docs/github-actions/" class="nav-link nav-extra">{{navGitHubActions}}</a>
+      <!--languages-->
+      <button type="button" class="header-control theme-toggle" data-label="{{theme}}" data-system="{{themeSystem}}" data-light="{{themeLight}}" data-dark="{{themeDark}}" aria-label="{{theme}}">
+        <svg class="icon icon-system" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <svg class="icon icon-light" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <svg class="icon icon-dark" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      </button>
+      <a class="button button-small" href="/docs/">{{getStarted}}</a>
     </nav>
   </div>
 </header>

@@ -1,0 +1,98 @@
+<!-- title: {{name}}; description: {{name}} lee tu git diff y ejecuta solo las clases de prueba de .NET que un cambio puede afectar. Cuando no puede estar seguro, ejecuta más, nunca menos.; source: be9de6a1186d -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">Análisis de impacto de pruebas para .NET</span>
+      <h1>Ejecuta solo las pruebas que tu cambio puede romper.</h1>
+      <p class="lead">{{name}} lee tu diff, lo sigue a través de proyectos, símbolos y cobertura registrada, y ejecuta solo las clases de prueba que pueden observarlo. Cuando no puede estar seguro, ejecuta más, nunca menos.</p>
+      <div class="hero-actions">
+        <a class="button" href="/docs/">Empezar</a>
+        <a class="button button-ghost" href="/docs/how-it-works/">Cómo decide</a>
+      </div>
+    </div>
+    <div class="terminal replay" aria-label="Salida de td test en un cambio real de Spectre.Console">
+      <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed: 0, Passed: 156, Total: 156 - Spectre.Console.Tests.dll</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l t-dim"># un cambio real en Spectre.Console: <a href="/docs/examples/">ver la ejecución completa</a></span></pre>
+    </div>
+  </div>
+</div>
+
+<section class="section-soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Medido en código real, no en demos</h2>
+      <p>Cambiamos miembros de bibliotecas .NET de código abierto populares, uno a uno, y comprobamos que cada clase de prueba que falla sea una que {{name}} seleccionó.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{corpusRepositories}}</strong><span>repositorios de código abierto, cada uno con su propio framework de pruebas, test runner y particularidades de compilación</span></div>
+      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>cambios que rompieron al menos una prueba</span></div>
+      <div class="stat"><strong>{{corpusMissed}} pasadas por alto, todas corregidas</strong><span>cada caso pasado por alto recibe una prueba que falla sin la corrección, y su repositorio se vuelve a ejecutar hasta quedar limpio</span></div>
+    </div>
+    <p class="stats-note">Un cambio en un solo miembro ejecutó una mediana del <strong>{{corpusMedianShare}}</strong> de las clases de prueba. <a href="/docs/examples/">Mira una ejecución real, del diff al job summary →</a></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Cómo decide</h2>
+      <p>Cada paso reduce la selección solo cuando tiene pruebas de ello. Todo lo que no puede rastrear recurre a ejecutar más.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card"><span class="step-number">1</span><h3>Proyectos</h3><p>Los archivos modificados se asignan a proyectos y siguen sus <code>ProjectReference</code>. Los archivos que afectan a toda la compilación, como <code>Directory.Build.props</code>, afectan a todo lo que está por debajo de ellos.</p></div>
+      <div class="card"><span class="step-number">2</span><h3>Símbolos</h3><p>Se comparan los árboles de sintaxis de C#, así que los cambios en comentarios y espacios en blanco no seleccionan nada, y {{name}} sabe qué miembros cambiaron.</p></div>
+      <div class="card"><span class="step-number">3</span><h3>Cobertura</h3><p>Un mapa registrado en tu rama predeterminada indica qué clase de prueba ejecutó qué método, así que los métodos modificados seleccionan sus clases directamente.</p></div>
+      <div class="card"><span class="step-number">4</span><h3>Nombres</h3><p>El código nuevo, los campos y las constantes se rastrean por nombre a través del código fuente hasta llegar a clases de prueba o a código que el mapa conoce.</p></div>
+      <div class="card"><span class="step-number">5</span><h3>Alternativas seguras</h3><p>Archivos de configuración, global usings, tipos descubiertos por reflexión: cuando un cambio no se puede rastrear, se ejecuta el proyecto de pruebas completo.</p></div>
+      <div class="card"><span class="step-number">6</span><h3>Autocomprobaciones</h3><p>Un filtro que no coincide con ninguna prueba se trata como un error de {{name}}, y el proyecto se vuelve a ejecutar sin él.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap grid-2">
+    <div>
+      <div class="section-head">
+        <h2>Dos pasos en GitHub Actions</h2>
+        <p>Registra un mapa de cobertura en cada push a tu rama predeterminada. Las pull requests restauran el mapa más reciente y ejecutan solo las pruebas afectadas, con un job summary que explica por qué se ejecutó u omitió cada clase.</p>
+      </div>
+      <p><a href="/docs/github-actions/">Guía de GitHub Actions →</a><br><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
+    </div>
+<pre class="code">- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Hecho para equipos que no pueden permitirse pasar por alto una prueba</h2>
+    </div>
+    <div class="grid-3">
+      <div class="card"><h3>Tu código se queda contigo</h3><p>{{name}} se ejecuta dentro de tu CI. Ni el código fuente, ni la cobertura, ni los resultados de las pruebas salen de tus máquinas; los correos de los autores de commits solo se cuentan localmente.</p></div>
+      <div class="card"><h3>Todos los frameworks que usas</h3><p>xUnit v2 y v3, NUnit, MSTest y TUnit, tanto con VSTest como con Microsoft.Testing.Platform, incluida su propia paralelización.</p></div>
+      <div class="card"><h3>Nunca bloquea una compilación</h3><p>Sin una licencia válida se ejecutan todas las pruebas, como antes. Un problema de licencia cuesta tiempo de CI, nunca una compilación en rojo.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap center">
+    <div class="section-head">
+      <h2>Gratis para repositorios públicos. {{trialDays}} días gratis para los privados.</h2>
+      <p>Después, {{currency}}{{priceMonthly}} por committer activo al mes. Sin tarjeta para la prueba.</p>
+    </div>
+    <div class="hero-actions">
+      <a class="button" href="/pricing/">Ver precios</a>
+      <a class="button button-ghost" href="/docs/">Leer la documentación</a>
+    </div>
+  </div>
+</section>

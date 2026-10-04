@@ -16,7 +16,7 @@
 <div class="callout"><p>A cache written by hand, such as a <code>Dictionary</code> checked with <code>TryGetValue</code>, can still hide its users. Keep running the full suite on the default branch; recording does that.</p></div>
 
 <h2>Project files</h2>
-<p>Project files are evaluated by MSBuild (one <code>dotnet msbuild</code> call, cached in <code>.sift/cache</code>) for references, compiled and embedded items, assembly names and target frameworks, in the default configuration and without a restore.</p>
+<p>Project files are evaluated by MSBuild (one <code>dotnet msbuild</code> call, cached in <code>.testdetta/cache</code>) for references, compiled and embedded items, assembly names and target frameworks, in the default configuration and without a restore.</p>
 <ul>
   <li>Items only a package's props add, or only a <code>Release</code> condition adds, are not seen.</li>
   <li>A project MSBuild cannot evaluate is read as XML, as are imports.</li>
@@ -31,7 +31,7 @@
 <p>Tests skipped while a map was recorded have no coverage. A class whose tests were all skipped is selected on another platform, where it may run, and skipped on the recording platform. Tests skipped for other reasons, such as a missing Docker daemon, are covered only by recording where the tests run.</p>
 
 <h2>Source generators</h2>
-<p>Code written by source generators is not in the source tree. <code>sift record</code> reads it from the PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.</p>
+<p>Code written by source generators is not in the source tree. <code>td record</code> reads it from the PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.</p>
 
 <h2>F# and Visual Basic</h2>
 <p>F# and Visual Basic projects are part of the project graph, but their code is not analysed: when one is affected, everything that depends on it runs completely.</p>

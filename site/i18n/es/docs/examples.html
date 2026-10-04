@@ -1,0 +1,164 @@
+<!-- title: Una ejecución real; layout: docs; description: Un cambio real en Spectre.Console ejecutado con {{name}}: qué seleccionó, por qué, cuánto tardó y el job summary de GitHub que escribió.; source: da3f399ef86e -->
+<h1>Una ejecución real</h1>
+<p class="lead">Un cambio real en <a href="https://github.com/spectreconsole/spectre.console">Spectre.Console</a> (commit <code>01027ef</code>), del mapa de cobertura al job summary. Toda la salida de esta página está copiada de esa ejecución, no escrita a mano.</p>
+
+<h2 id="change">El cambio</h2>
+<p>Una refactorización de una línea en el widget <code>Rule</code>. No cambia ningún comportamiento, pero es un cambio de código, así que un pipeline normal ejecutaría las 787 pruebas de 141 clases en cada framework de destino.</p>
+<pre><code>// src/Spectre.Console/Widgets/Rule.cs, GetLineWithoutTitle
+ var text = border.GetPart(BoxBorderPart.Top).Repeat(maxWidth);
+<span class="diff-add">+var style = Style ?? Spectre.Console.Style.Plain;</span>
+
+ return
+ [
+<span class="diff-del">-    new Segment(text, Style ?? Spectre.Console.Style.Plain),</span>
+<span class="diff-add">+    new Segment(text, style),</span>
+     Segment.LineBreak
+ ];</code></pre>
+
+<h2 id="run">La ejecución</h2>
+<p>El mapa se registró en <code>main</code> con <code>td record</code>. Después, la pull request ejecuta:</p>
+<div class="terminal" aria-label="Salida de td test">
+  <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed:     0, Passed:   156, Skipped:     0, Total:   156 - Spectre.Console.Tests.dll (net10.0)</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span></pre>
+</div>
+<p>Se ejecutaron 156 pruebas de 14 clases en lugar de 787 de 141. El proyecto <code>Spectre.Console.Ansi.Tests</code> ni siquiera se compiló: no cambió nada de lo que depende.</p>
+
+<h2 id="proof">¿Eran esas las 14 correctas?</h2>
+<p>Para comprobarlo, hicimos que <code>GetLineWithoutTitle</code> lanzara una excepción y ejecutamos el conjunto completo de pruebas. Fallaron exactamente 14 clases, y son las 14 que {{name}} seleccionó: <code>AlignTests+Center</code>, <code>+Left</code>, <code>+Right</code>, <code>CanvasTests</code>, <code>ColumnsTests</code>, <code>ExceptionTests</code>, <code>LayoutTests</code>, <code>PadderTests</code>, <code>PanelTests</code>, <code>RecorderTests</code>, <code>RowsTests</code>, <code>RuleTests</code>, <code>TableTests</code> y <code>TextPathTests</code>. La mayoría nunca menciona <code>Rule</code>: llegan a él a través de layouts y paneles, que es lo que conoce el mapa de cobertura y no encontraría una búsqueda por nombre.</p>
+
+<h2 id="summary">El job summary</h2>
+<p>Con <code>--summary-file "$GITHUB_STEP_SUMMARY"</code> (la GitHub Action lo define por ti), cada pull request recibe este resumen: qué se ejecutó, por qué se ejecutó cada clase y qué se omitió.</p>
+<div class="gh-summary">
+  <h3>TestDetta test selection</h3>
+  <p>1 changed file(s) compared with <code>main</code>.</p>
+  <ul>
+    <li><strong>1</strong> of 1 affected test project(s) ran, <strong>0</strong> skipped.</li>
+    <li>Recorded test time: 0.6 s of 3.4 s (83% saved).</li>
+    <li>All selected tests passed.</li>
+  </ul>
+  <ul>
+    <li><code>src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</code>: passed, 14 test class(es), recorded time 0.6 s of 3.0 s (80% saved)
+      <ul>
+        <li>why: <code>14 of 141 test class(es) run or reference the changed code</code></li>
+        <li>classes:
+          <ul>
+          <li><code>AlignTests+Center</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>AlignTests+Left</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>AlignTests+Right</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>CanvasTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>ColumnsTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>ExceptionTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>LayoutTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>PadderTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>PanelTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>RecorderTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>RowsTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>RuleTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>TableTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>TextPathTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          </ul>
+        </li>
+        <li>skipped: 127 class(es) that ran none of the changed code and name none of it</li>
+      </ul>
+    </li>
+  </ul>
+</div>
+<p class="muted">Aquí los nombres de clase están abreviados; el resumen los muestra completos (<code>Spectre.Console.Tests.Unit.RuleTests</code>).</p>
+
+<h2 id="why">Preguntar por qué</h2>
+<p>Cada decisión tiene un motivo que puedes leer. <code>-v</code> escribe el rastro en stderr:</p>
+<pre class="wrap-code"><code>[DBG] CodeChangeDetector: src/Spectre.Console/Widgets/Rule.cs: Modified Spectre.Console.Rule GetLineWithoutTitle(RenderOptions,int)
+[DBG] CodeChangeDetector: src/Spectre.Console/Widgets/Rule.cs: 1 changed symbol(s), affects whole project: False
+[DBG] TestSelector: Spectre.Console.Rule GetLineWithoutTitle(RenderOptions,int) is affected because it changed
+[DBG] TestSelector: Spectre.Console.Rule Render(RenderOptions,int) is affected because GetLineWithoutTitle
+[DBG] TestSelector: Spectre.Console.Rule GetLineWithoutTitle(RenderOptions,int): test classes taken from coverage</code></pre>
+<p>Y <code>--format json</code> da la decisión de cada clase, con sus evidencias y una estimación de tiempo, para scripts y paneles:</p>
+<pre class="wrap-code"><code>{
+  &quot;project&quot;: &quot;src/Spectre.Console.Tests/Spectre.Console.Tests.csproj&quot;,
+  &quot;mode&quot;: &quot;Filtered&quot;,
+  &quot;reason&quot;: &quot;14 of 141 test class(es) run or reference the changed code&quot;,
+  &quot;estimate&quot;: {
+    &quot;fullSeconds&quot;: 3,
+    &quot;selectedSeconds&quot;: 0.6,
+    &quot;savedSeconds&quot;: 2.4
+  },
+  &quot;decisions&quot;: [
+    {
+      &quot;class&quot;: &quot;Spectre.Console.Tests.Unit.AlignTests+Center&quot;,
+      &quot;selected&quot;: true,
+      &quot;kind&quot;: &quot;coverage&quot;,
+      &quot;evidence&quot;: &quot;ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)&quot;
+    },
+    {
+      &quot;class&quot;: &quot;Spectre.Console.Tests.PublicApiTests&quot;,
+      &quot;selected&quot;: false,
+      &quot;kind&quot;: &quot;skipped&quot;,
+      &quot;evidence&quot;: &quot;ran none of the changed code and names none of it (map 01027efcd6c4)&quot;
+    },
+    &quot;…139 more&quot;
+  ]
+}</code></pre>
+
+<h2 id="commands">Ejecutar las pruebas a tu manera</h2>
+<p><code>td affected --format commands</code> muestra la llamada a <code>dotnet test</code> que haría {{name}}, para que puedas ejecutarla en tu propio script:</p>
+<pre class="wrap-code"><code>dotnet test src/Spectre.Console.Tests/Spectre.Console.Tests.csproj --filter &#x27;FullyQualifiedName~Spectre.Console.Tests.Unit.AlignTests+Center.|FullyQualifiedName~Spectre.Console.Tests.Unit.AlignTests+Left.|FullyQualifiedName~Spectre.Console.Tests.Unit.AlignTests+Right.|FullyQualifiedName~Spectre.Console.Tests.Unit.CanvasTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.ColumnsTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.ExceptionTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.LayoutTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.PadderTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.PanelTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.RecorderTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.RowsTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.RuleTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.TableTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.TextPathTests.&#x27;</code></pre>
+
+<h2 id="corpus">En 40 repositorios</h2>
+<p>Un cambio es un solo dato. En el corpus de evaluación se cambian, uno a uno, miembros de 40 bibliotecas de código abierto; para un cambio en un solo miembro, {{name}} ejecutó una mediana del <strong>28 %</strong> de las clases de prueba, y una cuarta parte o menos en 18 de los 40 repositorios. Las bibliotecas en las que casi todas las pruebas tocan el núcleo (Scriban, Markdig) ganan poco; el código organizado en capas es el que más gana. Cada clase que falló se comprobó frente a la selección: se pasaron por alto {{corpusMissed}} de {{corpusFailingChanges}} cambios con fallos, y cada una se corrigió.</p>
+<figure class="chart-figure">
+<svg class="chart" viewBox="0 0 660 750" role="img" aria-labelledby="share-title share-desc">
+<title id="share-title">Porcentaje de clases de prueba ejecutadas por cambio, por repositorio</title>
+<desc id="share-desc">Ronda 1 del corpus de evaluación: para cada uno de los 40 repositorios, el porcentaje medio de sus clases de prueba que {{name}} seleccionó para un cambio en un solo miembro. Mediana: 28 %.</desc>
+<line class="grid" x1="170.0" x2="170.0" y1="0" y2="720"/>
+<text class="axis" x="170.0" y="736" text-anchor="middle">0%</text>
+<line class="grid" x1="280.0" x2="280.0" y1="0" y2="720"/>
+<text class="axis" x="280.0" y="736" text-anchor="middle">25%</text>
+<line class="grid" x1="390.0" x2="390.0" y1="0" y2="720"/>
+<text class="axis" x="390.0" y="736" text-anchor="middle">50%</text>
+<line class="grid" x1="500.0" x2="500.0" y1="0" y2="720"/>
+<text class="axis" x="500.0" y="736" text-anchor="middle">75%</text>
+<line class="grid" x1="610.0" x2="610.0" y1="0" y2="720"/>
+<text class="axis" x="610.0" y="736" text-anchor="middle">100%</text>
+<g class="row"><title>opentelemetry-dotnet: 6 % de las clases de prueba ejecutadas de media, sobre 79 cambios con fallos</title><rect class="hit" x="0" y="0" width="660" height="18"/><text class="label" x="160" y="13.0" text-anchor="end">opentelemetry-dotnet</text><path class="bar" d="M170,4.5 H192.4 Q196.4,4.5 196.4,8.5 V9.5 Q196.4,13.5 192.4,13.5 H170 Z"/><text class="value" x="202.4" y="13.0">6%</text></g>
+<g class="row"><title>polly: 7 % de las clases de prueba ejecutadas de media, sobre 65 cambios con fallos</title><rect class="hit" x="0" y="18" width="660" height="18"/><text class="label" x="160" y="31.0" text-anchor="end">polly</text><path class="bar" d="M170,22.5 H196.8 Q200.8,22.5 200.8,26.5 V27.5 Q200.8,31.5 196.8,31.5 H170 Z"/><text class="value" x="206.8" y="31.0">7%</text></g>
+<g class="row"><title>roslynator: 8 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="36" width="660" height="18"/><text class="label" x="160" y="49.0" text-anchor="end">roslynator</text><path class="bar" d="M170,40.5 H201.2 Q205.2,40.5 205.2,44.5 V45.5 Q205.2,49.5 201.2,49.5 H170 Z"/><text class="value" x="211.2" y="49.0">8%</text></g>
+<g class="row"><title>spectre: 9 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="54" width="660" height="18"/><text class="label" x="160" y="67.0" text-anchor="end">spectre</text><path class="bar" d="M170,58.5 H205.6 Q209.6,58.5 209.6,62.5 V63.5 Q209.6,67.5 205.6,67.5 H170 Z"/><text class="value" x="215.6" y="67.0">9%</text></g>
+<g class="row"><title>swashbuckle: 12 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="72" width="660" height="18"/><text class="label" x="160" y="85.0" text-anchor="end">swashbuckle</text><path class="bar" d="M170,76.5 H218.8 Q222.8,76.5 222.8,80.5 V81.5 Q222.8,85.5 218.8,85.5 H170 Z"/><text class="value" x="228.8" y="85.0">12%</text></g>
+<g class="row"><title>nsec: 13 % de las clases de prueba ejecutadas de media, sobre 79 cambios con fallos</title><rect class="hit" x="0" y="90" width="660" height="18"/><text class="label" x="160" y="103.0" text-anchor="end">nsec</text><path class="bar" d="M170,94.5 H223.2 Q227.2,94.5 227.2,98.5 V99.5 Q227.2,103.5 223.2,103.5 H170 Z"/><text class="value" x="233.2" y="103.0">13%</text></g>
+<g class="row"><title>aspnetcore-odata: 13 % de las clases de prueba ejecutadas de media, sobre 79 cambios con fallos</title><rect class="hit" x="0" y="108" width="660" height="18"/><text class="label" x="160" y="121.0" text-anchor="end">aspnetcore-odata</text><path class="bar" d="M170,112.5 H223.2 Q227.2,112.5 227.2,116.5 V117.5 Q227.2,121.5 223.2,121.5 H170 Z"/><text class="value" x="233.2" y="121.0">13%</text></g>
+<g class="row"><title>guardclauses: 13 % de las clases de prueba ejecutadas de media, sobre 24 cambios con fallos</title><rect class="hit" x="0" y="126" width="660" height="18"/><text class="label" x="160" y="139.0" text-anchor="end">guardclauses</text><path class="bar" d="M170,130.5 H223.2 Q227.2,130.5 227.2,134.5 V135.5 Q227.2,139.5 223.2,139.5 H170 Z"/><text class="value" x="233.2" y="139.0">13%</text></g>
+<g class="row"><title>mimekit: 14 % de las clases de prueba ejecutadas de media, sobre 79 cambios con fallos</title><rect class="hit" x="0" y="144" width="660" height="18"/><text class="label" x="160" y="157.0" text-anchor="end">mimekit</text><path class="bar" d="M170,148.5 H227.6 Q231.6,148.5 231.6,152.5 V153.5 Q231.6,157.5 227.6,157.5 H170 Z"/><text class="value" x="237.6" y="157.0">14%</text></g>
+<g class="row"><title>autofixture: 16 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="162" width="660" height="18"/><text class="label" x="160" y="175.0" text-anchor="end">autofixture</text><path class="bar" d="M170,166.5 H236.4 Q240.4,166.5 240.4,170.5 V171.5 Q240.4,175.5 236.4,175.5 H170 Z"/><text class="value" x="246.4" y="175.0">16%</text></g>
+<g class="row"><title>communitytoolkit: 18 % de las clases de prueba ejecutadas de media, sobre 76 cambios con fallos</title><rect class="hit" x="0" y="180" width="660" height="18"/><text class="label" x="160" y="193.0" text-anchor="end">communitytoolkit</text><path class="bar" d="M170,184.5 H245.2 Q249.2,184.5 249.2,188.5 V189.5 Q249.2,193.5 245.2,193.5 H170 Z"/><text class="value" x="255.2" y="193.0">18%</text></g>
+<g class="row"><title>libgit2sharp: 19 % de las clases de prueba ejecutadas de media, sobre 57 cambios con fallos</title><rect class="hit" x="0" y="198" width="660" height="18"/><text class="label" x="160" y="211.0" text-anchor="end">libgit2sharp</text><path class="bar" d="M170,202.5 H249.6 Q253.6,202.5 253.6,206.5 V207.5 Q253.6,211.5 249.6,211.5 H170 Z"/><text class="value" x="259.6" y="211.0">19%</text></g>
+<g class="row"><title>castle-core: 19 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="216" width="660" height="18"/><text class="label" x="160" y="229.0" text-anchor="end">castle-core</text><path class="bar" d="M170,220.5 H249.6 Q253.6,220.5 253.6,224.5 V225.5 Q253.6,229.5 249.6,229.5 H170 Z"/><text class="value" x="259.6" y="229.0">19%</text></g>
+<g class="row"><title>serilog: 20 % de las clases de prueba ejecutadas de media, sobre 79 cambios con fallos</title><rect class="hit" x="0" y="234" width="660" height="18"/><text class="label" x="160" y="247.0" text-anchor="end">serilog</text><path class="bar" d="M170,238.5 H254.0 Q258.0,238.5 258.0,242.5 V243.5 Q258.0,247.5 254.0,247.5 H170 Z"/><text class="value" x="264.0" y="247.0">20%</text></g>
+<g class="row"><title>mediator: 21 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="252" width="660" height="18"/><text class="label" x="160" y="265.0" text-anchor="end">mediator</text><path class="bar" d="M170,256.5 H258.4 Q262.4,256.5 262.4,260.5 V261.5 Q262.4,265.5 258.4,265.5 H170 Z"/><text class="value" x="268.4" y="265.0">21%</text></g>
+<g class="row"><title>fastendpoints: 23 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="270" width="660" height="18"/><text class="label" x="160" y="283.0" text-anchor="end">fastendpoints</text><path class="bar" d="M170,274.5 H267.2 Q271.2,274.5 271.2,278.5 V279.5 Q271.2,283.5 267.2,283.5 H170 Z"/><text class="value" x="277.2" y="283.0">23%</text></g>
+<g class="row"><title>fluid: 23 % de las clases de prueba ejecutadas de media, sobre 79 cambios con fallos</title><rect class="hit" x="0" y="288" width="660" height="18"/><text class="label" x="160" y="301.0" text-anchor="end">fluid</text><path class="bar" d="M170,292.5 H267.2 Q271.2,292.5 271.2,296.5 V297.5 Q271.2,301.5 267.2,301.5 H170 Z"/><text class="value" x="277.2" y="301.0">23%</text></g>
+<g class="row"><title>carter: 24 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="306" width="660" height="18"/><text class="label" x="160" y="319.0" text-anchor="end">carter</text><path class="bar" d="M170,310.5 H271.6 Q275.6,310.5 275.6,314.5 V315.5 Q275.6,319.5 271.6,319.5 H170 Z"/><text class="value" x="281.6" y="319.0">24%</text></g>
+<g class="row"><title>lamar: 26 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="324" width="660" height="18"/><text class="label" x="160" y="337.0" text-anchor="end">lamar</text><path class="bar" d="M170,328.5 H280.4 Q284.4,328.5 284.4,332.5 V333.5 Q284.4,337.5 280.4,337.5 H170 Z"/><text class="value" x="290.4" y="337.0">26%</text></g>
+<g class="row"><title>awesomeassertions: 27 % de las clases de prueba ejecutadas de media, sobre 81 cambios con fallos</title><rect class="hit" x="0" y="342" width="660" height="18"/><text class="label" x="160" y="355.0" text-anchor="end">awesomeassertions</text><path class="bar" d="M170,346.5 H284.8 Q288.8,346.5 288.8,350.5 V351.5 Q288.8,355.5 284.8,355.5 H170 Z"/><text class="value" x="294.8" y="355.0">27%</text></g>
+<g class="row"><title>nsubstitute: 29 % de las clases de prueba ejecutadas de media, sobre 3 cambios con fallos</title><rect class="hit" x="0" y="360" width="660" height="18"/><text class="label" x="160" y="373.0" text-anchor="end">nsubstitute</text><path class="bar" d="M170,364.5 H293.6 Q297.6,364.5 297.6,368.5 V369.5 Q297.6,373.5 293.6,373.5 H170 Z"/><text class="value" x="303.6" y="373.0">29%</text></g>
+<g class="row"><title>immediate-handlers: 29 % de las clases de prueba ejecutadas de media, sobre 43 cambios con fallos</title><rect class="hit" x="0" y="378" width="660" height="18"/><text class="label" x="160" y="391.0" text-anchor="end">immediate-handlers</text><path class="bar" d="M170,382.5 H293.6 Q297.6,382.5 297.6,386.5 V387.5 Q297.6,391.5 293.6,391.5 H170 Z"/><text class="value" x="303.6" y="391.0">29%</text></g>
+<g class="row"><title>open-xml-sdk: 30 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="396" width="660" height="18"/><text class="label" x="160" y="409.0" text-anchor="end">open-xml-sdk</text><path class="bar" d="M170,400.5 H298.0 Q302.0,400.5 302.0,404.5 V405.5 Q302.0,409.5 298.0,409.5 H170 Z"/><text class="value" x="308.0" y="409.0">30%</text></g>
+<g class="row"><title>fluentvalidation: 32 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="414" width="660" height="18"/><text class="label" x="160" y="427.0" text-anchor="end">fluentvalidation</text><path class="bar" d="M170,418.5 H306.8 Q310.8,418.5 310.8,422.5 V423.5 Q310.8,427.5 306.8,427.5 H170 Z"/><text class="value" x="316.8" y="427.0">32%</text></g>
+<g class="row"><title>unitsnet: 34 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="432" width="660" height="18"/><text class="label" x="160" y="445.0" text-anchor="end">unitsnet</text><path class="bar" d="M170,436.5 H315.6 Q319.6,436.5 319.6,440.5 V441.5 Q319.6,445.5 315.6,445.5 H170 Z"/><text class="value" x="325.6" y="445.0">34%</text></g>
+<g class="row"><title>vogen: 36 % de las clases de prueba ejecutadas de media, sobre 77 cambios con fallos</title><rect class="hit" x="0" y="450" width="660" height="18"/><text class="label" x="160" y="463.0" text-anchor="end">vogen</text><path class="bar" d="M170,454.5 H324.4 Q328.4,454.5 328.4,458.5 V459.5 Q328.4,463.5 324.4,463.5 H170 Z"/><text class="value" x="334.4" y="463.0">36%</text></g>
+<g class="row"><title>nodatime: 43 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="468" width="660" height="18"/><text class="label" x="160" y="481.0" text-anchor="end">nodatime</text><path class="bar" d="M170,472.5 H355.2 Q359.2,472.5 359.2,476.5 V477.5 Q359.2,481.5 355.2,481.5 H170 Z"/><text class="value" x="365.2" y="481.0">43%</text></g>
+<g class="row"><title>graphql-dotnet: 45 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="486" width="660" height="18"/><text class="label" x="160" y="499.0" text-anchor="end">graphql-dotnet</text><path class="bar" d="M170,490.5 H364.0 Q368.0,490.5 368.0,494.5 V495.5 Q368.0,499.5 364.0,499.5 H170 Z"/><text class="value" x="374.0" y="499.0">45%</text></g>
+<g class="row"><title>newtonsoft-json: 47 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="504" width="660" height="18"/><text class="label" x="160" y="517.0" text-anchor="end">newtonsoft-json</text><path class="bar" d="M170,508.5 H372.8 Q376.8,508.5 376.8,512.5 V513.5 Q376.8,517.5 372.8,517.5 H170 Z"/><text class="value" x="382.8" y="517.0">47%</text></g>
+<g class="row"><title>autofac: 49 % de las clases de prueba ejecutadas de media, sobre 77 cambios con fallos</title><rect class="hit" x="0" y="522" width="660" height="18"/><text class="label" x="160" y="535.0" text-anchor="end">autofac</text><path class="bar" d="M170,526.5 H381.6 Q385.6,526.5 385.6,530.5 V531.5 Q385.6,535.5 381.6,535.5 H170 Z"/><text class="value" x="391.6" y="535.0">49%</text></g>
+<g class="row"><title>scrutor: 57 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="540" width="660" height="18"/><text class="label" x="160" y="553.0" text-anchor="end">scrutor</text><path class="bar" d="M170,544.5 H416.8 Q420.8,544.5 420.8,548.5 V549.5 Q420.8,553.5 416.8,553.5 H170 Z"/><text class="value" x="426.8" y="553.0">57%</text></g>
+<g class="row"><title>meziantou-analyzer: 63 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="558" width="660" height="18"/><text class="label" x="160" y="571.0" text-anchor="end">meziantou-analyzer</text><path class="bar" d="M170,562.5 H443.2 Q447.2,562.5 447.2,566.5 V567.5 Q447.2,571.5 443.2,571.5 H170 Z"/><text class="value" x="453.2" y="571.0">63%</text></g>
+<g class="row"><title>automapper: 67 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="576" width="660" height="18"/><text class="label" x="160" y="589.0" text-anchor="end">automapper</text><path class="bar" d="M170,580.5 H460.8 Q464.8,580.5 464.8,584.5 V585.5 Q464.8,589.5 460.8,589.5 H170 Z"/><text class="value" x="470.8" y="589.0">67%</text></g>
+<g class="row"><title>protobuf-net: 78 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="594" width="660" height="18"/><text class="label" x="160" y="607.0" text-anchor="end">protobuf-net</text><path class="bar" d="M170,598.5 H509.20000000000005 Q513.2,598.5 513.2,602.5 V603.5 Q513.2,607.5 509.20000000000005,607.5 H170 Z"/><text class="value" x="519.2" y="607.0">78%</text></g>
+<g class="row"><title>yamldotnet: 78 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="612" width="660" height="18"/><text class="label" x="160" y="625.0" text-anchor="end">yamldotnet</text><path class="bar" d="M170,616.5 H509.20000000000005 Q513.2,616.5 513.2,620.5 V621.5 Q513.2,625.5 509.20000000000005,625.5 H170 Z"/><text class="value" x="519.2" y="625.0">78%</text></g>
+<g class="row"><title>cliwrap: 81 % de las clases de prueba ejecutadas de media, sobre 69 cambios con fallos</title><rect class="hit" x="0" y="630" width="660" height="18"/><text class="label" x="160" y="643.0" text-anchor="end">cliwrap</text><path class="bar" d="M170,634.5 H522.4 Q526.4,634.5 526.4,638.5 V639.5 Q526.4,643.5 522.4,643.5 H170 Z"/><text class="value" x="532.4" y="643.0">81%</text></g>
+<g class="row"><title>nlog: 82 % de las clases de prueba ejecutadas de media, sobre 65 cambios con fallos</title><rect class="hit" x="0" y="648" width="660" height="18"/><text class="label" x="160" y="661.0" text-anchor="end">nlog</text><path class="bar" d="M170,652.5 H526.8 Q530.8,652.5 530.8,656.5 V657.5 Q530.8,661.5 526.8,661.5 H170 Z"/><text class="value" x="536.8" y="661.0">82%</text></g>
+<g class="row"><title>mapperly: 89 % de las clases de prueba ejecutadas de media, sobre 79 cambios con fallos</title><rect class="hit" x="0" y="666" width="660" height="18"/><text class="label" x="160" y="679.0" text-anchor="end">mapperly</text><path class="bar" d="M170,670.5 H557.6 Q561.6,670.5 561.6,674.5 V675.5 Q561.6,679.5 557.6,679.5 H170 Z"/><text class="value" x="567.6" y="679.0">89%</text></g>
+<g class="row"><title>markdig: 98 % de las clases de prueba ejecutadas de media, sobre 80 cambios con fallos</title><rect class="hit" x="0" y="684" width="660" height="18"/><text class="label" x="160" y="697.0" text-anchor="end">markdig</text><path class="bar" d="M170,688.5 H597.2 Q601.2,688.5 601.2,692.5 V693.5 Q601.2,697.5 597.2,697.5 H170 Z"/><text class="value" x="607.2" y="697.0">98%</text></g>
+<g class="row"><title>scriban: 100 % de las clases de prueba ejecutadas de media, sobre 71 cambios con fallos</title><rect class="hit" x="0" y="702" width="660" height="18"/><text class="label" x="160" y="715.0" text-anchor="end">scriban</text><path class="bar" d="M170,706.5 H606.0 Q610.0,706.5 610.0,710.5 V711.5 Q610.0,715.5 606.0,715.5 H170 Z"/><text class="value" x="616.0" y="715.0">100%</text></g>
+</svg>
+  <figcaption class="muted">Porcentaje medio de clases de prueba ejecutadas por cambio, ronda de evaluación 1. Pasa el cursor sobre una fila para ver el número de cambios en que se basa.</figcaption>
+</figure>

@@ -1,0 +1,145 @@
+<!-- title: Diğer CI sistemleri; layout: docs; description: {{name}}'yı GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi CI'da bir kapsam haritaları klasörüyle çalıştırın.; source: ce15ca657ac0 -->
+<h1>Diğer CI sistemleri</h1>
+<p class="lead">{{name}}, .NET ve git çalıştıran her CI'da çalışır. GitHub Actions dışında iki komut ve bir klasör işi görür.</p>
+
+<ul>
+  <li><strong>Varsayılan branch'te</strong> <code>td record --maps-dir &lt;maps&gt;</code> tüm test paketini kapsam ölçümüyle bir kez çalıştırır ve her test projesi için <code>&lt;maps&gt;/&lt;commit&gt;/</code> altına bir kapsam haritası kaydeder.</li>
+  <li><strong>Bir pull ya da merge request'te</strong> <code>td test --base origin/&lt;target&gt; --maps-dir &lt;maps&gt;</code>, merge base'deki ya da ondan önceki en yeni haritayı geri yükler. 50 first-parent commit (<code>--max-map-age</code>) içindeki en yakın haritayı alır ve aradaki değişiklikleri köprüler. Ardından yalnızca etkilenen testleri çalıştırır.</li>
+</ul>
+<p><code>&lt;maps&gt;</code> sıradan bir klasördür. Onu CI'ınızın pipeline'lar arasında dosya tutabildiği herhangi bir yerde saklayın:</p>
+<ul>
+  <li>agent'ların paylaştığı bir disk, şirket içi kurulumlarda yaygındır: <code>/srv/testdetta-maps/&lt;repository&gt;</code>;</li>
+  <li>öncesinde ve sonrasında senkronize edilen nesne depolama (S3, Azure Blob, GCS, MinIO).</li>
+</ul>
+<p>{{name}}'nın kendisi haritalar için hiçbir zaman ağı kullanmaz.</p>
+
+<h2>Her kurulumun ihtiyaç duydukları</h2>
+<ul>
+  <li><strong>Tam git geçmişi.</strong> {{name}}, merge base ile karşılaştırma yapar ve haritaları bulmak için geçmişi dolaşır. Shallow clone'lar ikisini de yapamaz.</li>
+  <li><strong>Hedef branch'in fetch edilmiş olması</strong>; böylece <code>origin/&lt;target&gt;</code> mevcut olur. Onu açık bir refspec ile fetch edin: <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code>. CI clone'ları remote'un refspec'lerini çoğu zaman pipeline'ın kendi branch'iyle sınırlar (GitLab ve Bitbucket öyle yapar); bu durumda tek başına <code>git fetch origin &lt;target&gt;</code> yalnızca <code>FETCH_HEAD</code>'i günceller ve <code>origin/&lt;target&gt;</code> eksik kalır.</li>
+  <li><strong>Lisans</strong>: <code>TESTDETTA_LICENSE</code> içinde (maskelenmiş ya da secret bir değişken) ya da <code>TESTDETTA_LICENSE_FILE</code> ile belirtilen bir dosyada. GitLab CI ve GitHub Actions'ta açık depolar lisansa ihtiyaç duymaz; Jenkins, Azure DevOps ve Bitbucket bir deponun açık olup olmadığını bildirmez, bu yüzden oralarda her depo lisans gerektirir. Geçerli bir lisans olmadan tüm testler çalışır ve derleme bu yüzden asla başarısız olmaz. Bkz. <a href="/docs/license/">Lisans</a>.</li>
+  <li><strong>Çıkış kodları:</strong> <code>0</code> başarılı, <code>1</code> analiz başarısız oldu, <code>2</code> geçersiz komut satırı, <code>3</code> testler başarısız oldu.</li>
+  <li><strong>Temizlik:</strong> eski commit'lerin haritalarına yalnızca 50 commit boyunca ihtiyaç duyulur. Daha eski klasörleri zamanlanmış bir job ya da bir depolama yaşam döngüsü kuralıyla silin.</li>
+</ul>
+
+<h2>Kurulum</h2>
+<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
+<div class="callout"><p>Paket adı lansmanda belirlenecek. O zamana kadar {{name}}'yı kaynaktan <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> ile derleyin ve aşağıda <code>td</code> geçen her yerde <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> çağırın.</p></div>
+
+<h2>GitLab CI</h2>
+<pre><code>variables:
+  GIT_DEPTH: "0"                    # full history
+  TESTDETTA_MAPS: /srv/testdetta-maps/$CI_PROJECT_PATH   # a disk the runners share; or sync with object storage
+
+record-coverage:
+  stage: test
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - td record --maps-dir "$TESTDETTA_MAPS"
+
+affected-tests:
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - git fetch --no-tags origin "+refs/heads/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:refs/remotes/origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - td test --base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --maps-dir "$TESTDETTA_MAPS" --summary-file testdetta-summary.md
+  artifacts:
+    when: always
+    paths: [testdetta-summary.md]</code></pre>
+<p><code>TESTDETTA_LICENSE</code> değişkenini Settings → CI/CD → Variables altında, gerektiği gibi masked ve protected olarak tanımlayın. {{name}} açık projeleri <code>CI_PROJECT_VISIBILITY</code> üzerinden algılar.</p>
+
+<h2>Jenkins</h2>
+<p>Bildirimsel (declarative) bir multibranch pipeline:</p>
+<pre><code>pipeline {
+  agent any
+  environment {
+    TESTDETTA_LICENSE = credentials('testdetta-license')          // a "secret text" credential
+    TESTDETTA_MAPS = "/srv/testdetta-maps/${env.JOB_NAME.split('/')[0]}"
+  }
+  options { skipDefaultCheckout() }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scmGit(branches: scm.branches, userRemoteConfigs: scm.userRemoteConfigs,
+                        extensions: [cloneOption(shallow: false, depth: 0, noTags: true, reference: '')])
+      }
+    }
+    stage('Record coverage') {
+      when { branch 'main' }
+      steps { sh 'td record --maps-dir "$TESTDETTA_MAPS"' }
+    }
+    stage('Affected tests') {
+      when { changeRequest() }
+      steps {
+        sh 'git fetch --no-tags origin "+refs/heads/$CHANGE_TARGET:refs/remotes/origin/$CHANGE_TARGET"'
+        sh 'td test --base "origin/$CHANGE_TARGET" --maps-dir "$TESTDETTA_MAPS"'
+      }
+    }
+  }
+}</code></pre>
+<p>Jenkins çoğu zaman remote URL'sinde kimlik bilgileriyle clone yapar. {{name}} bunları lisans kapsamını eşleştirmeden önce çıkarır ve hiçbir zaman loglamaz. Remote, lisansın kapsadığı depoyu adlandırmıyorsa (örneğin yerel bir mirror), <code>TESTDETTA_LICENSE_SCOPE</code> ayarlayın, örneğin <code>git.acme.corp/scm/pay/app</code>.</p>
+
+<h2>Azure DevOps Pipelines</h2>
+<pre><code>trigger: [main]
+pr: [main]
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+  - script: td record --maps-dir "$(TESTDETTA_MAPS)"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    env:
+      TESTDETTA_LICENSE: $(TestDettaLicense)          # a secret pipeline variable
+  - script: |
+      target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+      git fetch --no-tags origin "+refs/heads/$target:refs/remotes/origin/$target"
+      td test --base "origin/$target" --maps-dir "$(TESTDETTA_MAPS)" --summary-file "$(Agent.TempDirectory)/testdetta.md"
+      echo "##vso[task.uploadsummary]$(Agent.TempDirectory)/testdetta.md"
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    env:
+      TESTDETTA_LICENSE: $(TestDettaLicense)</code></pre>
+<p><code>TESTDETTA_MAPS</code>, self-hosted agent'larda bir paylaşıma işaret eder. Microsoft-hosted agent'larda onu Azure Blob depolamayla senkronize edin (bkz. <a href="#object-storage">Nesne depolama</a>).</p>
+
+<h2>Bitbucket Pipelines</h2>
+<pre><code>clone:
+  depth: full
+
+pipelines:
+  branches:
+    main:
+      - step:
+          script:
+            - td record --maps-dir maps
+            - ./sync-maps.sh upload maps        # see "Object storage"
+  pull-requests:
+    '**':
+      - step:
+          script:
+            - git fetch --no-tags origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
+            - td test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps</code></pre>
+<p><code>TESTDETTA_LICENSE</code> değişkenini secured bir depo değişkeni olarak tanımlayın.</p>
+
+<h2 id="object-storage">Paylaşılan disk yerine nesne depolama</h2>
+<p>Barındırılan (hosted) runner'larda paylaşılan bir disk yoktur. Kayıttan sonra yeni klasörü yükleyin. Test etmeden önce yalnızca kullanılabilecek klasörleri indirin: merge base ve ondan önceki en fazla 50 first-parent commit. Onları en yeniden başlayarak indirin ve mevcut olan ilkinde durun. S3 için bir örnek; <code>cp</code> ve <code>ls</code> komutları olan her araç aynı şekilde çalışır:</p>
+<pre><code>#!/usr/bin/env bash
+# sync-maps.sh upload &lt;maps&gt;          | after td record on the default branch
+# sync-maps.sh download &lt;maps&gt; &lt;base&gt; | before td test on a pull request
+set -euo pipefail
+remote="s3://my-bucket/testdetta-maps/my-repository"
+case "$1" in
+  upload)
+    aws s3 cp --recursive "$2/$(git rev-parse HEAD)" "$remote/$(git rev-parse HEAD)" ;;
+  download)
+    for sha in $(git rev-list --first-parent -n 51 "$(git merge-base "$3" HEAD)"); do
+      if aws s3 ls "$remote/$sha/" &gt; /dev/null 2&gt;&amp;1; then
+        aws s3 cp --recursive "$remote/$sha" "$2/$sha"
+        break
+      fi
+    done ;;
+esac</code></pre>
+
+<h2>Harita olmadığında</h2>
+<p>Kurulumdan sonraki ilk pull request'ler ya da çok geride kalanlar, erişilebilir mesafede bir harita bulamaz. {{name}} bu durumda yalnızca isimlere göre seçer; bu güvenlidir ama daha fazlasını seçer ve bunu logunda belirtir. <code>td record</code> varsayılan branch'te çalıştıktan sonra seçim isabetli hale gelir.</p>

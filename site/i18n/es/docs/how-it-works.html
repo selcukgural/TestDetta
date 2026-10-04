@@ -1,0 +1,49 @@
+<!-- title: Cómo decide; layout: docs; description: Cómo convierte {{name}} un git diff en los proyectos de pruebas y las clases de prueba que hay que ejecutar.; source: 185c628bff1f -->
+<h1>Cómo decide</h1>
+<p class="lead">{{name}} reduce la selección paso a paso, y solo donde tiene pruebas de ello. Todo lo que no puede rastrear recurre a ejecutar más.</p>
+
+<h2>Seleccionar más, nunca menos</h2>
+<p>Una prueba pasada por alto es un error; una prueba de más solo cuesta tiempo de CI. Todas las reglas siguientes se derivan de eso. Cuando el análisis no está seguro de si un cambio afecta a un proyecto o a una clase, lo trata como afectado, y el motivo aparece en la salida.</p>
+
+<h2>Los cinco pasos</h2>
+
+<h3>1. Proyectos</h3>
+<p>Los archivos modificados se asignan a sus proyectos y se siguen a través de las <code>ProjectReference</code> hasta cada proyecto que depende de ellos. Los archivos que afectan a toda la compilación, como <code>Directory.Build.props</code>, <code>global.json</code> y <code>.editorconfig</code>, afectan a todos los proyectos que están por debajo de ellos.</p>
+
+<h3>2. Símbolos</h3>
+<p>En los archivos de C#, se comparan los árboles de sintaxis antiguo y nuevo. Los cambios en comentarios y espacios en blanco no seleccionan nada; en los demás casos, {{name}} sabe qué tipos y miembros cambiaron.</p>
+
+<h3>3. Cobertura</h3>
+<p>Tras <code>td record</code>, un mapa de qué clase de prueba ejecutó qué método, registrado en el commit base, da directamente las clases de prueba de los métodos, propiedades y constructores modificados.</p>
+
+<h3>4. Nombres</h3>
+<p>Lo que la cobertura no puede ver, como el código nuevo, los campos y las constantes, se rastrea por nombre a través del código fuente hasta llegar a clases de prueba o a código que el mapa de cobertura conoce.</p>
+
+<h3>5. Alternativas seguras</h3>
+<p>Se ejecuta un proyecto de pruebas completo cuando un cambio no se puede rastrear:</p>
+<ul>
+  <li>archivos que no son de C# dentro de un proyecto, como <code>appsettings.json</code>, el <code>.csproj</code> o un <code>.resx</code>;</li>
+  <li>global usings y atributos de ensamblado;</li>
+  <li>tipos que un framework descubre por reflexión, como controladores, manejadores de mensajes y configuraciones de EF.</li>
+</ul>
+
+<h2>La autocomprobación del filtro</h2>
+<p>{{name}} ejecuta un proyecto seleccionado con un filtro sobre sus clases de prueba. Un filtro que no coincide con ninguna prueba se trata como un error de {{name}}: el proyecto se vuelve a ejecutar sin él.</p>
+
+<h2>Mapas de cobertura</h2>
+<p><code>td record</code> ejecuta todas las pruebas con cobertura y escribe un mapa por proyecto de pruebas. Lo ideal es registrar los mapas en la merge base de tu rama, y en CI se registra uno por cada commit de la rama predeterminada.</p>
+
+<h3>Mapas más antiguos y el drift bridge</h3>
+<p>Un mapa registrado hasta 50 commits antes de la merge base se sigue usando (<code>--max-map-age</code>, predeterminado 50; 0 usa solo un mapa registrado en la merge base). El código modificado entretanto podría haber creado llamadas que el mapa no conoce, así que {{name}} también selecciona las clases que ejecutaron cualquier miembro modificado desde entonces que pueda llegar a tu cambio, y rastrea el código nuevo por nombre.</p>
+<p>Cuando algo intermedio no se puede describir en términos de miembros, como un archivo de compilación o <code>appsettings.json</code>, los proyectos de pruebas afectados se ejecutan completos. <code>--drift-fallback name</code> decide en su lugar por nombre, como sin mapa: más rápido, pero ciego a las llamadas conectadas mediante configuración o reflexión.</p>
+
+<h3>Sin mapa</h3>
+<p>Las primeras pull requests tras la configuración, o las que están muy atrasadas, no encuentran ningún mapa a su alcance. {{name}} selecciona entonces solo por nombre, lo cual es seguro pero selecciona más, y lo indica en su registro. La selección se vuelve precisa en cuanto <code>td record</code> se ha ejecutado en la rama predeterminada.</p>
+
+<h2>Ver el porqué</h2>
+<p><code>td affected</code> y <code>td test --dry-run</code> muestran cada proyecto de pruebas afectado con el motivo por el que se ejecuta filtrado, completo o no se ejecuta; <code>td affected --format json</code> añade la decisión de cada clase de prueba. <code>-v</code> escribe cada decisión en stderr, por ejemplo por qué un proyecto se vio afectado o qué cambio ejecutó una clase.</p>
+<pre><code>$ td test --dry-run --base origin/main
+td: 1 changed file(s), 2 affected test project(s).
+Tests to run:
+  filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
+  skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>

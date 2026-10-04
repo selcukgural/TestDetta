@@ -1,0 +1,51 @@
+<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: db51e1c29635 -->
+<h1>Licencia</h1>
+<p class="lead">Los repositorios públicos usan {{name}} gratis. Los repositorios privados pasan una cadena de licencia al CI. Un problema de licencia nunca hace fallar una compilación: sin una licencia válida se ejecutan todas las pruebas, como antes de {{name}}.</p>
+
+<h2>Repositorios públicos</h2>
+<p>Un repositorio público no necesita licencia, pero {{name}} solo sabe que un repositorio es público donde el CI lo indica:</p>
+<ul>
+  <li><strong>GitHub Actions:</strong> a partir del payload del evento (<code>repository.private</code>);</li>
+  <li><strong>GitLab CI:</strong> a partir de <code>CI_PROJECT_VISIBILITY</code>.</li>
+</ul>
+<p>En Jenkins, Azure DevOps, Bitbucket, otros sistemas de CI y las máquinas de los desarrolladores, todos los repositorios cuentan como privados.</p>
+
+<h2>Cómo pasar la licencia</h2>
+<p>{{name}} busca la licencia en este orden:</p>
+<ol>
+  <li><code>TESTDETTA_LICENSE</code>: la cadena de licencia, desde una variable enmascarada o secreta;</li>
+  <li><code>TESTDETTA_LICENSE_FILE</code>: la ruta de un archivo que la contiene;</li>
+  <li><code>~/.testdetta/license</code>: la escriben <code>td license install</code> y la actualización automática;</li>
+  <li><code>.testdetta/license</code> en el repositorio.</li>
+</ol>
+<p>Lo recomendado es una variable secreta. En GitHub Actions, pásala a través de la entrada <code>license</code> de la acción:</p>
+<pre><code>- uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
+<p>Solo <code>td affected</code> y <code>td test</code> comprueban la licencia. <code>td record</code> ejecuta todas las pruebas de todos modos y no necesita ninguna.</p>
+
+<h2>Cómo comprobarla</h2>
+<p><code>td license status</code> muestra qué cubre la licencia encontrada: su validez, los repositorios que cubre y el número de committers activos, sin datos personales. El mismo estado aparece en el registro, en el job summary y en la salida JSON siempre que importa: válida, a punto de caducar, por encima de los puestos, caducada, ámbito incorrecto, no válida o ausente.</p>
+<pre><code>td license status</code></pre>
+
+<h2>Máquinas sin secretos de CI</h2>
+<p>Donde ninguna variable secreta puede contener la licencia, guárdala una vez por máquina:</p>
+<pre><code>td license install &lt;license|file&gt;</code></pre>
+<p>Primero se comprueba y después se escribe en <code>~/.testdetta/license</code>.</p>
+
+<h2>Renovación automática</h2>
+<p>Una licencia incluye la dirección desde la que se renueva. Como máximo una vez al día, {{name}} obtiene la versión actual y la guarda en <code>~/.testdetta/license</code>, así que las renovaciones y los puestos añadidos llegan sin tocar tus secretos. La solicitud envía la licencia en una cabecera y nada de tu repositorio. Tiene un tiempo de espera de 2 segundos y ningún reintento, y cualquier fallo se ignora: una red sin conexión o bloqueada cuesta como mucho 2 segundos al día. Se respeta <code>HTTPS_PROXY</code>.</p>
+<p>En una red que no puede acceder al servicio de licencias, define <code>TESTDETTA_LICENSE_REFRESH=off</code> y sustituye tú mismo la cadena de licencia cuando recibas una nueva.</p>
+
+<h2>Qué repositorios cubre una licencia</h2>
+<p>Una licencia indica los repositorios que cubre, como <code>github.com/acme/*</code>. {{name}} los compara con el remoto <code>origin</code> del repositorio. Las credenciales incrustadas en la URL del remoto, habituales con Jenkins, se eliminan antes de la comparación y nunca se registran.</p>
+<p>Cuando el remoto no nombra el repositorio que cubre la licencia, por ejemplo en un mirror local, define <code>TESTDETTA_LICENSE_SCOPE</code>:</p>
+<pre><code>TESTDETTA_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
+
+<h2>Committers activos</h2>
+<p>{{name}} tiene un precio por committer activo al mes: un autor de commits distinto con al menos un commit creado en los últimos 30 días, entre los commits alcanzables desde el commit analizado. Los autores se cuentan localmente, por correo unificado mediante <code>.mailmap</code>, y ningún correo sale de tus máquinas. No se cuentan bots como Dependabot, Renovate y <code>github-actions</code>; añade tus propios patrones en <code>.testdetta/license.json</code>:</p>
+<pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>Hasta un 20 % por encima de los puestos de la licencia (al menos una persona) no hay problema. Por encima de eso, {{name}} sigue seleccionando durante 30 días y avisa en cada resumen, para que haya tiempo de añadir puestos; solo si después el recuento sigue por encima se ejecutan todas las pruebas, como sin licencia. Consulta <a href="/pricing/">Precios</a>.</p>
+
+<div class="callout"><p>Nunca una compilación en rojo: una licencia caducada, ausente o que no coincide hace que {{name}} ejecute todas las pruebas y explique por qué. No hace fallar el job.</p></div>

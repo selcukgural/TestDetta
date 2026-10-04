@@ -1,0 +1,84 @@
+<!-- title: Preise; description: Kostenlos für öffentliche Repositorys, {{trialDays}} Tage kostenlos für private, danach Abrechnung pro aktivem Committer.; source: d120e134a447 -->
+<section class="hero">
+  <div class="wrap center">
+    <div class="section-head">
+      <span class="eyebrow">Preise</span>
+      <h1>Sie zahlen für die Menschen, die committen, nicht für CI-Minuten.</h1>
+      <p class="lead">Ein Preis pro aktivem Committer: jede Person, die in den letzten 30 Tagen einen Commit verfasst hat. Bots zählen nicht, ebenso wenig Personen, die ausgeschieden sind.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="plans">
+      <div class="plan">
+        <h2>Open Source</h2>
+        <p class="price">Kostenlos</p>
+        <p class="price-note">Für öffentliche Repositorys auf GitHub Actions und GitLab CI.</p>
+        <ul>
+          <li>Alle Funktionen, ohne Einschränkungen</li>
+          <li>Keine Lizenz und keine Registrierung nötig</li>
+          <li>Wird anhand der CI erkannt, nichts zu konfigurieren</li>
+        </ul>
+        <a class="button button-ghost" href="/docs/">Loslegen</a>
+      </div>
+      <div class="plan plan-featured">
+        <h2>Team</h2>
+        <p class="price">{{currency}}{{priceMonthly}}<small> / aktiver Committer / Monat</small></p>
+        <p class="price-note">Oder {{currency}}{{priceYearly}} pro Committer und Monat bei jährlicher Abrechnung. Starten Sie mit {{trialDays}} kostenlosen Tagen, ohne Kreditkarte.</p>
+        <ul>
+          <li>Private Repositorys auf jeder CI</li>
+          <li>Coverage-Maps, Drift-Bridge und Job Summaries</li>
+          <li>20 % Spielraum über Ihre Seats hinaus und 30 Tage Vorwarnung, bevor sich etwas ändert</li>
+          <li>Die Lizenz erneuert sich in der CI selbst</li>
+          <li>Support per E-Mail</li>
+        </ul>
+        <a class="button" href="{{checkoutUrl}}">Kostenlos testen</a>
+      </div>
+      <div class="plan">
+        <h2>Offline &amp; Enterprise</h2>
+        <p class="price">Jährlich</p>
+        <p class="price-note">Für Netzwerke, die unseren Lizenzdienst nicht erreichen können, sowie für Rechnungen und Bestellungen per Purchase Order.</p>
+        <ul>
+          <li>Jährliche Lizenzdatei, keine Verbindung nach Hause</li>
+          <li>Rechnung und Purchase Order</li>
+          <li>Organisationsweiter jährlicher Abgleich (True-up)</li>
+        </ul>
+        <a class="button button-ghost" href="mailto:{{supportEmail}}">Kontakt aufnehmen</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap faq">
+    <div class="section-head">
+      <h2>Fragen</h2>
+    </div>
+    <details>
+      <summary>Wer zählt als aktiver Committer?</summary>
+      <p>Eine eindeutige Autor-E-Mail-Adresse (über <code>.mailmap</code> zusammengeführt) mit mindestens einem in den letzten 30 Tagen verfassten Commit unter den Commits, die Ihre Pipeline baut. Bots wie Dependabot, Renovate und <code>github-actions</code> sind ausgenommen, und Sie können eigene Dienstkonten hinzufügen. <code>td license status</code> zeigt die Anzahl und die Bot-Liste an, berechnet auf Ihren Rechnern; es werden keine Namen oder E-Mail-Adressen übertragen.</p>
+    </details>
+    <details>
+      <summary>Was passiert, wenn wir mehr Seats nutzen als lizenziert?</summary>
+      <p>Bis zu 20 % darüber (mindestens eine Person) sind in Ordnung. Darüber hinaus arbeitet {{name}} weiter und warnt 30 Tage lang in jeder Job Summary. Erst wenn Sie danach immer noch darüber liegen, führt es alle Tests aus, wie ohne Lizenz. Es lässt nie einen Build fehlschlagen.</p>
+    </details>
+    <details>
+      <summary>Was passiert, wenn die Lizenz abläuft?</summary>
+      <p>Die Warnungen beginnen 14 Tage vorher. Nach dem Enddatum laufen wieder alle Tests, genau wie vor der Installation von {{name}}. Builds bestehen oder scheitern weiterhin aus eigenen Gründen.</p>
+    </details>
+    <details>
+      <summary>Sendet {{name}} unseren Code irgendwohin?</summary>
+      <p>Nein. Analyse, Coverage-Maps und Testläufe bleiben in Ihrer CI. Die einzige Netzwerkverbindung ist eine optionale tägliche Lizenzaktualisierung, die nur die Lizenz selbst sendet; setzen Sie <code>TESTDETTA_LICENSE_REFRESH=off</code>, um sie abzuschalten.</p>
+    </details>
+    <details>
+      <summary>Wer wickelt Zahlung und Rechnungen ab?</summary>
+      <p>{{seller}} ist unser Merchant of Record: Das Unternehmen nimmt die Zahlung entgegen, berechnet die korrekte Umsatz- bzw. Mehrwertsteuer und stellt die Rechnungen aus. Ihre Lizenz erhalten Sie direkt nach dem Kauf per E-Mail.</p>
+    </details>
+    <details>
+      <summary>Können wir eine Erstattung erhalten?</summary>
+      <p>Ja, innerhalb von {{refundDays}} Tagen nach einer Zahlung. Siehe die <a href="/legal/refunds/">Erstattungsrichtlinie</a>.</p>
+    </details>
+  </div>
+</section>

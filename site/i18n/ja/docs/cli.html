@@ -1,0 +1,121 @@
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 9290031d3f43 -->
+<h1>CLI リファレンス</h1>
+<p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
+
+<pre><code>td affected [options]              Print the projects and tests a change affects
+td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
+td record [options]                Run all tests with coverage and store the map
+td license status [options]        Check the license and show what it covers
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+
+<h2 id="shared">すべての分析に共通のオプション</h2>
+<p>これらは <code>affected</code>、<code>test</code>、<code>record</code> で使用できます。</p>
+
+<h3 id="base"><code>--base &lt;ref&gt;</code></h3>
+<p>比較対象の git ref です。{{name}} は作業ツリーを、<code>HEAD</code> とこの ref の<em>マージベース</em>と比較します。そのため、ブランチを作成した後にベースブランチに取り込まれたコミットは、ご自身の変更としては数えられません。既定値：<code>origin/main</code>。</p>
+<pre><code>td test --base origin/develop
+td affected --base HEAD~3      # the last three commits and anything uncommitted</code></pre>
+
+<h3 id="repo"><code>--repo &lt;path&gt;</code></h3>
+<p>分析するリポジトリ内の任意のパスです。既定値：カレントディレクトリ。</p>
+<pre><code>td affected --repo ../shop</code></pre>
+
+<h3 id="verbose"><code>-v</code>、<code>--verbose</code>、<code>--log-level &lt;level&gt;</code></h3>
+<p>ログは stderr に出力されるため、stdout は機械可読な状態に保たれます。<code>-v</code> はデバッグログを有効にし、プロジェクトが影響を受ける理由、テストクラスがどのメンバーを実行したか、トレースがどの名前をたどったかなど、すべての判断を説明します。<code>--log-level</code> では <code>trace</code>、<code>debug</code>、<code>information</code>、<code>warning</code>（既定値）、<code>error</code>、<code>none</code> のいずれかを選択できます。<code>trace</code> では git の生の出力も加わります。</p>
+<pre><code>td affected -v 2&gt; testdetta-debug.log
+td test --log-level information</code></pre>
+
+<h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
+<p>マージベース自体にカバレッジマップがない場合に、マージベースから最大 <em>n</em> 個の first-parent コミット前までに記録されたマップを使用します。その間の変更は橋渡しされます。つまり、マップ以降に変更されたメンバーのうち、今回の変更に到達しうるものを実行したクラスも選択されます。<code>0</code> を指定すると、マージベースで記録されたマップだけを使用します。既定値：<code>50</code>。<a href="/docs/how-it-works/">選択のしくみ</a>を参照してください。</p>
+<pre><code>td test --max-map-age 20</code></pre>
+
+<h3 id="drift-fallback"><code>--drift-fallback &lt;all|name&gt;</code></h3>
+<p>古いマップ以降の変更に、ビルドファイル、構成、グローバル using など、メンバー単位で表せないものが含まれる場合の動作を指定します。<code>all</code>（既定値）は影響を受けるテストプロジェクトを丸ごと実行し、<code>name</code> は名前で判断します。後者は高速ですが、構成やリフレクションによってつながった呼び出しは捉えられません。</p>
+<pre><code>td test --drift-fallback name</code></pre>
+
+<h3 id="maps-dir"><code>--maps-dir &lt;dir&gt;</code></h3>
+<p>カバレッジマップをリポジトリの外に、コミットごとに 1 フォルダーで保持します。<code>record</code> は <code>&lt;dir&gt;/&lt;commit&gt;/</code> に保存し、<code>affected</code> と <code>test</code> は <code>--max-map-age</code> の範囲内で最新のものを復元します。GitHub Actions 以外の CI システムで、共有ディスクまたは同期したオブジェクトストレージとともに使用します。既定値：マップはリポジトリ内の <code>.testdetta/coverage</code> に置かれます。</p>
+<pre><code>td record --maps-dir /srv/testdetta-maps/shop
+td test --base origin/main --maps-dir /srv/testdetta-maps/shop</code></pre>
+
+<h2 id="affected"><code>td affected</code></h2>
+<p>何もビルドや実行をせずに、変更が何に影響するかをその理由とともに出力します。</p>
+
+<h3 id="format"><code>--format &lt;text|json|paths|commands&gt;</code></h3>
+<table>
+  <thead><tr><th>形式</th><th>出力</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td><code>text</code>（既定値）</td><td>影響を受けるプロジェクトとその理由、続いてテスト計画</td><td>人が読む</td></tr>
+    <tr><td><code>json</code></td><td>すべてのプロジェクトとテストクラスについて、判断、根拠、推定時間</td><td>スクリプト、ダッシュボード</td></tr>
+    <tr><td><code>paths</code></td><td>影響を受けるテストの <code>.csproj</code> を 1 行に 1 つ</td><td>別のツールへの入力</td></tr>
+    <tr><td><code>commands</code></td><td>テストプロジェクトごとに 1 つの <code>dotnet test</code> コマンド（フィルター付き）</td><td>独自の方法でのテスト実行</td></tr>
+  </tbody>
+</table>
+<pre><code>td affected --format json &gt; plan.json
+td affected --format paths | xargs -n1 dotnet build</code></pre>
+
+<h3 id="tests-only"><code>--tests-only</code></h3>
+<p>影響を受けるテストプロジェクトだけを一覧表示し、途中にある本番コードのプロジェクトは含めません。</p>
+
+<h2 id="test"><code>td test</code></h2>
+<p>影響を受けるテストだけをビルドして実行します。一部のクラスだけが影響を受ける場合はテストプロジェクトごとにフィルターを使い、すべてのクラスが影響を受ける場合や変更を絞り込めない場合はプロジェクト全体を実行し、どのクラスも影響を受けない場合は何も実行しません。いずれかのテストが失敗すると、終了コードは <code>3</code> になります。</p>
+
+<h3 id="dry-run"><code>--dry-run</code></h3>
+<p><code>dotnet test</code> コマンドを実行せずに出力します。<code>global.json</code> がサブフォルダーにあるプロジェクトは、<code>(cd src &amp;&amp; dotnet test ...)</code> のように出力されます。</p>
+
+<h3 id="summary-file"><code>--summary-file &lt;path&gt;</code></h3>
+<p>Markdown のサマリーを追記します。内容は、各プロジェクトの結果、実行されたクラスとその理由、スキップされたクラス、記録済みのテスト時間のうち節約できた分です。GitHub Actions では <code>$GITHUB_STEP_SUMMARY</code> を指定します（アクションが自動的に行います）。<a href="/docs/examples/">例</a>をご覧ください。</p>
+<pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
+
+<h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
+<p><code>--</code> の後に指定したものはすべて、各 <code>dotnet test</code> の呼び出しに渡されます。</p>
+<pre><code>td test -- -c Release --logger trx
+td test -- --no-restore</code></pre>
+
+<h2 id="record"><code>td record</code></h2>
+<p>すべてのテストをカバレッジ付きで実行し、テストプロジェクトごとに 1 つのマップを <code>.testdetta/coverage</code>（または <code>--maps-dir</code>）に書き込みます。既定のブランチで実行してください。これはそのブランチの完全なテスト実行も兼ねます。テストが失敗すると終了コードは <code>3</code> になりますが、マップは書き込まれ、失敗したクラスは以後常に選択されます。</p>
+
+<h3 id="configuration"><code>-c</code>、<code>--configuration &lt;name&gt;</code></h3>
+<p>ビルド構成です。既定値：<code>Debug</code>。</p>
+
+<h3 id="framework"><code>-f</code>、<code>--framework &lt;tfm&gt;</code></h3>
+<p>複数のターゲットフレームワークを持つテストプロジェクトで記録するターゲットフレームワークです。既定値：プロジェクトの最初のターゲットフレームワーク。</p>
+<pre><code>td record -f net10.0</code></pre>
+
+<h3 id="project"><code>--project &lt;path&gt;</code></h3>
+<p>このテストプロジェクトだけを記録します。パスはリポジトリのルートからの相対パスで、複数指定する場合は繰り返します。データベースが必要な統合テストなど、CI で実行できないプロジェクトは除外してください。それらは名前で判断されます。</p>
+<pre><code>td record --project tests/Shop.Tests/Shop.Tests.csproj --project tests/Api.Tests/Api.Tests.csproj</code></pre>
+
+<h3 id="parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>記録を高速化するため、各プロジェクトのテストクラスを <em>n</em> 個のテストプロセスに分散します。各プロセスはテストを 1 つずつ実行します。テストスイートが複数のテストプロセスの同時実行に耐えられる必要があります（固定ポートや共有ファイルを使わないこと）。既定値：<code>1</code>。</p>
+
+<h3 id="no-build"><code>--no-build</code></h3>
+<p>再ビルドせずに、同じ構成で事前に行ったビルドの出力を記録します。</p>
+<pre><code>dotnet build -c Release
+td record -c Release --no-build</code></pre>
+
+<h2 id="license-commands"><code>td license</code></h2>
+<p><code>td license status</code> は、<code>td test</code> と同じ方法でライセンスを確認し、ライセンシー、シート数、過去 30 日間のアクティブなコミッター、ボットの一覧、スコープ、終了日といった対象範囲を出力します。個人データをどこかに送信することはありません。<code>td license install &lt;license|file&gt;</code> はライセンスを <code>~/.testdetta/license</code> に保存します。CI のシークレットにライセンスを保持できないマシン向けです。<a href="/docs/license/">ライセンス</a>を参照してください。</p>
+
+<h2 id="environment">環境変数</h2>
+<table>
+  <thead><tr><th>変数</th><th>動作</th></tr></thead>
+  <tbody>
+    <tr><td><code>TESTDETTA_LICENSE</code></td><td>CI のシークレットから渡すライセンス文字列。</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_FILE</code></td><td>ライセンス文字列を格納したファイル。</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>1 日 1 回のライセンス更新を無効にします。ライセンスサービスに接続できないネットワーク向けです。</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_SCOPE</code></td><td><code>origin</code> リモートがライセンスの対象リポジトリを示していない場合（ローカルのミラーなど）に、ライセンスが対象とすべきリポジトリ。</td></tr>
+    <tr><td><code>HTTPS_PROXY</code></td><td>ライセンス更新に使用するプロキシ。</td></tr>
+  </tbody>
+</table>
+
+<h2 id="exit-codes">終了コード</h2>
+<table>
+  <thead><tr><th>コード</th><th>意味</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td>成功（「テスト不要」の場合を含む）。</td></tr>
+    <tr><td><code>1</code></td><td>分析に失敗しました（git、ファイルシステム、またはプロジェクトファイル）。</td></tr>
+    <tr><td><code>2</code></td><td>コマンドラインが無効です。</td></tr>
+    <tr><td><code>3</code></td><td>テストが失敗しました（<code>test</code> と <code>record</code>）。</td></tr>
+  </tbody>
+</table>

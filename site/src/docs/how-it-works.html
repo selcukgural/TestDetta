@@ -14,7 +14,7 @@
 <p>For C# files, the old and new syntax trees are compared. Comment and whitespace edits select nothing; otherwise {{name}} knows which types and members changed.</p>
 
 <h3>3. Coverage</h3>
-<p>After <code>sift record</code>, a map of which test class ran which method, recorded at the base commit, gives the test classes for changed methods, properties and constructors directly.</p>
+<p>After <code>td record</code>, a map of which test class ran which method, recorded at the base commit, gives the test classes for changed methods, properties and constructors directly.</p>
 
 <h3>4. Names</h3>
 <p>What coverage cannot see, such as new code, fields and constants, is traced through the source by name until it reaches test classes or code the coverage map knows.</p>
@@ -31,19 +31,19 @@
 <p>{{name}} runs a selected project with a filter on its test classes. A filter that matches no test is treated as a bug in {{name}}: the project is run again without it.</p>
 
 <h2>Coverage maps</h2>
-<p><code>sift record</code> runs every test with coverage and writes one map per test project. Maps are best recorded at the merge base of your branch, and in CI you record one for every commit on the default branch.</p>
+<p><code>td record</code> runs every test with coverage and writes one map per test project. Maps are best recorded at the merge base of your branch, and in CI you record one for every commit on the default branch.</p>
 
 <h3>Older maps and the drift bridge</h3>
 <p>A map recorded up to 50 commits before the merge base is still used (<code>--max-map-age</code>, default 50; 0 uses only a map recorded at the merge base). Code changed in between could have created calls the map does not know, so {{name}} also selects the classes that ran any changed-since member that can reach your change, and traces new code by name.</p>
 <p>When something in between cannot be described by members, such as a build file or <code>appsettings.json</code>, the affected test projects run completely. <code>--drift-fallback name</code> decides them by name instead, as without a map: faster, but blind to calls wired by configuration or reflection.</p>
 
 <h3>Without a map</h3>
-<p>The first pull requests after setting up, or ones far behind, find no map within reach. {{name}} then selects by name only, which is safe but selects more, and says so in its log. Selection becomes precise once <code>sift record</code> has run on the default branch.</p>
+<p>The first pull requests after setting up, or ones far behind, find no map within reach. {{name}} then selects by name only, which is safe but selects more, and says so in its log. Selection becomes precise once <code>td record</code> has run on the default branch.</p>
 
 <h2>Seeing why</h2>
-<p><code>sift affected</code> and <code>sift test --dry-run</code> print every affected test project with the reason it runs filtered, completely or not at all; <code>sift affected --format json</code> adds the decision for each test class. <code>-v</code> writes every decision to stderr, for example why a project was affected or which change a class ran.</p>
-<pre><code>$ sift test --dry-run --base origin/main
-sift: 1 changed file(s), 2 affected test project(s).
+<p><code>td affected</code> and <code>td test --dry-run</code> print every affected test project with the reason it runs filtered, completely or not at all; <code>td affected --format json</code> adds the decision for each test class. <code>-v</code> writes every decision to stderr, for example why a project was affected or which change a class ran.</p>
+<pre><code>$ td test --dry-run --base origin/main
+td: 1 changed file(s), 2 affected test project(s).
 Tests to run:
   filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
   skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>

@@ -1,0 +1,90 @@
+<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: 356b3c4f84a4 -->
+<h1>GitHub Actions</h1>
+<p class="lead">既定のブランチのコミットごとにマップを記録し、プルリクエストでは変更が影響するテストだけを実行します。アクションが {{name}} 自体をビルドし、マップを Actions のキャッシュに保持します。</p>
+
+<h2>ワークフロー</h2>
+<pre><code>on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read # lets pull requests find the newest coverage map in the Actions cache
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7 # pin to a commit SHA
+        with:
+          fetch-depth: 0 # TestDetta compares with the merge base
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6 # pin to a commit SHA
+        with:
+          global-json-file: global.json
+
+      # Also the full test run of main. Leave out projects that cannot run here, such as
+      # integration tests that need a database; they are then decided by name on pull requests.
+      - if: github.event_name == 'push'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: record
+          projects: |
+            tests/Shop.Tests/Shop.Tests.csproj
+
+      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: test
+          dotnet-test-args: --logger trx
+          license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
+
+<div class="callout"><p><strong>完全な履歴が必要です。</strong>シャロークローンの場合、アクションはエラーで停止します。<code>fetch-depth: 0</code> でチェックアウトしてください。</p></div>
+
+<h2>マップがプルリクエストに届くしくみ</h2>
+<ul>
+  <li>record モードでは、マップを Actions のキャッシュに <code>testdetta-coverage-&lt;commit&gt;</code> という名前で保存します。プルリクエストはベースブランチのキャッシュを読み取れます。</li>
+  <li>プルリクエストは、マージベースのマップか、マージベースから最大 <code>max-map-age</code> 個の first-parent コミット前までに記録された最新のマップを使用します。</li>
+  <li>完全に一致しないマップを探すにはリポジトリのキャッシュを一覧表示する必要があり、そのために <code>actions: read</code> が必要です。この許可がない場合はマージベースのマップしか見つからず、ステップがその旨を通知します。</li>
+  <li>マップがまったくなくても <code>mode: test</code> は動作し、名前だけで判断します。</li>
+</ul>
+<p>記録中にテストが失敗しても、ジョブが失敗する前にマップは保存されるため、プルリクエストは引き続きマップを利用できます。</p>
+
+<h2>アクセス許可</h2>
+<table>
+  <thead><tr><th>アクセス許可</th><th>理由</th></tr></thead>
+  <tbody>
+    <tr><td><code>contents: read</code></td><td>リポジトリをチェックアウトするため。</td></tr>
+    <tr><td><code>actions: read</code></td><td>Actions のキャッシュを一覧表示し、<code>max-map-age</code> の範囲内で最新のマップを探すため。</td></tr>
+  </tbody>
+</table>
+<p><code>persist-credentials: false</code> を指定すると、ジョブの後半でプライベートリポジトリを再びフェッチすることはできません。ただし、<code>fetch-depth: 0</code> の時点ですべてのブランチを取得しているため、ベースブランチは存在しています。</p>
+
+<h2>入力</h2>
+<table>
+  <thead><tr><th>入力</th><th>既定値</th><th>説明</th></tr></thead>
+  <tbody>
+    <tr><td><code>mode</code></td><td></td><td>プルリクエストでは <code>test</code>（影響を受けるテストを実行）、既定のブランチでは <code>record</code>（カバレッジマップを記録）。必須です。</td></tr>
+    <tr><td><code>base</code></td><td>PR のベースブランチ</td><td>test モードで比較するブランチ。プルリクエスト以外で使う場合は指定してください。</td></tr>
+    <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>テストのビルドと実行に使うビルド構成。</td></tr>
+    <tr><td><code>projects</code></td><td>すべてのテストプロジェクト</td><td>record モード：<code>.csproj</code> のパスを 1 行に 1 つずつ指定します。</td></tr>
+    <tr><td><code>parallel</code></td><td><code>1</code></td><td>record モード：テストプロジェクトごとのテストホストプロセス数。各プロセスはテストを 1 つずつ実行します。テストスイートが複数のテストプロセスの同時実行に耐えられる必要があります。</td></tr>
+    <tr><td><code>no-build</code></td><td><code>false</code></td><td>record モード：<code>true</code> にすると、前のステップで同じ <code>configuration</code> によって作成されたビルドを記録します。</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>test モード：<code>dotnet test</code> に渡す追加の引数（スペース区切り）。</td></tr>
+    <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>test モード：マップがマージベースより何コミット遅れていてよいか。その間の変更は橋渡しされます。<code>0</code> を指定すると完全に一致するマップだけを使用します。</td></tr>
+    <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>test モード：古いマップ以降の変更にビルドファイル、構成、グローバル using が含まれる場合、<code>all</code> は影響を受けるテストプロジェクトを丸ごと実行し、<code>name</code> は名前で判断します（高速ですが、構成やリフレクションを介した呼び出しは捉えられません）。</td></tr>
+    <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>test モード：最新のマップを探すために Actions のキャッシュを一覧表示します（<code>actions: read</code> が必要）。</td></tr>
+    <tr><td><code>license</code></td><td></td><td>test モード：ライセンス文字列。<code>TESTDETTA_LICENSE</code> のようなリポジトリまたは組織のシークレットから渡します。パブリックリポジトリでは不要です。有効なライセンスがない場合はすべてのテストを実行し、それが原因でジョブが失敗することはありません。</td></tr>
+    <tr><td><code>working-directory</code></td><td><code>.</code></td><td>分析するリポジトリ内の任意のディレクトリ。</td></tr>
+    <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>{{name}} の実行に必要な .NET 10 SDK をインストールします。ジョブにすでにインストールされている場合は <code>false</code> に設定してください。</td></tr>
+  </tbody>
+</table>
+
+<h2>ジョブサマリー</h2>
+<p>test モードでは、{{name}} は選択内容をジョブサマリーに書き込みます。変更されたファイルと比較したベース、各テストプロジェクトがフィルター付きで実行されたか、丸ごと実行されたか、まったく実行されなかったかとその理由、テスト結果、そして関係がある場合はライセンスの状態です。リポジトリ由来のパス、クラス名、理由はコードとして書き込まれるため、プルリクエスト内のファイル名によってページにリンクやメンションが挿入されることはありません。</p>
+
+<h2>テストスイートの一部だけを記録する</h2>
+<p>記録ではテストスイート全体をカバレッジ付きで 1 回実行します。既定のブランチでは、これがそのまま完全なテスト実行にもなります。データベースが必要な統合テストなど、ランナー上で実行できないプロジェクトは <code>projects</code> で除外してください。プルリクエストでは、それらのプロジェクトは名前で判断されます。</p>
+<p>前のステップですでに同じ構成でソリューションをビルドしている場合は、<code>no-build: true</code> を設定します。複数のテストプロセスの同時実行に耐えられるテストスイートでは、<code>parallel</code> によって各プロジェクトのテストクラスを指定した数のプロセスに分散できます。</p>

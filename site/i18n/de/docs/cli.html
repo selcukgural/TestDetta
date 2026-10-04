@@ -1,0 +1,121 @@
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 9290031d3f43 -->
+<h1>CLI-Referenz</h1>
+<p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
+
+<pre><code>td affected [options]              Print the projects and tests a change affects
+td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
+td record [options]                Run all tests with coverage and store the map
+td license status [options]        Check the license and show what it covers
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+
+<h2 id="shared">Optionen für jede Analyse</h2>
+<p>Diese funktionieren mit <code>affected</code>, <code>test</code> und <code>record</code>.</p>
+
+<h3 id="base"><code>--base &lt;ref&gt;</code></h3>
+<p>Die Git-Ref, mit der verglichen wird. {{name}} vergleicht Ihr Arbeitsverzeichnis mit der <em>Merge-Base</em> von <code>HEAD</code> und dieser Ref, sodass Commits, die nach Ihrer Abzweigung auf dem Basis-Branch gelandet sind, nicht als Ihre Änderungen zählen. Standard: <code>origin/main</code>.</p>
+<pre><code>td test --base origin/develop
+td affected --base HEAD~3      # the last three commits and anything uncommitted</code></pre>
+
+<h3 id="repo"><code>--repo &lt;path&gt;</code></h3>
+<p>Ein beliebiger Pfad innerhalb des zu analysierenden Repositorys. Standard: das aktuelle Verzeichnis.</p>
+<pre><code>td affected --repo ../shop</code></pre>
+
+<h3 id="verbose"><code>-v</code>, <code>--verbose</code> und <code>--log-level &lt;level&gt;</code></h3>
+<p>Logs gehen nach stderr, sodass stdout maschinenlesbar bleibt. <code>-v</code> aktiviert Debug-Logs, die jede Entscheidung erklären: warum ein Projekt betroffen ist, welchen Member eine Testklasse ausgeführt hat, welchem Namen eine Verfolgung gefolgt ist. <code>--log-level</code> wählt eine der Stufen <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (Standard), <code>error</code> oder <code>none</code>; <code>trace</code> ergänzt die unverarbeitete Git-Ausgabe.</p>
+<pre><code>td affected -v 2&gt; testdetta-debug.log
+td test --log-level information</code></pre>
+
+<h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
+<p>Verwendet eine Coverage-Map, die bis zu <em>n</em> First-Parent-Commits vor der Merge-Base aufgezeichnet wurde, wenn es an der Merge-Base selbst keine gibt. Die Änderungen dazwischen werden überbrückt: Klassen, die einen seit der Map geänderten Member ausgeführt haben, der Ihre Änderung erreichen kann, werden ebenfalls ausgewählt. <code>0</code> verwendet nur eine an der Merge-Base aufgezeichnete Map. Standard: <code>50</code>. Siehe <a href="/docs/how-it-works/">Wie es entscheidet</a>.</p>
+<pre><code>td test --max-map-age 20</code></pre>
+
+<h3 id="drift-fallback"><code>--drift-fallback &lt;all|name&gt;</code></h3>
+<p>Legt fest, was geschieht, wenn die Änderungen seit einer älteren Map etwas enthalten, das sich nicht durch Member beschreiben lässt: eine Build-Datei, Konfiguration, ein globales Using. <code>all</code> (Standard) führt die betroffenen Testprojekte vollständig aus; <code>name</code> entscheidet sie anhand von Namen, was schneller ist, aber blind für Aufrufe, die über Konfiguration oder Reflection verbunden sind.</p>
+<pre><code>td test --drift-fallback name</code></pre>
+
+<h3 id="maps-dir"><code>--maps-dir &lt;dir&gt;</code></h3>
+<p>Bewahrt Coverage-Maps außerhalb des Repositorys auf, ein Ordner pro Commit. <code>record</code> speichert nach <code>&lt;dir&gt;/&lt;commit&gt;/</code>; <code>affected</code> und <code>test</code> stellen die neueste innerhalb von <code>--max-map-age</code> wieder her. Verwenden Sie die Option auf anderen CI-Systemen als GitHub Actions, mit einem gemeinsamen Laufwerk oder einem synchronisierten Objektspeicher. Standard: Die Maps liegen in <code>.testdetta/coverage</code> im Repository.</p>
+<pre><code>td record --maps-dir /srv/testdetta-maps/shop
+td test --base origin/main --maps-dir /srv/testdetta-maps/shop</code></pre>
+
+<h2 id="affected"><code>td affected</code></h2>
+<p>Gibt aus, was eine Änderung betrifft und warum, ohne etwas zu bauen oder auszuführen.</p>
+
+<h3 id="format"><code>--format &lt;text|json|paths|commands&gt;</code></h3>
+<table>
+  <thead><tr><th>Format</th><th>Ausgabe</th><th>Verwendung</th></tr></thead>
+  <tbody>
+    <tr><td><code>text</code> (Standard)</td><td>Betroffene Projekte mit dem Grund, danach der Testplan</td><td>Zum Lesen</td></tr>
+    <tr><td><code>json</code></td><td>Jedes Projekt und jede Testklasse mit Entscheidung, Belegen und Zeitschätzung</td><td>Skripte, Dashboards</td></tr>
+    <tr><td><code>paths</code></td><td>Eine betroffene Test-<code>.csproj</code> pro Zeile</td><td>Als Eingabe für ein anderes Tool</td></tr>
+    <tr><td><code>commands</code></td><td>Ein <code>dotnet test</code>-Befehl pro Testprojekt, mit seinem Filter</td><td>Um die Tests auf eigene Weise auszuführen</td></tr>
+  </tbody>
+</table>
+<pre><code>td affected --format json &gt; plan.json
+td affected --format paths | xargs -n1 dotnet build</code></pre>
+
+<h3 id="tests-only"><code>--tests-only</code></h3>
+<p>Listet nur die betroffenen Testprojekte auf, nicht die Produktionsprojekte auf dem Weg dorthin.</p>
+
+<h2 id="test"><code>td test</code></h2>
+<p>Baut und führt nur die betroffenen Tests aus: einen Filter pro Testprojekt, wenn nur einige Klassen betroffen sind, das ganze Projekt, wenn alle betroffen sind oder sich eine Änderung nicht eingrenzen lässt, und nichts, wenn keine betroffen ist. Exitcode <code>3</code>, wenn ein Test fehlschlägt.</p>
+
+<h3 id="dry-run"><code>--dry-run</code></h3>
+<p>Gibt die <code>dotnet test</code>-Befehle aus, statt sie auszuführen. Ein Projekt, dessen <code>global.json</code> in einem Unterordner liegt, wird als <code>(cd src &amp;&amp; dotnet test ...)</code> ausgegeben.</p>
+
+<h3 id="summary-file"><code>--summary-file &lt;path&gt;</code></h3>
+<p>Hängt eine Markdown-Zusammenfassung an: das Ergebnis jedes Projekts, welche Klassen liefen und warum, welche übersprungen wurden und die eingesparte aufgezeichnete Testzeit. Verweisen Sie in GitHub Actions auf <code>$GITHUB_STEP_SUMMARY</code>; die Action erledigt das für Sie. Siehe ein <a href="/docs/examples/">Beispiel</a>.</p>
+<pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
+
+<h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
+<p>Alles nach <code>--</code> wird an jeden <code>dotnet test</code>-Aufruf übergeben.</p>
+<pre><code>td test -- -c Release --logger trx
+td test -- --no-restore</code></pre>
+
+<h2 id="record"><code>td record</code></h2>
+<p>Führt alle Tests mit Coverage aus und schreibt eine Map pro Testprojekt nach <code>.testdetta/coverage</code> (oder <code>--maps-dir</code>). Führen Sie den Befehl auf Ihrem Standard-Branch aus; er ist zugleich der vollständige Testlauf dieses Branches. Exitcode <code>3</code>, wenn Tests fehlschlagen; die Maps werden trotzdem geschrieben, und die fehlschlagenden Klassen werden später immer ausgewählt.</p>
+
+<h3 id="configuration"><code>-c</code>, <code>--configuration &lt;name&gt;</code></h3>
+<p>Build-Konfiguration. Standard: <code>Debug</code>.</p>
+
+<h3 id="framework"><code>-f</code>, <code>--framework &lt;tfm&gt;</code></h3>
+<p>Das Ziel-Framework, das in einem Testprojekt mit mehreren Ziel-Frameworks aufgezeichnet wird. Standard: das erste Ziel-Framework des Projekts.</p>
+<pre><code>td record -f net10.0</code></pre>
+
+<h3 id="project"><code>--project &lt;path&gt;</code></h3>
+<p>Zeichnet nur dieses Testprojekt auf, relativ zum Stammverzeichnis des Repositorys; für mehrere Projekte wiederholen Sie die Option. Lassen Sie Projekte weg, die in der CI nicht laufen können, etwa Integrationstests, die eine Datenbank benötigen; sie werden dann anhand von Namen entschieden.</p>
+<pre><code>td record --project tests/Shop.Tests/Shop.Tests.csproj --project tests/Api.Tests/Api.Tests.csproj</code></pre>
+
+<h3 id="parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>Verteilt die Testklassen jedes Projekts auf <em>n</em> Testprozesse, um schneller aufzuzeichnen. Jeder Prozess führt seine Tests weiterhin einzeln nacheinander aus. Ihre Testsuite muss mehrere gleichzeitige Testprozesse vertragen (keine festen Ports oder gemeinsam genutzten Dateien). Standard: <code>1</code>.</p>
+
+<h3 id="no-build"><code>--no-build</code></h3>
+<p>Zeichnet die Ausgabe eines früheren Builds mit derselben Konfiguration auf, statt erneut zu bauen.</p>
+<pre><code>dotnet build -c Release
+td record -c Release --no-build</code></pre>
+
+<h2 id="license-commands"><code>td license</code></h2>
+<p><code>td license status</code> prüft die Lizenz so, wie <code>td test</code> es tun würde, und gibt aus, was sie abdeckt: Lizenznehmer, Seats, aktive Committer der letzten 30 Tage, die Bot-Liste, Scopes und das Enddatum. Es sendet keine personenbezogenen Daten irgendwohin. <code>td license install &lt;license|file&gt;</code> speichert eine Lizenz in <code>~/.testdetta/license</code>, für Rechner, auf denen kein CI-Secret sie aufnehmen kann. Siehe <a href="/docs/license/">Lizenz</a>.</p>
+
+<h2 id="environment">Umgebungsvariablen</h2>
+<table>
+  <thead><tr><th>Variable</th><th>Funktion</th></tr></thead>
+  <tbody>
+    <tr><td><code>TESTDETTA_LICENSE</code></td><td>Der Lizenzstring, aus einem CI-Secret.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_FILE</code></td><td>Eine Datei, die den Lizenzstring enthält.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>Schaltet die tägliche Lizenzaktualisierung ab, für Netzwerke, die den Lizenzdienst nicht erreichen können.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_SCOPE</code></td><td>Das Repository, das die Lizenz abdecken muss, wenn der Remote <code>origin</code> es nicht benennt (zum Beispiel bei einem lokalen Mirror).</td></tr>
+    <tr><td><code>HTTPS_PROXY</code></td><td>Proxy für die Lizenzaktualisierung.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="exit-codes">Exitcodes</h2>
+<table>
+  <thead><tr><th>Code</th><th>Bedeutung</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td>Erfolg, auch wenn keine Tests nötig sind.</td></tr>
+    <tr><td><code>1</code></td><td>Die Analyse ist fehlgeschlagen: Git, das Dateisystem oder eine Projektdatei.</td></tr>
+    <tr><td><code>2</code></td><td>Ungültige Befehlszeile.</td></tr>
+    <tr><td><code>3</code></td><td>Tests sind fehlgeschlagen (<code>test</code> und <code>record</code>).</td></tr>
+  </tbody>
+</table>

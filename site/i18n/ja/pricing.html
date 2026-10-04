@@ -1,0 +1,84 @@
+<!-- title: 料金; description: パブリックリポジトリは無料、プライベートリポジトリは {{trialDays}} 日間無料で、その後はアクティブなコミッター単位の料金です。; source: d120e134a447 -->
+<section class="hero">
+  <div class="wrap center">
+    <div class="section-head">
+      <span class="eyebrow">料金</span>
+      <h1>お支払いは CI の実行時間ではなく、コミットする人の数に対してです。</h1>
+      <p class="lead">料金はアクティブなコミッター 1 人あたりの単価です。アクティブなコミッターとは、過去 30 日間にコミットを作成したすべての人を指します。ボットは数えず、退職・離脱した人も数えません。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="plans">
+      <div class="plan">
+        <h2>オープンソース</h2>
+        <p class="price">無料</p>
+        <p class="price-note">GitHub Actions と GitLab CI 上のパブリックリポジトリが対象です。</p>
+        <ul>
+          <li>すべての機能を制限なく利用可能</li>
+          <li>ライセンスもサインアップも不要</li>
+          <li>CI から自動で判定されるため、設定は不要</li>
+        </ul>
+        <a class="button button-ghost" href="/docs/">はじめる</a>
+      </div>
+      <div class="plan plan-featured">
+        <h2>Team</h2>
+        <p class="price">{{currency}}{{priceMonthly}}<small> / アクティブなコミッター / 月</small></p>
+        <p class="price-note">年払いの場合は、コミッター 1 人あたり月額 {{currency}}{{priceYearly}} です。最初の {{trialDays}} 日間は無料で、カードは不要です。</p>
+        <ul>
+          <li>あらゆる CI 上のプライベートリポジトリ</li>
+          <li>カバレッジマップ、ドリフトブリッジ、ジョブサマリー</li>
+          <li>シート数に対して 20% の余裕があり、何かが変わる前に 30 日間の猶予付きで警告</li>
+          <li>ライセンスは CI 内で自動更新</li>
+          <li>メールサポート</li>
+        </ul>
+        <a class="button" href="{{checkoutUrl}}">無料トライアルを開始</a>
+      </div>
+      <div class="plan">
+        <h2>オフライン &amp; エンタープライズ</h2>
+        <p class="price">年間契約</p>
+        <p class="price-note">当社のライセンスサービスに接続できないネットワーク向け、また請求書払いや発注書（PO）での購入向けです。</p>
+        <ul>
+          <li>年間ライセンスファイル、外部への通信なし</li>
+          <li>請求書払いと発注書</li>
+          <li>組織全体での年次精算（トゥルーアップ）</li>
+        </ul>
+        <a class="button button-ghost" href="mailto:{{supportEmail}}">お問い合わせ</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap faq">
+    <div class="section-head">
+      <h2>よくある質問</h2>
+    </div>
+    <details>
+      <summary>アクティブなコミッターとして数えられるのは誰ですか？</summary>
+      <p>パイプラインがビルドするコミットのうち、過去 30 日間に 1 件以上のコミットを作成した、重複のない作成者メールアドレス（<code>.mailmap</code> で名寄せしたもの）です。Dependabot、Renovate、<code>github-actions</code> などのボットは除外され、独自のサービスアカウントを追加することもできます。<code>td license status</code> で人数とボットの一覧を確認できます。この集計はお使いのマシン上で行われ、名前やメールアドレスがどこかに送信されることはありません。</p>
+    </details>
+    <details>
+      <summary>シート数を超えた場合はどうなりますか？</summary>
+      <p>20% まで（最低 1 人）の超過は問題ありません。それを超えた場合も {{name}} は動作を続け、30 日間はすべてのジョブサマリーに警告を表示します。その後も超過したままの場合に限り、ライセンスがない場合と同様にすべてのテストを実行します。ビルドを失敗させることはありません。</p>
+    </details>
+    <details>
+      <summary>ライセンスの期限が切れるとどうなりますか？</summary>
+      <p>期限の 14 日前から警告が表示されます。終了日を過ぎると、{{name}} を導入する前とまったく同じように、すべてのテストが再び実行されます。ビルドの成否は、これまでどおりビルド自体の結果で決まります。</p>
+    </details>
+    <details>
+      <summary>{{name}} はコードをどこかに送信しますか？</summary>
+      <p>いいえ。分析、カバレッジマップ、テストの実行はすべてお使いの CI の中で完結します。唯一のネットワーク通信は、ライセンスそのものを送信する任意の 1 日 1 回のライセンス更新です。無効にするには <code>TESTDETTA_LICENSE_REFRESH=off</code> を設定してください。</p>
+    </details>
+    <details>
+      <summary>支払いと請求書は誰が扱いますか？</summary>
+      <p>{{seller}} が当社の販売代理人（Merchant of Record）として、支払いの受け取り、適切な売上税または VAT の請求、請求書の発行を行います。ライセンスは購入手続きの直後にメールで届きます。</p>
+    </details>
+    <details>
+      <summary>返金を受けられますか？</summary>
+      <p>はい、お支払いから {{refundDays}} 日以内であれば可能です。<a href="/legal/refunds/">返金ポリシー</a>をご覧ください。</p>
+    </details>
+  </div>
+</section>

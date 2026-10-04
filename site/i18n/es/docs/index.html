@@ -1,0 +1,83 @@
+<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: 8a80a118b806 -->
+<h1>Primeros pasos</h1>
+<p class="lead">{{name}} compara tu rama con su base, determina qué proyectos de pruebas y qué clases de prueba pueden observar el cambio, y ejecuta solo esos. Cuando no puede estar seguro, ejecuta más, nunca menos.</p>
+
+<h2>Requisitos</h2>
+<ul>
+  <li><strong>El SDK de .NET 10</strong> para ejecutar el propio {{name}}. Tus pruebas siguen usando el SDK y el test runner que ya usa tu repositorio.</li>
+  <li><strong>El historial de git completo.</strong> {{name}} compara con la merge base de tu rama y recorre el historial para encontrar mapas de cobertura. Los clones superficiales (shallow) no permiten ninguna de las dos cosas.</li>
+  <li><strong>La rama de destino descargada</strong>, para que exista una ref como <code>origin/main</code>.</li>
+  <li><strong>Un test runner</strong> tal como lo ve <code>dotnet test</code>. Se admiten ambos runners; el runner se lee de <code>global.json</code> (<code>"test": { "runner": "Microsoft.Testing.Platform" }</code>), y el predeterminado es VSTest.</li>
+</ul>
+
+<h2>Inicio rápido</h2>
+
+<h3>GitHub Actions</h3>
+<p>La GitHub Action compila {{name}} por ti; no hay nada que instalar. Añade dos pasos a tu workflow: uno registra un mapa de cobertura en los push a tu rama predeterminada y el otro ejecuta solo las pruebas afectadas en las pull requests.</p>
+<pre><code>- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test</code></pre>
+<p>El workflow completo, los permisos que necesita y todas las entradas están en <a href="/docs/github-actions/">GitHub Actions</a>.</p>
+
+<h3>Otros sistemas de CI</h3>
+<p>GitLab CI, Jenkins, Azure DevOps, Bitbucket y las instalaciones on-premises ejecutan los mismos dos comandos, con una carpeta de mapas de cobertura por commit (<code>--maps-dir</code>) guardada en un disco compartido o en almacenamiento de objetos. Instala {{name}} como herramienta de .NET:</p>
+<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
+<div class="callout"><p>El nombre del paquete se fijará en el lanzamiento. Hasta entonces, compila la herramienta desde el código fuente con <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> y llama a <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> allí donde aparezca <code>td</code>.</p></div>
+<p>Los pipelines para cada sistema están en <a href="/docs/other-ci/">Otros sistemas de CI</a>.</p>
+
+<h2>Primeros comandos</h2>
+<p>Ejecútalos desde cualquier lugar dentro de tu repositorio. <code>--base</code> es <code>origin/main</code> de forma predeterminada.</p>
+<pre><code># What does my branch affect, and why?
+td affected --base origin/main
+
+# Run only the affected tests (add --dry-run to print the dotnet test commands)
+td test --base origin/main
+
+# Run every test with coverage and write one map per test project to .testdetta/coverage
+td record</code></pre>
+<p>Sin un mapa de cobertura, <code>td test</code> sigue funcionando: decide solo por nombre, lo cual es seguro pero selecciona más. En cuanto <code>td record</code> se haya ejecutado en la base de tu rama, la selección se vuelve precisa.</p>
+<div class="callout"><p>Añade <code>.testdetta/</code> a tu <code>.gitignore</code>. Contiene mapas de cobertura y cachés, nunca nada que deba ir en un commit.</p></div>
+
+<h2>Comandos</h2>
+<table>
+  <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
+  <tbody>
+    <tr><td><code>td affected [--format text|json|paths|commands]</code></td><td>Muestra qué afecta un cambio y por qué. <code>--tests-only</code> lista solo los proyectos de pruebas afectados.</td></tr>
+    <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Ejecuta solo las pruebas afectadas. <code>--summary-file</code> añade un resumen en Markdown, por ejemplo a <code>$GITHUB_STEP_SUMMARY</code>. Los argumentos después de <code>--</code> se pasan a cada <code>dotnet test</code>, por ejemplo <code>-- -c Release</code>.</td></tr>
+    <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Ejecuta todas las pruebas con cobertura y escribe un mapa por proyecto de pruebas en <code>.testdetta/coverage</code>. <code>--parallel</code> reparte las clases de prueba de cada proyecto entre n procesos de prueba; <code>--no-build</code> registra la salida de una compilación anterior con la misma configuración.</td></tr>
+    <tr><td><code>td license status</code></td><td>Comprueba la licencia y muestra lo que cubre.</td></tr>
+    <tr><td><code>td license install &lt;license|file&gt;</code></td><td>Guarda una licencia en <code>~/.testdetta/license</code>, para máquinas donde ningún secreto de CI puede contenerla.</td></tr>
+  </tbody>
+</table>
+
+<h3>Opciones comunes</h3>
+<table>
+  <thead><tr><th>Opción</th><th>Significado</th></tr></thead>
+  <tbody>
+    <tr><td><code>--base &lt;ref&gt;</code></td><td>Ref de git con la que comparar. Predeterminado: <code>origin/main</code>.</td></tr>
+    <tr><td><code>--repo &lt;path&gt;</code></td><td>Cualquier ruta dentro del repositorio. Predeterminado: el directorio actual.</td></tr>
+    <tr><td><code>--max-map-age &lt;n&gt;</code></td><td>Usa mapas de cobertura registrados hasta n commits antes de la merge base, salvando los cambios intermedios. Predeterminado: 50; 0 usa solo mapas exactos. Consulta <a href="/docs/how-it-works/">Cómo decide</a>.</td></tr>
+    <tr><td><code>--maps-dir &lt;dir&gt;</code></td><td>Mapas de cobertura guardados fuera del repositorio, una carpeta por commit: <code>record</code> los guarda ahí, y <code>affected</code> y <code>test</code> restauran el más reciente dentro de <code>--max-map-age</code>. Para sistemas de CI distintos de GitHub Actions.</td></tr>
+    <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>Cuando los cambios desde un mapa más antiguo incluyen un archivo de compilación, configuración o un global using: ejecuta completos los proyectos de pruebas afectados (<code>all</code>, el predeterminado) o decide por nombre (<code>name</code>).</td></tr>
+    <tr><td><code>-v</code>, <code>--verbose</code></td><td>Escribe registros de depuración en stderr: cada decisión que un usuario podría cuestionar, con su motivo.</td></tr>
+    <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (predeterminado), <code>error</code> o <code>none</code>.</td></tr>
+  </tbody>
+</table>
+<p>Los registros van a stderr; stdout lleva la salida del comando y sigue siendo legible por máquinas.</p>
+
+<h2>Códigos de salida</h2>
+<table>
+  <thead><tr><th>Código</th><th>Significado</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td>Éxito.</td></tr>
+    <tr><td><code>1</code></td><td>El análisis falló.</td></tr>
+    <tr><td><code>2</code></td><td>Línea de comandos no válida.</td></tr>
+    <tr><td><code>3</code></td><td>Fallaron pruebas.</td></tr>
+  </tbody>
+</table>

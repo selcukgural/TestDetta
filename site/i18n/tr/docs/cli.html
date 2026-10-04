@@ -1,0 +1,121 @@
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 9290031d3f43 -->
+<h1>CLI referansı</h1>
+<p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
+
+<pre><code>td affected [options]              Print the projects and tests a change affects
+td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
+td record [options]                Run all tests with coverage and store the map
+td license status [options]        Check the license and show what it covers
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+
+<h2 id="shared">Tüm analizler için seçenekler</h2>
+<p>Bunlar <code>affected</code>, <code>test</code> ve <code>record</code> ile çalışır.</p>
+
+<h3 id="base"><code>--base &lt;ref&gt;</code></h3>
+<p>Karşılaştırılacak git ref'i. {{name}} çalışma ağacınızı <code>HEAD</code> ile bu ref'in <em>merge base</em>'iyle karşılaştırır; böylece siz branch'i ayırdıktan sonra base branch'e gelen commit'ler sizin değişiklikleriniz sayılmaz. Varsayılan: <code>origin/main</code>.</p>
+<pre><code>td test --base origin/develop
+td affected --base HEAD~3      # the last three commits and anything uncommitted</code></pre>
+
+<h3 id="repo"><code>--repo &lt;path&gt;</code></h3>
+<p>Analiz edilecek, depo içindeki herhangi bir yol. Varsayılan: geçerli dizin.</p>
+<pre><code>td affected --repo ../shop</code></pre>
+
+<h3 id="verbose"><code>-v</code>, <code>--verbose</code> ve <code>--log-level &lt;level&gt;</code></h3>
+<p>Loglar stderr'e gider, böylece stdout makine tarafından okunabilir kalır. <code>-v</code> her kararı açıklayan debug loglarını açar: bir projenin neden etkilendiğini, bir test sınıfının hangi üyeyi çalıştırdığını, bir izlemenin hangi ismi takip ettiğini. <code>--log-level</code> şunlardan birini seçer: <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (varsayılan), <code>error</code> ya da <code>none</code>; <code>trace</code> ham git çıktısını da ekler.</p>
+<pre><code>td affected -v 2&gt; testdetta-debug.log
+td test --log-level information</code></pre>
+
+<h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
+<p>Merge base'in kendisinde harita yoksa, merge base'den en fazla <em>n</em> first-parent commit önce kaydedilmiş bir kapsam haritası kullanır. Aradaki değişiklikler köprülenir: haritadan bu yana değişmiş ve sizin değişikliğinize ulaşabilen herhangi bir üyeyi çalıştırmış sınıflar da seçilir. <code>0</code> yalnızca merge base'de kaydedilmiş bir haritayı kullanır. Varsayılan: <code>50</code>. Bkz. <a href="/docs/how-it-works/">Nasıl karar verir</a>.</p>
+<pre><code>td test --max-map-age 20</code></pre>
+
+<h3 id="drift-fallback"><code>--drift-fallback &lt;all|name&gt;</code></h3>
+<p>Daha eski bir haritadan bu yana yapılan değişiklikler üyelerle ifade edilemeyen bir şey içerdiğinde (bir derleme dosyası, yapılandırma, bir global using) ne yapılacağı. <code>all</code> (varsayılan) etkilenen test projelerini tamamen çalıştırır; <code>name</code> isimlere göre karar verir; bu daha hızlıdır ama yapılandırma ya da reflection ile bağlanan çağrıları göremez.</p>
+<pre><code>td test --drift-fallback name</code></pre>
+
+<h3 id="maps-dir"><code>--maps-dir &lt;dir&gt;</code></h3>
+<p>Kapsam haritalarını depo dışında, commit başına bir klasör olarak tutar. <code>record</code> haritaları <code>&lt;dir&gt;/&lt;commit&gt;/</code> altına kaydeder; <code>affected</code> ve <code>test</code> ise <code>--max-map-age</code> sınırı içindeki en yenisini geri yükler. GitHub Actions dışındaki CI sistemlerinde, paylaşılan bir disk ya da senkronize edilen nesne depolamayla kullanın. Varsayılan: haritalar depoda <code>.testdetta/coverage</code> içinde durur.</p>
+<pre><code>td record --maps-dir /srv/testdetta-maps/shop
+td test --base origin/main --maps-dir /srv/testdetta-maps/shop</code></pre>
+
+<h2 id="affected"><code>td affected</code></h2>
+<p>Hiçbir şey derlemeden ya da çalıştırmadan, bir değişikliğin neleri etkilediğini ve nedenini yazdırır.</p>
+
+<h3 id="format"><code>--format &lt;text|json|paths|commands&gt;</code></h3>
+<table>
+  <thead><tr><th>Biçim</th><th>Çıktı</th><th>Kullanım amacı</th></tr></thead>
+  <tbody>
+    <tr><td><code>text</code> (varsayılan)</td><td>Gerekçeleriyle etkilenen projeler, ardından test planı</td><td>Okumak</td></tr>
+    <tr><td><code>json</code></td><td>Her proje ve test sınıfı; kararı, kanıtı ve süre tahminiyle</td><td>Script'ler, dashboard'lar</td></tr>
+    <tr><td><code>paths</code></td><td>Her satırda etkilenen bir test <code>.csproj</code> dosyası</td><td>Başka bir araca girdi vermek</td></tr>
+    <tr><td><code>commands</code></td><td>Her test projesi için filtresiyle birlikte bir <code>dotnet test</code> komutu</td><td>Testleri kendi yönteminizle çalıştırmak</td></tr>
+  </tbody>
+</table>
+<pre><code>td affected --format json &gt; plan.json
+td affected --format paths | xargs -n1 dotnet build</code></pre>
+
+<h3 id="tests-only"><code>--tests-only</code></h3>
+<p>Aradaki üretim projelerini değil, yalnızca etkilenen test projelerini listeler.</p>
+
+<h2 id="test"><code>td test</code></h2>
+<p>Yalnızca etkilenen testleri derler ve çalıştırır: yalnızca bazı sınıflar etkilendiğinde test projesi başına bir filtreyle, hepsi etkilendiğinde ya da bir değişiklik daraltılamadığında projenin tamamını, hiçbiri etkilenmediğinde hiçbir şey. Herhangi bir test başarısız olduğunda çıkış kodu <code>3</code>'tür.</p>
+
+<h3 id="dry-run"><code>--dry-run</code></h3>
+<p><code>dotnet test</code> komutlarını çalıştırmak yerine yazdırır. <code>global.json</code> dosyası bir alt klasörde bulunan bir proje <code>(cd src &amp;&amp; dotnet test ...)</code> şeklinde yazdırılır.</p>
+
+<h3 id="summary-file"><code>--summary-file &lt;path&gt;</code></h3>
+<p>Bir Markdown özeti ekler: her projenin sonucu, hangi sınıfların çalıştığı ve nedeni, hangilerinin atlandığı ve kazanılan kayıtlı test süresi. GitHub Actions'ta bunu <code>$GITHUB_STEP_SUMMARY</code>'ye yönlendirin; action bunu sizin için yapar. Bir <a href="/docs/examples/">örneğe</a> bakın.</p>
+<pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
+
+<h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
+<p><code>--</code> sonrasındaki her şey her <code>dotnet test</code> çağrısına iletilir.</p>
+<pre><code>td test -- -c Release --logger trx
+td test -- --no-restore</code></pre>
+
+<h2 id="record"><code>td record</code></h2>
+<p>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> (ya da <code>--maps-dir</code>) altına bir harita yazar. Bunu varsayılan branch'inizde çalıştırın; bu aynı zamanda o branch'in tam test koşusudur. Testler başarısız olduğunda çıkış kodu <code>3</code>'tür; haritalar yine de yazılır ve başarısız sınıflar daha sonra her zaman seçilir.</p>
+
+<h3 id="configuration"><code>-c</code>, <code>--configuration &lt;name&gt;</code></h3>
+<p>Derleme yapılandırması. Varsayılan: <code>Debug</code>.</p>
+
+<h3 id="framework"><code>-f</code>, <code>--framework &lt;tfm&gt;</code></h3>
+<p>Birden fazla framework hedefleyen bir test projesinde kaydedilecek hedef framework. Varsayılan: projenin ilk hedef framework'ü.</p>
+<pre><code>td record -f net10.0</code></pre>
+
+<h3 id="project"><code>--project &lt;path&gt;</code></h3>
+<p>Yalnızca bu test projesini kaydeder; yol depo köküne görelidir. Birden fazla proje için tekrarlayın. CI'da çalışamayan projeleri, örneğin veritabanı gerektiren entegrasyon testlerini, dışarıda bırakın; bunlar için isimlere göre karar verilir.</p>
+<pre><code>td record --project tests/Shop.Tests/Shop.Tests.csproj --project tests/Api.Tests/Api.Tests.csproj</code></pre>
+
+<h3 id="parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>Daha hızlı kayıt için her projenin test sınıflarını <em>n</em> test sürecine dağıtır. Her süreç testlerini yine birer birer çalıştırır. Test paketinizin aynı anda birden fazla test sürecini kaldırabilmesi gerekir (sabit port ya da paylaşılan dosya olmamalı). Varsayılan: <code>1</code>.</p>
+
+<h3 id="no-build"><code>--no-build</code></h3>
+<p>Yeniden derlemek yerine aynı yapılandırmayla yapılmış önceki bir derlemenin çıktısını kaydeder.</p>
+<pre><code>dotnet build -c Release
+td record -c Release --no-build</code></pre>
+
+<h2 id="license-commands"><code>td license</code></h2>
+<p><code>td license status</code>, lisansı <code>td test</code>'in yapacağı şekilde kontrol eder ve neyi kapsadığını yazdırır: lisans sahibi, koltuklar, son 30 gündeki aktif committer'lar, bot listesi, kapsamlar, bitiş tarihi. Hiçbir yere kişisel veri göndermez. <code>td license install &lt;license|file&gt;</code>, hiçbir CI secret'ının tutamayacağı makineler için lisansı <code>~/.testdetta/license</code> dosyasına kaydeder. Bkz. <a href="/docs/license/">Lisans</a>.</p>
+
+<h2 id="environment">Ortam değişkenleri</h2>
+<table>
+  <thead><tr><th>Değişken</th><th>Ne yapar</th></tr></thead>
+  <tbody>
+    <tr><td><code>TESTDETTA_LICENSE</code></td><td>Bir CI secret'ından gelen lisans dizesi.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_FILE</code></td><td>Lisans dizesini içeren bir dosya.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>Lisans servisine erişemeyen ağlar için günlük lisans yenilemesini kapatır.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_SCOPE</code></td><td><code>origin</code> remote'u depoyu adlandırmadığında (örneğin yerel bir mirror) lisansın kapsaması gereken depo.</td></tr>
+    <tr><td><code>HTTPS_PROXY</code></td><td>Lisans yenilemesi için proxy.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="exit-codes">Çıkış kodları</h2>
+<table>
+  <thead><tr><th>Kod</th><th>Anlamı</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td>Başarılı; "test gerekmiyor" durumu dahil.</td></tr>
+    <tr><td><code>1</code></td><td>Analiz başarısız oldu: git, dosya sistemi ya da bir proje dosyası.</td></tr>
+    <tr><td><code>2</code></td><td>Geçersiz komut satırı.</td></tr>
+    <tr><td><code>3</code></td><td>Testler başarısız oldu (<code>test</code> ve <code>record</code>).</td></tr>
+  </tbody>
+</table>

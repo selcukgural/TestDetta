@@ -1,0 +1,121 @@
+<!-- title: CLI reference; layout: docs; description: Every {{name}} command, option and environment variable, with examples. -->
+<h1>CLI reference</h1>
+<p class="lead">Every command, option and environment variable, with what it does, its default and an example. Run <code>td --help</code> for the short version.</p>
+
+<pre><code>td affected [options]              Print the projects and tests a change affects
+td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
+td record [options]                Run all tests with coverage and store the map
+td license status [options]        Check the license and show what it covers
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+
+<h2 id="shared">Options for every analysis</h2>
+<p>These work with <code>affected</code>, <code>test</code> and <code>record</code>.</p>
+
+<h3 id="base"><code>--base &lt;ref&gt;</code></h3>
+<p>The git ref to compare with. {{name}} compares your working tree with the <em>merge base</em> of <code>HEAD</code> and this ref, so commits that landed on the base branch after you branched off are not counted as your changes. Default: <code>origin/main</code>.</p>
+<pre><code>td test --base origin/develop
+td affected --base HEAD~3      # the last three commits and anything uncommitted</code></pre>
+
+<h3 id="repo"><code>--repo &lt;path&gt;</code></h3>
+<p>Any path inside the repository to analyse. Default: the current directory.</p>
+<pre><code>td affected --repo ../shop</code></pre>
+
+<h3 id="verbose"><code>-v</code>, <code>--verbose</code> and <code>--log-level &lt;level&gt;</code></h3>
+<p>Logs go to stderr, so stdout stays machine readable. <code>-v</code> turns on debug logs, which explain every decision: why a project is affected, which member a test class ran, which name a trace followed. <code>--log-level</code> picks any of <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (default), <code>error</code> or <code>none</code>; <code>trace</code> adds raw git output.</p>
+<pre><code>td affected -v 2&gt; testdetta-debug.log
+td test --log-level information</code></pre>
+
+<h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
+<p>Use a coverage map recorded up to <em>n</em> first-parent commits before the merge base when there is none at the merge base itself. Changes made in between are bridged: classes that ran any member changed since the map and able to reach your change are selected too. <code>0</code> uses only a map recorded at the merge base. Default: <code>50</code>. See <a href="/docs/how-it-works/">How it decides</a>.</p>
+<pre><code>td test --max-map-age 20</code></pre>
+
+<h3 id="drift-fallback"><code>--drift-fallback &lt;all|name&gt;</code></h3>
+<p>What to do when the changes since an older map include something members cannot describe: a build file, configuration, a global using. <code>all</code> (default) runs the affected test projects completely; <code>name</code> decides them by name, which is faster but blind to calls wired by configuration or reflection.</p>
+<pre><code>td test --drift-fallback name</code></pre>
+
+<h3 id="maps-dir"><code>--maps-dir &lt;dir&gt;</code></h3>
+<p>Keep coverage maps outside the repository, one folder per commit. <code>record</code> saves to <code>&lt;dir&gt;/&lt;commit&gt;/</code>; <code>affected</code> and <code>test</code> restore the newest one within <code>--max-map-age</code>. Use it on CI systems other than GitHub Actions, with a shared disk or synced object storage. Default: maps live in <code>.testdetta/coverage</code> in the repository.</p>
+<pre><code>td record --maps-dir /srv/testdetta-maps/shop
+td test --base origin/main --maps-dir /srv/testdetta-maps/shop</code></pre>
+
+<h2 id="affected"><code>td affected</code></h2>
+<p>Prints what a change affects and why, without building or running anything.</p>
+
+<h3 id="format"><code>--format &lt;text|json|paths|commands&gt;</code></h3>
+<table>
+  <thead><tr><th>Format</th><th>Output</th><th>Use it for</th></tr></thead>
+  <tbody>
+    <tr><td><code>text</code> (default)</td><td>Affected projects with the reason, then the test plan</td><td>Reading</td></tr>
+    <tr><td><code>json</code></td><td>Every project and test class with its decision, evidence and time estimate</td><td>Scripts, dashboards</td></tr>
+    <tr><td><code>paths</code></td><td>One affected test <code>.csproj</code> per line</td><td>Feeding another tool</td></tr>
+    <tr><td><code>commands</code></td><td>One <code>dotnet test</code> command per test project, with its filter</td><td>Running the tests your own way</td></tr>
+  </tbody>
+</table>
+<pre><code>td affected --format json &gt; plan.json
+td affected --format paths | xargs -n1 dotnet build</code></pre>
+
+<h3 id="tests-only"><code>--tests-only</code></h3>
+<p>List only the affected test projects, not the production projects on the way.</p>
+
+<h2 id="test"><code>td test</code></h2>
+<p>Builds and runs only the affected tests: a filter per test project when only some classes are affected, the whole project when all are or when a change cannot be narrowed, nothing when none is. Exit code <code>3</code> when any test fails.</p>
+
+<h3 id="dry-run"><code>--dry-run</code></h3>
+<p>Print the <code>dotnet test</code> commands instead of running them. A project whose <code>global.json</code> lives in a subfolder is printed as <code>(cd src &amp;&amp; dotnet test ...)</code>.</p>
+
+<h3 id="summary-file"><code>--summary-file &lt;path&gt;</code></h3>
+<p>Append a Markdown summary: each project's result, which classes ran and why, which were skipped, and the recorded test time saved. Point it at <code>$GITHUB_STEP_SUMMARY</code> in GitHub Actions; the action does this for you. See an <a href="/docs/examples/">example</a>.</p>
+<pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
+
+<h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
+<p>Everything after <code>--</code> is passed to every <code>dotnet test</code> call.</p>
+<pre><code>td test -- -c Release --logger trx
+td test -- --no-restore</code></pre>
+
+<h2 id="record"><code>td record</code></h2>
+<p>Runs every test with coverage and writes one map per test project to <code>.testdetta/coverage</code> (or <code>--maps-dir</code>). Run it on your default branch; it is also that branch's full test run. Exit code <code>3</code> when tests fail; the maps are still written, and the failing classes are always selected later.</p>
+
+<h3 id="configuration"><code>-c</code>, <code>--configuration &lt;name&gt;</code></h3>
+<p>Build configuration. Default: <code>Debug</code>.</p>
+
+<h3 id="framework"><code>-f</code>, <code>--framework &lt;tfm&gt;</code></h3>
+<p>Target framework to record in a multi-targeted test project. Default: the project's first target framework.</p>
+<pre><code>td record -f net10.0</code></pre>
+
+<h3 id="project"><code>--project &lt;path&gt;</code></h3>
+<p>Record only this test project, relative to the repository root; repeat it for several. Leave out projects that cannot run in CI, such as integration tests that need a database; they are then decided by name.</p>
+<pre><code>td record --project tests/Shop.Tests/Shop.Tests.csproj --project tests/Api.Tests/Api.Tests.csproj</code></pre>
+
+<h3 id="parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>Spread each project's test classes over <em>n</em> test processes to record faster. Each process still runs its tests one at a time. Your suite must tolerate several test processes at once (no fixed ports or shared files). Default: <code>1</code>.</p>
+
+<h3 id="no-build"><code>--no-build</code></h3>
+<p>Record the output of an earlier build with the same configuration instead of building again.</p>
+<pre><code>dotnet build -c Release
+td record -c Release --no-build</code></pre>
+
+<h2 id="license-commands"><code>td license</code></h2>
+<p><code>td license status</code> checks the license the way <code>td test</code> would and prints what it covers: licensee, seats, active committers over the last 30 days, the bot list, scopes, the end date. It sends no personal data anywhere. <code>td license install &lt;license|file&gt;</code> stores a license in <code>~/.testdetta/license</code>, for machines where no CI secret can hold it. See <a href="/docs/license/">License</a>.</p>
+
+<h2 id="environment">Environment variables</h2>
+<table>
+  <thead><tr><th>Variable</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>TESTDETTA_LICENSE</code></td><td>The license string, from a CI secret.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_FILE</code></td><td>A file holding the license string.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>Turns off the daily license refresh, for networks that cannot reach the license service.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_SCOPE</code></td><td>The repository the license must cover, when the <code>origin</code> remote does not name it (a local mirror, for example).</td></tr>
+    <tr><td><code>HTTPS_PROXY</code></td><td>Proxy for the license refresh.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="exit-codes">Exit codes</h2>
+<table>
+  <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td>Success, including "no tests needed".</td></tr>
+    <tr><td><code>1</code></td><td>The analysis failed: git, the file system or a project file.</td></tr>
+    <tr><td><code>2</code></td><td>Invalid command line.</td></tr>
+    <tr><td><code>3</code></td><td>Tests failed (<code>test</code> and <code>record</code>).</td></tr>
+  </tbody>
+</table>

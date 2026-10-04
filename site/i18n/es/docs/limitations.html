@@ -1,0 +1,37 @@
+<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: 6da41d9f69cb -->
+<h1>Limitaciones</h1>
+<p class="lead">Donde {{name}} no puede ver algo, selecciona más. Esta página enumera esos casos, para que sepas cuándo una selección es más amplia de lo necesario, y los pocos casos en los que un patrón escrito a mano puede ocultar una prueba.</p>
+
+<h2>Frameworks de pruebas y runners</h2>
+<p>Se admiten ambos runners de <code>dotnet test</code>. El runner se lee de <code>global.json</code> (<code>"test": { "runner": "Microsoft.Testing.Platform" }</code>, obligatorio para xUnit v3 con el SDK de .NET 10).</p>
+<p>Cada proyecto de pruebas se compila y ejecuta en el directorio del <code>global.json</code> más cercano en su nivel o por encima, de modo que un archivo guardado junto a la solución (<code>src/global.json</code>) cuenta igual que para un desarrollador que trabaje ahí. <code>--dry-run</code> muestra esos comandos como <code>(cd src &amp;&amp; dotnet test ...)</code>.</p>
+<p>El registro y la selección se prueban de extremo a extremo con xUnit v2 (VSTest), xUnit v3 y TUnit (Microsoft.Testing.Platform), y MSTest y NUnit con ambos runners, incluidos proyectos que activan la paralelización propia de su framework.</p>
+
+<h2>Pruebas que fallan durante el registro</h2>
+<p>Las clases de prueba que fallan durante el registro se seleccionan siempre que su proyecto se ve afectado: una prueba que falla se detiene antes de tiempo, así que su cobertura está incompleta.</p>
+<p>Cuando fallan pruebas y ningún informe TRX indica cuáles (NUnit con Microsoft.Testing.Platform sin <code>Microsoft.Testing.Extensions.TrxReport</code>), el mapa no se usa y la selección recurre a los nombres.</p>
+
+<h2>Código que se ejecuta una vez por proceso</h2>
+<p>Las cachés, los singletons diferidos y la construcción del modelo de EF se ejecutan una vez por proceso de prueba y se atribuyen a la primera clase de prueba que los desencadena. Los cambios en código que se ejecutó dentro de un constructor estático o de una llamada que llena una caché (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>), y en constructores y miembros estáticos que solo una clase de prueba por proceso de registro ejecutó, se rastrean en su lugar por nombre.</p>
+<div class="callout"><p>Una caché escrita a mano, como un <code>Dictionary</code> consultado con <code>TryGetValue</code>, todavía puede ocultar a quienes la usan. Sigue ejecutando el conjunto completo en la rama predeterminada; el registro ya lo hace.</p></div>
+
+<h2>Archivos de proyecto</h2>
+<p>Los archivos de proyecto los evalúa MSBuild (una llamada a <code>dotnet msbuild</code>, almacenada en caché en <code>.testdetta/cache</code>) para obtener referencias, elementos compilados e incrustados, nombres de ensamblado y frameworks de destino, en la configuración predeterminada y sin restore.</p>
+<ul>
+  <li>No se ven los elementos que solo añaden los props de un paquete o solo una condición <code>Release</code>.</li>
+  <li>Un proyecto que MSBuild no puede evaluar se lee como XML, al igual que los imports.</li>
+  <li>Se supone que los archivos modificados que ningún proyecto reclama afectan a los proyectos de su directorio.</li>
+  <li>Los proyectos de pruebas también se reconocen por un nombre <code>*.Tests</code> o <code>*.Test</code>.</li>
+</ul>
+
+<h2>Símbolos del preprocesador</h2>
+<p>Los archivos de C# se analizan con los símbolos de preprocesador reales de cada framework de destino, y también sin símbolos y con todos los símbolos que nombran sus <code>#if</code>, de modo que se ve el código bajo cualquier condición activa.</p>
+
+<h2>Pruebas omitidas</h2>
+<p>Las pruebas que se omitieron (skipped) mientras se registraba un mapa no tienen cobertura. Una clase cuyas pruebas se omitieron todas se selecciona en otra plataforma, donde puede ejecutarse, y se omite en la plataforma de registro. Las pruebas omitidas por otros motivos, como la falta de un daemon de Docker, solo quedan cubiertas si el registro se hace donde se ejecutan las pruebas.</p>
+
+<h2>Generadores de código fuente</h2>
+<p>El código escrito por generadores de código fuente no está en el árbol de código fuente. <code>td record</code> lo lee de los PDB de los ensamblados registrados (portables o incrustados) y guarda en el mapa los nombres que menciona, para que el rastreo por nombre vea a los llamadores generados. Los ensamblados compilados sin un PDB portable no aportan nada.</p>
+
+<h2>F# y Visual Basic</h2>
+<p>Los proyectos de F# y Visual Basic forman parte del grafo de proyectos, pero su código no se analiza: cuando uno se ve afectado, todo lo que depende de él se ejecuta completo.</p>

@@ -1,0 +1,84 @@
+<!-- title: Precios; description: Gratis para repositorios públicos, {{trialDays}} días gratis para los privados y después un precio por committer activo.; source: d120e134a447 -->
+<section class="hero">
+  <div class="wrap center">
+    <div class="section-head">
+      <span class="eyebrow">Precios</span>
+      <h1>Paga por las personas que hacen commits, no por minutos de CI.</h1>
+      <p class="lead">Un único precio por committer activo: cualquier persona que haya creado un commit en los últimos 30 días. Los bots no cuentan, y tampoco quienes ya se fueron.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="plans">
+      <div class="plan">
+        <h2>Código abierto</h2>
+        <p class="price">Gratis</p>
+        <p class="price-note">Para repositorios públicos en GitHub Actions y GitLab CI.</p>
+        <ul>
+          <li>Todas las funciones, sin límites</li>
+          <li>Sin licencia ni registro</li>
+          <li>Se detecta desde el CI, sin nada que configurar</li>
+        </ul>
+        <a class="button button-ghost" href="/docs/">Empezar</a>
+      </div>
+      <div class="plan plan-featured">
+        <h2>Equipo</h2>
+        <p class="price">{{currency}}{{priceMonthly}}<small> / committer activo / mes</small></p>
+        <p class="price-note">O {{currency}}{{priceYearly}} por committer al mes, con facturación anual. Empieza con {{trialDays}} días gratis, sin tarjeta.</p>
+        <ul>
+          <li>Repositorios privados en cualquier CI</li>
+          <li>Mapas de cobertura, drift bridge y job summaries</li>
+          <li>Un 20 % de margen sobre tus puestos, y 30 días de aviso antes de que cambie nada</li>
+          <li>La licencia se renueva sola en el CI</li>
+          <li>Soporte por correo electrónico</li>
+        </ul>
+        <a class="button" href="{{checkoutUrl}}">Empezar la prueba gratuita</a>
+      </div>
+      <div class="plan">
+        <h2>Sin conexión y empresas</h2>
+        <p class="price">Anual</p>
+        <p class="price-note">Para redes que no pueden acceder a nuestro servicio de licencias, y para facturas y órdenes de compra.</p>
+        <ul>
+          <li>Archivo de licencia anual, sin conexiones a nuestros servidores</li>
+          <li>Factura y orden de compra</li>
+          <li>Regularización anual para toda la organización</li>
+        </ul>
+        <a class="button button-ghost" href="mailto:{{supportEmail}}">Contáctanos</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap faq">
+    <div class="section-head">
+      <h2>Preguntas</h2>
+    </div>
+    <details>
+      <summary>¿Quién cuenta como committer activo?</summary>
+      <p>Una dirección de correo de autor distinta (unificada mediante <code>.mailmap</code>) con al menos un commit creado en los últimos 30 días, entre los commits que compila tu pipeline. Se excluyen bots como Dependabot, Renovate y <code>github-actions</code>, y puedes añadir tus propias cuentas de servicio. <code>td license status</code> muestra el recuento y la lista de bots, calculados en tus máquinas; no se envían nombres ni correos a ninguna parte.</p>
+    </details>
+    <details>
+      <summary>¿Qué pasa si superamos nuestros puestos?</summary>
+      <p>Hasta un 20 % por encima (al menos una persona) no hay problema. Por encima de eso, {{name}} sigue funcionando y avisa en cada job summary durante 30 días. Solo si después sigues por encima ejecuta todas las pruebas, como haría sin licencia. Nunca hace fallar una compilación.</p>
+    </details>
+    <details>
+      <summary>¿Qué pasa cuando caduca la licencia?</summary>
+      <p>Los avisos empiezan 14 días antes. Después de la fecha de fin se vuelven a ejecutar todas las pruebas, exactamente como antes de instalar {{name}}. Las compilaciones siguen pasando o fallando por sí mismas.</p>
+    </details>
+    <details>
+      <summary>¿{{name}} envía nuestro código a algún sitio?</summary>
+      <p>No. El análisis, los mapas de cobertura y las ejecuciones de pruebas se quedan en tu CI. La única llamada de red es una actualización diaria opcional de la licencia que envía la propia licencia; define <code>TESTDETTA_LICENSE_REFRESH=off</code> para desactivarla.</p>
+    </details>
+    <details>
+      <summary>¿Quién gestiona los pagos y las facturas?</summary>
+      <p>{{seller}} es nuestro merchant of record: cobra el pago, aplica el impuesto sobre las ventas o el IVA que corresponda y emite las facturas. Tu licencia llega por correo electrónico justo después de la compra.</p>
+    </details>
+    <details>
+      <summary>¿Podemos obtener un reembolso?</summary>
+      <p>Sí, dentro de los {{refundDays}} días siguientes a un pago. Consulta la <a href="/legal/refunds/">política de reembolsos</a>.</p>
+    </details>
+  </div>
+</section>

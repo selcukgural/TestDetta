@@ -1,0 +1,90 @@
+<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 356b3c4f84a4 -->
+<h1>GitHub Actions</h1>
+<p class="lead">Registra un mapa por cada commit de la rama predeterminada y deja que las pull requests ejecuten solo las pruebas que sus cambios afectan. La acción compila {{name}} por sí misma y guarda los mapas en la caché de Actions.</p>
+
+<h2>Workflow</h2>
+<pre><code>on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read # lets pull requests find the newest coverage map in the Actions cache
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7 # pin to a commit SHA
+        with:
+          fetch-depth: 0 # TestDetta compares with the merge base
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6 # pin to a commit SHA
+        with:
+          global-json-file: global.json
+
+      # Also the full test run of main. Leave out projects that cannot run here, such as
+      # integration tests that need a database; they are then decided by name on pull requests.
+      - if: github.event_name == 'push'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: record
+          projects: |
+            tests/Shop.Tests/Shop.Tests.csproj
+
+      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: test
+          dotnet-test-args: --logger trx
+          license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
+
+<div class="callout"><p><strong>Se necesita el historial completo.</strong> La acción se detiene con un error en un clon superficial (shallow). Haz el checkout con <code>fetch-depth: 0</code>.</p></div>
+
+<h2>Cómo llegan los mapas a las pull requests</h2>
+<ul>
+  <li>El modo record guarda los mapas en la caché de Actions con la clave <code>testdetta-coverage-&lt;commit&gt;</code>. Las pull requests pueden leer las cachés de su rama base.</li>
+  <li>Una pull request usa el mapa de su merge base, o el más reciente registrado hasta <code>max-map-age</code> commits de primer padre (first-parent) antes de ella.</li>
+  <li>Para encontrar ese mapa más reciente que no es exacto se listan las cachés del repositorio, lo que requiere <code>actions: read</code>. Sin ese permiso, solo se encuentra un mapa en la merge base, y el paso lo indica con un aviso.</li>
+  <li>Sin ningún mapa, <code>mode: test</code> sigue funcionando y decide solo por nombre.</li>
+</ul>
+<p>Cuando fallan pruebas durante el registro, el mapa se guarda igualmente antes de que falle el job, así que las pull requests siguen teniendo un mapa con el que trabajar.</p>
+
+<h2>Permisos</h2>
+<table>
+  <thead><tr><th>Permiso</th><th>Por qué</th></tr></thead>
+  <tbody>
+    <tr><td><code>contents: read</code></td><td>Hacer el checkout del repositorio.</td></tr>
+    <tr><td><code>actions: read</code></td><td>Listar las cachés de Actions para encontrar el mapa más reciente dentro de <code>max-map-age</code>.</td></tr>
+  </tbody>
+</table>
+<p>Con <code>persist-credentials: false</code>, un repositorio privado no se puede volver a descargar más adelante en el job; <code>fetch-depth: 0</code> ya trae todas las ramas, así que la rama base está disponible.</p>
+
+<h2>Entradas</h2>
+<table>
+  <thead><tr><th>Entrada</th><th>Predeterminado</th><th>Descripción</th></tr></thead>
+  <tbody>
+    <tr><td><code>mode</code></td><td></td><td><code>test</code> en las pull requests (ejecutar las pruebas afectadas), <code>record</code> en la rama predeterminada (registrar mapas de cobertura). Obligatoria.</td></tr>
+    <tr><td><code>base</code></td><td>la rama base de la PR</td><td>Rama con la que comparar en el modo test. Fuera de las pull requests, defínela.</td></tr>
+    <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Configuración de compilación para compilar y ejecutar las pruebas.</td></tr>
+    <tr><td><code>projects</code></td><td>todos los proyectos de pruebas</td><td>Modo record: rutas de <code>.csproj</code>, una por línea.</td></tr>
+    <tr><td><code>parallel</code></td><td><code>1</code></td><td>Modo record: procesos host de prueba por proyecto de pruebas; cada uno sigue ejecutando sus pruebas de una en una. El conjunto de pruebas debe tolerar varios procesos de prueba a la vez.</td></tr>
+    <tr><td><code>no-build</code></td><td><code>false</code></td><td>Modo record: <code>true</code> para registrar la compilación que hizo un paso anterior con la misma <code>configuration</code>.</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>Modo test: argumentos adicionales de <code>dotnet test</code>, separados por espacios.</td></tr>
+    <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Modo test: cuántos commits puede estar un mapa por detrás de la merge base; los cambios intermedios se salvan con el drift bridge. <code>0</code> usa solo un mapa exacto.</td></tr>
+    <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Modo test: cuando los cambios desde un mapa más antiguo incluyen un archivo de compilación, configuración o un global using, <code>all</code> ejecuta completos los proyectos de pruebas afectados; <code>name</code> decide por nombre (más rápido, pero ciego a las llamadas hechas mediante configuración o reflexión).</td></tr>
+    <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Modo test: lista las cachés de Actions para encontrar el mapa más reciente (necesita <code>actions: read</code>).</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello.</td></tr>
+    <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Cualquier directorio dentro del repositorio que se vaya a analizar.</td></tr>
+    <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Instala el SDK de .NET 10 sobre el que se ejecuta {{name}}. Ponlo en <code>false</code> si el job ya lo tiene.</td></tr>
+  </tbody>
+</table>
+
+<h2>Job summary</h2>
+<p>En el modo test, {{name}} escribe su selección en el job summary: los archivos modificados y la base con la que comparó, cada proyecto de pruebas indicando si se ejecutó filtrado, completo o no se ejecutó y por qué, los resultados de las pruebas y el estado de la licencia cuando importa. Las rutas, los nombres de clase y los motivos procedentes del repositorio se escriben como código, para que los nombres de archivo de una pull request no puedan inyectar enlaces ni menciones en la página.</p>
+
+<h2>Registrar solo una parte del conjunto de pruebas</h2>
+<p>El registro ejecuta una vez todo el conjunto de pruebas con cobertura, lo que en la rama predeterminada es también tu ejecución completa de pruebas. Excluye con <code>projects</code> los proyectos que no pueden ejecutarse en el runner, como las pruebas de integración que necesitan una base de datos. Las pull requests deciden entonces esos proyectos por nombre.</p>
+<p>Si un paso anterior ya compiló la solución con la misma configuración, define <code>no-build: true</code>. Para un conjunto de pruebas que tolera varios procesos de prueba a la vez, <code>parallel</code> reparte las clases de prueba de cada proyecto entre esa cantidad de procesos.</p>

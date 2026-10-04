@@ -1,0 +1,51 @@
+<!-- title: ライセンス; layout: docs; description: {{name}} のライセンスを CI に渡す方法、その対象範囲の確認方法、更新のしくみを説明します。; source: db51e1c29635 -->
+<h1>ライセンス</h1>
+<p class="lead">パブリックリポジトリでは {{name}} を無料で使用できます。プライベートリポジトリでは、ライセンス文字列を CI に渡します。ライセンスの問題でビルドが失敗することはありません。有効なライセンスがない場合は、{{name}} を導入する前と同じようにすべてのテストを実行します。</p>
+
+<h2>パブリックリポジトリ</h2>
+<p>パブリックリポジトリにライセンスは不要ですが、{{name}} がリポジトリをパブリックと判断できるのは、CI がそれを示している場合だけです。</p>
+<ul>
+  <li><strong>GitHub Actions：</strong>イベントペイロード（<code>repository.private</code>）から判断します。</li>
+  <li><strong>GitLab CI：</strong><code>CI_PROJECT_VISIBILITY</code> から判断します。</li>
+</ul>
+<p>Jenkins、Azure DevOps、Bitbucket、その他の CI システム、開発者のマシンでは、すべてのリポジトリがプライベートとして扱われます。</p>
+
+<h2>ライセンスを渡す</h2>
+<p>{{name}} は次の順序でライセンスを探します。</p>
+<ol>
+  <li><code>TESTDETTA_LICENSE</code>：マスクされた変数またはシークレット変数から渡すライセンス文字列</li>
+  <li><code>TESTDETTA_LICENSE_FILE</code>：ライセンスを格納したファイルのパス</li>
+  <li><code>~/.testdetta/license</code>：<code>td license install</code> と自動更新によって書き込まれるファイル</li>
+  <li>リポジトリ内の <code>.testdetta/license</code></li>
+</ol>
+<p>推奨される方法はシークレット変数です。GitHub Actions では、アクションの <code>license</code> 入力で渡します。</p>
+<pre><code>- uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
+<p>ライセンスを確認するのは <code>td affected</code> と <code>td test</code> だけです。<code>td record</code> はいずれにしてもすべてのテストを実行するため、ライセンスは不要です。</p>
+
+<h2>ライセンスを確認する</h2>
+<p><code>td license status</code> は、見つかったライセンスの内容を表示します。有効性、対象となるリポジトリ、アクティブなコミッター数を、個人データを含めずに示します。同じ状態は、関係がある場合には常に、ログ、ジョブサマリー、JSON 出力にも表示されます。状態には、有効、まもなく期限切れ、シート超過、期限切れ、スコープ不一致、無効、なしがあります。</p>
+<pre><code>td license status</code></pre>
+
+<h2>CI のシークレットがないマシン</h2>
+<p>シークレット変数にライセンスを保持できない場合は、マシンごとに一度だけライセンスを保存します。</p>
+<pre><code>td license install &lt;license|file&gt;</code></pre>
+<p>ライセンスはまず検証され、その後 <code>~/.testdetta/license</code> に書き込まれます。</p>
+
+<h2>自動更新</h2>
+<p>ライセンスには、更新元のアドレスが含まれています。{{name}} は 1 日に最大 1 回、最新のバージョンを取得して <code>~/.testdetta/license</code> に保持します。そのため、更新や追加したシートは、シークレットに手を加えなくても反映されます。このリクエストはヘッダーでライセンスを送信するだけで、リポジトリの内容は何も送信しません。タイムアウトは 2 秒で再試行は行わず、失敗はすべて無視されます。オフラインやブロックされたネットワークでも、かかる時間は 1 日あたり最大 2 秒です。<code>HTTPS_PROXY</code> に従います。</p>
+<p>ライセンスサービスに接続できないネットワークでは、<code>TESTDETTA_LICENSE_REFRESH=off</code> を設定し、新しいライセンスを受け取ったときにご自身でライセンス文字列を置き換えてください。</p>
+
+<h2>ライセンスの対象となるリポジトリ</h2>
+<p>ライセンスには、<code>github.com/acme/*</code> のように対象となるリポジトリが記載されています。{{name}} はこれをリポジトリの <code>origin</code> リモートと照合します。Jenkins でよく見られる、リモート URL に埋め込まれた資格情報は、照合の前に取り除かれ、ログに出力されることはありません。</p>
+<p>リモートがライセンスの対象リポジトリを示していない場合（ローカルのミラーなど）は、<code>TESTDETTA_LICENSE_SCOPE</code> を設定してください。</p>
+<pre><code>TESTDETTA_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
+
+<h2>アクティブなコミッター</h2>
+<p>{{name}} の料金は、アクティブなコミッター 1 人あたりの月額です。アクティブなコミッターとは、分析対象のコミットから到達できるコミットのうち、過去 30 日間に 1 件以上のコミットを作成した、重複のないコミット作成者を指します。作成者は <code>.mailmap</code> で名寄せしたメールアドレスによってローカルで数えられ、メールアドレスがお使いのマシンの外に出ることはありません。Dependabot、Renovate、<code>github-actions</code> などのボットは数えません。独自のパターンは <code>.testdetta/license.json</code> に追加できます。</p>
+<pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>ライセンスのシート数に対して 20% まで（最低 1 人）の超過は問題ありません。それを超えた場合も、シートを追加する時間を確保できるよう、{{name}} は 30 日間は選択を続け、すべてのサマリーに警告を表示します。その後も超過したままの場合に限り、ライセンスがない場合と同様にすべてのテストを実行します。<a href="/pricing/">料金</a>を参照してください。</p>
+
+<div class="callout"><p>ビルドが失敗することはありません。ライセンスが期限切れ、見つからない、または一致しない場合、{{name}} はすべてのテストを実行してその理由を表示します。ジョブを失敗させることはありません。</p></div>

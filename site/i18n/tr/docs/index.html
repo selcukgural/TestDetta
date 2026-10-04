@@ -1,0 +1,83 @@
+<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: 8a80a118b806 -->
+<h1>Başlarken</h1>
+<p class="lead">{{name}} branch'inizi base'iyle karşılaştırır, hangi test projelerinin ve hangi test sınıflarının değişikliği gözlemleyebileceğini belirler ve yalnızca onları çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.</p>
+
+<h2>Gereksinimler</h2>
+<ul>
+  <li>{{name}}'nın kendisini çalıştırmak için <strong>.NET 10 SDK</strong>. Testleriniz, deponuzun zaten kullandığı SDK ve test runner ile çalışmaya devam eder.</li>
+  <li><strong>Tam git geçmişi.</strong> {{name}}, branch'inizin merge base'iyle karşılaştırma yapar ve kapsam haritalarını bulmak için geçmişi dolaşır. Shallow clone'lar ikisini de yapamaz.</li>
+  <li><strong>Hedef branch'in fetch edilmiş olması</strong>; böylece <code>origin/main</code> gibi bir ref mevcut olur.</li>
+  <li><code>dotnet test</code>'in gördüğü haliyle <strong>bir test runner</strong>. Her iki runner da desteklenir; runner <code>global.json</code> dosyasından okunur (<code>"test": { "runner": "Microsoft.Testing.Platform" }</code>), varsayılanı VSTest'tir.</li>
+</ul>
+
+<h2>Hızlı başlangıç</h2>
+
+<h3>GitHub Actions</h3>
+<p>GitHub Action {{name}}'yı sizin için derler; kurmanız gereken bir şey yok. Workflow'unuza iki adım ekleyin: biri varsayılan branch'inize yapılan push'larda bir kapsam haritası kaydeder, diğeri pull request'lerde yalnızca etkilenen testleri çalıştırır.</p>
+<pre><code>- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test</code></pre>
+<p>Workflow'un tamamı, gerektirdiği izinler ve tüm girdiler <a href="/docs/github-actions/">GitHub Actions</a> sayfasında.</p>
+
+<h3>Diğer CI sistemleri</h3>
+<p>GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi kurulumlar aynı iki komutu çalıştırır; commit başına kapsam haritalarını içeren bir klasör (<code>--maps-dir</code>) paylaşılan bir diskte ya da nesne depolamada tutulur. {{name}}'yı bir .NET aracı olarak kurun:</p>
+<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
+<div class="callout"><p>Paket adı lansmanda belirlenecek. O zamana kadar aracı kaynaktan <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> ile derleyin ve <code>td</code> geçen her yerde <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> çağırın.</p></div>
+<p>Her sistem için pipeline'lar <a href="/docs/other-ci/">Diğer CI sistemleri</a> sayfasında.</p>
+
+<h2>İlk komutlar</h2>
+<p>Bunları deponuzun içinde herhangi bir yerden çalıştırın. <code>--base</code> varsayılan olarak <code>origin/main</code>'dir.</p>
+<pre><code># What does my branch affect, and why?
+td affected --base origin/main
+
+# Run only the affected tests (add --dry-run to print the dotnet test commands)
+td test --base origin/main
+
+# Run every test with coverage and write one map per test project to .testdetta/coverage
+td record</code></pre>
+<p>Kapsam haritası olmadan da <code>td test</code> çalışır: yalnızca isimlere göre karar verir; bu güvenlidir ama daha fazlasını seçer. <code>td record</code> branch'inizin base'inde çalıştıktan sonra seçim isabetli hale gelir.</p>
+<div class="callout"><p><code>.testdetta/</code> klasörünü <code>.gitignore</code> dosyanıza ekleyin. Bu klasör kapsam haritalarını ve önbellekleri tutar; commit edilecek hiçbir şey içermez.</p></div>
+
+<h2>Komutlar</h2>
+<table>
+  <thead><tr><th>Komut</th><th>Ne yapar</th></tr></thead>
+  <tbody>
+    <tr><td><code>td affected [--format text|json|paths|commands]</code></td><td>Bir değişikliğin neleri etkilediğini ve nedenini yazdırır. <code>--tests-only</code> yalnızca etkilenen test projelerini listeler.</td></tr>
+    <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Yalnızca etkilenen testleri çalıştırır. <code>--summary-file</code> bir Markdown özeti ekler, örneğin <code>$GITHUB_STEP_SUMMARY</code> dosyasına. <code>--</code> sonrasındaki argümanlar her <code>dotnet test</code> çağrısına iletilir, örneğin <code>-- -c Release</code>.</td></tr>
+    <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> altına bir harita yazar. <code>--parallel</code> her projenin test sınıflarını n test sürecine dağıtır; <code>--no-build</code> aynı yapılandırmayla yapılmış önceki bir derlemenin çıktısını kaydeder.</td></tr>
+    <tr><td><code>td license status</code></td><td>Lisansı kontrol eder ve neyi kapsadığını gösterir.</td></tr>
+    <tr><td><code>td license install &lt;license|file&gt;</code></td><td>Hiçbir CI secret'ının tutamayacağı makineler için lisansı <code>~/.testdetta/license</code> dosyasına kaydeder.</td></tr>
+  </tbody>
+</table>
+
+<h3>Ortak seçenekler</h3>
+<table>
+  <thead><tr><th>Seçenek</th><th>Anlamı</th></tr></thead>
+  <tbody>
+    <tr><td><code>--base &lt;ref&gt;</code></td><td>Karşılaştırılacak git ref'i. Varsayılan: <code>origin/main</code>.</td></tr>
+    <tr><td><code>--repo &lt;path&gt;</code></td><td>Depo içindeki herhangi bir yol. Varsayılan: geçerli dizin.</td></tr>
+    <tr><td><code>--max-map-age &lt;n&gt;</code></td><td>Merge base'den en fazla n commit önce kaydedilmiş kapsam haritalarını kullanır ve aradaki değişiklikleri köprüler. Varsayılan: 50; 0 yalnızca tam eşleşen haritaları kullanır. Bkz. <a href="/docs/how-it-works/">Nasıl karar verir</a>.</td></tr>
+    <tr><td><code>--maps-dir &lt;dir&gt;</code></td><td>Depo dışında, commit başına bir klasör olarak tutulan kapsam haritaları: <code>record</code> oraya kaydeder, <code>affected</code> ve <code>test</code> ise <code>--max-map-age</code> sınırı içindeki en yenisini geri yükler. GitHub Actions dışındaki CI sistemleri için.</td></tr>
+    <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>Daha eski bir haritadan bu yana yapılan değişiklikler bir derleme dosyası, yapılandırma ya da global using içerdiğinde: etkilenen test projelerini tamamen çalıştırır (<code>all</code>, varsayılan) ya da isimlere göre karar verir (<code>name</code>).</td></tr>
+    <tr><td><code>-v</code>, <code>--verbose</code></td><td>Debug loglarını stderr'e yazar: kullanıcının sorgulayabileceği her karar, gerekçesiyle birlikte.</td></tr>
+    <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (varsayılan), <code>error</code> ya da <code>none</code>.</td></tr>
+  </tbody>
+</table>
+<p>Loglar stderr'e gider; stdout komutun çıktısını taşır ve makine tarafından okunabilir kalır.</p>
+
+<h2>Çıkış kodları</h2>
+<table>
+  <thead><tr><th>Kod</th><th>Anlamı</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td>Başarılı.</td></tr>
+    <tr><td><code>1</code></td><td>Analiz başarısız oldu.</td></tr>
+    <tr><td><code>2</code></td><td>Geçersiz komut satırı.</td></tr>
+    <tr><td><code>3</code></td><td>Testler başarısız oldu.</td></tr>
+  </tbody>
+</table>

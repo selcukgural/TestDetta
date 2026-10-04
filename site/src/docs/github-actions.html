@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7 # pin to a commit SHA
         with:
-          fetch-depth: 0 # Sift compares with the merge base
+          fetch-depth: 0 # TestDetta compares with the merge base
           persist-credentials: false
 
       - uses: actions/setup-dotnet@v6 # pin to a commit SHA
@@ -28,24 +28,24 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/sift@&lt;sha&gt;
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/sift@&lt;sha&gt;
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
         with:
           mode: test
           dotnet-test-args: --logger trx
-          license: ${{ secrets.SIFT_LICENSE }}</code></pre>
+          license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
 
 <div class="callout"><p><strong>Full history is required.</strong> The action stops with an error on a shallow clone. Check out with <code>fetch-depth: 0</code>.</p></div>
 
 <h2>How the maps get to pull requests</h2>
 <ul>
-  <li>Record mode saves the maps in the Actions cache under <code>sift-coverage-&lt;commit&gt;</code>. Pull requests can read caches of their base branch.</li>
+  <li>Record mode saves the maps in the Actions cache under <code>testdetta-coverage-&lt;commit&gt;</code>. Pull requests can read caches of their base branch.</li>
   <li>A pull request uses the map of its merge base, or the newest one recorded up to <code>max-map-age</code> first-parent commits before it.</li>
   <li>Finding that newer-than-exact map lists the repository's caches, which needs <code>actions: read</code>. Without it, only a map at the merge base is found, and the step says so in a notice.</li>
   <li>Without any map, <code>mode: test</code> still works, deciding by name only.</li>
@@ -76,7 +76,7 @@ jobs:
     <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Test mode: commits a map may be behind the merge base; the changes in between are bridged. <code>0</code> uses only an exact map.</td></tr>
     <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Test mode: when the changes since an older map include a build file, configuration or a global using, <code>all</code> runs the affected test projects completely; <code>name</code> decides them by name (faster, blind to calls made through configuration or reflection).</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test mode: lists the Actions caches to find the newest map (needs <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>SIFT_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>TESTDETTA_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Any directory inside the repository to analyze.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Install the .NET 10 SDK {{name}} runs on. Set to <code>false</code> if the job already has it.</td></tr>
   </tbody>

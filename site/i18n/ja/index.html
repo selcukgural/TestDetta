@@ -1,0 +1,98 @@
+<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: be9de6a1186d -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">.NET のためのテスト影響分析</span>
+      <h1>変更で壊れる可能性のあるテストだけを実行します。</h1>
+      <p class="lead">{{name}} は差分を読み取り、プロジェクト、シンボル、記録済みのカバレッジをたどって、その変更を検出できるテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。</p>
+      <div class="hero-actions">
+        <a class="button" href="/docs/">はじめる</a>
+        <a class="button button-ghost" href="/docs/how-it-works/">選択のしくみ</a>
+      </div>
+    </div>
+    <div class="terminal replay" aria-label="実際の Spectre.Console の変更に対する td test の出力">
+      <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed: 0, Passed: 156, Total: 156 - Spectre.Console.Tests.dll</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l t-dim"># Spectre.Console への実際の変更: <a href="/docs/examples/">実行の全体を見る</a></span></pre>
+    </div>
+  </div>
+</div>
+
+<section class="section-soft">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>デモではなく、実際のコードで計測しています</h2>
+      <p>人気のあるオープンソースの .NET ライブラリのメンバーを 1 つずつ変更し、失敗したテストクラスがすべて {{name}} によって選択されていたことを確認しています。</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{corpusRepositories}}</strong><span>件のオープンソースのリポジトリ。テストフレームワーク、テストランナー、ビルドの癖はそれぞれ異なります</span></div>
+      <div class="stat"><strong>{{corpusFailingChanges}}</strong><span>件の、少なくとも 1 つのテストを失敗させた変更</span></div>
+      <div class="stat"><strong>見逃し {{corpusMissed}} 件、すべて修正済み</strong><span>見逃しのたびに、修正なしでは失敗するテストを追加し、そのリポジトリを問題がなくなるまで再実行します</span></div>
+    </div>
+    <p class="stats-note">1 つのメンバーへの変更で実行されたテストクラスの割合は、中央値で <strong>{{corpusMedianShare}}</strong> でした。<a href="/docs/examples/">差分からジョブサマリーまで、実際の実行例を見る →</a></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>選択のしくみ</h2>
+      <p>各ステップは、根拠がある場合にのみ選択を絞り込みます。追跡できないものは、多めに実行する側にフォールバックします。</p>
+    </div>
+    <div class="grid-3">
+      <div class="card"><span class="step-number">1</span><h3>プロジェクト</h3><p>変更されたファイルをプロジェクトに対応付け、<code>ProjectReference</code> をたどります。<code>Directory.Build.props</code> のようなビルド全体に関わるファイルは、その配下のすべてに影響します。</p></div>
+      <div class="card"><span class="step-number">2</span><h3>シンボル</h3><p>C# の構文ツリーを比較するため、コメントや空白の編集では何も選択されず、{{name}} はどのメンバーが変更されたかを把握できます。</p></div>
+      <div class="card"><span class="step-number">3</span><h3>カバレッジ</h3><p>既定のブランチで記録したマップが、どのテストクラスがどのメソッドを実行したかを示すため、変更されたメソッドから対応するクラスを直接選択できます。</p></div>
+      <div class="card"><span class="step-number">4</span><h3>名前</h3><p>新しいコード、フィールド、定数は、テストクラスかマップが把握しているコードに到達するまで、ソース内を名前でたどります。</p></div>
+      <div class="card"><span class="step-number">5</span><h3>フォールバック</h3><p>構成ファイル、グローバル using、リフレクションで検出される型など、変更を追跡できない場合はテストプロジェクト全体を実行します。</p></div>
+      <div class="card"><span class="step-number">6</span><h3>自己チェック</h3><p>どのテストにも一致しないフィルターは {{name}} のバグとして扱い、フィルターなしでそのプロジェクトを再実行します。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap grid-2">
+    <div>
+      <div class="section-head">
+        <h2>GitHub Actions なら 2 ステップ</h2>
+        <p>既定のブランチへのプッシュごとにカバレッジマップを記録します。プルリクエストでは最新のマップを復元して影響を受けるテストだけを実行し、各クラスが実行された理由やスキップされた理由をジョブサマリーに示します。</p>
+      </div>
+      <p><a href="/docs/github-actions/">GitHub Actions ガイド →</a><br><a href="/docs/other-ci/">GitLab CI、Jenkins、Azure DevOps、Bitbucket →</a></p>
+    </div>
+<pre class="code">- if: github.event_name == 'push'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'
+  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  with:
+    mode: test
+    license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>テストの見逃しが許されないチームのために</h2>
+    </div>
+    <div class="grid-3">
+      <div class="card"><h3>コードは手元にとどまります</h3><p>{{name}} は CI の中で動作します。ソース、カバレッジ、テスト結果がお使いのマシンの外に出ることはなく、コミッターのメールアドレスはローカルで数えるだけです。</p></div>
+      <div class="card"><h3>お使いのすべてのフレームワークに対応</h3><p>xUnit v2 と v3、NUnit、MSTest、TUnit に、VSTest と Microsoft.Testing.Platform の両方で対応し、それぞれの並列実行にも対応しています。</p></div>
+      <div class="card"><h3>ビルドを止めません</h3><p>有効なライセンスがない場合は、これまでどおりすべてのテストを実行します。ライセンスの問題で増えるのは CI の時間だけで、ビルドが失敗することはありません。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-soft">
+  <div class="wrap center">
+    <div class="section-head">
+      <h2>パブリックリポジトリは無料。プライベートリポジトリは {{trialDays}} 日間無料。</h2>
+      <p>その後はアクティブなコミッター 1 人あたり月額 {{currency}}{{priceMonthly}} です。試用にカードは不要です。</p>
+    </div>
+    <div class="hero-actions">
+      <a class="button" href="/pricing/">料金を見る</a>
+      <a class="button button-ghost" href="/docs/">ドキュメントを読む</a>
+    </div>
+  </div>
+</section>

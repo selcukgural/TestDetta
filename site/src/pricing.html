@@ -58,7 +58,7 @@
     </div>
     <details>
       <summary>Who counts as an active committer?</summary>
-      <p>A distinct author email (folded through <code>.mailmap</code>) with at least one commit authored in the last 30 days, among the commits your pipeline builds. Bots such as Dependabot, Renovate and <code>github-actions</code> are excluded, and you can add your own service accounts. <code>sift license status</code> shows the count and the bot list, computed on your machines; no names or emails are sent anywhere.</p>
+      <p>A distinct author email (folded through <code>.mailmap</code>) with at least one commit authored in the last 30 days, among the commits your pipeline builds. Bots such as Dependabot, Renovate and <code>github-actions</code> are excluded, and you can add your own service accounts. <code>td license status</code> shows the count and the bot list, computed on your machines; no names or emails are sent anywhere.</p>
     </details>
     <details>
       <summary>What happens if we go over our seats?</summary>
@@ -70,7 +70,7 @@
     </details>
     <details>
       <summary>Does {{name}} send our code anywhere?</summary>
-      <p>No. Analysis, coverage maps and test runs stay in your CI. The only network call is an optional daily license refresh that sends the license itself; set <code>SIFT_LICENSE_REFRESH=off</code> to turn it off.</p>
+      <p>No. Analysis, coverage maps and test runs stay in your CI. The only network call is an optional daily license refresh that sends the license itself; set <code>TESTDETTA_LICENSE_REFRESH=off</code> to turn it off.</p>
     </details>
     <details>
       <summary>Who handles payment and invoices?</summary>
