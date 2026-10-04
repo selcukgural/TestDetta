@@ -98,7 +98,8 @@ that report numbers (value reporting) only once the numbers are proven right.
   on another platform; a class the map never reported is decided by the record at its place when one
   orphan (a recorded class the build lacks) sits there, and is selected with a warning when the map
   and the build disagree about its file. Elsewhere it stays skipped as before.
-- **Corpus runs depend on the machine's locale** (found 2026-10-04 on a Turkish-locale machine):
+- ~~**Corpus runs depend on the machine's locale**~~ (done 2026-10-04: `eval/corpus.json` defaults set
+  `LC_ALL`/`LANG` to en_US.UTF-8; found on a Turkish-locale machine):
   Markdig's build regenerates its spec test classes with a culture-sensitive `ToUpper`, so a class is
   `TestBlocksAndİnlinesPrecedence` in one build and `...AndInlines...` in another, and an evaluation
   that compares class names with stored outcomes reports false misses (26 of them in one explain
