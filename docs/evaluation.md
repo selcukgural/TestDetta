@@ -1,5 +1,34 @@
 # Evaluation on real repositories
 
+## Corpus round 2 (2026-10-03 → 2026-10-04)
+
+The same method as round 1 on 42 repositories (Refit added), with every fix up to `e55241c`: MSBuild
+evaluation of each project, the real preprocessor symbols per target framework, initialization and
+field-read data in the maps. Recorded fresh at each repository's head
+(the commits are now pinned in `eval/corpus.json`).
+
+**Headline (round 2c): 2 missed of 2313 failing mutants (95% upper bound 0.27%), both fixed since.
+TestDetta ran 44% of the test classes on average, whole affected test projects (as dotnet-affected
+selects) 91%. Median share per repository 35% (round 1: 27%).**
+
+- **Misses:** AwesomeAssertions `NumericAssertions'1..ctor` and `FailureMessageFormatter.Format`, both
+  failing an MSpec context in `MSpec.Specs`. MSpec's adapter reports the namespace as the class, so the
+  map named a class that does not exist and the context was never a candidate. Fixed in `82ff30a`;
+  the rerun is round 2d.
+- **Round 2b's 26 misses** (all Markdig) were an evaluation artefact: under the machine's Turkish locale
+  Markdig regenerates its spec classes with culture-dependent names, so failing classes matched nothing
+  in the map. Builds and tests now run under en-US (`environment` in `eval/corpus.json`); 2c has 0
+  Markdig misses at the same commit.
+- **Wider than round 1** on some repositories (Roslynator 8% → 35%, OpenTelemetry 6% → 15%) and
+  narrower on others (Markdig 98% → 39%, NodaTime 43% → 23%). The fixes since
+  round 1 (run-once code credited to every reader, the MSBuild evaluation) widen the selection where
+  shared code runs everywhere and narrow it where names used to over-select. Precision work comes
+  after v1.
+- **Not informative:** Argu (F#), Mapperly (its main test host crashed in both baselines while the
+  machine was loaded, so only 1 mutant counted; passes when run alone, rerun in round 2d).
+- Durations are not comparable with round 1: 2c ran two repositories at once, and a locale
+  change invalidated the outcome cache, so every mutant ran again.
+
 ## Corpus round 1 (2026-09-30 → 2026-10-02)
 
 `testdetta-eval --corpus eval/corpus.json`: per repository, coverage is recorded at the default branch's
