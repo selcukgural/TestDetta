@@ -50,6 +50,19 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void Keep_clones_reaches_every_repository_and_takes_no_value()
+    {
+        var entry = new CorpusEntry { Name = "polly", Url = "https://example.com/polly.git", Synthetic = 100 };
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--keep-clones", "--only", "polly"], out var options, out var error), error);
+        Assert.True(BatchRunner.SettingsFor(entry, options).Run.KeepClones);
+
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json"], out var defaults, out _));
+        Assert.False(BatchRunner.SettingsFor(entry, defaults).Run.KeepClones);
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--keep-clones", "--synthetic", "2"], out var single, out error), error);
+        Assert.True(single.Run.KeepClones);
+    }
+
+    [Fact]
     public void Corpus_run_can_replace_mutants_and_parallelism_for_every_repository()
     {
         Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--only", "scriban,fluid", "--synthetic", "20", "--mutant-parallelism", "2", "--parallel", "2"], out var options, out var error), error);

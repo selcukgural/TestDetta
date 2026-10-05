@@ -183,6 +183,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 Report();
             });
 
+            if (!settings.KeepClones)
+            {
+                RemoveReports(Path.Combine(workspace.Executor.LogDirectory, "trx"), results);
+            }
+
             return Snapshot();
         }
         catch (Exception ex) when (Expected(ex))
@@ -197,6 +202,36 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             _generators = null;
         }
     }
+
+    /// <summary>
+    /// Deletes the test reports of the evaluation, which are read by now, except those of mutants that
+    /// missed a class or crashed, which are kept to look into; <see cref="RunSettings.KeepClones"/> keeps all.
+    /// </summary>
+    /// <param name="directory">The reports, one directory per run.</param>
+    /// <param name="results">The mutants, by index from 0; a report's run name holds the index from 1.</param>
+    internal static void RemoveReports(string directory, IReadOnlyList<SyntheticMutant?> results)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        foreach (var report in Directory.EnumerateDirectories(directory))
+        {
+            var match = MutantRunName().Match(Path.GetFileName(report));
+            var index = match.Success ? int.Parse(match.Groups[1].ValueSpan, System.Globalization.CultureInfo.InvariantCulture) - 1 : -1;
+            if (index >= 0 && index < results.Count && results[index] is not { MissedClasses.Count: 0, Inconclusive: false, CaughtByCrash: false })
+            {
+                continue;
+            }
+
+            Directory.Delete(report, recursive: true);
+        }
+    }
+
+    /// <summary>A mutant's run directory, such as <c>042-synthetic-7</c> or <c>043-synthetic-7-confirm</c>; group 1 is the mutant's index from 1.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\d+-synthetic-(\d+)(?:-|$)")]
+    private static partial System.Text.RegularExpressions.Regex MutantRunName();
 
     /// <summary>The run without mutants that every mutant of the commit is compared with.</summary>
     /// <param name="Projects">Test projects that built and reported; the ones the mutants run.</param>

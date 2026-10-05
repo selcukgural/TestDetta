@@ -28,7 +28,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                testdetta-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
                          [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
                          [--compare-tia <dll>] [--compare-affected <exe>] [--toolchains <dir>] [--compare <dir>]
-                         [--history <dir>] [--cache <dir>] [--explain] [-v]
+                         [--history <dir>] [--cache <dir>] [--explain] [--keep-clones] [-v]
                testdetta-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -60,6 +60,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --compare-affected <exe>  Also select each synthetic change with dotnet-affected (its executable),
                                  running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
+          --keep-clones          Keep the clone and every test report when the evaluation ends (default: a
+                                 clone is deleted when nothing was missed, and the test reports of mutants
+                                 that were neither missed nor crashed once they are read)
           --no-schema            Write each synthetic mutant in alone instead of switching it on in a
                                  schema (to compare both, or for a suite that notices the switches)
           --analysis-timeout <span>  Longest TestDetta may analyse one synthetic change (default 00:10:00); beyond
@@ -135,6 +138,12 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
             if (arg == "--explain")
             {
                 run = run with { ExplainOnly = true };
+                continue;
+            }
+
+            if (arg == "--keep-clones")
+            {
+                run = run with { KeepClones = true };
                 continue;
             }
 
@@ -409,6 +418,13 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// no test run. For the precision round.
     /// </summary>
     public bool ExplainOnly { get; init; }
+
+    /// <summary>
+    /// True to keep the clone and every test report when the evaluation ends. Otherwise a clone whose
+    /// evaluation missed nothing and did not fail is deleted, and so are the reports of mutants that were
+    /// neither missed nor crashed: their outcomes are in the results and the outcome cache.
+    /// </summary>
+    public bool KeepClones { get; init; }
 
     /// <summary>Solution dotnet-tia analyses, relative to the repository root; null to let it discover one.</summary>
     public string? TiaSolution { get; init; }

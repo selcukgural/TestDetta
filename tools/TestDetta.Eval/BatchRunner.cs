@@ -81,6 +81,12 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                 continue;
             }
 
+            if (arg == "--keep-clones")
+            {
+                overrides = overrides with { KeepClones = true };
+                continue;
+            }
+
             if (i + 1 >= args.Length)
             {
                 error = $"{arg} needs a value";
@@ -196,7 +202,8 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 /// running a test; see <see cref="RunSettings.ExplainOnly"/>. For the precision round, with each
 /// repository's own commit, toolchain and environment.
 /// </param>
-internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false);
+/// <param name="KeepClones">Keep every clone and test report; see <see cref="RunSettings.KeepClones"/>.</param>
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false, bool KeepClones = false);
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -294,6 +301,7 @@ internal static partial class BatchRunner
             TiaCli = options.Overrides.TiaCli,
             AffectedCli = options.Overrides.AffectedCli,
             ExplainOnly = options.Overrides.Explain,
+            KeepClones = options.Overrides.KeepClones,
             TiaSolution = entry.TiaSolution,
             Toolchain = entry.Toolchain?.ToToolchain(),
             Environment = entry.Environment ?? new Dictionary<string, string>(),

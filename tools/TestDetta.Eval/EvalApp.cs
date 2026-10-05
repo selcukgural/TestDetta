@@ -101,6 +101,12 @@ internal static partial class EvalApp
             passed &= run.Error is null && run.Mutants.All(static m => m.MissedClasses.Count == 0);
         }
 
+        // A clone takes up to a few gigabytes with its build output; one that missed something is kept to look into.
+        if (passed && !options.Run.KeepClones)
+        {
+            WorkerCopies.Remove(clone);
+        }
+
         return passed ? 0 : 3;
     }
 
