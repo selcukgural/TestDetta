@@ -107,6 +107,22 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 LogGeneratorMutants(_generatorTests.Count);
             }
 
+            // A quick check keeps part of the usual sample: the same targets, so their stored outcomes count.
+            if (settings.Focus != EvalFocus.All || settings.MaxMutants is not null)
+            {
+                var sampled = targets.Count;
+                targets = [.. targets
+                    .Where(t => settings.Focus switch
+                    {
+                        EvalFocus.Generator => _generatorTests.ContainsKey(t),
+                        EvalFocus.DataFiles => t.Kind == MutantKind.EmptyFile,
+                        _ => true,
+                    })
+                    .Take(settings.MaxMutants ?? int.MaxValue)];
+                var focus = EvalFocusNames.Name(settings.Focus);
+                LogFocused(targets.Count, sampled, focus);
+            }
+
             // A stored baseline means the outcomes below were measured against it; only the mutants
             // without a stored outcome then need a build and test runs.
             var stored = StoredBaselineFor(candidates);
@@ -453,6 +469,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         json.WriteEndObject();
         LogExplained(targets.Count, path);
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Quick check: {Kept} of {Sampled} sampled change(s) kept (focus {Focus})")]
+    private partial void LogFocused(int kept, int sampled, string focus);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Count} sampled change(s) are in a source generator; their consumers are built with the mutant on (docs/design/generator-mutants.md)")]
     private partial void LogGeneratorMutants(int count);

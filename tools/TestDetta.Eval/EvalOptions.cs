@@ -60,6 +60,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --compare-affected <exe>  Also select each synthetic change with dotnet-affected (its executable),
                                  running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
+          --focus <what>         Quick check: keep only the sampled changes in a source generator
+                                 (generator) or the data files (data-files) of the usual sample, so
+                                 stored outcomes are reused; all (default) keeps every change
+          --max-mutants <n>      Evaluate at most n changes, in sample order after --focus
           --data-files <n>       Also empty n data files outside every project, one change each, to check that
                                  the tests reading them are selected (needs maps with file reads)
           --keep-clones          Keep the clone and every test report when the evaluation ends (default: a
@@ -293,6 +297,26 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { MapAge = mapAge };
                     break;
 
+                case "--focus":
+                    if (!EvalFocusNames.TryParse(value, out var focus))
+                    {
+                        error = $"--focus takes {EvalFocusNames.All}, not {value}";
+                        return false;
+                    }
+
+                    run = run with { Focus = focus };
+                    break;
+
+                case "--max-mutants":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var most) || most < 1)
+                    {
+                        error = $"--max-mutants needs a positive number, not {value}";
+                        return false;
+                    }
+
+                    run = run with { MaxMutants = most };
+                    break;
+
                 case "--data-files":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var files) || files < 0)
                     {
@@ -443,6 +467,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// (<see cref="DataFileSampler"/>); 0 for none.
     /// </summary>
     public int DataFiles { get; init; }
+
+    /// <summary>The changes a quick check keeps of the sample (<c>--focus</c>); <see cref="EvalFocus.All"/> keeps all.</summary>
+    public EvalFocus Focus { get; init; }
+
+    /// <summary>Most changes evaluated, taken in sample order after <see cref="Focus"/> (<c>--max-mutants</c>); null for all.</summary>
+    public int? MaxMutants { get; init; }
 
     /// <summary>Solution dotnet-tia analyses, relative to the repository root; null to let it discover one.</summary>
     public string? TiaSolution { get; init; }

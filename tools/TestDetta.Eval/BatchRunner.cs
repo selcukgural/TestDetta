@@ -129,6 +129,26 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     only.UnionWith(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                     break;
 
+                case "--focus":
+                    if (!EvalFocusNames.TryParse(value, out var focus))
+                    {
+                        error = $"--focus takes {EvalFocusNames.All}, not {value}";
+                        return false;
+                    }
+
+                    overrides = overrides with { Focus = focus };
+                    break;
+
+                case "--max-mutants":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var most) || most < 1)
+                    {
+                        error = $"--max-mutants needs a positive number, not {value}";
+                        return false;
+                    }
+
+                    overrides = overrides with { MaxMutants = most };
+                    break;
+
                 case "--data-files":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var files) || files < 0)
                     {
@@ -214,7 +234,9 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 /// </param>
 /// <param name="KeepClones">Keep every clone and test report; see <see cref="RunSettings.KeepClones"/>.</param>
 /// <param name="DataFiles">Data files to empty per repository; see <see cref="RunSettings.DataFiles"/>.</param>
-internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false, bool KeepClones = false, int DataFiles = 0);
+/// <param name="Focus">Changes a quick check keeps; see <see cref="RunSettings.Focus"/>.</param>
+/// <param name="MaxMutants">Most changes per repository; see <see cref="RunSettings.MaxMutants"/>.</param>
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false, bool KeepClones = false, int DataFiles = 0, EvalFocus Focus = EvalFocus.All, int? MaxMutants = null);
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -314,6 +336,8 @@ internal static partial class BatchRunner
             ExplainOnly = options.Overrides.Explain,
             KeepClones = options.Overrides.KeepClones,
             DataFiles = options.Overrides.DataFiles,
+            Focus = options.Overrides.Focus,
+            MaxMutants = options.Overrides.MaxMutants,
             TiaSolution = entry.TiaSolution,
             Toolchain = entry.Toolchain?.ToToolchain(),
             Environment = entry.Environment ?? new Dictionary<string, string>(),

@@ -50,6 +50,24 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void A_quick_check_keeps_a_focus_and_a_most_of_the_sample()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--focus", "generator", "--max-mutants", "20"], out var options, out var error), error);
+        Assert.Equal(EvalFocus.Generator, options.Run.Focus);
+        Assert.Equal(20, options.Run.MaxMutants);
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--focus", "everything"], out _, out _));
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--max-mutants", "0"], out _, out _));
+
+        var entry = new CorpusEntry { Name = "fluid", Url = "https://example.com/fluid.git", Synthetic = 100 };
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--focus", "data-files", "--max-mutants", "5"], out var batch, out error), error);
+        var run = BatchRunner.SettingsFor(entry, batch).Run;
+        Assert.Equal((EvalFocus.DataFiles, 5), (run.Focus, run.MaxMutants));
+
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json"], out var defaults, out _));
+        Assert.Equal((EvalFocus.All, (int?)null), (BatchRunner.SettingsFor(entry, defaults).Run.Focus, BatchRunner.SettingsFor(entry, defaults).Run.MaxMutants));
+    }
+
+    [Fact]
     public void Data_files_are_a_count_of_their_own_and_not_a_mutant_kind()
     {
         Assert.True(EvalOptions.TryParse(["--repo", "r", "--data-files", "5"], out var options, out var error), error);
