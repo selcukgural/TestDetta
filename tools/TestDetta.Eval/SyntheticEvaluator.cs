@@ -67,30 +67,20 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             workspace.Executor.Setup();
             var untracked = workspace.Git.Untracked();
             var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
-            var testProjects = _steps.Build(_steps.TestProjects(graph));
-            if (testProjects.Count == 0)
-            {
-                throw new InvalidOperationException("No test project could be built.");
-            }
-
-            workspace.Executor.Outputs = _steps.OutputDirectories(testProjects);
-            var baseline = workspace.Executor.RunAll(testProjects, "baseline");
-            var unreported = testProjects.Where(p => baseline.Unreported.Contains(p.Path) || baseline.Crashed.Contains(p.Path))
-                .Select(p => Path.GetRelativePath(workspace.RepoRoot, p.Path).Replace('\\', '/')).ToList();
-            testProjects = _steps.Reporting(testProjects, baseline);
-            if (testProjects.Count == 0)
-            {
-                throw new InvalidOperationException("No test project wrote a test report.");
-            }
-
+            var candidates = _steps.TestProjects(graph);
             var testClasses = maps.Values.Sum(static m => m.Classes.Count);
-
             var targets = TargetSampler.Sample(graph, workspace.RepoRoot, CoveredMembers(maps), request);
             var coveredTargets = targets.Count(static t => t.Covered);
             LogSampled(targets.Count, coveredTargets);
 
-            var assemblies = EvalSteps.RepositoryAssemblies(
-                new ProjectAssemblies(_logger).FileNames(graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
+            // A stored baseline means the outcomes below were measured against it; only the mutants
+            // without a stored outcome then need a build and test runs.
+            var stored = StoredBaselineFor(candidates);
+            var baseline = stored ?? RunBaseline(candidates);
+            if (stored is not null)
+            {
+                LogBaselineReused(stored.Projects.Count);
+            }
 
             // Selecting edits the clone's sources, so it happens one mutant at a time, and before any
             // binary is touched: a hang in TestDetta's analysis then leaves the clone as it was. What the
@@ -98,19 +88,74 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             _steps.RemoveLeftBehind(untracked);
             var selections = targets.Select(t => Select(sha, t, maps, mapCommit)).ToList();
 
-            using var schema = settings.UseSchema ? TrySchema(assemblies, targets, testProjects, baseline) : null;
-            var context = new MutantContext(testProjects, maps, assemblies, baseline, schema);
-            var (parallelism, copies) = Parallelism(schema, testProjects, baseline);
+            var results = new SyntheticMutant?[targets.Count];
+            var pending = new List<int>();
+            for (var i = 0; i < targets.Count; i++)
+            {
+                var (tests, detected, share, drift) = selections[i];
+                var state = new MutantRun(tests, baseline.Projects, i + 1, detected, share) { Others = drift };
+                if (_cache?.Find(targets[i]) is { } outcome && FromCache(targets[i], outcome, state) is { } reused)
+                {
+                    results[i] = reused;
+                    continue;
+                }
+
+                pending.Add(i);
+            }
+
+            var gate = new object();
+            var usedSchema = false;
+            var usedParallelism = 1;
+            SyntheticRun Snapshot() => new(sha, testClasses, baseline.Outcome.Seconds, [.. results.OfType<SyntheticMutant>()], null)
+            {
+                Unreported = baseline.Unreported,
+                Schema = usedSchema,
+                MutantParallelism = usedParallelism,
+                Toolchain = settings.Toolchain?.Description,
+                Seconds = started.Elapsed.TotalSeconds,
+                MapAge = settings.MapAge,
+                MapCommit = mapCommit,
+            };
+
+            void Report()
+            {
+                lock (gate)
+                {
+                    mutants.Clear();
+                    mutants.AddRange(results.OfType<SyntheticMutant>());
+                    progress(Snapshot());
+                }
+            }
+
+            Report();
+            if (pending.Count == 0)
+            {
+                return Snapshot();
+            }
+
+            if (stored is not null)
+            {
+                baseline = BuildForStoredBaseline(stored);
+            }
+
+            var testProjects = baseline.Projects;
+            var assemblies = EvalSteps.RepositoryAssemblies(
+                new ProjectAssemblies(_logger).FileNames(graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
+            var pendingTargets = pending.Select(i => (Id: i + 1, Target: targets[i])).ToList();
+            using var schema = settings.UseSchema ? TrySchema(assemblies, pendingTargets, testProjects, baseline.Outcome) : null;
+            var context = new MutantContext(testProjects, maps, assemblies, baseline.Outcome, schema);
+            var (parallelism, copies) = Parallelism(schema, testProjects, baseline.Outcome, pending.Count);
             using var workerCopies = copies;
             workspace.Executor.Concurrency = parallelism;
+            usedSchema = schema is not null;
+            usedParallelism = parallelism;
 
             // Each worker runs in its own copy of the clone; a mutant takes a free one for all its runs.
             var free = new System.Collections.Concurrent.ConcurrentBag<TestExecutor>(
                 copies is null ? [workspace.Executor] : Executors(copies));
-            var results = new SyntheticMutant?[targets.Count];
-            var gate = new object();
-            Parallel.For(0, targets.Count, new ParallelOptions { MaxDegreeOfParallelism = parallelism }, i =>
+            Parallel.For(0, pending.Count, new ParallelOptions { MaxDegreeOfParallelism = parallelism }, n =>
             {
+                var i = pending[n];
                 if (!free.TryTake(out var executor))
                 {
                     throw new InvalidOperationException("More mutants ran at once than there are worker copies.");
@@ -129,15 +174,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 lock (gate)
                 {
                     results[i] = result;
-                    mutants.Clear();
-                    mutants.AddRange(results.OfType<SyntheticMutant>());
-                    progress(new SyntheticRun(sha, testClasses, baseline.Seconds, [.. mutants], null)
-                        { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds, MapAge = settings.MapAge, MapCommit = mapCommit });
                 }
+
+                Report();
             });
 
-            return new SyntheticRun(sha, testClasses, baseline.Seconds, mutants, null)
-                { Unreported = unreported, Schema = schema is not null, MutantParallelism = parallelism, Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds, MapAge = settings.MapAge, MapCommit = mapCommit };
+            return Snapshot();
         }
         catch (Exception ex) when (Expected(ex))
         {
@@ -146,6 +188,112 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             return new SyntheticRun(sha, 0, 0, mutants, cause.Message) { Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds };
         }
     }
+
+    /// <summary>The run without mutants that every mutant of the commit is compared with.</summary>
+    /// <param name="Projects">Test projects that built and reported; the ones the mutants run.</param>
+    /// <param name="Outcome">The run.</param>
+    /// <param name="Unreported">Projects left out because they wrote no report or crashed, relative to the clone.</param>
+    private sealed record Baseline(List<ProjectNode> Projects, TestRunOutcome Outcome, List<string> Unreported);
+
+    /// <summary>
+    /// Builds the test projects and runs them without mutants. A complete run is stored with the
+    /// outcomes, so a later round whose mutants are all stored skips the build and this run.
+    /// </summary>
+    /// <param name="candidates">Test projects to evaluate.</param>
+    private Baseline RunBaseline(List<ProjectNode> candidates)
+    {
+        var built = _steps.Build(candidates);
+        if (built.Count == 0)
+        {
+            throw new InvalidOperationException("No test project could be built.");
+        }
+
+        workspace.Executor.Outputs = _steps.OutputDirectories(built);
+        var outcome = workspace.Executor.RunAll(built, "baseline");
+        var unreported = built.Where(p => outcome.Unreported.Contains(p.Path) || outcome.Crashed.Contains(p.Path))
+            .Select(Relative).ToList();
+        var reporting = _steps.Reporting(built, outcome);
+        if (reporting.Count == 0)
+        {
+            throw new InvalidOperationException("No test project wrote a test report.");
+        }
+
+        // A project that writes no report without crashing (no tests, no TRX logger) does so every
+        // time; one that crashed or hung may have done so under load and must run again next time.
+        if (outcome.Aborted == 0 && outcome.Crashed.Count == 0)
+        {
+            _cache?.StoreBaseline(new StoredBaseline(
+                [.. candidates.Select(Relative)],
+                [.. reporting.Select(Relative)],
+                outcome.FailedByProject.ToDictionary(p => Relative(p.Key), static p => p.Value.Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal),
+                outcome.Seconds,
+                outcome.Total) { Unreported = unreported });
+        }
+
+        return new Baseline(reporting, outcome, unreported);
+    }
+
+    /// <summary>
+    /// The stored run without mutants, when it was made with the same test projects as today; null
+    /// otherwise, and the baseline is run. No project crashed or hung in a stored run (see <see cref="OutcomeCache.StoreBaseline"/>).
+    /// </summary>
+    /// <param name="candidates">Test projects to evaluate.</param>
+    private Baseline? StoredBaselineFor(List<ProjectNode> candidates)
+    {
+        if (_cache?.Baseline is not { } stored || !stored.Candidates.SequenceEqual(candidates.Select(Relative), StringComparer.Ordinal))
+        {
+            return null;
+        }
+
+        var byPath = candidates.ToDictionary(Relative, StringComparer.Ordinal);
+        var projects = new List<ProjectNode>(stored.Reporting.Count);
+        foreach (var path in stored.Reporting)
+        {
+            if (!byPath.TryGetValue(path, out var project))
+            {
+                return null;
+            }
+
+            projects.Add(project);
+        }
+
+        var failed = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        foreach (var (path, classes) in stored.FailedByProject)
+        {
+            if (byPath.TryGetValue(path, out var project))
+            {
+                failed[project.Path] = classes.ToHashSet(StringComparer.Ordinal);
+            }
+        }
+
+        var outcome = new TestRunOutcome(stored.Seconds, stored.Total, failed, new HashSet<string>(StringComparer.Ordinal), 0);
+        return new Baseline(projects, outcome, stored.Unreported);
+    }
+
+    /// <summary>
+    /// Builds the projects of a stored baseline when some mutant has to run after all. A project that
+    /// no longer builds is left out of those runs; its stored failures still hold for the others.
+    /// </summary>
+    /// <param name="stored">The stored baseline.</param>
+    private Baseline BuildForStoredBaseline(Baseline stored)
+    {
+        var built = _steps.Build(stored.Projects);
+        if (built.Count == 0)
+        {
+            throw new InvalidOperationException("No test project could be built.");
+        }
+
+        workspace.Executor.Outputs = _steps.OutputDirectories(built);
+        return stored with { Projects = built };
+    }
+
+    /// <summary>A path of the clone relative to its root, with forward slashes, as the cache stores it.</summary>
+    /// <param name="path">Full path inside the clone.</param>
+    private string Relative(string path) => Path.GetRelativePath(workspace.RepoRoot, path).Replace('\\', '/');
+
+    /// <summary>See <see cref="Relative(string)"/>, for a project.</summary>
+    /// <param name="project">A project of the clone.</param>
+    private string Relative(ProjectNode project) => Relative(project.Path);
 
     /// <summary>
     /// Writes <c>explain.json</c> next to the maps' workspace: for every sampled change, TestDetta's
@@ -243,14 +391,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// mutant is written in alone, as before; the report says which way the commit was evaluated.
     /// </summary>
     /// <param name="assemblies">Repository assemblies in the test outputs.</param>
-    /// <param name="targets">Sampled mutants; their 1-based position is their id.</param>
+    /// <param name="targets">Mutants that run, with their 1-based position in the sample as id; stored ones are not written in.</param>
     /// <param name="testProjects">Test projects that reported in the baseline.</param>
     /// <param name="baseline">Run of those projects without any schema.</param>
-    private Schema? TrySchema(List<string> assemblies, List<SyntheticTarget> targets, List<ProjectNode> testProjects, TestRunOutcome baseline)
+    private Schema? TrySchema(List<string> assemblies, List<(int Id, SyntheticTarget Target)> targets, List<ProjectNode> testProjects, TestRunOutcome baseline)
     {
         var schema = MutationInjector.InjectSchema(
             assemblies,
-            [.. targets.Select(static (t, i) => new SchemaTarget(i + 1, t.Member, t.Kind))],
+            [.. targets.Select(static t => new SchemaTarget(t.Id, t.Target.Member, t.Target.Kind))],
             Path.Combine(workspace.MapCache, "..", "schema-backup"));
         var check = workspace.Executor.RunAll(testProjects, "baseline-schema");
         var same = check.Complete && testProjects.All(p =>
@@ -279,9 +427,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="schema">The commit's schema, or null.</param>
     /// <param name="testProjects">Test projects that reported in the baseline.</param>
     /// <param name="baseline">Run of those projects without any mutant.</param>
-    private (int Count, WorkerCopies? Copies) Parallelism(Schema? schema, List<ProjectNode> testProjects, TestRunOutcome baseline)
+    /// <param name="mutantCount">Mutants that run; more workers than that would only cost the check.</param>
+    private (int Count, WorkerCopies? Copies) Parallelism(Schema? schema, List<ProjectNode> testProjects, TestRunOutcome baseline, int mutantCount)
     {
-        var wanted = settings.MutantParallelism;
+        var wanted = Math.Min(settings.MutantParallelism, mutantCount);
         if (wanted <= 1 || schema is null || settings.Commands.Cleanup is not null)
         {
             return (1, null);
@@ -488,11 +637,6 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         var (tests, detected, share, drift) = selection;
         var state = new MutantRun(tests, context.TestProjects, index, detected, share) { Others = drift };
-        if (_cache?.Find(target) is { } stored && FromCache(target, stored, state) is { } reused)
-        {
-            return reused;
-        }
-
         using var mutation = Apply(target, context, index);
         if (mutation.MutatedMethods == 0)
         {
@@ -1003,6 +1147,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Sha} could not be evaluated synthetically")]
     private partial void LogFailed(string sha, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Reusing the stored run without mutants of {Count} test project(s); the build waits until a mutant has to run")]
+    private partial void LogBaselineReused(int count);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reusing {Count} stored mutant outcome(s); only the selection is computed for them")]
     private partial void LogCacheOpened(int count);

@@ -26,6 +26,30 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void Memory_limit_is_on_by_default_takes_gigabytes_and_zero_turns_it_off()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r"], out var defaults, out _));
+        Assert.True(defaults.Run.MemoryLimit!.TreeBytes > 0);
+
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--memory-limit", "1.5"], out var options, out var error), error);
+        Assert.Equal(3L << 29, options.Run.MemoryLimit!.TreeBytes);
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--memory-limit", "0"], out var off, out _));
+        Assert.Null(off.Run.MemoryLimit);
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--memory-limit", "lots"], out _, out _));
+    }
+
+    [Fact]
+    public void Corpus_run_can_only_explain_with_each_repository_s_own_settings()
+    {
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--explain", "--only", "polly"], out var options, out var error), error);
+        var entry = new CorpusEntry { Name = "polly", Url = "https://example.com/polly.git", Synthetic = 100 };
+
+        Assert.True(BatchRunner.SettingsFor(entry, options).Run.ExplainOnly);
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json"], out var defaults, out _));
+        Assert.False(BatchRunner.SettingsFor(entry, defaults).Run.ExplainOnly);
+    }
+
+    [Fact]
     public void Corpus_run_can_replace_mutants_and_parallelism_for_every_repository()
     {
         Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--only", "scriban,fluid", "--synthetic", "20", "--mutant-parallelism", "2", "--parallel", "2"], out var options, out var error), error);

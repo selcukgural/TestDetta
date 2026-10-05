@@ -108,6 +108,33 @@ internal sealed class OutcomeCache
         }
     }
 
+    /// <summary>The stored run without mutants, or null when none was stored.</summary>
+    public StoredBaseline? Baseline
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _file.Baseline;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stores the run without mutants and writes the file. Only a run in which no project crashed or
+    /// hung belongs here: a project that crashed under load once would otherwise stay left out of
+    /// every later round.
+    /// </summary>
+    /// <param name="baseline">The run, with paths relative to the clone.</param>
+    public void StoreBaseline(StoredBaseline baseline)
+    {
+        lock (_gate)
+        {
+            _file.Baseline = baseline;
+            Save();
+        }
+    }
+
     /// <summary>Key of a mutant: member and kind.</summary>
     /// <param name="target">The mutant.</param>
     private static string Key(SyntheticTarget target) =>
@@ -146,7 +173,30 @@ internal sealed class OutcomeCache
 
         /// <summary>Whether a class (<c>Project: Class</c>) fails alone without any mutant.</summary>
         public Dictionary<string, bool> FailsAlone { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>The run without mutants the outcomes were measured against; null when none was stored.</summary>
+        public StoredBaseline? Baseline { get; set; }
     }
+}
+
+/// <summary>
+/// A run of the full suite without mutants in which no project crashed or hung, kept so a round whose mutants are all stored
+/// needs neither a build nor a test run. Paths are relative to the clone, which moves between rounds.
+/// </summary>
+/// <param name="Candidates">Test projects the evaluation considered, before building; the stored run is used only when today's list is the same.</param>
+/// <param name="Reporting">Test projects that built and reported; the ones the outcomes were measured with.</param>
+/// <param name="FailedByProject">Classes that failed without any mutant, by project.</param>
+/// <param name="Seconds">How long the run took, for the report.</param>
+/// <param name="Total">Number of tests that ran.</param>
+internal sealed record StoredBaseline(
+    List<string> Candidates,
+    List<string> Reporting,
+    Dictionary<string, List<string>> FailedByProject,
+    double Seconds,
+    int Total)
+{
+    /// <summary>Test projects that built but wrote no report without crashing, as the report names them; left out like in the run itself.</summary>
+    public List<string> Unreported { get; init; } = [];
 }
 
 /// <summary>What the tests did against one mutant, independent of TestDetta's selection.</summary>

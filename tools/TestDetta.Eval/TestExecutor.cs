@@ -178,7 +178,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 var started = Stopwatch.GetTimestamp();
                 using (var log = File.CreateText(logPath))
                 {
-                    exitCode = dotnet.Run(arguments, location.FullDirectory(context.RepoRoot), variables, log, new RunLimits(Timeout(project.Path), context.Settings.IdleTimeout));
+                    exitCode = dotnet.Run(arguments, location.FullDirectory(context.RepoRoot), variables, log, new RunLimits(Timeout(project.Path), context.Settings.IdleTimeout, context.Settings.MemoryLimit));
                     LogRun(label, project.Path, exitCode);
                 }
 

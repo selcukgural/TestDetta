@@ -60,6 +60,37 @@ public sealed class EvalOutcomeCacheTests : IDisposable
         Assert.All(second, m => Assert.True(m.Reused));
         Assert.Equal(first.Select(static m => m.Result), second.Select(static m => m.Result));
         Assert.Contains(first, static m => m.Result.Contains("killed=", StringComparison.Ordinal) && !m.Result.EndsWith("killed=", StringComparison.Ordinal));
+
+        // Every outcome and the run without mutants were stored: nothing is built or run again.
+        Assert.Empty(RunLogs(Path.Combine(_root, "second")));
+        Assert.NotEmpty(RunLogs(Path.Combine(_root, "first")));
+
+        // One outcome lost: only that mutant is built and run, on the stored baseline, with the same result.
+        var file = Directory.EnumerateFiles(cache, "*.json", SearchOption.AllDirectories).Single();
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(file))!;
+        var mutants = json["Mutants"]!.AsObject();
+        var lost = mutants.First(static m => m.Key.StartsWith("Calc.Calculator|Neg|", StringComparison.Ordinal)).Key;
+        mutants.Remove(lost);
+        File.WriteAllText(file, json.ToJsonString());
+
+        var third = Evaluate(Path.Combine(_root, "third"), cache);
+
+        Assert.Equal(first.Select(static m => m.Result), third.Select(static m => m.Result));
+        Assert.Equal(first.Count - 1, third.Count(static m => m.Reused));
+        var logs = RunLogs(Path.Combine(_root, "third"));
+        Assert.DoesNotContain(logs, static l => l.Contains("baseline", StringComparison.Ordinal) && !l.Contains("schema", StringComparison.Ordinal));
+        Assert.Contains(logs, static l => l.Contains("synthetic-", StringComparison.Ordinal));
+    }
+
+    /// <summary>Logs of builds and test runs an evaluation wrote; empty when it ran nothing.</summary>
+    /// <param name="output">Output directory of the evaluation.</param>
+    private static List<string> RunLogs(string output)
+    {
+        var logs = Path.Combine(output, "logs");
+        return Directory.Exists(logs)
+            ? [.. Directory.EnumerateFiles(logs, "*.log").Select(Path.GetFileName).OfType<string>()
+                .Where(static f => f.StartsWith("build-", StringComparison.Ordinal) || f.Contains("baseline", StringComparison.Ordinal) || f.Contains("synthetic-", StringComparison.Ordinal))]
+            : [];
     }
 
     [Fact]

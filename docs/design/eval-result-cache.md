@@ -67,6 +67,35 @@ kept by hand, and it errs towards recording again: any reachable change counts, 
 `RecordingVersion` still covers the evaluation's own recording code (`EvalSteps.RecordAt` and the
 options it passes), which is outside the fingerprint.
 
+### 3. A round whose outcomes are stored builds and runs nothing
+
+Measured on round 2c (2026-10-05): 1768 machine minutes, 81 % in mutant runs and 19 % in setup.
+With every outcome stored, the mutant runs go, but the setup still built every test project, ran the
+full suite without mutants, ran it again with the schema written in, and ran it once per worker for
+the parallelism check: four to six full runs per repository, about 25 minutes for OpenTelemetry alone.
+
+- **Selection first, runs after.** The evaluation records (or reuses) the maps, samples the mutants,
+  lets TestDetta select for each, and looks every mutant up in the cache. Only the mutants without a
+  usable outcome are built, written into the schema and run; the parallelism check starts no more
+  workers than there are such mutants. With none, the round ends after the selection.
+- **The run without mutants is stored too**, next to the outcomes (`Baseline` in the cache file), with
+  the test projects it considered, those that reported, their failing classes and its duration. It is
+  used when today's test projects are the same; otherwise the baseline runs as before. Only a complete
+  run is stored: a project that crashed under load once would otherwise stay left out of every round.
+  Outcomes are compared with the baseline they were measured against, so reusing it is also more
+  consistent than a fresh run.
+- When some mutant has to run on a stored baseline, its test projects are built then; one that no
+  longer builds is left out of those runs.
+
+## Memory guard
+
+A test run's process tree is killed, and counted as hung, when it holds more than half the machine's
+memory, or more than a tenth while less than a tenth of the machine's memory is free
+(`MemoryLimit`, `--memory-limit <GB>`). Round 2e reset the machine: Mapperly's four mutant workers and
+NLog together held 69 GB of 48, and macOS swapped until its watchdog restarted it, ending both
+evaluations and everything else on the machine. A killed tree costs one inconclusive run instead; in
+the parallelism check it makes the repository run its mutants one at a time.
+
 ## Not done here
 
 - Skipping mutants that no test reaches (a reachability run with the schema) and scheduling the
@@ -79,3 +108,6 @@ options it passes), which is outside the fingerprint.
 - `--cache` places outcomes and maps under the given folder; without it they stay in the output.
 - The fingerprint is stable across builds of the same code; it changes when a method the recorder
   reaches changes, and stays when an unreached Core method changes (two small generated assemblies).
+- With every outcome and the baseline stored, a second evaluation writes no build or test-run log; with
+  one outcome lost, only that mutant is built and run, on the stored baseline, with the same result.
+- A process tree over its memory limit is stopped within seconds; one within it runs to its end.

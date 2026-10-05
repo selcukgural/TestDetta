@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using TestDetta.Coverage;
 
 namespace TestDetta.Eval;
 
@@ -27,7 +28,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                testdetta-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
                          [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
                          [--compare-tia <dll>] [--compare-affected <exe>] [--toolchains <dir>] [--compare <dir>]
-                         [--history <dir>] [--cache <dir>] [-v]
+                         [--history <dir>] [--cache <dir>] [--explain] [-v]
                testdetta-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -50,6 +51,9 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  and judge it on the same mutants (docs/design/tia-comparison.md)
           --idle-timeout <span>  Kill a test run whose processes use almost no CPU for this long, as stuck
                                  (default 00:05:00; 00:00:00 waits for the run's timeout only)
+          --memory-limit <GB>    Kill a test run whose processes hold more than this, as hung (default half
+                                 the machine's memory; 0 turns it off). Large runs are also killed while
+                                 less than 10 % of the machine's memory is free.
           --maps <dir>           Use these maps of the evaluated commit instead of recording
           --explain              Only write TestDetta's decisions and evidence for every sampled change to
                                  explain.json (no build, no test run; for the precision round)
@@ -246,6 +250,16 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { IdleTimeout = idle == TimeSpan.Zero ? null : idle };
                     break;
 
+                case "--memory-limit":
+                    if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var gigabytes) || gigabytes < 0)
+                    {
+                        error = $"--memory-limit needs gigabytes such as 24 (0 turns it off), not {value}";
+                        return false;
+                    }
+
+                    run = run with { MemoryLimit = gigabytes == 0 ? null : MemoryLimit.ForThisMachine() with { TreeBytes = (long)(gigabytes * (1L << 30)) } };
+                    break;
+
                 case "--compare-affected":
                     run = run with { AffectedCli = Path.GetFullPath(value) };
                     break;
@@ -417,6 +431,13 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// The outcome is the same as a timeout: the run hung.
     /// </summary>
     public TimeSpan? IdleTimeout { get; init; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// When a test run's process tree is killed for its memory (<see cref="MemoryLimit"/>); null for
+    /// never. The outcome is the same as a hang. The default keeps a mutant that allocates without end
+    /// from resetting the machine, which also stops the other evaluations running on it.
+    /// </summary>
+    public MemoryLimit? MemoryLimit { get; init; } = MemoryLimit.ForThisMachine();
 
     /// <summary>
     /// The .NET the repository is built, recorded and tested with, installed under
