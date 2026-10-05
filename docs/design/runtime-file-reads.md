@@ -1,6 +1,6 @@
 # Files tests read at run time
 
-Status: proposed 2026-10-05, not started. The user decides whether it goes into v1.
+Status: proposed 2026-10-05; in v1 (user decision, 2026-10-05), after the switch-based evaluation of generator changes.
 
 ## Problem
 
@@ -54,6 +54,16 @@ selection, output), the design's docs page in five languages, and a corpus mode 
 Not seen: reads by third-party libraries (a later step could rewrite their IO calls too), child processes
 and native code, and reads by a computed path from code the map does not cover. All of this is strictly
 more than today, which selects nothing for these files.
+
+## Also: outputs referenced without compiling against them
+
+A `ReferenceOutputAssembly="false"` reference runs its consumer completely when it is affected: the
+tests may run its output as another process (LibGit2Sharp's `NativeLibraryLoadTestApp`, 100% of classes
+selected), or it may only order the build (protobuf-net: `protobuf-net.Core` references
+`protobuf-net.BuildTools` this way, and since almost every test project depends on Core, 77.7% of classes
+run). Recording which test classes start a process, and from which output, is the same instrumentation
+as file reads (`Process.Start`, `ProcessStartInfo`): classes that started the output are selected, and a
+reference no test started or read is build order only.
 
 ## Meanwhile
 
