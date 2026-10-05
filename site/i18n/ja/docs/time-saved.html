@@ -1,21 +1,21 @@
-<!-- title: 短縮された時間; layout: docs; description: {{name}} が実行ごとに短縮したテスト時間をどのように報告するか、またデータをどこにも送信せずに数週間分を合計する方法を説明します。; source: a0b828a29737 -->
+<!-- title: 短縮された時間; layout: docs; description: {{name}} が実行ごとに短縮したテスト時間をどのように報告するか、またデータをどこにも送信せずに数週間分を合計する方法を説明します。; source: a36fb70af02d -->
 <h1>短縮された時間</h1>
 <p class="lead">実行のたびに、どれだけのテスト時間を短縮したかが表示されます。数値は CI の中にとどまるため、1 か月分の合計も数行のスクリプトで出せます。信用するしかないダッシュボードは必要ありません。</p>
 
 <h2 id="per-run">実行ごと</h2>
 <p>カバレッジマップには、各テストクラスにかかった時間が記録されています。{{name}} は何かを実行する前に、テストスイート全体と、選択したクラスの記録時間をそれぞれ合計します。</p>
-<pre><code>Recorded test time: 0.6 s of 3.4 s (83% saved).</code></pre>
+<pre><code>Recorded test time: 22.4 s of 5 m 59 s (93% saved); 7 test project(s) without timings are not counted.</code></pre>
 <p>同じ行が GitHub のジョブサマリーにも、ほかの CI システム向けに <code>--summary-file</code> が書き込む Markdown にも含まれます。数えているのはテスト時間だけです。ビルドと復元はどちらの場合も行われます。ただし、丸ごとスキップされたテストプロジェクトはビルドもされないため、実際の短縮はこの行に示される以上になります。</p>
-<p>まだマップが記録されていないなどの理由で所要時間がわからないプロジェクトは、どちらの数値からも除外されます。JSON では <code>projectsWithoutTimings</code> に一覧表示されます。</p>
+<p>まだマップが記録されていないなどの理由で所要時間がわからないプロジェクトは、どちらの数値からも除外され、その数がこの行に表示されます。JSON では <code>projectsWithoutTimings</code> にその数が入ります。</p>
 
 <h2 id="json">JSON</h2>
 <p><code>td affected --format json</code> は、スクリプト向けに同じ数値を、実行全体とテストプロジェクトごとに出力します。</p>
 <pre><code>{
   "estimate": {
-    "fullSeconds": 3.4,
-    "selectedSeconds": 0.6,
-    "savedSeconds": 2.8,
-    "projectsWithoutTimings": []
+    "fullSeconds": 358.7,
+    "selectedSeconds": 22.4,
+    "savedSeconds": 336.3,
+    "projectsWithoutTimings": 7
   }
 }</code></pre>
 

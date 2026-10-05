@@ -1,21 +1,21 @@
-<!-- title: Tiempo ahorrado; layout: docs; description: Cómo informa {{name}} del tiempo de pruebas que ahorró en cada ejecución y cómo sumarlo a lo largo de semanas sin enviar datos a ninguna parte.; source: a0b828a29737 -->
+<!-- title: Tiempo ahorrado; layout: docs; description: Cómo informa {{name}} del tiempo de pruebas que ahorró en cada ejecución y cómo sumarlo a lo largo de semanas sin enviar datos a ninguna parte.; source: a36fb70af02d -->
 <h1>Tiempo ahorrado</h1>
 <p class="lead">Cada ejecución indica cuánto tiempo de pruebas ahorró. Las cifras se quedan en tu CI, así que sumarlas a lo largo de un mes son unas pocas líneas de script, no un panel en el que tengas que confiar.</p>
 
 <h2 id="per-run">En cada ejecución</h2>
 <p>Un mapa de cobertura registra cuánto tardó cada clase de prueba. Antes de ejecutar nada, {{name}} suma el tiempo registrado de todo el conjunto de pruebas y el de las clases que seleccionó:</p>
-<pre><code>Recorded test time: 0.6 s of 3.4 s (83% saved).</code></pre>
+<pre><code>Recorded test time: 22.4 s of 5 m 59 s (93% saved); 7 test project(s) without timings are not counted.</code></pre>
 <p>La misma línea aparece en el job summary de GitHub y en el Markdown que <code>--summary-file</code> escribe para otros sistemas de CI. Solo cuenta el tiempo de pruebas. La compilación y el restore se hacen de todos modos, salvo en los proyectos de pruebas que se omiten por completo: esos ni siquiera se compilan, lo que ahorra más de lo que muestra la línea.</p>
-<p>Los proyectos sin tiempos, por ejemplo porque todavía no se ha registrado ningún mapa para ellos, quedan fuera de ambas cifras; el JSON los enumera en <code>projectsWithoutTimings</code>.</p>
+<p>Los proyectos sin tiempos, por ejemplo porque todavía no se ha registrado ningún mapa para ellos, quedan fuera de ambas cifras, y la línea indica cuántos son; el JSON los cuenta en <code>projectsWithoutTimings</code>.</p>
 
 <h2 id="json">En JSON</h2>
 <p><code>td affected --format json</code> incluye las mismas cifras para scripts, para toda la ejecución y para cada proyecto de pruebas:</p>
 <pre><code>{
   "estimate": {
-    "fullSeconds": 3.4,
-    "selectedSeconds": 0.6,
-    "savedSeconds": 2.8,
-    "projectsWithoutTimings": []
+    "fullSeconds": 358.7,
+    "selectedSeconds": 22.4,
+    "savedSeconds": 336.3,
+    "projectsWithoutTimings": 7
   }
 }</code></pre>
 

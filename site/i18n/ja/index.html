@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 4a7375f30257 -->
+<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 92443c495dea -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -15,33 +15,33 @@
         <li>お使いの CI の中で動作</li>
       </ul>
     </div>
-    <figure class="check-card" data-reveal aria-label="Spectre.Console に対する実際のプルリクエスト">
+    <figure class="check-card" data-reveal aria-label="OpenTelemetry .NET に対する実際のプルリクエスト">
       <div class="check-head">
         <img src="/assets/favicon.svg" alt="" width="22" height="22">
         <span class="check-title">{{name}} · プルリクエストのチェック</span>
         <span class="badge-ok">成功</span>
       </div>
       <div class="check-body">
-        <p class="check-saving">テスト時間を <strong data-count>83%</strong> 削減</p>
+        <p class="check-saving">テスト時間を <strong data-count>93%</strong> 削減</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">すべてのテスト</span>
             <span class="bar-track"><span class="bar-fill bar-all"></span></span>
-            <span class="bar-value">3.4 秒 · 141 クラス</span>
+            <span class="bar-value">5 分 59 秒 · 274 クラス</span>
           </div>
           <div class="bar-row">
             <span class="bar-label">{{name}}</span>
             <span class="bar-track"><span class="bar-fill bar-selected"></span></span>
-            <span class="bar-value">0.6 秒 · 14 クラス</span>
+            <span class="bar-value">22.4 秒 · 8 クラス</span>
           </div>
         </div>
         <ul class="check-list">
-          <li class="is-run"><strong>14 クラスを実行</strong> 変更されたコードを実行または参照しています</li>
-          <li class="is-skip"><strong>127 クラスをスキップ</strong> 変更からたどり着く経路がありません</li>
-          <li class="is-run"><strong>156 件のテストが成功</strong> 失敗 0 件</li>
+          <li class="is-run"><strong>8 クラスを実行</strong> 変更されたコードを実行または参照しています</li>
+          <li class="is-skip"><strong>266 クラスをスキップ</strong> 変更からたどり着く経路がありません</li>
+          <li class="is-run"><strong>229 件のテストが成功</strong> 失敗 0 件</li>
         </ul>
       </div>
-      <figcaption>Spectre.Console への実際の変更です。<a href="/docs/examples/">実行の全体を見る →</a></figcaption>
+      <figcaption>OpenTelemetry .NET への実際の変更です。<a href="/docs/examples/">実行の全体を見る →</a></figcaption>
     </figure>
   </div>
 </div>
@@ -132,33 +132,33 @@
   <div class="wrap">
     <div class="section-head center-head" data-reveal>
       <h2>選択のしくみ</h2>
-      <p>Spectre.Console への実際の変更を 1 ステップずつ追います。各ステップは、根拠がある場合にのみ選択を絞り込みます。</p>
+      <p>OpenTelemetry .NET への実際の変更を 1 ステップずつ追います。各ステップは、根拠がある場合にのみ選択を絞り込みます。</p>
     </div>
     <div class="trace" data-reveal>
       <div class="trace-col trace-change">
         <p class="trace-label">1 · 変更</p>
-        <pre class="trace-diff"><span class="trace-file">Widgets/Rule.cs</span>
- var text = border.GetPart(…)…;
-<span class="diff-add">+var style = Style ?? Style.Plain;</span>
-<span class="diff-del">-new Segment(text, Style ?? Style.Plain),</span>
-<span class="diff-add">+new Segment(text, style),</span></pre>
-        <p class="trace-note">1 行のリファクタリングです。通常のパイプラインでは、141 クラスの 787 件のテストをすべて実行します。</p>
+        <pre class="trace-diff"><span class="trace-file">…ConfigurationExtensions.cs</span>
+<span class="diff-del">-bool differs;</span>
+<span class="diff-add">+bool overridden;</span>
+<span class="diff-del">-differs = new FilePath(…) != filePath;</span>
+<span class="diff-add">+overridden = new FilePath(…) != filePath;</span></pre>
+        <p class="trace-note">動作を変えない名前の変更です。通常のパイプラインでは、すべてのテストプロジェクト（274 のテストクラス）を実行します。</p>
       </div>
       <div class="trace-col trace-steps">
         <p class="trace-label">2 · {{name}} が割り出すこと</p>
         <ol>
-          <li><span class="step-name">プロジェクト</span><span class="step-result">影響を受けるテストプロジェクトは 1 つ。Spectre.Console.Ansi.Tests はビルドすらされません</span></li>
-          <li><span class="step-name">シンボル</span><span class="step-result">変更されたメンバーは 1 つ：<code>Rule.GetLineWithoutTitle</code></span></li>
-          <li><span class="step-name">カバレッジマップ</span><span class="step-result"><code>main</code> で 14 のテストクラスがこれを実行</span></li>
+          <li><span class="step-name">プロジェクト</span><span class="step-result">30 のテストプロジェクトのうち影響を受けるのは 2 つ。残りの 28 はビルドすらされません</span></li>
+          <li><span class="step-name">シンボル</span><span class="step-result">変更されたメンバーは 1 つ：<code>WarnIfConfigFileEnvVarDiffers</code></span></li>
+          <li><span class="step-name">カバレッジマップ</span><span class="step-result"><code>main</code> で 8 のテストクラスがこれを実行</span></li>
           <li><span class="step-name">名前</span><span class="step-result">たどるべき新しいコードはなし</span></li>
           <li><span class="step-name">フォールバック</span><span class="step-result">不要</span></li>
         </ol>
       </div>
       <div class="trace-col trace-tests">
         <p class="trace-label">3 · 実行するテスト</p>
-        <div class="dots" role="img" aria-label="141 のテストクラスのうち 14 を選択"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <p class="trace-result">141 クラス中 <strong>14</strong> クラスを実行、127 クラスをスキップ</p>
-        <p class="trace-note">メソッドを壊したときに失敗する 14 クラスと完全に一致します。<a href="/docs/examples/#proof">確認方法</a></p>
+        <div class="dots dots-dense" role="img" aria-label="274 のテストクラスのうち 8 を選択"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationDocumentAccessorTests"></i><i class="hit" title="DeclarativeConfigurationDocumentAcquisitionTests"></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationEventSourceTests"></i><i class="hit" title="DeclarativeConfigurationExtensionTests"></i><i></i><i class="hit" title="DeclarativeConfigurationHostIntegrationTests"></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationSdkIntegrationTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="StrictModeDiagnosticsTests"></i><i></i><i class="hit" title="StrictModeMaskTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="trace-result">274 クラス中 <strong>8</strong> クラスを実行、266 クラスをスキップ</p>
+        <p class="trace-note">メソッドを壊したときに失敗する 8 クラスと完全に一致します。<a href="/docs/examples/#proof">確認方法</a></p>
       </div>
     </div>
     <p class="trace-safety" data-reveal><strong>どのステップでも変更を追跡できない場合は、テストプロジェクト全体を実行します。</strong> <a href="/docs/what-runs-everything/">すべてが実行される変更 →</a></p>
@@ -210,7 +210,7 @@
           <span class="gha-event">プルリクエスト時</span>
           <h3>変更が影響するテストを実行</h3>
           <p>マージベース時点またはそれ以前の最新のマップを復元して、影響を受けるテストクラスだけを実行し、それぞれが実行された理由をジョブサマリーに示します。</p>
-          <p class="gha-summary"><span class="badge-ok">成功</span> 141 クラス中 14 クラス · テスト時間を 83% 削減</p>
+          <p class="gha-summary"><span class="badge-ok">成功</span> 274 クラス中 8 クラス · テスト時間を 93% 削減</p>
         </li>
       </ol>
       <figure class="editor">

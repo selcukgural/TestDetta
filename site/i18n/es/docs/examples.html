@@ -1,48 +1,50 @@
-<!-- title: Una ejecución real; layout: docs; description: Un cambio real en Spectre.Console ejecutado con {{name}}: qué seleccionó, por qué, cuánto tardó y el job summary de GitHub que escribió.; source: 3457b6db87dd -->
+<!-- title: Una ejecución real; layout: docs; description: Un cambio real en OpenTelemetry .NET ejecutado con {{name}}: qué seleccionó, por qué, cuánto tardó, el job summary de GitHub que escribió y la comprobación de que eligió las pruebas correctas.; source: c58bb987751b -->
 <h1>Una ejecución real</h1>
-<p class="lead">Un cambio real en <a href="https://github.com/spectreconsole/spectre.console">Spectre.Console</a> (commit <code>01027ef</code>), del mapa de cobertura al job summary. Toda la salida de esta página está copiada de esa ejecución, no escrita a mano.</p>
+<p class="lead">Un cambio real en <a href="https://github.com/open-telemetry/opentelemetry-dotnet">OpenTelemetry .NET</a> (commit <code>f9dd754</code>, 30 proyectos de pruebas), del mapa de cobertura al job summary. Toda la salida de esta página está copiada de esa ejecución, no escrita a mano.</p>
 
 <div class="outcome" data-reveal>
-  <div><span class="outcome-label">Clases de prueba</span><span class="outcome-was">141</span><strong>14</strong></div>
-  <div><span class="outcome-label">Pruebas</span><span class="outcome-was">787</span><strong>156</strong></div>
-  <div><span class="outcome-label">Tiempo de pruebas registrado</span><span class="outcome-was">3,4 s</span><strong>0,6 s</strong></div>
-  <div><span class="outcome-label">Proyectos de pruebas compilados</span><span class="outcome-was">2</span><strong>1</strong></div>
+  <div><span class="outcome-label">Clases de prueba</span><span class="outcome-was">274</span><strong>8</strong></div>
+  <div><span class="outcome-label">Tiempo de pruebas registrado</span><span class="outcome-was">5 m 59 s</span><strong>22,4 s</strong></div>
+  <div><span class="outcome-label">Tiempo real, compilación incluida</span><span class="outcome-was">2 m 14 s</span><strong>29 s</strong></div>
+  <div><span class="outcome-label">Proyectos de pruebas ejecutados</span><span class="outcome-was">19</span><strong>1</strong></div>
 </div>
 
 <h2 id="change">El cambio</h2>
-<p>Una refactorización de una línea en el widget <code>Rule</code>. No cambia ningún comportamiento, pero es un cambio de código, así que un pipeline normal ejecutaría las 787 pruebas de 141 clases en cada framework de destino.</p>
+<p>Un cambio de nombre en el paquete de configuración declarativa: el indicador que dice si <code>OTEL_CONFIG_FILE</code> está sobrescrito recibe un nombre que lo dice claramente. No cambia ningún comportamiento, pero es un cambio de código, así que un pipeline normal compilaría y ejecutaría todos los proyectos de pruebas del repositorio.</p>
 <figure class="editor editor-diff" data-reveal>
-  <div class="editor-bar"><span class="editor-dots"><i></i><i></i><i></i></span><span class="editor-tab">src/Spectre.Console/Widgets/Rule.cs</span><span class="editor-meta">GetLineWithoutTitle</span></div>
-<pre class="editor-code"><span class="line"> var text = border.GetPart(BoxBorderPart.Top).Repeat(maxWidth);</span><span class="line add">+var style = Style ?? Spectre.Console.Style.Plain;</span><span class="line"> </span><span class="line"> return</span><span class="line"> [</span><span class="line del">-    new Segment(text, Style ?? Spectre.Console.Style.Plain),</span><span class="line add">+    new Segment(text, style),</span><span class="line">     Segment.LineBreak</span><span class="line"> ];</span></pre>
+  <div class="editor-bar"><span class="editor-dots"><i></i><i></i><i></i></span><span class="editor-tab">OpenTelemetryBuilderDeclarativeConfigurationExtensions.cs</span><span class="editor-meta">WarnIfConfigFileEnvVarDiffers</span></div>
+<pre class="editor-code"><span class="line del">-bool differs;</span><span class="line add">+bool overridden;</span><span class="line"> try</span><span class="line"> {</span><span class="line del">-    differs = new FilePath(configFile) != filePath;</span><span class="line add">+    overridden = new FilePath(configFile) != filePath;</span><span class="line"> }</span><span class="line"> catch (Exception ex) when (ex is ArgumentException or …)</span><span class="line"> {</span><span class="line del">-    differs = true;</span><span class="line add">+    overridden = true;</span><span class="line"> }</span><span class="line"> </span><span class="line del">-if (differs)</span><span class="line add">+if (overridden)</span></pre>
 </figure>
 
 <h2 id="decision">Cómo se tomó la decisión</h2>
-<p>{{name}} sigue el cambio desde el archivo hasta las pruebas que pueden observarlo. El mapa de cobertura, registrado en <code>main</code>, sabe qué clases de prueba ejecutaron el método modificado; las otras 127 no ejecutaron nada de él ni lo nombran.</p>
+<p>{{name}} sigue el cambio desde el archivo hasta las pruebas que pueden observarlo. El método modificado es privado; solo lo llama <code>UseDeclarativeConfiguration</code>. El mapa de cobertura, registrado en <code>main</code>, sabe qué clases de prueba lo ejecutaron: 8 clases de un único proyecto de pruebas. Las otras 266 no ejecutaron nada de él ni lo nombran.</p>
 <div class="chain" data-reveal>
-  <div class="chain-node"><span class="chain-kind">miembro modificado</span><code>Rule.GetLineWithoutTitle</code></div>
-  <div class="chain-node"><span class="chain-kind">llamador afectado</span><code>Rule.Render</code></div>
-  <div class="chain-node"><span class="chain-kind">mapa de cobertura</span><code>main, 01027ef</code></div>
-  <div class="chain-node chain-result"><span class="chain-kind">pruebas que se ejecutan</span><strong>14 clases</strong></div>
+  <div class="chain-node"><span class="chain-kind">miembro modificado</span><code>WarnIfConfigFileEnvVarDiffers</code></div>
+  <div class="chain-node"><span class="chain-kind">llamador afectado</span><code>UseDeclarativeConfiguration</code></div>
+  <div class="chain-node"><span class="chain-kind">mapa de cobertura</span><code>main, f9dd754</code></div>
+  <div class="chain-node chain-result"><span class="chain-kind">pruebas que se ejecutan</span><strong>8 clases</strong></div>
 </div>
 <figure class="dots-figure" data-reveal>
-  <div class="dots dots-wide" role="img" aria-label="141 clases de prueba, 14 de ellas seleccionadas"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-  <figcaption><span class="legend-hit"></span>seleccionadas, 14 <span class="legend-skip"></span>omitidas, 127 <span class="muted">· un cuadrado por clase de prueba de Spectre.Console.Tests; pasa el cursor sobre uno verde para ver su nombre</span></figcaption>
+  <div class="dots dots-wide" role="img" aria-label="274 clases de prueba, 8 de ellas seleccionadas"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationDocumentAccessorTests"></i><i class="hit" title="DeclarativeConfigurationDocumentAcquisitionTests"></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationEventSourceTests"></i><i class="hit" title="DeclarativeConfigurationExtensionTests"></i><i></i><i class="hit" title="DeclarativeConfigurationHostIntegrationTests"></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationSdkIntegrationTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="StrictModeDiagnosticsTests"></i><i></i><i class="hit" title="StrictModeMaskTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <figcaption><span class="legend-hit"></span>seleccionadas, 8 <span class="legend-skip"></span>omitidas, 266 <span class="muted">· un cuadrado por clase de prueba registrada en el repositorio, agrupadas por proyecto; pasa el cursor sobre uno verde para ver su nombre</span></figcaption>
 </figure>
 
 <h2 id="run">La ejecución</h2>
 <p>El mapa se registró en <code>main</code> con <code>td record</code>. Después, la pull request ejecuta:</p>
 <div class="terminal replay" data-reveal aria-label="Salida de td test">
   <div class="terminal-bar"><span></span><span></span><span></span></div>
-<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 1 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-acc">filtered</span> src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</span><span class="l t-dim">    (14 of 141 test class(es) run or reference the changed code, 0.6 s of 3.0 s (80% saved))</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span><span class="l t-dim">Passed!  - Failed:     0, Passed:   156, Skipped:     0, Total:   156 - Spectre.Console.Tests.dll (net10.0)</span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  src/Spectre.Console.Tests/Spectre.Console.Tests.csproj  (14 class(es), 4.6 s)</span><span class="l">1 project(s) run, 0 failed, 0 skipped.</span><span class="l">Recorded test time: 0.6 s of 3.4 s (83% saved).</span></pre>
+<pre><span class="l l-cmd"><span class="t-dim">$ </span><span class="type">td test --base main -- -f net10.0</span></span><span class="l">td: 1 changed file(s), 2 affected test project(s).</span><span class="l">Tests to run:</span><span class="l">  <span class="t-dim">skip</span>     test/OpenTelemetry.Configuration.Declarative.FuzzTests/OpenTelemetry.Configuration.Declarative.FuzzTests.csproj  (no test class runs or references the changed code, 0.0 s of 0.4 s (100% saved))</span><span class="l">  <span class="t-acc">filtered</span> test/OpenTelemetry.Configuration.Declarative.Tests/OpenTelemetry.Configuration.Declarative.Tests.csproj  (8 of 28 test class(es) run or reference the changed code, 22.4 s of 23.6 s (5% saved))</span><span class="l t-dim">    DeclarativeConfigurationDocumentAccessorTests</span><span class="l t-dim">    DeclarativeConfigurationDocumentAcquisitionTests</span><span class="l t-dim">    DeclarativeConfigurationEventSourceTests</span><span class="l t-dim">    DeclarativeConfigurationExtensionTests</span><span class="l t-dim">    DeclarativeConfigurationHostIntegrationTests</span><span class="l t-dim">    DeclarativeConfigurationSdkIntegrationTests</span><span class="l t-dim">    StrictModeDiagnosticsTests</span><span class="l t-dim">    StrictModeMaskTests</span><span class="l">Recorded test time: 22.4 s of 5 m 59 s (93% saved); 7 test project(s) without timings are not counted.</span><span class="l"><span class="t-dim">Passed!  - Failed:     0, Passed:   228, Skipped:     1, Total:   229, Duration: 21 s - OpenTelemetry.Configuration.Declarative.Tests.dll (net10.0)</span></span><span class="l">td summary:</span><span class="l">  <span class="t-ok">passed</span>  test/OpenTelemetry.Configuration.Declarative.Tests/OpenTelemetry.Configuration.Declarative.Tests.csproj  (8 class(es), 28.0 s)</span><span class="l">1 project(s) run, 0 failed, 1 skipped.</span><span class="l">Recorded test time: 22.4 s of 5 m 59 s (93% saved); 7 test project(s) without timings are not counted.</span></pre>
 </div>
-<p>Se ejecutaron 156 pruebas de 14 clases en lugar de 787 de 141. El proyecto <code>Spectre.Console.Ansi.Tests</code> ni siquiera se compiló: no cambió nada de lo que depende.</p>
+<p>Se ejecutaron 229 pruebas en lugar de 6078, y solo se compilaron los proyectos que están en el camino del cambio a esas pruebas. Las clases seleccionadas son las pruebas de integración lentas de su proyecto, así que dentro de él se ahorra poco (22,4 s de 23,6 s); el ahorro está en los otros 18 proyectos de pruebas que nunca tuvieron que ejecutarse. Los 7 proyectos sin tiempos son aplicaciones móviles y de pruebas de estrés que <code>td record</code> no pudo ejecutar en esta máquina; tampoco estaban afectados.</p>
+<p class="muted">Aquí los nombres de clase están abreviados; la salida los muestra completos (<code>OpenTelemetry.Configuration.Declarative.Tests.StrictModeMaskTests</code>).</p>
 
-<h2 id="proof">¿Eran esas las 14 correctas?</h2>
-<p>Para comprobarlo, hicimos que <code>GetLineWithoutTitle</code> lanzara una excepción y ejecutamos el conjunto completo de pruebas. Las clases que fallaron son exactamente las que {{name}} seleccionó: nada pasado por alto, nada de más. La mayoría nunca menciona <code>Rule</code>: llegan a él a través de layouts y paneles, que es lo que conoce el mapa de cobertura y no encontraría una búsqueda por nombre.</p>
+<h2 id="proof">¿Eran esas las 8 correctas?</h2>
+<p>Para comprobarlo, hicimos que <code>WarnIfConfigFileEnvVarDiffers</code> lanzara una excepción y ejecutamos la solución completa: 6078 pruebas en 19 proyectos de pruebas. Fallaron 70 pruebas, exactamente en las 8 clases que {{name}} seleccionó: nada pasado por alto, nada de más. Ninguna de ellas nombra el método, que es privado; llegan a él a través del builder de configuración, que es lo que conoce el mapa de cobertura.</p>
 <table class="match" data-reveal>
   <thead><tr><th>Clase de prueba</th><th>Seleccionada por {{name}}</th><th>Falla con el método roto</th><th>Coincide</th></tr></thead>
-  <tbody><tr><td><code>AlignTests+Center</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>AlignTests+Left</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>AlignTests+Right</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>CanvasTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>ColumnsTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>ExceptionTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>LayoutTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>PadderTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>PanelTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>RecorderTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>RowsTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>RuleTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>TableTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>TextPathTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr class="others"><td>Otras 127 clases</td><td>no</td><td>no</td><td class="ok">✓</td></tr></tbody>
+  <tbody><tr><td><code>DeclarativeConfigurationDocumentAccessorTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>DeclarativeConfigurationDocumentAcquisitionTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>DeclarativeConfigurationEventSourceTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>DeclarativeConfigurationExtensionTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>DeclarativeConfigurationHostIntegrationTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>DeclarativeConfigurationSdkIntegrationTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>StrictModeDiagnosticsTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr><td><code>StrictModeMaskTests</code></td><td class="pick">sí</td><td class="fail">sí</td><td class="ok">✓</td></tr><tr class="others"><td>Otras 266 clases</td><td>no</td><td>no</td><td class="ok">✓</td></tr></tbody>
 </table>
+<p class="muted">Dos pruebas del listener HTTP de Prometheus fallaron en ambas ejecuciones, con y sin el cambio, por la configuración de red de la máquina; quedan fuera de la comparación.</p>
 
 <h2 id="summary">El job summary</h2>
 <p>Con <code>--summary-file "$GITHUB_STEP_SUMMARY"</code> (la GitHub Action lo define por ti), cada pull request recibe este resumen: qué se ejecutó, por qué se ejecutó cada clase y qué se omitió.</p>
@@ -50,72 +52,70 @@
   <h3>TestDetta test selection</h3>
   <p>1 changed file(s) compared with <code>main</code>.</p>
   <ul>
-    <li><strong>1</strong> of 1 affected test project(s) ran, <strong>0</strong> skipped.</li>
-    <li>Recorded test time: 0.6 s of 3.4 s (83% saved).</li>
+    <li><strong>1</strong> of 2 affected test project(s) ran, <strong>1</strong> skipped.</li>
+    <li>Recorded test time: 22.4 s of 5 m 59 s (93% saved); 7 test project(s) without timings are not counted.</li>
     <li>All selected tests passed.</li>
   </ul>
   <ul>
-    <li><code>src/Spectre.Console.Tests/Spectre.Console.Tests.csproj</code>: passed, 14 test class(es), recorded time 0.6 s of 3.0 s (80% saved)
+    <li><code>test/OpenTelemetry.Configuration.Declarative.FuzzTests/OpenTelemetry.Configuration.Declarative.FuzzTests.csproj</code>: skipped, none, recorded time 0.0 s of 0.4 s (100% saved)
+      <ul><li>why: <code>no test class runs or references the changed code</code></li></ul>
+    </li>
+    <li><code>test/OpenTelemetry.Configuration.Declarative.Tests/OpenTelemetry.Configuration.Declarative.Tests.csproj</code>: passed, 8 test class(es), recorded time 22.4 s of 23.6 s (5% saved)
       <ul>
-        <li>why: <code>14 of 141 test class(es) run or reference the changed code</code></li>
-        <li><details><summary>classes (14)</summary>
+        <li>why: <code>8 of 28 test class(es) run or reference the changed code</code></li>
+        <li><details><summary>classes (8)</summary>
           <ul>
-          <li><code>AlignTests+Center</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>AlignTests+Left</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>AlignTests+Right</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>CanvasTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>ColumnsTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>ExceptionTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>LayoutTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>PadderTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>PanelTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>RecorderTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>RowsTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>RuleTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>TableTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
-          <li><code>TextPathTests</code>: <code>ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)</code></li>
+          <li><code>DeclarativeConfigurationDocumentAccessorTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li><li><code>DeclarativeConfigurationDocumentAcquisitionTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li><li><code>DeclarativeConfigurationEventSourceTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li><li><code>DeclarativeConfigurationExtensionTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li><li><code>DeclarativeConfigurationHostIntegrationTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li><li><code>DeclarativeConfigurationSdkIntegrationTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li><li><code>StrictModeDiagnosticsTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li><li><code>StrictModeMaskTests</code>: <code>ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)</code></li>
           </ul>
         </details></li>
-        <li>skipped: 127 class(es) that ran none of the changed code and name none of it</li>
+        <li>skipped: 20 class(es) that ran none of the changed code and name none of it</li>
       </ul>
     </li>
   </ul>
 </div></div>
-<p class="muted">Aquí los nombres de clase están abreviados; el resumen los muestra completos (<code>Spectre.Console.Tests.Unit.RuleTests</code>).</p>
 
 <h2 id="why">Preguntar por qué</h2>
 <p>Cada decisión tiene un motivo que puedes leer. <code>-v</code> escribe el rastro en stderr:</p>
-<pre class="log"><code><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">CodeChangeDetector</span> src/Spectre.Console/Widgets/Rule.cs: Modified Spectre.Console.Rule GetLineWithoutTitle(RenderOptions,int)</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">CodeChangeDetector</span> src/Spectre.Console/Widgets/Rule.cs: 1 changed symbol(s), affects whole project: False</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> Spectre.Console.Rule GetLineWithoutTitle(RenderOptions,int) is affected because it changed</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> Spectre.Console.Rule Render(RenderOptions,int) is affected because GetLineWithoutTitle</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> Spectre.Console.Rule GetLineWithoutTitle(RenderOptions,int): test classes taken from coverage</span></code></pre>
+<pre class="log"><code><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">CodeChangeDetector</span> src/OpenTelemetry.Configuration.Declarative/Extensions/OpenTelemetryBuilderDeclarativeConfigurationExtensions.cs: Modified OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions WarnIfConfigFileEnvVarDiffers</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">CodeChangeDetector</span> src/OpenTelemetry.Configuration.Declarative/Extensions/OpenTelemetryBuilderDeclarativeConfigurationExtensions.cs: 1 changed symbol(s), affects whole project: False</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">ImpactAnalyzer</span> 4 affected project(s), 2 of them tests, 0 unmapped file(s)</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions WarnIfConfigFileEnvVarDiffers(FilePath) is affected because it changed</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions UseDeclarativeConfiguration(this IOpenTelemetryBuilder,string) is affected because WarnIfConfigFileEnvVarDiffers</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions WarnIfConfigFileEnvVarDiffers(FilePath): test classes taken from coverage</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> test/OpenTelemetry.Configuration.Declarative.FuzzTests/OpenTelemetry.Configuration.Declarative.FuzzTests.csproj: Skipped (no test class runs or references the changed code)</span><span class="log-line"><span class="log-lvl">DBG</span> <span class="log-src">TestSelector</span> test/OpenTelemetry.Configuration.Declarative.Tests/OpenTelemetry.Configuration.Declarative.Tests.csproj: Filtered (8 of 28 test class(es) run or reference the changed code)</span></code></pre>
 <p>Y <code>--format json</code> da la decisión de cada clase, con sus evidencias y una estimación de tiempo, para scripts y paneles:</p>
 <pre class="wrap-code"><code>{
-  &quot;project&quot;: &quot;src/Spectre.Console.Tests/Spectre.Console.Tests.csproj&quot;,
+  &quot;project&quot;: &quot;test/OpenTelemetry.Configuration.Declarative.Tests/OpenTelemetry.Configuration.Declarative.Tests.csproj&quot;,
   &quot;mode&quot;: &quot;Filtered&quot;,
-  &quot;reason&quot;: &quot;14 of 141 test class(es) run or reference the changed code&quot;,
+  &quot;reason&quot;: &quot;8 of 28 test class(es) run or reference the changed code&quot;,
   &quot;estimate&quot;: {
-    &quot;fullSeconds&quot;: 3,
-    &quot;selectedSeconds&quot;: 0.6,
-    &quot;savedSeconds&quot;: 2.4
+    &quot;fullSeconds&quot;: 23.6,
+    &quot;selectedSeconds&quot;: 22.4,
+    &quot;savedSeconds&quot;: 1.2
   },
   &quot;decisions&quot;: [
     {
-      &quot;class&quot;: &quot;Spectre.Console.Tests.Unit.AlignTests+Center&quot;,
+      &quot;class&quot;: &quot;OpenTelemetry.Configuration.Declarative.Tests.DeclarativeConfigurationDocumentAccessorTests&quot;,
       &quot;selected&quot;: true,
       &quot;kind&quot;: &quot;coverage&quot;,
-      &quot;evidence&quot;: &quot;ran Spectre.Console.Rule.GetLineWithoutTitle(RenderOptions,int), which changed (map 01027efcd6c4)&quot;
+      &quot;evidence&quot;: &quot;ran OpenTelemetry.OpenTelemetryBuilderDeclarativeConfigurationExtensions.WarnIfConfigFileEnvVarDiffers(FilePath), which changed (map f9dd7546cc3d)&quot;
     },
     {
-      &quot;class&quot;: &quot;Spectre.Console.Tests.PublicApiTests&quot;,
+      &quot;class&quot;: &quot;OpenTelemetry.Configuration.Declarative.Tests.ConfigPropertiesTests&quot;,
       &quot;selected&quot;: false,
       &quot;kind&quot;: &quot;skipped&quot;,
-      &quot;evidence&quot;: &quot;ran none of the changed code and names none of it (map 01027efcd6c4)&quot;
+      &quot;evidence&quot;: &quot;ran none of the changed code and names none of it (map f9dd7546cc3d)&quot;
     },
-    &quot;…139 more&quot;
+    &quot;…26 more&quot;
   ]
 }</code></pre>
 
 <h2 id="commands">Ejecutar las pruebas a tu manera</h2>
 <p><code>td affected --format commands</code> muestra la llamada a <code>dotnet test</code> que haría {{name}}, para que puedas ejecutarla en tu propio script:</p>
-<pre class="wrap-code"><code>dotnet test src/Spectre.Console.Tests/Spectre.Console.Tests.csproj --filter &#x27;FullyQualifiedName~Spectre.Console.Tests.Unit.AlignTests+Center.|FullyQualifiedName~Spectre.Console.Tests.Unit.AlignTests+Left.|FullyQualifiedName~Spectre.Console.Tests.Unit.AlignTests+Right.|FullyQualifiedName~Spectre.Console.Tests.Unit.CanvasTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.ColumnsTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.ExceptionTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.LayoutTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.PadderTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.PanelTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.RecorderTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.RowsTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.RuleTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.TableTests.|FullyQualifiedName~Spectre.Console.Tests.Unit.TextPathTests.&#x27;</code></pre>
+<pre class="wrap-code"><code>dotnet test test/OpenTelemetry.Configuration.Declarative.Tests/OpenTelemetry.Configuration.Declarative.Tests.csproj --filter &#x27;FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.DeclarativeConfigurationDocumentAccessorTests.|FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.DeclarativeConfigurationDocumentAcquisitionTests.|FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.DeclarativeConfigurationEventSourceTests.|FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.DeclarativeConfigurationExtensionTests.|FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.DeclarativeConfigurationHostIntegrationTests.|FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.DeclarativeConfigurationSdkIntegrationTests.|FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.StrictModeDiagnosticsTests.|FullyQualifiedName~OpenTelemetry.Configuration.Declarative.Tests.StrictModeMaskTests.&#x27;</code></pre>
+
+<h2 id="small-change">Un cambio más pequeño: Spectre.Console</h2>
+<p>Una refactorización de una línea en el widget <code>Rule</code> de <a href="https://github.com/spectreconsole/spectre.console">Spectre.Console</a> (commit <code>01027ef</code>). El mapa de cobertura sabía qué 14 de sus 141 clases de prueba ejecutaban el método modificado, la mayoría a través de layouts y paneles que nunca mencionan <code>Rule</code>. Hacer que el método lanzara una excepción hizo fallar exactamente esas 14 clases.</p>
+<div class="outcome" data-reveal>
+  <div><span class="outcome-label">Clases de prueba</span><span class="outcome-was">141</span><strong>14</strong></div>
+  <div><span class="outcome-label">Pruebas</span><span class="outcome-was">787</span><strong>156</strong></div>
+  <div><span class="outcome-label">Tiempo de pruebas registrado</span><span class="outcome-was">3,4 s</span><strong>0,6 s</strong></div>
+  <div><span class="outcome-label">Proyectos de pruebas compilados</span><span class="outcome-was">2</span><strong>1</strong></div>
+</div>
 
 <h2 id="corpus">En 40 repositorios</h2>
 <p>Un cambio es un solo dato. Para saber cómo se comporta {{name}} con código que nunca ha visto, lo ejecutamos en 40 bibliotecas .NET de código abierto y comparamos cada selección con las pruebas que realmente fallan.</p>

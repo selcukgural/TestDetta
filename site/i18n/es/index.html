@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} lee tu git diff y ejecuta solo las clases de prueba de .NET que un cambio puede afectar. Cuando no puede estar seguro, ejecuta más, nunca menos.; source: 4a7375f30257 -->
+<!-- title: {{name}}; description: {{name}} lee tu git diff y ejecuta solo las clases de prueba de .NET que un cambio puede afectar. Cuando no puede estar seguro, ejecuta más, nunca menos.; source: 92443c495dea -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -15,33 +15,33 @@
         <li>Se ejecuta dentro de tu CI</li>
       </ul>
     </div>
-    <figure class="check-card" data-reveal aria-label="Una pull request real en Spectre.Console">
+    <figure class="check-card" data-reveal aria-label="Una pull request real en OpenTelemetry .NET">
       <div class="check-head">
         <img src="/assets/favicon.svg" alt="" width="22" height="22">
         <span class="check-title">{{name}} · check de la pull request</span>
         <span class="badge-ok">Correcto</span>
       </div>
       <div class="check-body">
-        <p class="check-saving"><strong data-count>83 %</strong> menos tiempo de pruebas</p>
+        <p class="check-saving"><strong data-count>93 %</strong> menos tiempo de pruebas</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">Todas las pruebas</span>
             <span class="bar-track"><span class="bar-fill bar-all"></span></span>
-            <span class="bar-value">3,4 s · 141 clases</span>
+            <span class="bar-value">5 m 59 s · 274 clases</span>
           </div>
           <div class="bar-row">
             <span class="bar-label">{{name}}</span>
             <span class="bar-track"><span class="bar-fill bar-selected"></span></span>
-            <span class="bar-value">0,6 s · 14 clases</span>
+            <span class="bar-value">22,4 s · 8 clases</span>
           </div>
         </div>
         <ul class="check-list">
-          <li class="is-run"><strong>14 clases se ejecutan</strong> ejecutan o referencian el código modificado</li>
-          <li class="is-skip"><strong>127 omitidas</strong> ningún camino desde el cambio llega a ellas</li>
-          <li class="is-run"><strong>156 pruebas correctas</strong> 0 fallidas</li>
+          <li class="is-run"><strong>8 clases se ejecutan</strong> ejecutan o referencian el código modificado</li>
+          <li class="is-skip"><strong>266 omitidas</strong> ningún camino desde el cambio llega a ellas</li>
+          <li class="is-run"><strong>229 pruebas correctas</strong> 0 fallidas</li>
         </ul>
       </div>
-      <figcaption>Un cambio real en Spectre.Console. <a href="/docs/examples/">Ver la ejecución completa →</a></figcaption>
+      <figcaption>Un cambio real en OpenTelemetry .NET. <a href="/docs/examples/">Ver la ejecución completa →</a></figcaption>
     </figure>
   </div>
 </div>
@@ -132,33 +132,33 @@
   <div class="wrap">
     <div class="section-head center-head" data-reveal>
       <h2>Cómo decide</h2>
-      <p>Un cambio real en Spectre.Console, seguido paso a paso. Cada paso reduce la selección solo cuando tiene pruebas de ello.</p>
+      <p>Un cambio real en OpenTelemetry .NET, seguido paso a paso. Cada paso reduce la selección solo cuando tiene pruebas de ello.</p>
     </div>
     <div class="trace" data-reveal>
       <div class="trace-col trace-change">
         <p class="trace-label">1 · El cambio</p>
-        <pre class="trace-diff"><span class="trace-file">Widgets/Rule.cs</span>
- var text = border.GetPart(…)…;
-<span class="diff-add">+var style = Style ?? Style.Plain;</span>
-<span class="diff-del">-new Segment(text, Style ?? Style.Plain),</span>
-<span class="diff-add">+new Segment(text, style),</span></pre>
-        <p class="trace-note">Una refactorización de una línea. Un pipeline normal ejecuta las 787 pruebas de 141 clases.</p>
+        <pre class="trace-diff"><span class="trace-file">…ConfigurationExtensions.cs</span>
+<span class="diff-del">-bool differs;</span>
+<span class="diff-add">+bool overridden;</span>
+<span class="diff-del">-differs = new FilePath(…) != filePath;</span>
+<span class="diff-add">+overridden = new FilePath(…) != filePath;</span></pre>
+        <p class="trace-note">Un cambio de nombre que no altera ningún comportamiento. Un pipeline normal ejecuta todos los proyectos de pruebas: 274 clases de prueba.</p>
       </div>
       <div class="trace-col trace-steps">
         <p class="trace-label">2 · Lo que determina {{name}}</p>
         <ol>
-          <li><span class="step-name">Proyectos</span><span class="step-result">1 proyecto de pruebas afectado; Spectre.Console.Ansi.Tests ni siquiera se compila</span></li>
-          <li><span class="step-name">Símbolos</span><span class="step-result">1 miembro modificado: <code>Rule.GetLineWithoutTitle</code></span></li>
-          <li><span class="step-name">Mapa de cobertura</span><span class="step-result">14 clases de prueba lo ejecutaron en <code>main</code></span></li>
+          <li><span class="step-name">Proyectos</span><span class="step-result">2 de 30 proyectos de pruebas afectados; los otros 28 ni siquiera se compilan</span></li>
+          <li><span class="step-name">Símbolos</span><span class="step-result">1 miembro modificado: <code>WarnIfConfigFileEnvVarDiffers</code></span></li>
+          <li><span class="step-name">Mapa de cobertura</span><span class="step-result">8 clases de prueba lo ejecutaron en <code>main</code></span></li>
           <li><span class="step-name">Nombres</span><span class="step-result">No hay código nuevo que rastrear</span></li>
           <li><span class="step-name">Alternativas seguras</span><span class="step-result">No hicieron falta</span></li>
         </ol>
       </div>
       <div class="trace-col trace-tests">
         <p class="trace-label">3 · Pruebas que se ejecutan</p>
-        <div class="dots" role="img" aria-label="141 clases de prueba, 14 de ellas seleccionadas"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <p class="trace-result">Se ejecutan <strong>14</strong> de 141 clases, 127 omitidas</p>
-        <p class="trace-note">Exactamente las 14 que fallan cuando el método se rompe. <a href="/docs/examples/#proof">Cómo lo comprobamos</a></p>
+        <div class="dots dots-dense" role="img" aria-label="274 clases de prueba, 8 de ellas seleccionadas"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationDocumentAccessorTests"></i><i class="hit" title="DeclarativeConfigurationDocumentAcquisitionTests"></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationEventSourceTests"></i><i class="hit" title="DeclarativeConfigurationExtensionTests"></i><i></i><i class="hit" title="DeclarativeConfigurationHostIntegrationTests"></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationSdkIntegrationTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="StrictModeDiagnosticsTests"></i><i></i><i class="hit" title="StrictModeMaskTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="trace-result">Se ejecutan <strong>8</strong> de 274 clases, 266 omitidas</p>
+        <p class="trace-note">Exactamente las 8 que fallan cuando el método se rompe. <a href="/docs/examples/#proof">Cómo lo comprobamos</a></p>
       </div>
     </div>
     <p class="trace-safety" data-reveal><strong>Cuando un paso no puede rastrear un cambio, se ejecuta el proyecto de pruebas completo.</strong> <a href="/docs/what-runs-everything/">Qué lo ejecuta todo →</a></p>
@@ -210,7 +210,7 @@
           <span class="gha-event">en cada pull request</span>
           <h3>Ejecutar lo que afecta el cambio</h3>
           <p>Se restaura el mapa más reciente en la merge base o antes, se ejecutan solo las clases de prueba afectadas y el job summary explica por qué se ejecutó cada una.</p>
-          <p class="gha-summary"><span class="badge-ok">Correcto</span> 14 de 141 clases · 83 % del tiempo de pruebas ahorrado</p>
+          <p class="gha-summary"><span class="badge-ok">Correcto</span> 8 de 274 clases · 93 % del tiempo de pruebas ahorrado</p>
         </li>
       </ol>
       <figure class="editor">

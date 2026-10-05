@@ -15,33 +15,33 @@
         <li>Runs inside your CI</li>
       </ul>
     </div>
-    <figure class="check-card" data-reveal aria-label="A real pull request on Spectre.Console">
+    <figure class="check-card" data-reveal aria-label="A real pull request on OpenTelemetry .NET">
       <div class="check-head">
         <img src="/assets/favicon.svg" alt="" width="22" height="22">
         <span class="check-title">{{name}} · pull request check</span>
         <span class="badge-ok">Passed</span>
       </div>
       <div class="check-body">
-        <p class="check-saving"><strong data-count>83%</strong> less test time</p>
+        <p class="check-saving"><strong data-count>93%</strong> less test time</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">All tests</span>
             <span class="bar-track"><span class="bar-fill bar-all"></span></span>
-            <span class="bar-value">3.4 s · 141 classes</span>
+            <span class="bar-value">5 m 59 s · 274 classes</span>
           </div>
           <div class="bar-row">
             <span class="bar-label">{{name}}</span>
             <span class="bar-track"><span class="bar-fill bar-selected"></span></span>
-            <span class="bar-value">0.6 s · 14 classes</span>
+            <span class="bar-value">22.4 s · 8 classes</span>
           </div>
         </div>
         <ul class="check-list">
-          <li class="is-run"><strong>14 classes run</strong> they run or reference the changed code</li>
-          <li class="is-skip"><strong>127 skipped</strong> no path from the change reaches them</li>
-          <li class="is-run"><strong>156 tests passed</strong> 0 failed</li>
+          <li class="is-run"><strong>8 classes run</strong> they run or reference the changed code</li>
+          <li class="is-skip"><strong>266 skipped</strong> no path from the change reaches them</li>
+          <li class="is-run"><strong>229 tests passed</strong> 0 failed</li>
         </ul>
       </div>
-      <figcaption>A real change to Spectre.Console. <a href="/docs/examples/">See the whole run →</a></figcaption>
+      <figcaption>A real change to OpenTelemetry .NET. <a href="/docs/examples/">See the whole run →</a></figcaption>
     </figure>
   </div>
 </div>
@@ -132,33 +132,33 @@
   <div class="wrap">
     <div class="section-head center-head" data-reveal>
       <h2>How it decides</h2>
-      <p>One real change to Spectre.Console, followed step by step. Each step narrows the selection only when it has evidence.</p>
+      <p>One real change to OpenTelemetry .NET, followed step by step. Each step narrows the selection only when it has evidence.</p>
     </div>
     <div class="trace" data-reveal>
       <div class="trace-col trace-change">
         <p class="trace-label">1 · The change</p>
-        <pre class="trace-diff"><span class="trace-file">Widgets/Rule.cs</span>
- var text = border.GetPart(…)…;
-<span class="diff-add">+var style = Style ?? Style.Plain;</span>
-<span class="diff-del">-new Segment(text, Style ?? Style.Plain),</span>
-<span class="diff-add">+new Segment(text, style),</span></pre>
-        <p class="trace-note">A one-line refactor. A normal pipeline runs all 787 tests in 141 classes.</p>
+        <pre class="trace-diff"><span class="trace-file">…ConfigurationExtensions.cs</span>
+<span class="diff-del">-bool differs;</span>
+<span class="diff-add">+bool overridden;</span>
+<span class="diff-del">-differs = new FilePath(…) != filePath;</span>
+<span class="diff-add">+overridden = new FilePath(…) != filePath;</span></pre>
+        <p class="trace-note">A rename that changes no behaviour. A normal pipeline runs every test project: 274 test classes.</p>
       </div>
       <div class="trace-col trace-steps">
         <p class="trace-label">2 · What {{name}} works out</p>
         <ol>
-          <li><span class="step-name">Projects</span><span class="step-result">1 test project affected; Spectre.Console.Ansi.Tests is not even built</span></li>
-          <li><span class="step-name">Symbols</span><span class="step-result">1 member changed: <code>Rule.GetLineWithoutTitle</code></span></li>
-          <li><span class="step-name">Coverage map</span><span class="step-result">14 test classes ran it on <code>main</code></span></li>
+          <li><span class="step-name">Projects</span><span class="step-result">2 of 30 test projects affected; the other 28 are not even built</span></li>
+          <li><span class="step-name">Symbols</span><span class="step-result">1 member changed: <code>WarnIfConfigFileEnvVarDiffers</code></span></li>
+          <li><span class="step-name">Coverage map</span><span class="step-result">8 test classes ran it on <code>main</code></span></li>
           <li><span class="step-name">Names</span><span class="step-result">No new code to trace</span></li>
           <li><span class="step-name">Fallbacks</span><span class="step-result">None needed</span></li>
         </ol>
       </div>
       <div class="trace-col trace-tests">
         <p class="trace-label">3 · Tests to run</p>
-        <div class="dots" role="img" aria-label="141 test classes, 14 of them selected"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <p class="trace-result"><strong>14</strong> of 141 classes run, 127 skipped</p>
-        <p class="trace-note">Exactly the 14 that fail when the method breaks. <a href="/docs/examples/#proof">How we checked</a></p>
+        <div class="dots dots-dense" role="img" aria-label="274 test classes, 8 of them selected"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationDocumentAccessorTests"></i><i class="hit" title="DeclarativeConfigurationDocumentAcquisitionTests"></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationEventSourceTests"></i><i class="hit" title="DeclarativeConfigurationExtensionTests"></i><i></i><i class="hit" title="DeclarativeConfigurationHostIntegrationTests"></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationSdkIntegrationTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="StrictModeDiagnosticsTests"></i><i></i><i class="hit" title="StrictModeMaskTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="trace-result"><strong>8</strong> of 274 classes run, 266 skipped</p>
+        <p class="trace-note">Exactly the 8 that fail when the method breaks. <a href="/docs/examples/#proof">How we checked</a></p>
       </div>
     </div>
     <p class="trace-safety" data-reveal><strong>When a step cannot trace a change, the whole test project runs.</strong> <a href="/docs/what-runs-everything/">What runs everything →</a></p>
@@ -210,7 +210,7 @@
           <span class="gha-event">on pull request</span>
           <h3>Run what the change affects</h3>
           <p>The newest map at or before the merge base is restored, only the affected test classes run, and the job summary says why each one did.</p>
-          <p class="gha-summary"><span class="badge-ok">Passed</span> 14 of 141 classes · 83% of test time saved</p>
+          <p class="gha-summary"><span class="badge-ok">Passed</span> 8 of 274 classes · 93% of test time saved</p>
         </li>
       </ol>
       <figure class="editor">

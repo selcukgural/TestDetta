@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 4a7375f30257 -->
+<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 92443c495dea -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -15,33 +15,33 @@
         <li>CI'ınızın içinde çalışır</li>
       </ul>
     </div>
-    <figure class="check-card" data-reveal aria-label="Spectre.Console'da gerçek bir pull request">
+    <figure class="check-card" data-reveal aria-label="OpenTelemetry .NET'te gerçek bir pull request">
       <div class="check-head">
         <img src="/assets/favicon.svg" alt="" width="22" height="22">
         <span class="check-title">{{name}} · pull request kontrolü</span>
         <span class="badge-ok">Başarılı</span>
       </div>
       <div class="check-body">
-        <p class="check-saving"><strong data-count>%83</strong> daha az test süresi</p>
+        <p class="check-saving"><strong data-count>%93</strong> daha az test süresi</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">Tüm testler</span>
             <span class="bar-track"><span class="bar-fill bar-all"></span></span>
-            <span class="bar-value">3,4 sn · 141 sınıf</span>
+            <span class="bar-value">5 dk 59 sn · 274 sınıf</span>
           </div>
           <div class="bar-row">
             <span class="bar-label">{{name}}</span>
             <span class="bar-track"><span class="bar-fill bar-selected"></span></span>
-            <span class="bar-value">0,6 sn · 14 sınıf</span>
+            <span class="bar-value">22,4 sn · 8 sınıf</span>
           </div>
         </div>
         <ul class="check-list">
-          <li class="is-run"><strong>14 sınıf çalışır</strong> değişen kodu çalıştırıyor ya da ona referans veriyorlar</li>
-          <li class="is-skip"><strong>127 atlandı</strong> değişiklikten onlara ulaşan bir yol yok</li>
-          <li class="is-run"><strong>156 test başarılı</strong> 0 başarısız</li>
+          <li class="is-run"><strong>8 sınıf çalışır</strong> değişen kodu çalıştırıyor ya da ona referans veriyorlar</li>
+          <li class="is-skip"><strong>266 atlandı</strong> değişiklikten onlara ulaşan bir yol yok</li>
+          <li class="is-run"><strong>229 test başarılı</strong> 0 başarısız</li>
         </ul>
       </div>
-      <figcaption>Spectre.Console'da gerçek bir değişiklik. <a href="/docs/examples/">Koşunun tamamını görün →</a></figcaption>
+      <figcaption>OpenTelemetry .NET'te gerçek bir değişiklik. <a href="/docs/examples/">Koşunun tamamını görün →</a></figcaption>
     </figure>
   </div>
 </div>
@@ -132,33 +132,33 @@
   <div class="wrap">
     <div class="section-head center-head" data-reveal>
       <h2>Nasıl karar verir</h2>
-      <p>Spectre.Console'daki gerçek bir değişiklik, adım adım izleniyor. Her adım seçimi yalnızca kanıtı olduğunda daraltır.</p>
+      <p>OpenTelemetry .NET'teki gerçek bir değişiklik, adım adım izleniyor. Her adım seçimi yalnızca kanıtı olduğunda daraltır.</p>
     </div>
     <div class="trace" data-reveal>
       <div class="trace-col trace-change">
         <p class="trace-label">1 · Değişiklik</p>
-        <pre class="trace-diff"><span class="trace-file">Widgets/Rule.cs</span>
- var text = border.GetPart(…)…;
-<span class="diff-add">+var style = Style ?? Style.Plain;</span>
-<span class="diff-del">-new Segment(text, Style ?? Style.Plain),</span>
-<span class="diff-add">+new Segment(text, style),</span></pre>
-        <p class="trace-note">Tek satırlık bir refactoring. Normal bir pipeline 141 sınıftaki 787 testin hepsini çalıştırır.</p>
+        <pre class="trace-diff"><span class="trace-file">…ConfigurationExtensions.cs</span>
+<span class="diff-del">-bool differs;</span>
+<span class="diff-add">+bool overridden;</span>
+<span class="diff-del">-differs = new FilePath(…) != filePath;</span>
+<span class="diff-add">+overridden = new FilePath(…) != filePath;</span></pre>
+        <p class="trace-note">Davranışı değiştirmeyen bir yeniden adlandırma. Normal bir pipeline her test projesini çalıştırır: 274 test sınıfı.</p>
       </div>
       <div class="trace-col trace-steps">
         <p class="trace-label">2 · {{name}}'nın çıkardığı sonuç</p>
         <ol>
-          <li><span class="step-name">Projeler</span><span class="step-result">1 test projesi etkilendi; Spectre.Console.Ansi.Tests derlenmiyor bile</span></li>
-          <li><span class="step-name">Semboller</span><span class="step-result">1 üye değişti: <code>Rule.GetLineWithoutTitle</code></span></li>
-          <li><span class="step-name">Kapsam haritası</span><span class="step-result">Onu <code>main</code> üzerinde 14 test sınıfı çalıştırdı</span></li>
+          <li><span class="step-name">Projeler</span><span class="step-result">30 test projesinden 2'si etkilendi; diğer 28'i derlenmiyor bile</span></li>
+          <li><span class="step-name">Semboller</span><span class="step-result">1 üye değişti: <code>WarnIfConfigFileEnvVarDiffers</code></span></li>
+          <li><span class="step-name">Kapsam haritası</span><span class="step-result">Onu <code>main</code> üzerinde 8 test sınıfı çalıştırdı</span></li>
           <li><span class="step-name">İsimler</span><span class="step-result">İzlenecek yeni kod yok</span></li>
           <li><span class="step-name">Geri dönüşler</span><span class="step-result">Gerek kalmadı</span></li>
         </ol>
       </div>
       <div class="trace-col trace-tests">
         <p class="trace-label">3 · Çalıştırılacak testler</p>
-        <div class="dots" role="img" aria-label="141 test sınıfı, 14'ü seçildi"><i></i><i></i><i class="hit" title="AlignTests+Center"></i><i class="hit" title="AlignTests+Left"></i><i class="hit" title="AlignTests+Right"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="CanvasTests"></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ColumnsTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="ExceptionTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="LayoutTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="PadderTests"></i><i></i><i></i><i class="hit" title="PanelTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RecorderTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="RowsTests"></i><i></i><i></i><i></i><i class="hit" title="RuleTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TableTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="TextPathTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <p class="trace-result">141 sınıftan <strong>14</strong>'ü çalışır, 127'si atlanır</p>
-        <p class="trace-note">Tam olarak, metot bozulduğunda başarısız olan 14 sınıf. <a href="/docs/examples/#proof">Nasıl kontrol ettik</a></p>
+        <div class="dots dots-dense" role="img" aria-label="274 test sınıfı, 8'i seçildi"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationDocumentAccessorTests"></i><i class="hit" title="DeclarativeConfigurationDocumentAcquisitionTests"></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationEventSourceTests"></i><i class="hit" title="DeclarativeConfigurationExtensionTests"></i><i></i><i class="hit" title="DeclarativeConfigurationHostIntegrationTests"></i><i></i><i></i><i></i><i class="hit" title="DeclarativeConfigurationSdkIntegrationTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="hit" title="StrictModeDiagnosticsTests"></i><i></i><i class="hit" title="StrictModeMaskTests"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="trace-result">274 sınıftan <strong>8</strong>'i çalışır, 266'sı atlanır</p>
+        <p class="trace-note">Tam olarak, metot bozulduğunda başarısız olan 8 sınıf. <a href="/docs/examples/#proof">Nasıl kontrol ettik</a></p>
       </div>
     </div>
     <p class="trace-safety" data-reveal><strong>Bir adım bir değişikliği izleyemediğinde test projesinin tamamı çalışır.</strong> <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır →</a></p>
@@ -210,7 +210,7 @@
           <span class="gha-event">pull request'te</span>
           <h3>Değişikliğin etkilediklerini çalıştırın</h3>
           <p>Merge base'deki ya da ondan önceki en yeni harita geri yüklenir, yalnızca etkilenen test sınıfları çalışır ve job summary her birinin neden çalıştığını söyler.</p>
-          <p class="gha-summary"><span class="badge-ok">Başarılı</span> 141 sınıftan 14'ü · test süresinin %83'ü kazanıldı</p>
+          <p class="gha-summary"><span class="badge-ok">Başarılı</span> 274 sınıftan 8'i · test süresinin %93'ü kazanıldı</p>
         </li>
       </ol>
       <figure class="editor">
