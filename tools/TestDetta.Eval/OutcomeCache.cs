@@ -6,8 +6,8 @@ namespace TestDetta.Eval;
 /// What the tests did against each mutant of one commit, kept across evaluations so a fix to TestDetta
 /// does not cost the test runs again. Which classes a mutant fails does not depend on TestDetta, only on
 /// the commit, the mutant and how the evaluation injects and runs it, so after a fix only TestDetta's
-/// selection is computed anew and compared with the stored failures. Runs that crashed, hung or
-/// lacked a report are never stored; they are run again.
+/// selection is computed anew and compared with the stored failures. A run that crashed, hung or
+/// lacked a report stores only that fact (see <see cref="MutantOutcome.FullRunIncomplete"/>).
 /// </summary>
 internal sealed class OutcomeCache
 {
@@ -214,4 +214,19 @@ internal sealed record StoredBaseline(
 /// (its run without mutants crashed) may fail now, so an outcome is reused only when every project
 /// evaluated now is in this list. Null in files written before it was stored: such outcomes are run again.
 /// </param>
-internal sealed record MutantOutcome(int MutatedMethods, List<string> Failed, Dictionary<string, bool> FailsAloneWithMutant, List<string>? Evaluated = null);
+internal sealed record MutantOutcome(int MutatedMethods, List<string> Failed, Dictionary<string, bool> FailsAloneWithMutant, List<string>? Evaluated = null)
+{
+    /// <summary>
+    /// True when the full run with the mutant crashed or hung, so <see cref="Failed"/> is unknown and
+    /// empty. Such a mutant is judged by running what TestDetta left out (the only place a miss can
+    /// be); later rounds skip the full run, which mostly waits for its timeout.
+    /// </summary>
+    public bool FullRunIncomplete { get; init; }
+
+    /// <summary>
+    /// With <see cref="FullRunIncomplete"/>: the fingerprint of the selection whose left-out classes
+    /// were run and missed nothing. The same selection is not run again; any other is. Null when that
+    /// run missed a class or did not complete.
+    /// </summary>
+    public string? NothingMissedWith { get; init; }
+}

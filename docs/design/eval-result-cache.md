@@ -86,6 +86,11 @@ the parallelism check: four to six full runs per repository, about 25 minutes fo
   consistent than a fresh run.
 - When some mutant has to run on a stored baseline, its test projects are built then; one that no
   longer builds is left out of those runs.
+- **A full run that crashed or hung is stored as such** (`FullRunIncomplete`). Such a mutant is judged
+  by running what TestDetta left out, the only place a miss can be; later rounds skip the full run,
+  which mostly waits for its timeout (Polly: 8 such mutants took 11 of 16 minutes on a warm cache).
+  When that run missed nothing, the selection's fingerprint is stored with it (`NothingMissedWith`):
+  the same selection leaves out the same classes and is not run again, any other selection is.
 
 ## Memory guard
 

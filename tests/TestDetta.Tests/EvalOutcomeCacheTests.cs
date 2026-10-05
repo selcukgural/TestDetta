@@ -29,6 +29,7 @@ public sealed class EvalOutcomeCacheTests : IDisposable
                 public static int Add(int a, int b) => a + b;
                 public static int Neg(int a) => -a;
                 public static int Twice(int a) => Add(a, a);
+                public static void Log(System.Collections.Generic.List<string> lines) => lines.Add("run");
             }
             """);
         _repo.Write("tests/Calc.Tests/Calc.Tests.csproj", """
@@ -48,6 +49,19 @@ public sealed class EvalOutcomeCacheTests : IDisposable
             public class AddTests { [Fact] public void Adds() => Assert.Equal(3, Calculator.Add(1, 2)); }
             public class NegTests { [Fact] public void Negates() => Assert.Equal(-2, Calculator.Neg(2)); }
             public class TwiceTests { [Fact] public void Doubles() => Assert.Equal(4, Calculator.Twice(2)); }
+            public class LogTests
+            {
+                // An exception on a thread of its own takes the test host down: the full run crashes.
+                [Fact]
+                public void Logs_on_a_thread()
+                {
+                    var lines = new System.Collections.Generic.List<string>();
+                    var thread = new System.Threading.Thread(() => Calculator.Log(lines));
+                    thread.Start();
+                    thread.Join();
+                    Assert.Single(lines);
+                }
+            }
             """);
         _repo.Commit("base");
 
@@ -59,7 +73,8 @@ public sealed class EvalOutcomeCacheTests : IDisposable
         Assert.All(first, m => Assert.False(m.Reused));
         Assert.All(second, m => Assert.True(m.Reused));
         Assert.Equal(first.Select(static m => m.Result), second.Select(static m => m.Result));
-        Assert.Contains(first, static m => m.Result.Contains("killed=", StringComparison.Ordinal) && !m.Result.EndsWith("killed=", StringComparison.Ordinal));
+        Assert.Contains(first, static m => m.Result.Contains("killed=", StringComparison.Ordinal) && !m.Result.Contains("killed= ", StringComparison.Ordinal));
+        Assert.Contains(first, static m => m.Result.StartsWith("Calc.Calculator.Log", StringComparison.Ordinal) && m.Result.EndsWith("crash=True", StringComparison.Ordinal));
 
         // Every outcome and the run without mutants were stored: nothing is built or run again.
         Assert.Empty(RunLogs(Path.Combine(_root, "second")));
@@ -175,7 +190,8 @@ public sealed class EvalOutcomeCacheTests : IDisposable
         return [.. run.GetProperty("mutants").EnumerateArray().Select(static m => (
             $"{m.GetProperty("target").GetString()} methods={m.GetProperty("mutatedMethods").GetInt32()} " +
             $"missed={string.Join(",", m.GetProperty("missed").EnumerateArray().Select(static c => c.GetString()))} " +
-            $"killed={string.Join(",", m.GetProperty("killed").EnumerateArray().Select(static c => c.GetString()))}",
+            $"killed={string.Join(",", m.GetProperty("killed").EnumerateArray().Select(static c => c.GetString()))} " +
+            $"crash={m.GetProperty("caughtByCrash").GetBoolean()}",
             m.GetProperty("reused").GetBoolean()))];
     }
 

@@ -649,11 +649,21 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var reached = context.TestProjects
             .Where(p => workspace.Executor.Outputs.TryGetValue(p.Path, out var output) && mutation.Outputs.Contains(output))
             .ToList();
+        var scope = new MutantScope(reached, index, mutation, executor);
+
+        // A mutant whose full run crashed or hung does so again, and only what TestDetta left out can
+        // hold a miss: the full run, which mostly waits for its timeout, is not repeated.
+        if (_cache?.Find(target) is { FullRunIncomplete: true } known && EvaluatedAll(known, context.TestProjects))
+        {
+            LogFullRunSkipped(index);
+            return OutsideAndStore(target, state with { Reached = reached }, scope, context);
+        }
+
         // A project that wrote no report this time died with the mutant in place, like a crash.
         var run = executor.RunAll(reached, $"synthetic-{index}", mutation.Environment);
         if (!run.Complete)
         {
-            return RunOutsideSelection(target, state with { Reached = reached }, new MutantScope(reached, index, mutation, executor));
+            return OutsideAndStore(target, state with { Reached = reached }, scope, context);
         }
 
         var killed = new List<string>();
@@ -690,6 +700,54 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     }
 
     /// <summary>
+    /// <see cref="RunOutsideSelection"/>, and stores that the full run did not complete. When nothing
+    /// TestDetta left out was missed, the selection is stored with it: the same selection next time
+    /// leaves out the same classes, so the run is not repeated either.
+    /// </summary>
+    /// <param name="target">The mutant.</param>
+    /// <param name="state">The mutant's state.</param>
+    /// <param name="scope">The applied mutant and the worker it runs in.</param>
+    /// <param name="context">What the mutants of the commit share.</param>
+    private SyntheticMutant OutsideAndStore(SyntheticTarget target, MutantRun state, MutantScope scope, MutantContext context)
+    {
+        var result = RunOutsideSelection(target, state, scope);
+        _cache?.Store(target, new MutantOutcome(scope.Mutation.MutatedMethods, [], [], Evaluated(context.TestProjects))
+        {
+            FullRunIncomplete = true,
+            NothingMissedWith = !result.Inconclusive && result.MissedClasses.Count == 0 ? SelectionKey(state.Tests) : null,
+        });
+        return result;
+    }
+
+    /// <summary>
+    /// A fingerprint of a selection: per test project, whether it runs all, some (which) or none of its
+    /// classes. Two selections with the same fingerprint leave out the same classes.
+    /// </summary>
+    /// <param name="tests">The selection.</param>
+    private static string SelectionKey(IReadOnlyList<TestProjectSelection> tests)
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (var test in tests.OrderBy(static t => t.Project.Path, StringComparer.Ordinal))
+        {
+            text.Append(Path.GetFileNameWithoutExtension(test.Project.Path)).Append('|').Append(test.Mode).Append('|');
+            foreach (var testClass in test.TestClasses.Order(StringComparer.Ordinal))
+            {
+                text.Append(testClass).Append(',');
+            }
+
+            text.Append('\n');
+        }
+
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text.ToString())));
+    }
+
+    /// <summary>True when every project evaluated now was evaluated when <paramref name="stored"/> was recorded.</summary>
+    /// <param name="stored">A stored outcome.</param>
+    /// <param name="projects">Test projects evaluated now.</param>
+    private static bool EvaluatedAll(MutantOutcome stored, List<ProjectNode> projects) =>
+        stored.Evaluated is { } evaluated && projects.TrueForAll(p => evaluated.Contains(Path.GetFileNameWithoutExtension(p.Path), StringComparer.Ordinal));
+
+    /// <summary>
     /// The mutant's result from a stored test outcome and the current selection, without running a
     /// test: the stored failures are checked against what TestDetta selects now, and the confirmation
     /// rules of <see cref="Confirm"/> are applied to stored answers. Null when an answer is missing
@@ -702,11 +760,24 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="state">The mutant's analysis and the evaluated test projects.</param>
     private SyntheticMutant? FromCache(SyntheticTarget target, MutantOutcome stored, MutantRun state)
     {
-        if (stored.Evaluated is null || state.Reached.Exists(p => !stored.Evaluated.Contains(Path.GetFileNameWithoutExtension(p.Path), StringComparer.Ordinal)))
+        if (!EvaluatedAll(stored, state.Reached))
         {
             // Recorded while a project evaluated now was left out (or before that was stored): the
             // project's failures are not in the outcome.
             return null;
+        }
+
+        if (stored.FullRunIncomplete)
+        {
+            // Only the run outside the selection says anything; it is known for the selection it ran with.
+            if (stored.NothingMissedWith is not { } key || key != SelectionKey(state.Tests))
+            {
+                return null;
+            }
+
+            LogReused(state.Index);
+            LogCaughtByCrash(state.Index, target.Member.TypeName, target.Member.MemberName);
+            return new SyntheticMutant(target, state.Detected, stored.MutatedMethods, [], [], state.Share, Inconclusive: false) { CaughtByCrash = true, Reused = true };
         }
 
         if (stored.MutatedMethods == 0)
@@ -1153,6 +1224,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reusing {Count} stored mutant outcome(s); only the selection is computed for them")]
     private partial void LogCacheOpened(int count);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {Index}: its full run crashed or hung before; only what TestDetta left out runs")]
+    private partial void LogFullRunSkipped(int index);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {Index}: test outcome reused from the cache")]
     private partial void LogReused(int index);
