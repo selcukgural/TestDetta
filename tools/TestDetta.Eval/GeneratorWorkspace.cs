@@ -32,7 +32,8 @@ internal sealed partial class GeneratorWorkspace(EvalWorkspace workspace, string
 
     /// <summary>A reader for the selection of one change, which is in the clone's sources while the selection runs.</summary>
     /// <param name="target">The change.</param>
-    public IGeneratedCodeReader For(SyntheticTarget target) => new Reader(this, target);
+    /// <param name="originals">The clone's edited files as they are without the change, by path.</param>
+    public IGeneratedCodeReader For(SyntheticTarget target, IReadOnlyDictionary<string, byte[]> originals) => new Reader(this, target, originals);
 
     /// <summary>Deletes the copy, when one was made; the evaluation calls it when it ends.</summary>
     public void Remove()
@@ -45,12 +46,14 @@ internal sealed partial class GeneratorWorkspace(EvalWorkspace workspace, string
 
     /// <summary>The stored read of the change, or builds it in the copy and reads what the generators wrote.</summary>
     /// <param name="target">The change, written in the clone's sources now.</param>
+    /// <param name="cloneOriginals">The clone's edited files without the change, by path.</param>
     /// <param name="testProject">Test project of the clone whose build is read.</param>
     /// <param name="framework">Framework its map was recorded for, or null.</param>
-    private GeneratedCodeRead Read(SyntheticTarget target, ProjectNode testProject, string? framework)
+    private GeneratedCodeRead Read(SyntheticTarget target, IReadOnlyDictionary<string, byte[]> cloneOriginals, ProjectNode testProject, string? framework)
     {
         var relative = Path.GetRelativePath(workspace.RepoRoot, testProject.Path).Replace('\\', '/');
-        var key = $"{target.Member.TypeName}|{target.Member.MemberName}|{target.Kind}|{relative}|{framework}";
+        // "2": reads stored before the copy was made without the change it was made during.
+        var key = $"2|{target.Member.TypeName}|{target.Member.MemberName}|{target.Kind}|{relative}|{framework}";
         var file = cacheDirectory is null ? null : Path.Combine(cacheDirectory, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..32] + ".json.gz");
         // A stored failed build is from before such edits fell back to the unedited build.
         if (file is not null && Load(file) is { BuildErrors: null } stored)
@@ -59,7 +62,7 @@ internal sealed partial class GeneratorWorkspace(EvalWorkspace workspace, string
             return stored;
         }
 
-        var graph = Copy();
+        var graph = Copy(cloneOriginals);
         var originals = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         GeneratedCodeRead read;
         try
@@ -128,7 +131,11 @@ internal sealed partial class GeneratorWorkspace(EvalWorkspace workspace, string
             .Read(graph, Root, graph[Paths.Normalize(Path.Combine(Root, relative))], framework);
 
     /// <summary>Makes the copy and loads its graph, once per evaluation.</summary>
-    private ProjectGraph Copy()
+    /// <param name="cloneOriginals">
+    /// The clone's files the current change edits, without it: the copy is made while the clone holds
+    /// the change, and keeping it would put it into every later build of the copy, the unedited one too.
+    /// </param>
+    private ProjectGraph Copy(IReadOnlyDictionary<string, byte[]> cloneOriginals)
     {
         if (_graph is { } graph)
         {
@@ -137,6 +144,11 @@ internal sealed partial class GeneratorWorkspace(EvalWorkspace workspace, string
 
         WorkerCopies.Remove(Root);
         WorkerCopies.Copy(workspace.RepoRoot, Root);
+        foreach (var (path, bytes) in cloneOriginals)
+        {
+            File.WriteAllBytes(Path.Combine(Root, Path.GetRelativePath(workspace.RepoRoot, path)), bytes);
+        }
+
         _graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(Root);
         return _graph;
     }
@@ -179,11 +191,12 @@ internal sealed partial class GeneratorWorkspace(EvalWorkspace workspace, string
     /// <summary>The <see cref="IGeneratedCodeReader"/> of one change; the graph and root it is given are the clone's.</summary>
     /// <param name="owner">The workspace.</param>
     /// <param name="target">The change.</param>
-    private sealed class Reader(GeneratorWorkspace owner, SyntheticTarget target) : IGeneratedCodeReader
+    /// <param name="originals">The clone's edited files without the change.</param>
+    private sealed class Reader(GeneratorWorkspace owner, SyntheticTarget target, IReadOnlyDictionary<string, byte[]> originals) : IGeneratedCodeReader
     {
         /// <inheritdoc />
         public GeneratedCodeRead Read(ProjectGraph graph, string repoRoot, ProjectNode testProject, string? framework) =>
-            owner.Read(target, testProject, framework);
+            owner.Read(target, originals, testProject, framework);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{TestProject}: building the change to {TypeName}.{MemberName} in the generator copy to read what its source generators write")]

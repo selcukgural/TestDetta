@@ -1072,7 +1072,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var pipeline = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator);
             _steps.PlaceMaps(sha);
             // As td test does: a change that reaches a generator is built, to compare what it generates.
-            var analysis = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { GeneratedCode = _generators?.For(target) });
+            var analysis = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { GeneratedCode = _generators?.For(target, originals) });
             var others = new Dictionary<OtherSelector, OtherSelection>
             {
                 [OtherSelector.ProjectLevel] = new([.. analysis.Impact.Tests.Select(static t => new TestProjectSelection(t.Project, TestRunMode.All, [], "affected test project"))], 0),
