@@ -1011,6 +1011,7 @@ public sealed class TestSelectorTests : IDisposable
         {
             Generated = [new GeneratedSource("tests/A.Tests/A.Tests.csproj", "obj/Gen/BTests.g.cs", "partial class BTests { void Register() => Run(); }")],
             ExternalCallbacks = [1],
+            Framework = "net8.0",
         };
         var path = Path.Combine(_repo.Root, "map.json");
 
@@ -1026,6 +1027,7 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(map.Commit, read.Commit);
         Assert.Equal([1], read.ExternalCallbacks);
         Assert.Equal(map.Generated, read.Generated);
+        Assert.Equal("net8.0", read.Framework);
     }
 
     private CoverageMap Map(string commit, List<CoveredMethod> methods, Dictionary<string, IReadOnlyList<int>> byClass) =>

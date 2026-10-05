@@ -126,4 +126,7 @@ public sealed record TestSelectionRequest(
     /// where the map cannot say what it runs (docs/design/unrecorded-classes.md).
     /// </summary>
     public string Platform { get; init; } = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
+
+    /// <summary>See <see cref="AnalysisOptions.GeneratedCode"/>.</summary>
+    public IGeneratedCodeReader? GeneratedCode { get; init; }
 }

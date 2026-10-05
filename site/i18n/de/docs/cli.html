@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 9290031d3f43 -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 7cf305d08b92 -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -57,8 +57,11 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <h3 id="tests-only"><code>--tests-only</code></h3>
 <p>Listet nur die betroffenen Testprojekte auf, nicht die Produktionsprojekte auf dem Weg dorthin.</p>
 
+<h3 id="build"><code>--build</code></h3>
+<p>Erreicht eine Änderung einen Source Generator im Repository, werden die Testprojekte, die ihn verwenden, gebaut und sein erzeugter Code mit ihrer Coverage-Map verglichen, wie es <code>td test</code> immer tut. Ohne diese Option wird ein vorhandener Build gelesen, der neuer als die Quellen ist; gibt es keinen, werden diese Testprojekte als vollständig laufend aufgeführt.</p>
+
 <h2 id="test"><code>td test</code></h2>
-<p>Baut und führt nur die betroffenen Tests aus: einen Filter pro Testprojekt, wenn nur einige Klassen betroffen sind, das ganze Projekt, wenn alle betroffen sind oder sich eine Änderung nicht eingrenzen lässt, und nichts, wenn keine betroffen ist. Exitcode <code>3</code>, wenn ein Test fehlschlägt.</p>
+<p>Baut und führt nur die betroffenen Tests aus: einen Filter pro Testprojekt, wenn nur einige Klassen betroffen sind, das ganze Projekt, wenn alle betroffen sind oder sich eine Änderung nicht eingrenzen lässt, und nichts, wenn keine betroffen ist. Exitcode <code>3</code>, wenn ein Test fehlschlägt. Erreicht eine Änderung einen Source Generator im Repository, werden die Testprojekte, die ihn verwenden, zuerst gebaut, und nur geänderter erzeugter Code zählt; schlägt der Build fehl, endet der Befehl hier mit den Fehlern des Compilers.</p>
 
 <h3 id="dry-run"><code>--dry-run</code></h3>
 <p>Gibt die <code>dotnet test</code>-Befehle aus, statt sie auszuführen. Ein Projekt, dessen <code>global.json</code> in einem Unterordner liegt, wird als <code>(cd src &amp;&amp; dotnet test ...)</code> ausgegeben.</p>

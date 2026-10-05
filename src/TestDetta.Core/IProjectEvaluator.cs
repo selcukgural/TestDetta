@@ -40,4 +40,7 @@ public sealed record EvaluatedProject(
 
     /// <summary>The part of <see cref="References"/> it does not compile against; see <see cref="ProjectNode.OpaqueReferences"/>.</summary>
     public IReadOnlySet<string> OpaqueReferences { get; init; } = new HashSet<string>(Paths.Comparer);
+
+    /// <summary>The part of <see cref="OpaqueReferences"/> used as an analyzer or source generator; see <see cref="ProjectNode.GeneratorReferences"/>.</summary>
+    public IReadOnlySet<string> GeneratorReferences { get; init; } = new HashSet<string>(Paths.Comparer);
 }

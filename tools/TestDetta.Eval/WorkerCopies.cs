@@ -138,7 +138,7 @@ internal sealed partial class WorkerCopies : IDisposable
     /// </summary>
     /// <param name="source">Directory to copy.</param>
     /// <param name="destination">New directory; must not exist.</param>
-    private static void Copy(string source, string destination)
+    internal static void Copy(string source, string destination)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -196,7 +196,7 @@ internal sealed partial class WorkerCopies : IDisposable
 
     /// <summary>Deletes a copy, read-only files included (git objects are read-only).</summary>
     /// <param name="copy">The copy.</param>
-    private static void Remove(string copy)
+    internal static void Remove(string copy)
     {
         if (!Directory.Exists(copy))
         {

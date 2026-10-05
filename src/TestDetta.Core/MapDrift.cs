@@ -29,6 +29,12 @@ public sealed record AnalysisOptions
     /// </summary>
     public DriftFallback DriftFallback { get; init; } = DriftFallback.RunAll;
 
+    /// <summary>
+    /// Reads what source generators write now, to compare with the maps when a change reaches a
+    /// generator in the repository; null keeps every project using a changed generator running completely.
+    /// </summary>
+    public IGeneratedCodeReader? GeneratedCode { get; init; }
+
     /// <summary>How maps are used; anything but <see cref="MapUse.Bridge"/> exists for evaluation only.</summary>
     internal MapUse Maps { get; init; } = MapUse.Bridge;
 }

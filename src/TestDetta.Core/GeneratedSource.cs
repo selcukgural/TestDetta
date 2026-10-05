@@ -10,4 +10,19 @@ namespace TestDetta.Core;
 /// <param name="Project">Project that compiled it, relative to the repository root.</param>
 /// <param name="Name">Its path in the PDB, which tells the generated files of a project apart.</param>
 /// <param name="Text">Its source.</param>
-public sealed record GeneratedSource(string Project, string Name, string Text);
+public sealed record GeneratedSource(string Project, string Name, string Text)
+{
+    /// <summary>
+    /// What identifies the file across builds: the generator's assembly, its type and the file's hint
+    /// name, the last three parts of the path the compiler gives it. The part before them is the
+    /// project's intermediate directory, which differs between configurations, frameworks and machines.
+    /// </summary>
+    public string Key
+    {
+        get
+        {
+            var parts = Name.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return string.Join('/', parts[Math.Max(0, parts.Length - 3)..]);
+        }
+    }
+}

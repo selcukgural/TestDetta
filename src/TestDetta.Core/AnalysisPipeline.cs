@@ -93,8 +93,8 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
             LogDrift(commit, distance, driftFiles.Count);
         }
 
-        var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>())
-            .Select(new TestSelectionRequest(graph, root, changed, impact, maps) { Drifts = drifts, DriftFallback = options.DriftFallback });
+        var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>(), new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()))
+            .Select(new TestSelectionRequest(graph, root, changed, impact, maps) { Drifts = drifts, DriftFallback = options.DriftFallback, GeneratedCode = options.GeneratedCode });
 
         return new AnalysisResult(root, changed, graph, impact, Plan(graph, tests, maps)) { Drifts = drifts };
     }

@@ -40,13 +40,52 @@ internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLeve
 /// <summary>Options of <c>td affected</c>.</summary>
 /// <param name="TestsOnly">Print only test projects.</param>
 /// <param name="Format">Output format for stdout.</param>
-internal sealed record AffectedSettings(bool TestsOnly, OutputFormat Format);
+internal sealed record AffectedSettings(bool TestsOnly, OutputFormat Format)
+{
+    /// <summary>
+    /// True to build the test projects that use a changed source generator, to compare what it
+    /// generates; otherwise only a build newer than the sources is read, and without one such a
+    /// project is listed as running completely.
+    /// </summary>
+    public bool Build { get; init; }
+}
 
 /// <summary>Options of <c>td test</c>.</summary>
 /// <param name="DryRun">Print the <c>dotnet test</c> commands instead of running them.</param>
 /// <param name="DotnetTestArguments">Arguments after <c>--</c>, passed to every <c>dotnet test</c> as given.</param>
 /// <param name="SummaryFile">File to append a Markdown summary to (for example <c>$GITHUB_STEP_SUMMARY</c>), or null.</param>
-internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTestArguments, string? SummaryFile);
+internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTestArguments, string? SummaryFile)
+{
+    /// <summary>
+    /// The configuration <c>dotnet test</c> builds, from <c>-c</c> or <c>--configuration</c> among
+    /// <see cref="DotnetTestArguments"/>; Debug when none is given. A changed source generator is read
+    /// from a build of this configuration, the one the tests then run.
+    /// </summary>
+    public string Configuration
+    {
+        get
+        {
+            for (var i = 0; i < DotnetTestArguments.Count; i++)
+            {
+                var argument = DotnetTestArguments[i];
+                if (argument is "-c" or "--configuration" && i + 1 < DotnetTestArguments.Count)
+                {
+                    return DotnetTestArguments[i + 1];
+                }
+
+                foreach (var prefix in (ReadOnlySpan<string>)["-c:", "--configuration:", "--configuration="])
+                {
+                    if (argument.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        return argument[prefix.Length..];
+                    }
+                }
+            }
+
+            return "Debug";
+        }
+    }
+}
 
 /// <summary>Options of <c>td record</c>.</summary>
 /// <param name="Configuration">Build configuration used for building and running the tests.</param>
@@ -107,6 +146,9 @@ internal sealed record CliOptions(
           --tests-only         Only list affected test projects
           --format <format>    text (default), json, paths (one .csproj per line),
                                or commands (one dotnet test command per test project)
+          --build              When a change reaches a source generator in the repository, build the
+                               test projects using it to compare what it generates (td test always
+                               does); without it, an existing build newer than the sources is read
 
         td test:
           --dry-run            Print the dotnet test commands instead of running them
@@ -227,6 +269,10 @@ internal sealed record CliOptions(
 
             case "--tests-only" when options.Command == CliCommand.Affected:
                 options = options with { Affected = options.Affected with { TestsOnly = true } };
+                return true;
+
+            case "--build" when options.Command == CliCommand.Affected:
+                options = options with { Affected = options.Affected with { Build = true } };
                 return true;
 
             case "--dry-run" when options.Command == CliCommand.Test:

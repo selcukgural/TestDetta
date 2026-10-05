@@ -57,8 +57,11 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <h3 id="tests-only"><code>--tests-only</code></h3>
 <p>List only the affected test projects, not the production projects on the way.</p>
 
+<h3 id="build"><code>--build</code></h3>
+<p>When a change reaches a source generator in the repository, build the test projects that use it and compare what it generates with their coverage map, as <code>td test</code> always does. Without it, an existing build newer than the sources is read; with none, those test projects are listed as running completely.</p>
+
 <h2 id="test"><code>td test</code></h2>
-<p>Builds and runs only the affected tests: a filter per test project when only some classes are affected, the whole project when all are or when a change cannot be narrowed, nothing when none is. Exit code <code>3</code> when any test fails.</p>
+<p>Builds and runs only the affected tests: a filter per test project when only some classes are affected, the whole project when all are or when a change cannot be narrowed, nothing when none is. Exit code <code>3</code> when any test fails. When a change reaches a source generator in the repository, the test projects that use it are built first, and only generated code that changed counts; a build that fails stops here with the compiler's errors.</p>
 
 <h3 id="dry-run"><code>--dry-run</code></h3>
 <p>Print the <code>dotnet test</code> commands instead of running them. A project whose <code>global.json</code> lives in a subfolder is printed as <code>(cd src &amp;&amp; dotnet test ...)</code>.</p>

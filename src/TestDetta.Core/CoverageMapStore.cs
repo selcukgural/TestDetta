@@ -116,6 +116,11 @@ public static class CoverageMapStore
             json.WriteEndArray();
         }
 
+        if (map.Framework is { } framework)
+        {
+            json.WriteString("framework"u8, framework);
+        }
+
         if (map.Platform is { } platform)
         {
             json.WriteString("platform"u8, platform);
@@ -218,6 +223,7 @@ public static class CoverageMapStore
                     ? skipped.EnumerateArray().Select(static n => n.GetString()!).ToHashSet(StringComparer.Ordinal)
                     : null,
                 Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
+                Framework = root.TryGetProperty("framework", out var framework) ? framework.GetString() : null,
                 ClassLocations = root.TryGetProperty("classLocations", out var locations) ? ReadLocations(locations) : null,
             };
         }

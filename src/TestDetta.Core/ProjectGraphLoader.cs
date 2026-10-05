@@ -130,6 +130,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 References = project.References,
                 UnknownReferencePatterns = [],
                 OpaqueReferences = project.OpaqueReferences,
+                GeneratorReferences = project.GeneratorReferences,
                 UnknownOpaqueReferencePatterns = [],
                 UnknownItemPatterns = [],
                 ExternalItems = [],
@@ -167,6 +168,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         var projectDir = Paths.Normalize(Path.GetDirectoryName(projectPath)!);
         var references = new List<string>();
         var opaque = new HashSet<string>(Paths.Comparer);
+        var generators = new HashSet<string>(Paths.Comparer);
         var isTest = false;
 
         // Elements are matched by local name so legacy projects with the MSBuild XML namespace also work.
@@ -185,6 +187,11 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                     if (IsOpaqueReference(element))
                     {
                         opaque.Add(reference);
+                    }
+
+                    if (IsGeneratorReference(element))
+                    {
+                        generators.Add(reference);
                     }
 
                     break;
@@ -288,6 +295,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             HasUnresolvedInputs = inputs.Unresolved,
             UnknownReferencePatterns = unknownReferences,
             OpaqueReferences = opaque,
+            GeneratorReferences = generators,
             UnknownOpaqueReferencePatterns = unknownOpaqueReferences,
             UnknownItemPatterns = inputs.UnknownItems,
             PackageReferences = inputs.Packages,
@@ -318,6 +326,17 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                || Metadata("ReferenceOutputAssembly") is { } reference
                   && (reference.Equals("false", StringComparison.OrdinalIgnoreCase) || reference.Contains("$(", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// True for a <c>ProjectReference</c> the project's own file declares as an analyzer or source
+    /// generator with a literal <c>OutputItemType="Analyzer"</c> (see <see cref="ProjectNode.GeneratorReferences"/>).
+    /// A computed value, or metadata set elsewhere, is seen only by the MSBuild evaluation; until then
+    /// the reference is only opaque.
+    /// </summary>
+    /// <param name="element">The <c>ProjectReference</c> element.</param>
+    private static bool IsGeneratorReference(XElement element) =>
+        (element.Attribute("OutputItemType")?.Value ?? element.Elements().FirstOrDefault(static e => e.Name.LocalName == "OutputItemType")?.Value)?.Trim()
+        is { } kind && kind.Equals("Analyzer", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The <c>AssemblyName</c> set by the project or its imports: null when none sets it, empty when

@@ -24,6 +24,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <summary>Test outcomes kept from earlier evaluations of the commit; null when caching is off.</summary>
     private OutcomeCache? _cache;
 
+    /// <summary>Builds a change that reaches a source generator, for the selection to read what it generates; set per evaluation.</summary>
+    private GeneratorWorkspace? _generators;
+
     /// <summary>Evaluates sampled changes at <paramref name="sha"/>; a build failure is reported, not thrown.</summary>
     /// <param name="sha">Commit to change.</param>
     /// <param name="request">How many members to change.</param>
@@ -43,6 +46,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             }
 
             _cache = OutcomeCache.Open(settings.OutcomeCache, cacheKey);
+            _generators = new GeneratorWorkspace(workspace, settings.OutcomeCache is { } outcomes ? Path.Combine(outcomes, "generated", cacheKey) : null);
             if (_cache is { Count: > 0 } cache)
             {
                 LogCacheOpened(cache.Count);
@@ -186,6 +190,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var cause = ex is AggregateException aggregate ? aggregate.InnerExceptions[0] : ex;
             LogFailed(sha, cause);
             return new SyntheticRun(sha, 0, 0, mutants, cause.Message) { Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds };
+        }
+        finally
+        {
+            _generators?.Remove();
+            _generators = null;
         }
     }
 
@@ -1062,7 +1071,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             var pipeline = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator);
             _steps.PlaceMaps(sha);
-            var analysis = pipeline.Run(workspace.RepoRoot, sha);
+            // As td test does: a change that reaches a generator is built, to compare what it generates.
+            var analysis = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { GeneratedCode = _generators?.For(target) });
             var others = new Dictionary<OtherSelector, OtherSelection>
             {
                 [OtherSelector.ProjectLevel] = new([.. analysis.Impact.Tests.Select(static t => new TestProjectSelection(t.Project, TestRunMode.All, [], "affected test project"))], 0),

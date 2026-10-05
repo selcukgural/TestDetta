@@ -58,6 +58,22 @@ internal static class GeneratedSources
         return texts;
     }
 
+    /// <summary>True when <paramref name="assemblyPath"/> has a portable PDB, embedded or next to it, to read generated code from.</summary>
+    /// <param name="assemblyPath">Compiled assembly.</param>
+    public static bool HasPdb(string assemblyPath)
+    {
+        try
+        {
+            using var pe = new PEReader(File.OpenRead(assemblyPath));
+            using var provider = OpenPdb(pe, assemblyPath);
+            return provider is not null && provider.GetMetadataReader() is not null;
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or IOException or InvalidDataException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>The embedded PDB, or the <c>.pdb</c> file next to the assembly; null when neither is portable.</summary>
     /// <param name="pe">Opened assembly.</param>
     /// <param name="assemblyPath">Assembly file.</param>

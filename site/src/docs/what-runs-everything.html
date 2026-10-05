@@ -11,7 +11,8 @@
     <tr><td><code>Directory.Solution.props</code>, <code>Directory.Solution.targets</code></td><td>Every test project below it</td></tr>
     <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Every test project below it</td></tr>
     <tr><td><code>Directory.Packages.props</code>, only <code>PackageVersion</code> items changed</td><td>Only the test projects that reference a changed package, and those that depend on them</td></tr>
-    <tr><td><code>Directory.Packages.props</code>, anything else (a <code>GlobalPackageReference</code>, transitive pinning, properties)</td><td>Every test project below it</td></tr>
+    <tr><td>A changed source generator, for a test project that targets several frameworks, has no coverage map or builds without a portable PDB</td><td>What it generates is compared from a build, and here there is nothing to compare. Otherwise only the generated code that changed counts.</td></tr>
+    <tr><td>A project referenced with <code>ReferenceOutputAssembly="false"</code></td><td>The tests may run it as another process, which coverage does not see.</td></tr>
   </tbody>
 </table>
 

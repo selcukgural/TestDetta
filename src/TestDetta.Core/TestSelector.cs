@@ -8,7 +8,8 @@ namespace TestDetta.Core;
 /// and types that nothing names (and so are probably found through reflection).
 /// </summary>
 /// <param name="logger">Receives the reasons for every fallback and every selected class.</param>
-public sealed partial class TestSelector(ILogger<TestSelector> logger)
+/// <param name="detector">Compares generated code before and after a change; null without a <see cref="TestSelectionRequest.GeneratedCode"/> reader.</param>
+public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChangeDetector? detector = null)
 {
     /// <summary>Decides, per affected test project, which tests to run.</summary>
     /// <param name="request">Changes, project graph and the project-level impact.</param>
@@ -22,14 +23,17 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
         }
 
         (request, var driftRunAll) = WithoutDriftedMaps(request);
-        var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact);
+        var generatorUses = new List<GeneratorUse>();
+        var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, generatorUses);
+        var generatorOutput = CompareGeneratorOutput(request, projectLevel, generatorUses);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)
         {
             affectedProjects.Add(affected.Project.Path);
         }
 
-        var generated = request.CoverageMaps.Values.SelectMany(static m => m.Generated);
+        // What the generators write now comes first: the index keeps the first file of each name.
+        var generated = generatorOutput.Current.Concat(request.CoverageMaps.Values.SelectMany(static m => m.Generated));
         var index = new SourceIndexBuilder(logger).Build(request.Graph, request.RepoRoot, affectedProjects, generated);
         // Projects that run completely whatever coverage says have no say in what it can answer.
         var runsCompletely = RunAll(request.Graph, projectLevel).Keys.Concat(driftRunAll.Keys).ToHashSet(Paths.Comparer);
@@ -37,9 +41,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
 
         // Test projects without a coverage map are decided by name alone; those with one use a second
         // spread that stops wherever the maps know which tests run the reached code.
-        var byName = Trace(request, index, projectLevel, coverage: null, bridged: []);
+        var byName = Trace(request, index, projectLevel, coverage: null, bridged: generatorOutput.Changes);
         var withCoverage = coverage.HasAnyMap
-            ? Trace(request, index, projectLevel, coverage, Bridge(request, index, byName))
+            ? Trace(request, index, projectLevel, coverage, [.. Bridge(request, index, byName), .. generatorOutput.Changes])
             : byName;
 
         var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { DriftRunAll = driftRunAll });
@@ -151,7 +155,10 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     /// <param name="index">Indexed source code.</param>
     /// <param name="projectLevel">Project-level fallbacks from non-C# and build changes.</param>
     /// <param name="coverage">Coverage maps to stop at, or null for a pure name spread.</param>
-    /// <param name="bridged">Drift members to resolve like changes (<see cref="Bridge"/>); empty without drift.</param>
+    /// <param name="bridged">
+    /// Members to resolve like changes besides the source changes, each with the project it is compiled
+    /// into: drift members (<see cref="Bridge"/>) and generated members that changed (<see cref="CompareGeneratorOutput"/>).
+    /// </param>
     private TraceResult Trace(
         TestSelectionRequest request,
         SourceIndex index,
@@ -219,7 +226,17 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="changedFiles">Changed paths relative to <paramref name="repoRoot"/>.</param>
     /// <param name="impact">Project-level impact of the same changes.</param>
-    private Dictionary<string, string> FindProjectLevelChanges(ProjectGraph graph, string repoRoot, IReadOnlyList<string> changedFiles, ImpactResult impact)
+    /// <param name="generatorUses">
+    /// Receives the projects that use an affected project as a source generator, instead of a fallback,
+    /// for <see cref="CompareGeneratorOutput"/> to decide; null to fall back for them too (map drift,
+    /// where nothing builds the map's commit).
+    /// </param>
+    private Dictionary<string, string> FindProjectLevelChanges(
+        ProjectGraph graph,
+        string repoRoot,
+        IReadOnlyList<string> changedFiles,
+        ImpactResult impact,
+        List<GeneratorUse>? generatorUses = null)
     {
         var fallbacks = new Dictionary<string, string>(Paths.Comparer);
         var codeChanges = new Dictionary<string, CodeChange>(StringComparer.Ordinal);
@@ -283,8 +300,15 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger)
             // An analyzer or source generator runs inside the consumer's compiler, and an output the
             // consumer does not compile against is run in another process if at all: neither name
             // tracing nor coverage sees what the change does there, so the consumer changed as a whole.
+            // What a generator does shows in the code it generates, which a build can compare.
             foreach (var consumer in graph.OpaqueConsumersOf(affected.Project.Path))
             {
+                if (generatorUses is not null && consumer.GeneratorReferences.Contains(affected.Project.Path))
+                {
+                    generatorUses.Add(new GeneratorUse(consumer, affected.Project));
+                    continue;
+                }
+
                 AddFallback(
                     fallbacks,
                     consumer.Path,

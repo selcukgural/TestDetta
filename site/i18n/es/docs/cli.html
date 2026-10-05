@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 9290031d3f43 -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 7cf305d08b92 -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -57,8 +57,11 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <h3 id="tests-only"><code>--tests-only</code></h3>
 <p>Lista solo los proyectos de pruebas afectados, no los proyectos de producción intermedios.</p>
 
+<h3 id="build"><code>--build</code></h3>
+<p>Cuando un cambio llega a un generador de código fuente del repositorio, compila los proyectos de pruebas que lo usan y compara lo que genera con su mapa de cobertura, como hace siempre <code>td test</code>. Sin esta opción se lee una compilación existente más reciente que las fuentes; si no la hay, esos proyectos de pruebas se listan como ejecución completa.</p>
+
 <h2 id="test"><code>td test</code></h2>
-<p>Compila y ejecuta solo las pruebas afectadas: un filtro por proyecto de pruebas cuando solo algunas clases están afectadas, el proyecto completo cuando lo están todas o cuando un cambio no se puede acotar, y nada cuando no lo está ninguna. Código de salida <code>3</code> cuando falla alguna prueba.</p>
+<p>Compila y ejecuta solo las pruebas afectadas: un filtro por proyecto de pruebas cuando solo algunas clases están afectadas, el proyecto completo cuando lo están todas o cuando un cambio no se puede acotar, y nada cuando no lo está ninguna. Código de salida <code>3</code> cuando falla alguna prueba. Cuando un cambio llega a un generador de código fuente del repositorio, los proyectos de pruebas que lo usan se compilan primero y solo cuenta el código generado que cambió; si la compilación falla, el comando se detiene aquí con los errores del compilador.</p>
 
 <h3 id="dry-run"><code>--dry-run</code></h3>
 <p>Muestra los comandos <code>dotnet test</code> en lugar de ejecutarlos. Un proyecto cuyo <code>global.json</code> está en una subcarpeta se muestra como <code>(cd src &amp;&amp; dotnet test ...)</code>.</p>

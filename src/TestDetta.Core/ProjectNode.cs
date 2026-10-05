@@ -94,6 +94,15 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     /// </summary>
     public IReadOnlySet<string> OpaqueReferences { get; init; } = new HashSet<string>(Paths.Comparer);
 
+    /// <summary>
+    /// The part of <see cref="OpaqueReferences"/> used as an analyzer or source generator
+    /// (<c>OutputItemType="Analyzer"</c>): it runs inside this project's compiler, and what it does
+    /// reaches this project through the code it generates, which a build can show
+    /// (docs/design/generator-output-changes.md). Known from the MSBuild evaluation only; a project
+    /// read from its XML alone has none, and its opaque references stay opaque.
+    /// </summary>
+    public IReadOnlySet<string> GeneratorReferences { get; init; } = new HashSet<string>(Paths.Comparer);
+
     /// <summary>The part of <see cref="UnknownReferencePatterns"/> that comes from references as described in <see cref="OpaqueReferences"/>.</summary>
     public IReadOnlyList<string> UnknownOpaqueReferencePatterns { get; init; } = [];
 

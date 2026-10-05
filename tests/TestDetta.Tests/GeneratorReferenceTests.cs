@@ -94,7 +94,8 @@ public sealed class GeneratorReferenceTests : IDisposable
         var selection = Select();
 
         Assert.Equal(TestRunMode.All, selection.Mode);
-        Assert.Contains("Gen.csproj, which is affected, as an analyzer or source generator", selection.Reason, StringComparison.Ordinal);
+        // Without a build to compare what it generates, the project runs completely, as it always did.
+        Assert.Contains("Gen.csproj, which is affected, as a source generator, and nothing builds it here", selection.Reason, StringComparison.Ordinal);
     }
 
     [Fact]

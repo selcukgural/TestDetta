@@ -17,6 +17,30 @@ public sealed class CliOptionsTests
         Assert.Equal(["-c", "Release", "--no-build"], options.Test.DotnetTestArguments);
     }
 
+    [Theory]
+    [InlineData(new string[0], "Debug")]
+    [InlineData(new[] { "-c", "Release" }, "Release")]
+    [InlineData(new[] { "--no-build", "--configuration", "Ci" }, "Ci")]
+    [InlineData(new[] { "-c:Release" }, "Release")]
+    [InlineData(new[] { "--configuration=Release" }, "Release")]
+    public void Test_command_reads_the_configuration_dotnet_test_builds(string[] dotnetTest, string configuration)
+    {
+        Assert.True(CliOptions.TryParse(["test", "--", .. dotnetTest], "/repo", out var options, out _));
+
+        Assert.Equal(configuration, options.Test.Configuration);
+    }
+
+    [Fact]
+    public void Affected_command_builds_for_changed_generators_only_when_asked()
+    {
+        Assert.True(CliOptions.TryParse(["affected"], "/repo", out var plain, out _));
+        Assert.True(CliOptions.TryParse(["affected", "--build"], "/repo", out var building, out _));
+
+        Assert.False(plain.Affected.Build);
+        Assert.True(building.Affected.Build);
+        Assert.False(CliOptions.TryParse(["record", "--build"], "/repo", out _, out _));
+    }
+
     [Fact]
     public void Affected_command_reads_format_and_verbosity()
     {

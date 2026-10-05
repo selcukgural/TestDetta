@@ -99,7 +99,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 $"{Path.GetFileName(project)} has no build output at {targetPath}; build it with -c {request.Configuration} first, or drop --no-build.");
         }
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
-        var assemblies = AssembliesToInstrument(new HashSet<string>(AssemblyOwners(request).Keys, StringComparer.OrdinalIgnoreCase), outputDirectory);
+        var assemblies = GeneratedSourceReader.RepositoryAssemblies(AssemblyOwners(request).Keys, outputDirectory);
         var generated = ReadGenerated(request, targetPath, assemblies);
         var locations = ClassLocationReader.Read(targetPath, request.RepoRoot);
         LogAssemblies(assemblies.Count, outputDirectory);
@@ -185,6 +185,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             {
                 SkippedClasses = Skipped(runs, map),
                 Platform = RuntimeInformation.RuntimeIdentifier,
+                Framework = framework,
             };
             map = map with
             {
@@ -601,62 +602,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="assemblies">Repository assemblies in the test output.</param>
     private List<GeneratedSource> ReadGenerated(RecordRequest request, string targetPath, List<string> assemblies)
     {
-        var owners = AssemblyOwners(request);
-        var generated = new List<GeneratedSource>();
-        foreach (var assembly in assemblies.Append(targetPath).Distinct(StringComparer.Ordinal))
-        {
-            var owner = string.Equals(assembly, targetPath, StringComparison.Ordinal)
-                ? request.TestProject
-                : owners.GetValueOrDefault(Path.GetFileName(assembly));
-            var sources = owner is null ? [] : GeneratedSources.Read(assembly);
-            if (sources.Count == 0)
-            {
-                continue;
-            }
-
-            var project = Path.GetRelativePath(request.RepoRoot, owner!.Path).Replace('\\', '/');
-            generated.AddRange(sources.Select(source => new GeneratedSource(project, GeneratedName(request.RepoRoot, source.Name), source.Text)));
-        }
-
+        var generated = GeneratedSourceReader.Read(request.RepoRoot, request.TestProject, targetPath, AssemblyOwners(request), assemblies);
         LogGenerated(request.TestProject.Path, generated.Count);
         return generated;
-    }
-
-    /// <summary>
-    /// A generated file's PDB path relative to the repository when it lies inside it (the compiler names
-    /// it under the project's <c>obj</c> directory), so a map does not depend on where the clone was.
-    /// </summary>
-    /// <param name="repoRoot">Repository root.</param>
-    /// <param name="name">Path of the document in the PDB.</param>
-    private static string GeneratedName(string repoRoot, string name)
-    {
-        var relative = Path.GetRelativePath(repoRoot, name);
-        return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? name : relative.Replace('\\', '/');
-    }
-
-    /// <summary>The repository's own assemblies found in the test output, except TestDetta's runtime.</summary>
-    /// <param name="fileNames">Assembly file names of the repository's projects.</param>
-    /// <param name="outputDirectory">Test project output directory.</param>
-    private static List<string> AssembliesToInstrument(HashSet<string> fileNames, string outputDirectory)
-    {
-        var runtimeFile = typeof(TestDettaTracker).Assembly.GetName().Name + ".dll";
-        var assemblies = new List<string>();
-        foreach (var fileName in fileNames)
-        {
-            if (string.Equals(fileName, runtimeFile, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var path = Path.Combine(outputDirectory, fileName);
-            if (File.Exists(path))
-            {
-                assemblies.Add(path);
-            }
-        }
-
-        assemblies.Sort(StringComparer.Ordinal);
-        return assemblies;
     }
 
     /// <summary>

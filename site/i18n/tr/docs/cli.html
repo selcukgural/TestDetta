@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 9290031d3f43 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 7cf305d08b92 -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -57,8 +57,11 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <h3 id="tests-only"><code>--tests-only</code></h3>
 <p>Aradaki üretim projelerini değil, yalnızca etkilenen test projelerini listeler.</p>
 
+<h3 id="build"><code>--build</code></h3>
+<p>Bir değişiklik depodaki bir source generator'a ulaştığında, onu kullanan test projelerini derler ve ürettiği kodu kapsam haritalarıyla karşılaştırır; <code>td test</code> bunu her zaman yapar. Bu seçenek olmadan kaynaklardan daha yeni bir derleme varsa o okunur; yoksa bu test projeleri tamamen çalışacak olarak listelenir.</p>
+
 <h2 id="test"><code>td test</code></h2>
-<p>Yalnızca etkilenen testleri derler ve çalıştırır: yalnızca bazı sınıflar etkilendiğinde test projesi başına bir filtreyle, hepsi etkilendiğinde ya da bir değişiklik daraltılamadığında projenin tamamını, hiçbiri etkilenmediğinde hiçbir şey. Herhangi bir test başarısız olduğunda çıkış kodu <code>3</code>'tür.</p>
+<p>Yalnızca etkilenen testleri derler ve çalıştırır: yalnızca bazı sınıflar etkilendiğinde test projesi başına bir filtreyle, hepsi etkilendiğinde ya da bir değişiklik daraltılamadığında projenin tamamını, hiçbiri etkilenmediğinde hiçbir şey. Herhangi bir test başarısız olduğunda çıkış kodu <code>3</code>'tür. Bir değişiklik depodaki bir source generator'a ulaştığında, onu kullanan test projeleri önce derlenir ve yalnızca değişen üretilmiş kod sayılır; derleme başarısız olursa komut derleyicinin hatalarıyla burada durur.</p>
 
 <h3 id="dry-run"><code>--dry-run</code></h3>
 <p><code>dotnet test</code> komutlarını çalıştırmak yerine yazdırır. <code>global.json</code> dosyası bir alt klasörde bulunan bir proje <code>(cd src &amp;&amp; dotnet test ...)</code> şeklinde yazdırılır.</p>

@@ -152,6 +152,13 @@ public sealed record CoverageMap(
     public string? Platform { get; init; }
 
     /// <summary>
+    /// Target framework the test project was recorded for, such as <c>net8.0</c>, when it targets
+    /// several; null when it targets one. Generated code can differ per framework, so what the
+    /// generators write now is read from a build for this framework (docs/design/generator-output-changes.md).
+    /// </summary>
+    public string? Framework { get; init; }
+
+    /// <summary>
     /// Where each reported test class (runtime name) is written: one entry per source file with the
     /// first line of its code there, read from the test assembly's PDB. When the build names a class
     /// differently from the recording (Markdig's culture-dependent generated spec classes), the class

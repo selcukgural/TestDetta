@@ -1,4 +1,4 @@
-<!-- title: すべてが実行される変更; layout: docs; description: {{name}} がテストプロジェクト全体、またはフォルダー配下のすべてのプロジェクトを実行する変更と、無視するファイルを説明します。; source: 9d69a2b5015f -->
+<!-- title: すべてが実行される変更; layout: docs; description: {{name}} がテストプロジェクト全体、またはフォルダー配下のすべてのプロジェクトを実行する変更と、無視するファイルを説明します。; source: 3659216cb443 -->
 <h1>すべてが実行される変更</h1>
 <p class="lead">ほとんどの変更では、選択されるテストクラスはわずかです。しかし安全に絞り込めない変更もあり、その場合 {{name}} はテストプロジェクト全体、またはフォルダー配下のすべてのプロジェクトを実行します。このページではそうした変更をすべて挙げているので、選択が広くなっても驚くことはありません。</p>
 
@@ -11,7 +11,8 @@
     <tr><td><code>Directory.Solution.props</code>、<code>Directory.Solution.targets</code></td><td>配下のすべてのテストプロジェクト</td></tr>
     <tr><td><code>global.json</code>、<code>NuGet.config</code>、<code>.editorconfig</code></td><td>配下のすべてのテストプロジェクト</td></tr>
     <tr><td><code>Directory.Packages.props</code>（<code>PackageVersion</code> 項目だけが変更された場合）</td><td>変更されたパッケージを参照するテストプロジェクトと、それに依存するテストプロジェクトだけ</td></tr>
-    <tr><td><code>Directory.Packages.props</code>（それ以外の変更：<code>GlobalPackageReference</code>、推移的なピン留め、プロパティ）</td><td>配下のすべてのテストプロジェクト</td></tr>
+    <tr><td>複数のターゲットフレームワークを持つ、カバレッジマップがない、またはポータブル PDB なしでビルドされるテストプロジェクトに対する、変更されたソースジェネレーター</td><td>生成されるコードはビルドから比較しますが、この場合は比較する対象がないため。それ以外の場合は、変更された生成コードだけが対象になります。</td></tr>
+    <tr><td><code>ReferenceOutputAssembly="false"</code> で参照されるプロジェクト</td><td>テストが別のプロセスとして実行する可能性があり、カバレッジはそれを捉えられないため。</td></tr>
   </tbody>
 </table>
 

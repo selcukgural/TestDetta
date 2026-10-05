@@ -38,7 +38,7 @@ A filter that matches no test is treated as a TestDetta bug: the project is run 
 
 | Command | What it does |
 |---|---|
-| `td affected [--format text\|json\|paths\|commands]` | Print what a change affects and why. |
+| `td affected [--format text\|json\|paths\|commands] [--build]` | Print what a change affects and why. `--build` builds the test projects that use a changed source generator, to compare what it generates; without it, an existing build newer than the sources is read. |
 | `td test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
 | `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. A test project that does not build or run on the machine (a mobile app without its workload) gets no map and is decided by name; the command fails only when no map could be written. |
 | `td license status` | Check the license and show what it covers. |
@@ -173,8 +173,15 @@ and the details are in [docs/ci.md](docs/ci.md).
   skipped for other reasons, such as a missing Docker daemon, are covered only by recording where
   the tests run.
 - Code written by source generators is not in the source tree; `td record` reads it from the
-  PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the
-  map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.
+  PDBs of the recorded assemblies (portable or embedded) and keeps it in the map, where it is
+  analysed like the project's own code. Assemblies built without a portable PDB give nothing.
+- A change that reaches a source generator in the repository (a project used with
+  `OutputItemType="Analyzer"`) is decided by what the generator writes: `td test` builds the test
+  projects that use it and compares their generated code with the map, so only generated code that
+  really changed counts. A test project with several target frameworks, without a map, or without a
+  portable PDB still runs completely; a build that fails stops `td test` with the compiler's errors.
+  A project referenced with `ReferenceOutputAssembly="false"` (run as another process) still runs its
+  consumers completely.
 - F# and Visual Basic projects are part of the project graph, but their code is not analysed: when
   one is affected, everything that depends on it runs completely.
 

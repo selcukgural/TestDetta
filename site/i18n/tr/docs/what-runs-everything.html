@@ -1,4 +1,4 @@
-<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: 9d69a2b5015f -->
+<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: 3659216cb443 -->
 <h1>Neler her şeyi çalıştırır</h1>
 <p class="lead">Değişikliklerin çoğu birkaç test sınıfı seçer. Bazıları güvenli bir şekilde daraltılamaz; bu yüzden {{name}} bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırır. Bu sayfa hepsini listeler; böylece geniş bir seçim asla sürpriz olmaz.</p>
 
@@ -11,7 +11,8 @@
     <tr><td><code>Directory.Solution.props</code>, <code>Directory.Solution.targets</code></td><td>Altındaki her test projesi</td></tr>
     <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Altındaki her test projesi</td></tr>
     <tr><td><code>Directory.Packages.props</code>, yalnızca <code>PackageVersion</code> öğeleri değiştiyse</td><td>Yalnızca değişen bir paketi referans alan test projeleri ve onlara bağımlı olanlar</td></tr>
-    <tr><td><code>Directory.Packages.props</code>, başka herhangi bir şey (bir <code>GlobalPackageReference</code>, transitive pinning, property'ler)</td><td>Altındaki her test projesi</td></tr>
+    <tr><td>Birden fazla hedef framework'e derlenen, kapsam haritası olmayan ya da taşınabilir PDB olmadan derlenen bir test projesi için değişen bir source generator</td><td>Ürettiği kod bir derlemeden karşılaştırılır; burada karşılaştırılacak bir şey yoktur. Diğer durumlarda yalnızca değişen üretilmiş kod sayılır.</td></tr>
+    <tr><td><code>ReferenceOutputAssembly="false"</code> ile başvurulan bir proje</td><td>Testler onu ayrı bir süreç olarak çalıştırabilir; kapsam bunu görmez.</td></tr>
   </tbody>
 </table>
 

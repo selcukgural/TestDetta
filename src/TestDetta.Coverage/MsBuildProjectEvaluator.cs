@@ -20,7 +20,7 @@ namespace TestDetta.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 3;
+    private const int EvaluatorVersion = 4;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -56,6 +56,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
               <!-- Referenced without compiling against it: an analyzer or source generator, or build order and copied outputs. -->
               <_TestDettaOpaqueReference Include="@(ProjectReference)" Condition="'%(ProjectReference.OutputItemType)' != '' or '%(ProjectReference.ReferenceOutputAssembly)' == 'false'" />
               <TestDettaEvaluated Include="@(_TestDettaOpaqueReference->'%(FullPath)')" Kind="OpaqueReference" Project="$(MSBuildProjectFullPath)" />
+              <!-- Of those, the ones that run inside the compiler: what they do reaches the project through the code they generate. -->
+              <_TestDettaGeneratorReference Include="@(ProjectReference)" Condition="'%(ProjectReference.OutputItemType)' == 'Analyzer'" />
+              <TestDettaEvaluated Include="@(_TestDettaGeneratorReference->'%(FullPath)')" Kind="GeneratorReference" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="@(PackageReference)" Kind="Package" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="@(Compile->'%(FullPath)');@(EmbeddedResource->'%(FullPath)');@(Content->'%(FullPath)');@(None->'%(FullPath)');@(AdditionalFiles->'%(FullPath)')" Kind="Item" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="$(DefineConstants)" Kind="Define" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />
@@ -296,6 +299,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 case "OpaqueReference":
                     builder.OpaqueReferences.Add(Paths.Normalize(fields[2]));
                     break;
+                case "GeneratorReference":
+                    builder.GeneratorReferences.Add(Paths.Normalize(fields[2]));
+                    break;
                 case "Package":
                     builder.Packages.Add(fields[2]);
                     break;
@@ -326,6 +332,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
             {
                 SymbolSets = SymbolSets(b.Value.Symbols.Values),
                 OpaqueReferences = b.Value.OpaqueReferences,
+                GeneratorReferences = b.Value.GeneratorReferences,
             },
             Paths.Comparer);
     }
@@ -360,6 +367,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 {
                     SymbolSets = SymbolSets(c.Value.SymbolSets ?? []),
                     OpaqueReferences = (c.Value.OpaqueReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
+                    GeneratorReferences = (c.Value.GeneratorReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
                 },
                 Paths.Comparer);
         }
@@ -385,6 +393,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
             {
                 SymbolSets = [.. p.Value.SymbolSets.Select(static s => s.ToList())],
                 OpaqueReferences = [.. p.Value.OpaqueReferences.Select(Relative)],
+                GeneratorReferences = [.. p.Value.GeneratorReferences.Select(Relative)],
             });
         try
         {
@@ -414,6 +423,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
         /// <summary>See <see cref="EvaluatedProject.OpaqueReferences"/>.</summary>
         public HashSet<string> OpaqueReferences { get; } = new(Paths.Comparer);
 
+        /// <summary>See <see cref="EvaluatedProject.GeneratorReferences"/>.</summary>
+        public HashSet<string> GeneratorReferences { get; } = new(Paths.Comparer);
+
         /// <summary>See <see cref="EvaluatedProject.Items"/>.</summary>
         public HashSet<string> Items { get; } = new(Paths.Comparer);
 
@@ -437,6 +449,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 
         /// <summary>See <see cref="EvaluatedProject.OpaqueReferences"/>; null in caches written before they were read.</summary>
         public List<string>? OpaqueReferences { get; init; }
+
+        /// <summary>See <see cref="EvaluatedProject.GeneratorReferences"/>; null in caches written before they were read.</summary>
+        public List<string>? GeneratorReferences { get; init; }
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "MSBuild evaluated {Evaluated} of {Count} project(s) in {Seconds:0.0} s")]

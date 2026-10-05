@@ -65,7 +65,17 @@ internal static partial class CliApp
             analysis = new AnalysisPipeline(loggerFactory, new TestDetta.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(
                 options.Analysis.RepoPath,
                 options.Analysis.BaseRef,
-                new AnalysisOptions { MaxMapAge = options.Analysis.MaxMapAge, DriftFallback = options.Analysis.DriftFallback });
+                new AnalysisOptions
+                {
+                    MaxMapAge = options.Analysis.MaxMapAge,
+                    DriftFallback = options.Analysis.DriftFallback,
+                    // td test builds anyway before it runs tests; td affected only when asked.
+                    GeneratedCode = new TestDetta.Coverage.BuildGeneratedCodeReader(
+                        loggerFactory,
+                        options.Command == CliCommand.Test
+                            ? new TestDetta.Coverage.GeneratedCodeBuild(Build: true, options.Test.Configuration)
+                            : new TestDetta.Coverage.GeneratedCodeBuild(options.Affected.Build)),
+                });
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException
                                        or UnauthorizedAccessException)

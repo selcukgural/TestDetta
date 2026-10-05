@@ -234,10 +234,14 @@ public sealed class ProjectEvaluationTests : IDisposable
             "Reference\t/r/T.csproj\t/r/Lib.csproj\t\t\t",
             "Reference\t/r/T.csproj\t/r/Gen.csproj\t\t\t",
             "OpaqueReference\t/r/T.csproj\t/r/Gen.csproj\t\t\t",
+            "Reference\t/r/T.csproj\t/r/Tool.csproj\t\t\t",
+            "OpaqueReference\t/r/T.csproj\t/r/Tool.csproj\t\t\t",
+            "GeneratorReference\t/r/T.csproj\t/r/Gen.csproj\t\t\t",
         ]);
 
-        Assert.Equal(["/r/Gen.csproj", "/r/Lib.csproj"], evaluated["/r/T.csproj"].References);
-        Assert.Equal(["/r/Gen.csproj"], evaluated["/r/T.csproj"].OpaqueReferences);
+        Assert.Equal(["/r/Gen.csproj", "/r/Lib.csproj", "/r/Tool.csproj"], evaluated["/r/T.csproj"].References);
+        Assert.Equal(["/r/Gen.csproj", "/r/Tool.csproj"], evaluated["/r/T.csproj"].OpaqueReferences.Order(StringComparer.Ordinal));
+        Assert.Equal(["/r/Gen.csproj"], evaluated["/r/T.csproj"].GeneratorReferences);
     }
 
     [Fact]
@@ -268,6 +272,8 @@ public sealed class ProjectEvaluationTests : IDisposable
         var tests = graph[Full("tests/T/T.csproj")];
         Assert.Equal([Full("src/Gen/Gen.csproj"), Full("src/Lib/Lib.csproj"), Full("src/Tool/Tool.csproj")], tests.References.Order(StringComparer.Ordinal));
         Assert.Equal([Full("src/Gen/Gen.csproj"), Full("src/Tool/Tool.csproj")], tests.OpaqueReferences.Order(StringComparer.Ordinal));
+        // Only the analyzer is a generator; the tool is referenced for its output, run elsewhere if at all.
+        Assert.Equal([Full("src/Gen/Gen.csproj")], tests.GeneratorReferences);
 
         // A copy elsewhere reads the evaluation from the disk cache, its paths relative to the repository.
         var copy = Directory.CreateTempSubdirectory("testdetta-opaque-copy-").FullName;
@@ -278,6 +284,7 @@ public sealed class ProjectEvaluationTests : IDisposable
             var fromCache = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance, evaluator).Load(copy);
             string InCopy(string relative) => Paths.Normalize(Path.Combine(copy, relative));
             Assert.Equal([InCopy("src/Gen/Gen.csproj"), InCopy("src/Tool/Tool.csproj")], fromCache[InCopy("tests/T/T.csproj")].OpaqueReferences.Order(StringComparer.Ordinal));
+            Assert.Equal([InCopy("src/Gen/Gen.csproj")], fromCache[InCopy("tests/T/T.csproj")].GeneratorReferences);
             Assert.Equal(cacheFiles, Directory.GetFiles(Path.Combine(copy, ".testdetta", "cache", "graph")));
         }
         finally
