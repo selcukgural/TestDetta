@@ -28,6 +28,14 @@ internal sealed partial class CoverageSelection
     /// <summary>Affected test projects, by path.</summary>
     private readonly HashSet<string> _affectedTests = new(Paths.Comparer);
 
+    /// <summary>
+    /// Projects that run completely whatever coverage says (a changed build file, a generator they use).
+    /// Their maps have no say in whether coverage can answer: a map that cannot know code which ran in
+    /// the compiler sent changes into the name trace for every other project (Mapperly's integration
+    /// tests, which use the library as a generator).
+    /// </summary>
+    private readonly IReadOnlySet<string> _runsCompletely;
+
     /// <summary>Test classes selected from coverage, per test project, with the evidence of their first selection.</summary>
     private readonly Dictionary<string, Dictionary<string, string>> _selected = new(Paths.Comparer);
 
@@ -35,10 +43,12 @@ internal sealed partial class CoverageSelection
     /// <param name="request">Selection input, including the maps.</param>
     /// <param name="affectedTests">Test projects affected at project level.</param>
     /// <param name="index">Indexed source code, for the reflection check.</param>
+    /// <param name="runsCompletely">Projects that run completely whatever coverage says.</param>
     /// <param name="logger">Receives why coverage could not answer for a change.</param>
-    public CoverageSelection(TestSelectionRequest request, List<AffectedProject> affectedTests, SourceIndex index, ILogger logger)
+    public CoverageSelection(TestSelectionRequest request, List<AffectedProject> affectedTests, SourceIndex index, IReadOnlySet<string> runsCompletely, ILogger logger)
     {
         _logger = logger;
+        _runsCompletely = runsCompletely;
         _graph = request.Graph;
         _index = index;
         _repoRoot = request.RepoRoot;
@@ -342,7 +352,8 @@ internal sealed partial class CoverageSelection
             return Unanswered(change, change.Kind == SymbolChangeKind.Added ? "added" : "its type may be found through reflection");
         }
 
-        var (answers, unresolved) = Answers(change, owner);
+        var answerSet = Answers(change, owner);
+        var (answers, unresolved) = answerSet;
         var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
         SelectAll(answers, reached ? $"ran {member}, which names the changed code" : $"ran {member}, which changed");
         // Changed metadata is read through reflection without running the code: the classes that ran
@@ -350,7 +361,7 @@ internal sealed partial class CoverageSelection
         var reason = unresolved
                      ?? (!typeUsersKnown ? "a member of its type ran outside any test"
                          : change.MetadataChanged ? "its metadata changed"
-                         : answers.Count == 0 ? "no affected test project with a map depends on it"
+                         : answers.Count == 0 && !answerSet.CoveredByFullRuns ? "no affected test project with a map depends on it"
                          : null);
         return reason is null || Unanswered(change, reason);
     }
@@ -380,10 +391,17 @@ internal sealed partial class CoverageSelection
     public bool TryResolveType(string typeName, IReadOnlyCollection<string> owners)
     {
         var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
+        var runsCompletely = false;
         foreach (var project in _graph.WithDependents(owners))
         {
             if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var map))
             {
+                continue;
+            }
+
+            if (_runsCompletely.Contains(project))
+            {
+                runsCompletely = true;
                 continue;
             }
 
@@ -399,9 +417,10 @@ internal sealed partial class CoverageSelection
             answers.Add((project, classes));
         }
 
+        // Every project with a map below the type runs completely: nothing is left to answer for.
         if (answers.Count == 0)
         {
-            return false;
+            return runsCompletely;
         }
 
         SelectAll(answers, $"ran a member of {typeName}, which nothing names and the change reaches through its code");
@@ -420,6 +439,7 @@ internal sealed partial class CoverageSelection
         var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
         string? unresolved = null;
         var known = true;
+        var runsCompletely = false;
         foreach (var project in _graph.WithDependents([owner.Path]))
         {
             if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var map))
@@ -427,10 +447,19 @@ internal sealed partial class CoverageSelection
                 continue;
             }
 
+            if (_runsCompletely.Contains(project))
+            {
+                runsCompletely = true;
+                continue;
+            }
+
             var (classes, complete) = Lookup(map, change);
             if (classes is null)
             {
-                unresolved ??= "a map does not know it or it ran outside any test";
+                // Two different gaps, worth telling apart when a selection is questioned: code the map
+                // never instrumented (fields, constants, abstract members, other assemblies) and code
+                // that also ran before or between tests.
+                unresolved ??= RanOutsideTests(map, change) ? "it ran outside any test" : "a map does not know it";
                 known = false;
                 continue;
             }
@@ -448,7 +477,7 @@ internal sealed partial class CoverageSelection
             answers.Add((project, classes));
         }
 
-        return new AnswerSet(answers, unresolved, known);
+        return new AnswerSet(answers, unresolved, known) { CoveredByFullRuns = runsCompletely };
     }
 
     /// <summary>What the maps say about one change.</summary>
@@ -457,6 +486,9 @@ internal sealed partial class CoverageSelection
     /// <param name="Known">False when a map does not know who ran it at all (as opposed to run-once code).</param>
     private sealed record AnswerSet(List<(string Project, IReadOnlySet<string> Classes)> Answers, string? Unresolved, bool Known)
     {
+        /// <summary>True when a project with a map below the change was left out because it runs completely anyway.</summary>
+        public bool CoveredByFullRuns { get; init; }
+
         /// <summary>Deconstructs into the answers and the reason they are incomplete.</summary>
         /// <param name="answers">Classes per project.</param>
         /// <param name="unresolved">Why incomplete, or null.</param>
@@ -604,6 +636,14 @@ internal sealed partial class CoverageSelection
 
         return (classes, classes is not null);
     }
+
+    /// <summary>True when an overload of the member, or for a type any member of it, ran outside any test.</summary>
+    /// <param name="map">Coverage of one test project.</param>
+    /// <param name="change">A changed type or member.</param>
+    private static bool RanOutsideTests(CoverageIndex map, SymbolChange change) =>
+        change.MemberName is null
+            ? map.TypeRanOutsideTests(change.TypeName)
+            : DeclarationWalker.CompiledNames(change.MemberName).Any(name => map.Knows(change.TypeName, name) && map.ClassesRunning(change.TypeName, name) is null);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TestClass} is not in its coverage map by name; the map recorded it as {RecordedAs}, at the same place")]
     private partial void LogRecordedAs(string testClass, string recordedAs);

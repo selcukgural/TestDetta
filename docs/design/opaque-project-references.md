@@ -55,6 +55,25 @@ Round-2 maps, 100 mutants each, `testdetta-eval --explain` and `attribute.py`:
 On these two repositories the safety costs no precision. The projects it runs completely were
 already running completely for other reasons, and the reason now names the real one.
 
+## Consumers that run completely (2026-10-05)
+
+A consumer that runs completely has no say in whether coverage can answer for a change. Its map
+cannot know code that ran in the compiler, and a map that cannot answer sends the change into the
+name trace, which then reaches every other project. Mapperly's integration tests use `Riok.Mapperly`
+as a generator; the main test project's map knew who ran the changed code, but the integration
+tests' map did not, so every change was traced by name, and a polyfill's unrelated `Version.Build`
+ran the main tests completely.
+
+The selection now knows, before the coverage trace, which test projects run completely whatever
+coverage says (project-level fallbacks and their dependents, maps whose drift cannot be bridged).
+Coverage asks only the other maps; when the only maps below a change belong to such projects, nothing
+is left to answer for. This holds for any project-level fallback, not only opaque consumers.
+
+Verified with stored outcomes on nine repositories with generator or project-level fallbacks, no
+missed or inconclusive mutant: Mapperly 93.7% → 45.3% of classes selected, Immediate.Handlers
+82.2% → 67.1%, protobuf-net 80.3% → 77.7%, Mediator 77.2% → 76.5%; Fluid, Vogen, LibGit2Sharp,
+GraphQL and CommunityToolkit unchanged (their cost is elsewhere).
+
 ## Not covered
 
 - Analyzers and generators from packages (`PackageReference`): a version change is a package
