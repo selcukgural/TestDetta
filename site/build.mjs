@@ -135,9 +135,16 @@ function languageMenu(url, lang, allStrings) {
 
 const code = (lang) => lang.toUpperCase();
 
-function alternates(url) {
+// The page's own address as canonical, so search engines index the trailing-slash URL and not
+// /index.html, then the same page in every language for hreflang. A page with its own url (the 404
+// page) is not an address anyone should land on from a search, so it is marked noindex instead.
+function alternates(url, lang, indexable) {
   const base = `https://${site.domain}`;
+  if (!indexable) {
+    return `  <meta name="robots" content="noindex">`;
+  }
   return [
+    `  <link rel="canonical" href="${base}${prefix(lang)}${url}">`,
     ...languages.map((lang) => `  <link rel="alternate" hreflang="${lang}" href="${base}${prefix(lang)}${url}">`),
     `  <link rel="alternate" hreflang="x-default" href="${base}${url}">`,
   ].join("\n");
@@ -171,6 +178,7 @@ function build({ allowStale }) {
   const layouts = { page: partial("page.html"), docs: partial("docs.html") };
   const allStrings = loadStrings();
   const problems = [];
+  const sitemapUrls = [];
 
   for (const file of walk(src)) {
     const relativePath = relative(src, file);
@@ -183,6 +191,11 @@ function build({ allowStale }) {
 
     const english = readFileSync(file, "utf8");
     const sourceHash = hash(english);
+    // Pages with their own url (the 404 page) are not real addresses and stay out of the sitemap.
+    const englishMeta = parse(english).meta;
+    if (englishMeta.url === undefined) {
+      sitemapUrls.push(urlFor(relativePath));
+    }
     for (const lang of languages) {
       let text = english;
       if (lang !== "en") {
@@ -224,7 +237,7 @@ function build({ allowStale }) {
           url.startsWith(href) && href !== "/" ? `<a href="${href}" aria-current="page"${rest}` : all);
       // The language menu and alternates go in after the page's own links point into its language.
       html = localizeLinks(html, lang).replace("<!--languages-->", languageMenu(url, lang, allStrings))
-        .replace("<!--alternates-->", alternates(url));
+        .replace("<!--alternates-->", alternates(url, lang, meta.url === undefined));
       const outDir = join(dist, prefix(lang).slice(1));
       const target = url.endsWith("/") && meta.url === undefined
         ? join(outDir, url, "index.html")
@@ -241,7 +254,27 @@ function build({ allowStale }) {
     }
     console.warn(`${report}\nBuilt with English in their place (--allow-stale).`);
   }
+  writeSitemap(sitemapUrls);
   console.log(`built ${relative(process.cwd(), dist) || "dist"} in ${languages.length} languages`);
+}
+
+// sitemap.xml lists every page in every language, each with its hreflang alternates, and
+// robots.txt points crawlers at it. Both are generated so a new page cannot be left out.
+function writeSitemap(urls) {
+  const base = `https://${site.domain}`;
+  const links = (url) => languages
+    .map((lang) => `<xhtml:link rel="alternate" hreflang="${lang}" href="${base}${prefix(lang)}${url}"/>`)
+    .join("");
+  const entries = urls.toSorted().flatMap((url) => languages.map((lang) =>
+    `  <url><loc>${base}${prefix(lang)}${url}</loc>${links(url)}<xhtml:link rel="alternate" hreflang="x-default" href="${base}${url}"/></url>`));
+  writeFileSync(join(dist, "sitemap.xml"), [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">`,
+    ...entries,
+    `</urlset>`,
+    "",
+  ].join("\n"));
+  writeFileSync(join(dist, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${base}/sitemap.xml\n`);
 }
 
 if (process.argv.includes("--hashes")) {

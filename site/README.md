@@ -4,6 +4,10 @@ Static site, no dependencies: `node build.mjs` writes `dist/`, `node build.mjs -
 on http://localhost:4321. Pages are HTML fragments in `src/` wrapped in `partials/`; the product
 name, prices, contact and legal details come from `site.json` (`{{key}}` in any page).
 
+The build also writes `sitemap.xml` (every page in every language, with hreflang alternates) and
+`robots.txt`, and gives each page a canonical link; a page with its own `url` in the front matter
+(the 404 page) is left out of the sitemap and marked `noindex`.
+
 ## Languages
 
 English (`src/`) is the source. Turkish, German, Japanese and Spanish live in `i18n/<lang>/` with
