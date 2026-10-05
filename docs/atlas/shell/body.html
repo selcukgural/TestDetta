@@ -1,0 +1,39 @@
+<div class="shell">
+  <header class="topbar">
+    <button class="menu" id="menu" type="button" aria-label="Bölümler">☰</button>
+    <span class="brand"><i></i>TestDetta Atlası</span>
+    <span class="crumbs" id="crumbs"></span>
+    <button class="palette-btn" id="palette-btn" type="button"><span class="lbl">Adım, sınıf ya da metot ara…</span><span><kbd>⌘</kbd> <kbd>K</kbd></span></button>
+    <button class="theme-btn" id="theme" type="button">Tema: sistem</button>
+  </header>
+  <div class="body">
+    <aside class="explorer" aria-label="Bölümler ve adımlar">
+      <div class="filter"><input id="tree-filter" type="search" placeholder="Adımları süz" aria-label="Adımları süz"></div>
+      <nav class="tree" id="tree"></nav>
+    </aside>
+    <section class="center">
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="view diagram" id="v-diagram"></div>
+      <div class="view" id="v-calls" hidden></div>
+      <div class="view" id="v-code" hidden></div>
+      <div class="view" id="v-reading" hidden></div>
+      <div class="view" id="v-catalog" hidden></div>
+      <div class="player">
+        <button id="prev" type="button" aria-label="Önceki adım">←</button>
+        <button id="play" class="go" type="button">▶ Oynat</button>
+        <button id="next" type="button" aria-label="Sonraki adım">→</button>
+        <div class="scrub" id="scrub" title="Adıma atla"><i></i></div>
+        <span class="count" id="count"></span>
+      </div>
+    </section>
+    <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+  </div>
+  <footer class="status"><span id="status-left"></span><span>kaynak: TestDetta main · 2026-10-05</span><span class="right">← → adım · Boşluk oynat · 1–4 görünüm · ⌘K ara</span></footer>
+</div>
+<div class="palette" id="palette" hidden>
+  <div class="box" role="dialog" aria-label="Ara">
+    <input id="palette-input" type="text" placeholder="Adım, sınıf ya da metot adı yazın…" aria-label="Ara" autocomplete="off">
+    <ul id="palette-list" role="listbox"></ul>
+    <div class="hint"><span>↑↓ seç</span><span>Enter git</span><span>Esc kapat</span></div>
+  </div>
+</div>

@@ -1,0 +1,1700 @@
+<title>TestDetta Atlası</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an IDE shell. Explorer (chapters → steps) | center views (Şema, Çağrı ağacı, Kod, Okuma) over a player |
+   Inspector (what the step is: who, file, in, out, purpose, details). Breadcrumb + ⌘K palette on top, status bar below.
+   Dark-first editor palette with a light variant; amber marks the signal, blue the focus. */
+:root {
+  --bg: #0e1015; --panel: #141720; --panel2: #1a1e29; --raise: #20263380; --line: #252b38; --line2: #313849;
+  --fg: #d7dce6; --fg2: #aab2c2; --muted: #788196; --focus: #7aa2ff; --focus-bg: #1f2b47; --signal: #f0b35a; --signal-bg: #3a2c16;
+  --ok: #7ccf9a; --warn: #f2937a; --type: #c792ea; --str: #b5e08d; --num: #f78c6c; --com: #5c6680; --kw: #82aaff;
+  --sans: "Geist", "Segoe UI", system-ui, sans-serif; --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f6f8; --panel: #ffffff; --panel2: #f0f2f5; --raise: #e9edf380; --line: #e1e4ea; --line2: #cfd4dd;
+    --fg: #161a22; --fg2: #3d4554; --muted: #6a7384; --focus: #3461d9; --focus-bg: #e5ecfd; --signal: #b86a12; --signal-bg: #fbecd6;
+    --ok: #23855a; --warn: #c2512f; --type: #8a3fb0; --str: #2f7d32; --num: #b5521c; --com: #8a93a3; --kw: #2f5bd0; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f5f6f8; --panel: #ffffff; --panel2: #f0f2f5; --raise: #e9edf380; --line: #e1e4ea; --line2: #cfd4dd;
+  --fg: #161a22; --fg2: #3d4554; --muted: #6a7384; --focus: #3461d9; --focus-bg: #e5ecfd; --signal: #b86a12; --signal-bg: #fbecd6;
+  --ok: #23855a; --warn: #c2512f; --type: #8a3fb0; --str: #2f7d32; --num: #b5521c; --com: #8a93a3; --kw: #2f5bd0; color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 13.5px; line-height: 1.55; }
+button { font: inherit; color: inherit; }
+code { font-family: var(--mono); font-size: 0.92em; background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.shell { height: 100%; min-height: 620px; display: grid; grid-template-rows: 42px minmax(0, 1fr) 26px; padding-inline: 0; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line); min-width: 0; }
+.brand { font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 10px; height: 10px; border-radius: 3px; background: var(--signal); display: inline-block; }
+.menu { display: none; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.crumbs { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.crumbs b { color: var(--fg); font-weight: 500; }
+.palette-btn { display: flex; align-items: center; gap: 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px 4px 12px; color: var(--muted); cursor: pointer; min-width: 220px; }
+.palette-btn:hover { border-color: var(--line2); color: var(--fg2); }
+kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--fg2); background: var(--panel); }
+.theme-btn { background: transparent; border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; cursor: pointer; color: var(--fg2); }
+
+.body { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px; min-height: 0; }
+.explorer { background: var(--panel); border-right: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.explorer .filter { margin: 10px; }
+.explorer input { width: 100%; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; color: var(--fg); font: 12.5px var(--sans); }
+.tree { overflow: auto; padding: 0 6px 12px; }
+.ch > button { width: 100%; text-align: left; display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 6px 8px; cursor: pointer; border-radius: 6px; color: var(--fg); font-weight: 500; }
+.ch > button:hover { background: var(--panel2); }
+.ch > button .chev { width: 12px; color: var(--muted); transition: transform 150ms; font-size: 10px; }
+.ch.open > button .chev { transform: rotate(90deg); }
+.ch > button .num { font-family: var(--mono); font-size: 11px; color: var(--signal); }
+.ch .steps { display: none; padding-left: 14px; border-left: 1px solid var(--line); margin-left: 13px; }
+.ch.open .steps { display: grid; }
+.steps button { text-align: left; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 6px; background: none; border: 0; padding: 4px 8px; border-radius: 5px; cursor: pointer; color: var(--fg2); font-size: 12.5px; line-height: 1.4; }
+.steps button .n { font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 1px; }
+.steps button:hover { background: var(--panel2); color: var(--fg); }
+.steps button.on { background: var(--focus-bg); color: var(--fg); }
+.steps button.on .n { color: var(--focus); }
+.steps button[hidden] { display: none; }
+
+.center { display: grid; grid-template-rows: 38px minmax(0, 1fr) 44px; min-width: 0; min-height: 0; background: var(--bg); }
+.tabs { display: flex; align-items: stretch; gap: 0; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { background: none; border: 0; border-right: 1px solid var(--line); padding: 0 16px; cursor: pointer; color: var(--muted); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.tabs button kbd { opacity: 0.7; }
+.tabs button.on { color: var(--fg); background: var(--bg); box-shadow: inset 0 2px 0 var(--focus); }
+.view { overflow: auto; min-height: 0; position: relative; }
+.view[hidden] { display: none; }
+.view.diagram { background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 18px 18px; padding: 16px; }
+.view.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; max-height: 100%; }
+.player { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--panel); border-top: 1px solid var(--line); }
+.player button { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.player button:hover { border-color: var(--line2); }
+.player button.go { background: var(--focus); border-color: var(--focus); color: var(--bg); font-weight: 600; min-width: 92px; }
+.scrub { flex: 1; height: 6px; background: var(--line); border-radius: 6px; position: relative; cursor: pointer; }
+.scrub i { position: absolute; inset: 0 auto 0 0; background: var(--focus); border-radius: 6px; transition: width 250ms; }
+.player .count { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 54px; text-align: right; }
+
+.inspector { background: var(--panel); border-left: 1px solid var(--line); overflow: auto; min-height: 0; }
+.insp-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.insp-head .eyebrow { font-family: var(--mono); font-size: 11px; color: var(--signal); letter-spacing: 0.04em; }
+.insp-head h2 { margin: 0; font-size: 16px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.sect { border-bottom: 1px solid var(--line); }
+.sect h3 { margin: 0; padding: 8px 16px; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--panel2); }
+.sect .c { padding: 10px 16px; color: var(--fg2); min-width: 0; overflow-wrap: anywhere; }
+.sect .c > * + * { margin-top: 8px; }
+.sect .c.mono { font-family: var(--mono); font-size: 12px; color: var(--fg); }
+.sect .c ul { margin: 0; padding-left: 1.1em; display: grid; gap: 4px; }
+.sect .c p { margin: 0; }
+.file { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.file span { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; min-width: 0; }
+.mini { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 8px; cursor: pointer; font-size: 11.5px; color: var(--fg2); white-space: nowrap; }
+.mini:hover { border-color: var(--line2); color: var(--fg); }
+
+/* Code view */
+.codeview { padding: 16px; display: grid; gap: 14px; align-content: start; }
+.codeblock { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.codeblock .cb-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.codeblock .cb-head .mini { margin-left: auto; }
+.codeblock pre { margin: 0; padding: 12px 14px; font: 12.5px/1.65 var(--mono); overflow-x: auto; color: var(--fg); counter-reset: ln; }
+.codeblock pre .ln { display: block; padding-left: 3.2em; position: relative; white-space: pre; }
+.codeblock pre .ln::before { counter-increment: ln; content: counter(ln); position: absolute; left: 0; width: 2.2em; text-align: right; color: var(--com); }
+.tk-kw { color: var(--kw); } .tk-type { color: var(--type); } .tk-str { color: var(--str); } .tk-num { color: var(--num); } .tk-com { color: var(--com); font-style: italic; }
+.empty { color: var(--muted); padding: 24px; display: grid; gap: 8px; max-width: 60ch; }
+
+/* Reading view */
+.reading { padding: 24px 28px 48px; display: grid; gap: 18px; max-width: 900px; }
+.reading .kicker { font-family: var(--mono); font-size: 12px; color: var(--signal); }
+.reading h1 { margin: 0; font-size: 26px; line-height: 1.2; letter-spacing: -0.02em; text-wrap: balance; }
+.reading .lead { color: var(--fg2); max-width: 70ch; }
+.reading .note { border-left: 3px solid var(--signal); background: var(--panel); padding: 10px 14px; border-radius: 0 8px 8px 0; color: var(--fg2); max-width: 75ch; }
+.timeline { border-left: 2px solid var(--line); margin-left: 12px; display: grid; }
+.tl { position: relative; padding: 0 0 18px 24px; cursor: pointer; }
+.tl::before { content: attr(data-n); position: absolute; left: -14px; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--bg); border: 2px solid var(--line2); font: 600 11px var(--mono); display: grid; place-items: center; color: var(--muted); }
+.tl.on::before { background: var(--focus); border-color: var(--focus); color: var(--bg); }
+.tl h4 { margin: 2px 0 4px; font-size: 14.5px; font-weight: 600; }
+.tl p { margin: 0; color: var(--fg2); max-width: 68ch; }
+.tl .who { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.tl:hover h4 { color: var(--focus); }
+
+/* Waterfall */
+.waterfall { padding: 8px 0 24px; font-size: 12.5px; }
+.wf-ruler { display: grid; grid-template-columns: minmax(260px, 42%) minmax(0, 1fr); padding: 0 16px 6px; color: var(--muted); font-family: var(--mono); font-size: 11px; border-bottom: 1px solid var(--line); }
+.wf-ruler .ticks { display: flex; justify-content: space-between; }
+.wf-row { display: grid; grid-template-columns: minmax(260px, 42%) minmax(0, 1fr); align-items: center; padding: 3px 16px; cursor: pointer; }
+.wf-row:hover { background: var(--panel); }
+.wf-row.on { background: var(--focus-bg); box-shadow: inset 2px 0 0 var(--focus); }
+.wf-row .nm { font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-row .nm i { font-style: normal; color: var(--muted); }
+.wf-row .lane { position: relative; height: 16px; }
+.wf-row .lane b { position: absolute; top: 3px; height: 10px; border-radius: 3px; }
+.wf-note { padding: 10px 16px; color: var(--muted); font-size: 12px; }
+
+/* Catalog */
+.catalog { padding: 16px; display: grid; gap: 12px; align-content: start; }
+.catalog table { border-collapse: collapse; width: 100%; font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.catalog th, .catalog td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.catalog th { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: var(--panel2); position: sticky; top: 0; }
+.catalog td.name { font-family: var(--mono); white-space: nowrap; color: var(--fg); }
+.catalog td .area { font-size: 11px; color: var(--muted); }
+.catalog tr[hidden] { display: none; }
+
+/* Diagram (SVG) */
+.node rect, .node path.box { fill: var(--panel); stroke-width: 1.5; transition: fill 200ms, stroke 200ms, opacity 200ms; }
+.node text { font-family: var(--sans); fill: var(--fg); font-size: 15px; font-weight: 500; }
+.node text.sub { font-family: var(--mono); fill: var(--muted); font-size: 11.5px; font-weight: 400; }
+.node.k-actor rect { stroke: var(--focus); } .node.k-core rect { stroke: var(--line2); } .node.k-data path.box { stroke: var(--type); }
+.node.k-tool rect { stroke: var(--muted); stroke-dasharray: 4 3; } .node.k-cmd rect { stroke: var(--signal); }
+.node.k-q rect { stroke: var(--focus); } .node.k-q text { font-size: 14px; }
+.node.k-yes rect { stroke: var(--ok); stroke-width: 2.2; } .node.k-no rect { stroke: var(--warn); stroke-width: 2.2; }
+.node.dim { opacity: 0.35; }
+.node.on rect, .node.on path.box { fill: var(--signal-bg); stroke: var(--signal); stroke-width: 2.4; }
+.node.on.k-yes rect { fill: var(--panel); stroke: var(--ok); stroke-width: 3.4; } .node.on.k-no rect { fill: var(--panel); stroke: var(--warn); stroke-width: 3.4; }
+.node { cursor: default; }
+.edge path { fill: none; stroke: var(--line2); stroke-width: 1.5; transition: stroke 200ms, opacity 200ms; }
+.edge text { font-family: var(--mono); font-size: 11.5px; fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round; }
+.edge.dim { opacity: 0.25; }
+.edge.on path { stroke: var(--signal); stroke-width: 2.4; }
+.edge.on text { fill: var(--fg); }
+.zone rect { fill: none; stroke: var(--line); stroke-dasharray: 6 5; }
+.zone text { font-family: var(--mono); font-size: 11.5px; fill: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.token { fill: var(--signal); }
+.arrowhead { fill: var(--line2); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 10px; border-radius: 3px; border: 2px solid; display: inline-block; }
+
+.status { display: flex; align-items: center; gap: 18px; padding: 0 12px; background: var(--focus-bg); color: var(--fg2); font-family: var(--mono); font-size: 11px; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.status .right { margin-left: auto; color: var(--muted); }
+
+/* Command palette */
+.palette { position: fixed; inset: 0; background: rgba(5, 8, 14, 0.55); display: grid; place-items: start center; padding-top: 12vh; z-index: 20; }
+.palette[hidden] { display: none; }
+.palette .box { width: min(640px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); overflow: hidden; }
+.palette input { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--fg); padding: 14px 16px; font: 15px var(--sans); outline: none; }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.palette li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.palette li .where { font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 2px; }
+.palette li .what { min-width: 0; }
+.palette li .what small { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette li.on { background: var(--focus-bg); }
+.palette .hint { padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; display: flex; gap: 14px; }
+
+@media (max-width: 1100px) { .body { grid-template-columns: 220px minmax(0, 1fr) 300px; } }
+@media (max-width: 860px) {
+  .shell { height: auto; min-height: 100%; }
+  .menu { display: inline-block; }
+  .palette-btn { min-width: 0; } .palette-btn .lbl { display: none; }
+  .crumbs { display: none; }
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .explorer { display: none; border-right: 0; border-bottom: 1px solid var(--line); max-height: 60vh; }
+  .shell.nav-open .explorer { display: grid; }
+  .center { grid-template-rows: 38px minmax(360px, 60vh) auto; }
+  .player { flex-wrap: wrap; padding-block: 8px; }
+  .inspector { border-left: 0; border-top: 1px solid var(--line); }
+  .status .right { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="shell">
+  <header class="topbar">
+    <button class="menu" id="menu" type="button" aria-label="Bölümler">☰</button>
+    <span class="brand"><i></i>TestDetta Atlası</span>
+    <span class="crumbs" id="crumbs"></span>
+    <button class="palette-btn" id="palette-btn" type="button"><span class="lbl">Adım, sınıf ya da metot ara…</span><span><kbd>⌘</kbd> <kbd>K</kbd></span></button>
+    <button class="theme-btn" id="theme" type="button">Tema: sistem</button>
+  </header>
+  <div class="body">
+    <aside class="explorer" aria-label="Bölümler ve adımlar">
+      <div class="filter"><input id="tree-filter" type="search" placeholder="Adımları süz" aria-label="Adımları süz"></div>
+      <nav class="tree" id="tree"></nav>
+    </aside>
+    <section class="center">
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="view diagram" id="v-diagram"></div>
+      <div class="view" id="v-calls" hidden></div>
+      <div class="view" id="v-code" hidden></div>
+      <div class="view" id="v-reading" hidden></div>
+      <div class="view" id="v-catalog" hidden></div>
+      <div class="player">
+        <button id="prev" type="button" aria-label="Önceki adım">←</button>
+        <button id="play" class="go" type="button">▶ Oynat</button>
+        <button id="next" type="button" aria-label="Sonraki adım">→</button>
+        <div class="scrub" id="scrub" title="Adıma atla"><i></i></div>
+        <span class="count" id="count"></span>
+      </div>
+    </section>
+    <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+  </div>
+  <footer class="status"><span id="status-left"></span><span>kaynak: TestDetta main · 2026-10-05</span><span class="right">← → adım · Boşluk oynat · 1–4 görünüm · ⌘K ara</span></footer>
+</div>
+<div class="palette" id="palette" hidden>
+  <div class="box" role="dialog" aria-label="Ara">
+    <input id="palette-input" type="text" placeholder="Adım, sınıf ya da metot adı yazın…" aria-label="Ara" autocomplete="off">
+    <ul id="palette-list" role="listbox"></ul>
+    <div class="hint"><span>↑↓ seç</span><span>Enter git</span><span>Esc kapat</span></div>
+  </div>
+</div>
+
+<script>
+
+// Chapters 1 and 2. Helpers: C() prints an escaped code block; c() an inline code span.
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const C = s => `<code class="sig">${esc(s.trim())}</code>`;
+const c = s => `<code>${esc(s)}</code>`;
+const ul = items => `<ul>${items.map(i => `<li>${i}</li>`).join("")}</ul>`;
+
+const CH_OVERVIEW = {
+  id: "genel", short: "Genel bakış", eyebrow: "Bölüm 1 · Uçtan uca",
+  title: "Bir değişiklik main'den pull request'e nasıl gider",
+  lead: `TestDetta iki anda çalışır. <b>main</b> dalında testlerin tamamı bir kez koşarken her test sınıfının hangi kodu çalıştırdığı kaydedilir (kapsam haritası). Bir <b>pull request</b> geldiğinde değişiklik bu haritayla karşılaştırılır ve yalnız etkilenebilecek test sınıfları koşturulur. Örnek: ${c("Calculator.Tax")} değişti; ${c("Calc.Tests")} içinden yalnız ${c("TaxTests")} koşar.`,
+  width: 1000, height: 600,
+  zones: [
+    { x: 10, y: 20, w: 980, h: 150, label: "main dalı · her birleştirmeden sonra (record modu)" },
+    { x: 10, y: 250, w: 980, h: 340, label: "pull request · her push'ta (test modu)" },
+  ],
+  nodes: [
+    { id: "dev", kind: "actor", x: 30, y: 300, w: 180, h: 50, label: "Geliştirici", sub: "push · birleştirme" },
+    { id: "cimain", kind: "actor", x: 30, y: 70, w: 170, h: 56, label: "GitHub Actions", sub: "mode: record" },
+    { id: "rec", kind: "cmd", x: 280, y: 70, w: 160, h: 56, label: "td record", sub: "RecordCoverage" },
+    { id: "maps", kind: "data", x: 510, y: 66, w: 200, h: 64, label: ".testdetta/coverage", sub: "Calc.Tests.json" },
+    { id: "cache", kind: "data", x: 770, y: 66, w: 200, h: 64, label: "Actions cache", sub: "coverage-<sha>" },
+    { id: "cipr", kind: "actor", x: 30, y: 420, w: 170, h: 56, label: "GitHub Actions", sub: "mode: test" },
+    { id: "td", kind: "cmd", x: 280, y: 420, w: 160, h: 56, label: "td test", sub: "CliApp.Run" },
+    { id: "lic", kind: "core", x: 280, y: 520, w: 160, h: 50, label: "LicenseGate", sub: "Check · Apply" },
+    { id: "pipe", kind: "core", x: 510, y: 420, w: 200, h: 56, label: "AnalysisPipeline", sub: "Run → AnalysisResult" },
+    { id: "dt", kind: "tool", x: 770, y: 420, w: 200, h: 56, label: "dotnet test", sub: "--filter …TaxTests" },
+    { id: "sum", kind: "data", x: 770, y: 296, w: 200, h: 60, label: "İş özeti", sub: "$GITHUB_STEP_SUMMARY" },
+  ],
+  edges: [
+    { id: "merge", from: "dev", to: "cimain", label: "birleştirme", lx: 44 },
+    { id: "run", from: "cimain", to: "rec", label: "record" },
+    { id: "write", from: "rec", to: "maps", label: "Write" },
+    { id: "save", from: "maps", to: "cache", label: "save" },
+    { id: "push", from: "dev", to: "cipr", label: "push", lx: 26 },
+    { id: "restore", from: "cache", to: "td", label: "restore → .testdetta/coverage", bend: { x: 40, y: 60 }, ly: -8 },
+    { id: "start", from: "cipr", to: "td", label: "--base" },
+    { id: "license", from: "td", to: "lic", label: "lisans", lx: 30 },
+    { id: "analyze", from: "td", to: "pipe", label: "Run" },
+    { id: "invoke", from: "pipe", to: "dt", label: "komutlar" },
+    { id: "report", from: "dt", to: "sum", label: "özet", lx: 26 },
+  ],
+  steps: [
+    {
+      title: "main'e birleştirme record işini başlatır", nodes: ["dev", "cimain"], edges: ["merge"],
+      who: "GitHub Actions iş akışı, TestDetta Action'ı (<code>action.yml</code>) <code>mode: record</code> ile çağırır",
+      file: "action.yml",
+      input: "<code>mode: record</code>, <code>configuration</code> (Debug), <code>projects</code>, <code>parallel</code>, <code>no-build</code>",
+      output: "Bir sonraki adımda çalışacak <code>td record</code> komutu",
+      purpose: "Kapsam haritası testlerin hepsinin koştuğu yerde, yani main'de çıkarılır. PR'lar bu haritaya göre seçim yapar.",
+      body: ul([
+        "Action önce sığ (shallow) checkout'ı reddeder: <code>fetch-depth: 0</code> şarttır, çünkü TestDetta git geçmişini (merge base, haritanın commit'i) okur.",
+        "<code>actions/setup-dotnet</code> 10.0.x kurulur; TestDetta ya depodaki kaynaktan derlenir ya da <code>tool.lock</code>'taki sürüm indirilip SHA-512'si doğrulanır.",
+      ]),
+    },
+    {
+      title: "td record her test projesini kaydeder", nodes: ["cimain", "rec"], edges: ["run"],
+      who: "<code>CliApp.RecordCoverage</code> → her test projesi için <code>CoverageRecorder.Record</code>",
+      file: "src/TestDetta.Cli/CliApp.cs:230",
+      input: "<code>dotnet TestDetta.Cli.dll record -c &lt;cfg&gt; --parallel n [--no-build] [--project …]</code>",
+      output: "Proje başına <code>(CoverageMap Map, bool TestsPassed)</code>; çıkış kodu 0, 1 (hiç harita yazılmadı) ya da 3 (bir test başarısız)",
+      purpose: "Her test sınıfının hangi metotları çalıştırdığını ölçmek. Ayrıntılar Bölüm 2'de.",
+      body: C(`
+var graph = new ProjectGraphLoader(..., new MsBuildProjectEvaluator(lf)).Load(root);
+foreach (var project in SelectTestProjects(graph, root, projects))
+{
+    var (map, passed) = recorder.Record(
+        new RecordRequest(root, graph, project, new RecordOptions(cfg, fw, parallel) { NoBuild = noBuild }),
+        stdout);
+    CoverageMapStore.Write(CoverageMapStore.PathFor(root, project.Path), map);
+}`) + ul([
+        "<code>NoTestsRecordedException</code>: proje \"skipped\" olarak raporlanır (hiç test koşmadı).",
+        "<code>InvalidOperationException</code> (ör. derlenmedi): proje \"not recorded\" olur; PR'da isimle izlenerek seçilir.",
+      ]),
+    },
+    {
+      title: "Harita dosyası yazılır", nodes: ["rec", "maps"], edges: ["write"],
+      who: "<code>CoverageMapStore.Write(path, map)</code>",
+      file: "src/TestDetta.Core/CoverageMapStore.cs:27",
+      input: "<code>PathFor(repoRoot, csproj)</code> → <code>&lt;kök&gt;/.testdetta/coverage/Calc.Tests.json</code>, ve <code>CoverageMap</code>",
+      output: "Format sürümü 2 olan sıkıştırılmamış JSON (üretilmiş kaynaklar içinde gzip+base64)",
+      purpose: "Haritayı bir commit'e bağlı, sonradan okunabilir bir dosya olarak saklamak. <code>.testdetta/</code> git'e girmez.",
+      body: C(`
+{ "version": 2, "testProject": "tests/Calc.Tests/Calc.Tests.csproj", "commit": "9f3c…",
+  "methods": [["Calc.Calculator","Add"], ["Calc.Calculator","Tax"]],
+  "classes": { "Calc.Tests.AddTests": [0], "Calc.Tests.TaxTests": [1] },
+  "fixtures": {}, "ambient": [], "initialization": [],
+  "fileReads": { "classes": {}, "fixtures": {}, "ambient": [], "initialization": [] },
+  "failedClasses": [], "timings": { "classes": { "Calc.Tests.TaxTests": 0.41 } } }`) + "<p>Sayılar <code>methods</code> dizisindeki sıra numaralarıdır: <code>TaxTests</code> 1 numaralı metodu, yani <code>Calculator.Tax</code>'ı çalıştırmış.</p>",
+    },
+    {
+      title: "Harita commit anahtarıyla önbelleğe konur", nodes: ["maps", "cache"], edges: ["save"],
+      who: "<code>actions/cache/save</code> (Action'ın record modu)",
+      file: "action.yml",
+      input: "<code>.testdetta/coverage</code> klasörü, anahtar <code>testdetta-coverage-${{ github.sha }}</code>",
+      output: "Commit'e bağlı bir Actions önbellek girdisi",
+      purpose: "PR işleri haritayı yeniden üretmeden, kendi merge base'ine en yakın commit'in haritasını bulabilsin. GitHub dışı CI'da aynı işi <code>--maps-dir</code> yapar (<code>MapDirectory.Save/Restore</code>).",
+    },
+    {
+      title: "Geliştirici PR'a push eder", nodes: ["dev", "cipr"], edges: ["push"],
+      who: "GitHub Actions, Action'ı <code>mode: test</code> ile çağırır",
+      file: "action.yml",
+      input: "<code>base</code> (PR'ın taban dalı), <code>max-map-age</code> (50), <code>drift-fallback</code> (all), <code>license</code>, <code>dotnet-test-args</code>",
+      output: "Bir sonraki adımda kullanılacak taban ref'i ve merge base",
+      purpose: "PR'ın hangi commit'ten ayrıldığını bulmak: seçim merge base ile HEAD arasındaki değişikliğe göre yapılır.",
+    },
+    {
+      title: "En yakın harita bulunur ve geri yüklenir", nodes: ["cache", "cipr", "td"], edges: ["restore"],
+      who: "Action'ın 'find the newest map' adımı + <code>actions/cache/restore</code>",
+      file: "action.yml",
+      input: "<code>gh cache list --key testdetta-coverage-</code> (token <code>actions: read</code> ister) ve <code>git rev-list --first-parent -n max+1 &lt;merge-base&gt;</code>",
+      output: "<code>.testdetta/coverage/*.json</code>, merge base'te ya da en çok <code>max-map-age</code> commit gerisinde kaydedilmiş",
+      purpose: "Harita PR'ın tabanıyla tam aynı commit'te kaydedilmemiş olabilir. Aradaki fark (drift) sonradan analizde köprülenir.",
+      body: "<p>Token yoksa yalnız <code>testdetta-coverage-&lt;merge-base&gt;</code> denenir.</p>",
+    },
+    {
+      title: "td test başlar ve lisans arka planda kontrol edilir", nodes: ["cipr", "td", "lic"], edges: ["start", "license"],
+      who: "<code>CliApp.Run(args, stdout, stderr)</code> → <code>LicenseGate.Refresh</code> (arka plan Task), sonra <code>LicenseGate.Check</code> ve <code>Apply</code>",
+      file: "src/TestDetta.Cli/CliApp.cs:25, src/TestDetta.Cli/LicenseGate.cs",
+      input: "<code>td test --base origin/main --max-map-age 50 --drift-fallback all --summary-file $GITHUB_STEP_SUMMARY -- -c Debug</code>, ortamda <code>TESTDETTA_LICENSE</code>",
+      output: "<code>LicenseStatus</code> (Valid, Warning, PublicRepository, Missing, Invalid, Expired, OverSeats…)",
+      purpose: "Geçerli lisans yoksa seçim yapılmaz, bütün testler koşar; iş hiçbir zaman lisans yüzünden başarısız olmaz.",
+      body: ul([
+        "Lisans metni <code>testdetta1.&lt;base64url claims&gt;.&lt;imza&gt;</code>; ECDSA P-256 imzası ağ olmadan doğrulanır (<code>License.Verify</code>).",
+        "Koltuk hesabı: son 30 günün bot olmayan commit yazarları; izin = koltuk + max(1, ⌈koltuk × 0,2⌉).",
+        "<b>Bugün:</b> <code>LicenseKeys.Enforced = false</code>, yani kontrol raporlanır ama seçimi kapatmaz.",
+      ]),
+    },
+    {
+      title: "Analiz: değişiklikten test sınıflarına", nodes: ["td", "pipe"], edges: ["analyze"],
+      who: "<code>AnalysisPipeline.Run(repoPath, baseRef, AnalysisOptions)</code>",
+      file: "src/TestDetta.Core/AnalysisPipeline.cs:61",
+      input: "Depo yolu, <code>origin/main</code>, <code>AnalysisOptions { MaxMapAge, DriftFallback, GeneratedCode }</code>",
+      output: "<code>AnalysisResult(RepoRoot, ChangedFiles, Graph, Impact, Plan)</code>; <code>Plan.Projects</code> proje başına <code>TestProjectSelection</code>",
+      purpose: "Hangi test projesinin tamamen, hangisinin kısmen (hangi sınıflarla) koşacağına ve hangisinin hiç koşmayacağına karar vermek. Ayrıntılar Bölüm 3 ve 4'te.",
+      body: C(`
+var changed = git.ChangedFiles(root, baseRef);           // src/Calc/Calculator.cs
+var graph   = new ProjectGraphLoader(...).Load(root);    // Calc, Calc.Tests
+var codeChanges = reader.Read(root, mergeBase, changed, symbolSets);  // Calculator.Tax: Modified
+var impact  = impactAnalyzer.Analyze(graph, root, changed, codeChanges, packageChanges);
+var (maps, mapCommits) = LoadCoverageMaps(git, root, graph, mergeBase, options);
+var tests   = new TestSelector(...).Select(new TestSelectionRequest(graph, root, changed, impact, maps));
+// Calc.Tests: Filtered [Calc.Tests.TaxTests]`),
+    },
+    {
+      title: "Seçim dotnet test komutlarına dönüşür", nodes: ["pipe", "dt"], edges: ["invoke"],
+      who: "<code>TestInvocationBuilder.Build</code> → <code>TestRunner.RunAll</code>",
+      file: "src/TestDetta.Core/TestInvocation.cs:25, src/TestDetta.Cli/TestRunner.cs:39",
+      input: "<code>analysis.Tests</code>, repo kökü, <code>--</code> sonrası argümanlar",
+      output: "Proje başına <code>TestInvocation(Selection, Arguments, Location)</code>; çalıştıktan sonra <code>TestRunResult</code> listesi",
+      purpose: "Seçilen sınıfları test çerçevesinin anladığı filtreye çevirip projeleri sırayla koşturmak.",
+      body: C(`dotnet test tests/Calc.Tests/Calc.Tests.csproj --filter "FullyQualifiedName~Calc.Tests.TaxTests." -c Debug`) + ul([
+        "Filtre sözdizimi projeye göre: VSTest <code>--filter FullyQualifiedName~…</code>, xUnit v3 (MTP) <code>--filter-class</code>, TUnit <code>--treenode-filter</code>.",
+        "Filtre hiç teste uymazsa (\"No test matches…\" ya da MTP çıkış kodu 8) proje filtresiz yeniden koşar: daha fazla, asla daha az.",
+        "Skipped projeler için komut üretilmez; bir proje başarısız olsa da diğerleri koşar.",
+      ]),
+    },
+    {
+      title: "Sonuç ve gerekçeler iş özetine yazılır", nodes: ["dt", "sum"], edges: ["report"],
+      who: "<code>ResultWriter.WriteRunSummary</code> (konsol) ve <code>MarkdownSummary.Write</code> (dosya)",
+      file: "src/TestDetta.Cli/MarkdownSummary.cs",
+      input: "<code>SummaryInput(analysis, baseRef, results)</code>, <code>--summary-file</code> yolu",
+      output: "<code>### TestDetta test selection</code> başlıklı Markdown; çıkış kodu: herhangi bir dotnet test başarısızsa 3, değilse 0",
+      purpose: "Her projenin neden tamamen, kısmen ya da hiç koşmadığını ve her sınıfın kanıtını göstermek (ör. \"ran Calculator.Tax, which changed (map 9f3c…)\").",
+    },
+  ],
+};
+
+const CH_RECORD = {
+  id: "record", short: "td record", eyebrow: "Bölüm 2 · Kayıt",
+  title: "td record: kapsam haritası nasıl çıkarılır",
+  lead: `Kayıt, test projesinin derlenmiş dll'lerini Mono.Cecil ile yeniden yazar: her metodun başına bir "buradan geçildi" çağrısı ekler, testleri tek tek koşturur, hangi test sınıfı sırasında hangi metodun çalıştığını toplar ve dll'leri eski haline döndürür. Örnek: ${c("AddTests")} koşarken ${c("Calculator.Add")} (id 0) çalışır, ${c("TaxTests")} koşarken ${c("Calculator.Tax")} (id 1).`,
+  width: 1000, height: 640,
+  zones: [
+    { x: 10, y: 10, w: 980, h: 150, label: "td süreci" },
+    { x: 10, y: 190, w: 600, h: 290, label: "test çıktısı (bin/Debug/net10.0)" },
+    { x: 630, y: 190, w: 360, h: 290, label: "test host süreci (dotnet test)" },
+    { x: 10, y: 500, w: 980, h: 130, label: "birleştirme ve yazma" },
+  ],
+  nodes: [
+    { id: "cli", kind: "cmd", x: 30, y: 60, w: 150, h: 56, label: "td record", sub: "RecordCoverage" },
+    { id: "graph", kind: "core", x: 220, y: 60, w: 170, h: 56, label: "ProjectGraphLoader", sub: "Load(root)" },
+    { id: "rec", kind: "core", x: 430, y: 60, w: 180, h: 56, label: "CoverageRecorder", sub: "Record(request)" },
+    { id: "build", kind: "tool", x: 650, y: 60, w: 140, h: 56, label: "dotnet build", sub: "-c Debug" },
+    { id: "pre", kind: "core", x: 820, y: 54, w: 160, h: 68, label: ["GeneratedSource…", "ClassLocation…"], sub: "PDB okuma" },
+    { id: "dlls", kind: "data", x: 30, y: 230, w: 200, h: 76, label: ["Calc.dll", "Calc.Tests.dll"], sub: "+ .pdb" },
+    { id: "instr", kind: "core", x: 300, y: 236, w: 230, h: 64, label: "AssemblyInstrumenter", sub: "Instrument → Methods" },
+    { id: "deploy", kind: "core", x: 30, y: 384, w: 200, h: 64, label: "RuntimeDeployment", sub: "tracker dll + deps" },
+    { id: "run", kind: "core", x: 300, y: 384, w: 230, h: 64, label: "RunShards", sub: "parça başına RunShard" },
+    { id: "host", kind: "tool", x: 660, y: 226, w: 310, h: 56, label: "dotnet test --no-build", sub: "tek tek: MaxParallelThreads=1" },
+    { id: "tracker", kind: "core", x: 660, y: 316, w: 310, h: 64, label: "TestDettaTracker", sub: "Hit · Enter… · FileRead" },
+    { id: "results", kind: "data", x: 660, y: 404, w: 310, h: 56, label: "coverage-0.<pid>.json", sub: "WriteResults" },
+    { id: "merge", kind: "core", x: 300, y: 540, w: 230, h: 60, label: "BuildMap", sub: "+ FileReadPaths" },
+    { id: "map", kind: "data", x: 660, y: 536, w: 310, h: 68, label: "CoverageMap", sub: ".testdetta/coverage/…json" },
+    { id: "restore", kind: "core", x: 30, y: 540, w: 200, h: 60, label: "Restore", sub: "yedekler geri" },
+  ],
+  edges: [
+    { id: "load", from: "cli", to: "graph", label: "" },
+    { id: "call", from: "graph", to: "rec", label: "" },
+    { id: "b", from: "rec", to: "build", label: "" },
+    { id: "p", from: "build", to: "pre", label: "" },
+    { id: "i1", from: "rec", to: "instr", label: "Instrument" },
+    { id: "i2", from: "instr", to: "dlls", label: "yazar" },
+    { id: "d", from: "dlls", to: "deploy", label: "" },
+    { id: "r", from: "instr", to: "run", label: "id tablosu", lx: 44 },
+    { id: "h", from: "run", to: "host", label: "env + filtre" },
+    { id: "t", from: "host", to: "tracker", label: "probe'lar", lx: 44 },
+    { id: "w", from: "tracker", to: "results", label: "" },
+    { id: "m", from: "results", to: "merge", label: "sonuç dosyaları" },
+    { id: "out", from: "merge", to: "map", label: "Write" },
+    { id: "back", from: "run", to: "restore", label: "finally" },
+  ],
+  steps: [
+    {
+      title: "Komut, projeleri ve seçenekleri toplar", nodes: ["cli", "graph"], edges: ["load"],
+      who: "<code>CliApp.RecordCoverage</code>",
+      file: "src/TestDetta.Cli/CliApp.cs:230",
+      input: "<code>RecordSettings(Configuration, Projects, Parallelism, Framework) { NoBuild }</code>",
+      output: "<code>ProjectGraph</code> ve kaydedilecek test projelerinin listesi",
+      purpose: "Hangi projelerin test projesi olduğunu (MSBuild değerlendirmesi ya da <code>*.Tests</code> adı) bulmak.",
+      body: ul([
+        "<code>GitClient.TopLevel(repo)</code> depo kökünü verir.",
+        "<code>ProjectGraphLoader.Load(root)</code> her <code>.csproj</code>'u MSBuild ile değerlendirir (önbellek: <code>.testdetta/cache/graph</code>).",
+        "<code>--project</code> verilmemişse bütün test projeleri kaydedilir.",
+      ]),
+    },
+    {
+      title: "Kayıt isteği kurulur", nodes: ["graph", "rec"], edges: ["call"],
+      who: "<code>CoverageRecorder.Record(RecordRequest request, TextWriter output)</code>",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs:67",
+      input: "<code>RecordRequest(RepoRoot, Graph, TestProject, RecordOptions(Configuration = \"Debug\", Framework = null, Parallelism = 1, Timeout = null) { NoBuild })</code>",
+      output: "<code>(CoverageMap Map, bool TestsPassed)</code>",
+      purpose: "Tek bir test projesinin baştan sona kaydı. Aşağıdaki adımların hepsi bu metodun içindedir.",
+      body: "<p><code>DotnetTestLocation.For(root, project)</code> çalışma klasörünü (en yakın <code>global.json</code>) ve modu (VSTest ya da Microsoft.Testing.Platform) belirler.</p>",
+    },
+    {
+      title: "Proje derlenir, çıktı yolu sorulur", nodes: ["rec", "build"], edges: ["b"],
+      who: "<code>DotnetProcess.Run</code> ile <code>dotnet build</code>, sonra <code>FindTargetPath</code>",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs",
+      input: "<code>dotnet build &lt;proj&gt; -c Debug [-f fw]</code>; <code>dotnet msbuild -getProperty:TargetPath -getProperty:TargetFrameworks</code>",
+      output: "<code>TargetPath</code> = <code>…/bin/Debug/net10.0/Calc.Tests.dll</code>",
+      purpose: "Ölçülecek dll'leri üretmek. Derleme başarısızsa hatalar <code>ErrorCollectingWriter</code> ile toplanıp <code>InvalidOperationException</code> atılır.",
+      body: "<p>Birden çok framework'lü projede ilk framework kaydedilir; <code>--no-build</code> ile mevcut çıktı kullanılır, yoksa hata.</p>",
+    },
+    {
+      title: "Enstrümantasyondan önce PDB'ler okunur", nodes: ["build", "pre"], edges: ["p"],
+      who: "<code>GeneratedSourceReader.Read</code>, <code>ClassLocationReader.Read</code>",
+      file: "src/TestDetta.Coverage/GeneratedSourceReader.cs, GeneratedSources.cs, ClassLocationReader.cs",
+      input: "Çıktıdaki depo dll'leri (<code>RepositoryAssemblies</code>) ve <code>.pdb</code>'leri",
+      output: "<code>List&lt;GeneratedSource(Project, Name, Text) { Framework }&gt;</code> ve sınıf → <code>[(File, Line)]</code>",
+      purpose: "Kaynak jeneratörlerinin ürettiği kodu (diskte olmayan, PDB'ye gömülü belgeler) ve sınıfların kaynakta nerede olduğunu haritaya eklemek. Yeniden yazmadan önce yapılır, çünkü Cecil PDB'yi değiştirir.",
+    },
+    {
+      title: "Dll'ler probe'larla yeniden yazılır", nodes: ["rec", "instr", "dlls"], edges: ["i1", "i2"],
+      who: "<code>AssemblyInstrumenter.Instrument(assemblies, testAssemblies, backupDirectory)</code>",
+      file: "src/TestDetta.Coverage/AssemblyInstrumenter.cs:56 (InstrumentOne:163, InsertProbes:790)",
+      input: "Depo dll'leri, hangilerinin test dll'i olduğu, yedek klasörü (<code>%TEMP%/testdetta-record-&lt;guid&gt;/backup</code>)",
+      output: "<code>InstrumentationResult(Methods, Backups) { Fields, ExternalCallbacks }</code>: dizideki sıra = metot id'si",
+      purpose: "Hangi kodun çalıştığını, test sınıfının girildiği anı ve başlatma (static ctor, önbellek doldurma) kapsamlarını görebilmek.",
+      body: "<p>Her gövdeli metodun başına, sırasıyla:</p>" + C(`
+// Test sınıfının girişinde (ör. TaxTests'in test metodu):
+call TestDettaTracker.EnterTestInstance(this)   // sınıf kovası açılır
+call TestDettaTracker.EnterTestCode()
+// Her metotta:
+ldc.i4  1                                       // Calculator.Tax'ın id'si
+call    TestDettaTracker.Hit(int32)`) + ul([
+        "Static ctor: <code>EnterTypeInitializer(id)</code> … her <code>ret</code> önünde <code>ExitTypeInitializer()</code>.",
+        "<code>GetOrAdd</code>, <code>Lazy.Value</code> gibi önbellek doldurmalar <code>EnterCache</code>/<code>ExitCache</code> arasına alınır: içerde çalışan kod \"bir kez çalışır\" sayılır.",
+        "İzlenen alanların okunması/yazılması: <code>Read(field)</code>, <code>Stored(field, methodId)</code> (kim değeri kurdu?).",
+        "Dosya API çağrıları (<code>File.ReadAllText</code> vb.) <code>&lt;TestDettaFileReads&gt;</code> içindeki sarmalayıcılara yönlenir: önce <code>FileRead(path)</code>, sonra asıl çağrı (<code>FileReadCalls.Wrap</code>).",
+        "Fixture kurulumu: <code>EnterFixtureInstance(this)</code>; veri kaynağı: <code>EnterDataSource(\"Sınıf\")</code>.",
+      ]),
+    },
+    {
+      title: "İzleyici çalışma zamanı çıktıya konur", nodes: ["dlls", "deploy"], edges: ["d"],
+      who: "<code>new RuntimeDeployment(targetPath)</code>",
+      file: "src/TestDetta.Coverage/RuntimeDeployment.cs",
+      input: "Test dll'inin yolu",
+      output: "Çıktıda <code>TestDetta.Coverage.Runtime.dll</code> ve güncellenmiş <code>deps.json</code>",
+      purpose: "Yeniden yazılan dll'ler <code>TestDettaTracker</code>'ı çağırıyor; test host'unun onu yükleyebilmesi gerekir.",
+    },
+    {
+      title: "Testler parçalara bölünüp tek tek koşturulur", nodes: ["instr", "run", "host"], edges: ["r", "h"],
+      who: "<code>Shards</code> → <code>RunShards</code> → her parça için <code>RunShard</code>",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs",
+      input: "<code>dotnet test [--project] &lt;proj&gt; --no-build -c Debug --settings testdetta.runsettings</code>; ortam: <code>TESTDETTA_METHOD_COUNT</code>, <code>TESTDETTA_FIELD_COUNT</code>, <code>TESTDETTA_COVERAGE_OUTPUT=work/coverage-&lt;i&gt;.json</code>",
+      output: "Parça başına çıkış kodu, TRX raporu ve süreç başına bir sonuç dosyası",
+      purpose: "Paralellik kapatılır (xUnit <code>MaxParallelThreads=1</code>, NUnit <code>NumberOfTestWorkers=0</code>, MSTest <code>Workers=1</code>) ki bir anda tek test sınıfı çalışsın ve vuruşlar doğru sınıfa yazılsın.",
+      body: ul([
+        "<code>--parallel n</code>: sınıflar <code>n</code> parçaya dağıtılır, her parça ayrı süreç; sonda bilinen sınıfları dışlayan bir \"artakalan\" parça.",
+        "Bir parça sonuç yazmazsa tek süreçte filtresiz tekrar; o da olmazsa testin kendi paralelliğiyle (<code>TESTDETTA_PARALLEL_FLOWS=1</code>).",
+        "Zaman aşımı <code>RecordingTimedOutException</code>; hiç test koşmadıysa <code>NoTestsRecordedException</code>.",
+      ]),
+    },
+    {
+      title: "Probe'lar vuruşları kovalara yazar", nodes: ["host", "tracker"], edges: ["t"],
+      who: "<code>TestDettaTracker.Hit(int id)</code>, <code>EnterTestInstance</code>, <code>BucketForHit()</code>",
+      file: "src/TestDetta.Coverage.Runtime/TestDettaTracker.cs",
+      input: "Metot id'si; o anki test akışı (<code>AsyncLocal Current</code>) ve en son girilen kova",
+      output: "Kova başına bit kümesi (<code>ulong[]</code>): <code>Classes[\"Calc.Tests.TaxTests\"]</code> içinde bit 1",
+      purpose: "Her metodun hangi test sınıfı (ya da fixture, ya da başlangıç) sırasında çalıştığını bilmek.",
+      body: C(`
+public static void Hit(int id)
+{
+    var word = id >> 6; var bit = 1UL << (id & 63);
+    if (_typeInitializerDepth != 0 || _cacheDepth != 0)
+        Mark(InitializationBits, word, bit);   // static ctor / önbellek içinde: bir kez çalışan kod
+    var bucket = BucketForHit();              // Current ?? _lastEntered ?? Startup
+    Mark(bucket.Bits, word, bit);
+    if (IsBetweenTests(bucket)) { MarkBetween(word, bit); Mark(InitializationBits, word, bit); }
+    Remember(id);                             // iş parçacığı halkası: alan değerlerini kimin kurduğu
+}`) + ul([
+        "Hiçbir test girilmeden çalışan kod (keşif, teori verisi) <code>Startup</code> kovasına, yani <code>ambient</code>'e gider.",
+        "Başlatma kapsamında çalışan kod (<code>initialization</code>) ilk kullanıcıya yazılır; seçim tarafı bunu bilir ve tüm kullanıcıları seçer.",
+        "<code>FileRead(path)</code> yolu tam yola çevirip aynı kovanın <code>Files</code> kümesine ekler.",
+      ]),
+    },
+    {
+      title: "Süreç biterken sonuçlar JSON'a yazılır", nodes: ["tracker", "results"], edges: ["w"],
+      who: "<code>TestDettaTracker.WriteResults()</code>: <code>TestDettaInProcCollector.TestSessionEnd</code> (VSTest) ve <code>ProcessExit</code>",
+      file: "src/TestDetta.Coverage.Runtime/TestDettaTracker.cs",
+      input: "<code>TESTDETTA_COVERAGE_OUTPUT</code>, süreç id'si",
+      output: "<code>coverage-0.&lt;pid&gt;.json</code> (geçici dosya + atomik taşıma)",
+      purpose: "Test host'u öldürülse bile yarım dosya kalmasın; her süreç kendi dosyasını yazsın.",
+      body: C(`
+{ "classes": { "Calc.Tests.AddTests": [0], "Calc.Tests.TaxTests": [1] }, "fixtures": {},
+  "ambient": [], "initialization": [], "linked": [], "unlinked": [], "methodCount": 2,
+  "fieldBuilders": {}, "fileReads": { "classes": {}, "fixtures": {}, "ambient": [], "initialization": [] },
+  "classSeconds": { "Calc.Tests.TaxTests": 0.41 }, "startupSeconds": 0.9 }`),
+    },
+    {
+      title: "Bütün süreçlerin sonuçları birleştirilir", nodes: ["results", "merge"], edges: ["m"],
+      who: "<code>CoverageRecorder.BuildMap(request, methods, resultsFiles)</code>",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs:712",
+      input: "<code>InstrumentationResult.Methods</code> ve parça başına sonuç dosyaları",
+      output: "<code>CoverageMap(Header, Methods, Hits, Timings) { Initialization, LinkedInitialization, BuiltValues, SharedInProcess, FileReads, … }</code>",
+      purpose: "Parçaları tek haritada toplamak ve ham bitleri anlamlı bölümlere ayırmak.",
+      body: ul([
+        "Kovalar sınıf adına göre birleşir (<code>MergeBuckets</code>). <code>methodCount</code> üstündeki id'ler alan okumasıdır: o alanın değerini kuran metotlar (<code>fieldBuilders</code>, zincirleme) <code>BuiltValues</code>'a gider.",
+        "<code>LinkedInitialization</code>: bir süreçte bağlanmış, hiçbir süreçte bağlanmamış (unlinked) olmayan başlatma kodu.",
+        "<code>SharedInProcess</code>: aynı süreçte iki ya da daha çok kovada görünen metotlar.",
+        "Dosya okumaları <code>FileReadPaths</code> ile depo yollarına çevrilir: depo dışı atılır, <code>bin/obj</code> kopyası aynı adlı ve içerikli izlenen dosyaya eşlenir.",
+        "Başlık: <code>(tests/Calc.Tests/Calc.Tests.csproj, git HEAD, UtcNow)</code>.",
+      ]),
+    },
+    {
+      title: "Güven bilgileri ve harita yazılır", nodes: ["merge", "map"], edges: ["out"],
+      who: "<code>Record</code> metodunun sonu, ardından <code>CoverageMapStore.Write</code>",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs, src/TestDetta.Core/CoverageMapStore.cs:27",
+      input: "TRX raporları, sınıf konumları, üretilmiş kaynaklar",
+      output: "<code>FailedClasses</code>, <code>SkippedClasses</code>, <code>Platform</code>, <code>Framework</code>, <code>ClassLocations</code>, <code>Generated</code> eklenmiş harita dosyası",
+      purpose: "Haritaya güvenilemeyecek yerleri işaretlemek: kayıtta başarısız olan sınıf her proje etkilendiğinde koşar; atlanan sınıf başka platformda seçilir.",
+    },
+    {
+      title: "Dll'ler her durumda eski haline döner", nodes: ["run", "restore"], edges: ["back"],
+      who: "<code>finally</code>: <code>deployment.Dispose()</code>, <code>instrumenter.Restore(instrumentation)</code>, iş klasörü silinir",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs",
+      input: "<code>InstrumentationResult.Backups</code> (asıl dosya → yedek)",
+      output: "Kayıttan önceki dll ve pdb'ler",
+      purpose: "Kayıt sonrası aynı çıktıyla normal testler koşabilsin; yarıda kalan kayıt depoyu bozmasın.",
+    },
+  ],
+};
+
+const CH_TEST = {
+  id: "test", short: "td test · seçim", eyebrow: "Bölüm 3 · Analiz ve seçim",
+  title: "td test: değişiklikten test sınıflarına",
+  lead: `Seçim ilkesi: emin olunamayan her yerde <b>daha fazla</b> koş, asla daha az. Önce dosya ve proje düzeyinde neyin etkilendiği bulunur, sonra kapsam haritası ve isim izleme ile proje içinde hangi sınıfların koşacağına inilir. Örnek değişiklik: ${c("src/Calc/Calculator.cs")} içinde ${c("Tax")} metodunun gövdesi değişti.`,
+  width: 1000, height: 760,
+  zones: [
+    { x: 10, y: 10, w: 980, h: 260, label: "AnalysisPipeline.Run · proje düzeyi" },
+    { x: 10, y: 290, w: 980, h: 330, label: "TestSelector.Select · sınıf düzeyi" },
+    { x: 10, y: 640, w: 980, h: 110, label: "CliApp.RunTests · koşturma" },
+  ],
+  nodes: [
+    { id: "cli", kind: "cmd", x: 30, y: 50, w: 150, h: 56, label: "td test", sub: "CliApp.Run" },
+    { id: "git", kind: "tool", x: 220, y: 50, w: 170, h: 56, label: "GitClient", sub: "ChangedFiles" },
+    { id: "graph", kind: "core", x: 430, y: 50, w: 190, h: 56, label: "ProjectGraphLoader", sub: "Load → ProjectGraph" },
+    { id: "msb", kind: "tool", x: 670, y: 50, w: 300, h: 56, label: "MsBuildProjectEvaluator", sub: ".testdetta/cache/graph" },
+    { id: "ccr", kind: "core", x: 30, y: 170, w: 190, h: 64, label: "CodeChangeReader", sub: "+ Detector" },
+    { id: "imp", kind: "core", x: 250, y: 170, w: 170, h: 64, label: "ImpactAnalyzer", sub: "→ ImpactResult" },
+    { id: "maps", kind: "data", x: 450, y: 168, w: 180, h: 68, label: "haritalar", sub: "LoadCoverageMaps" },
+    { id: "drift", kind: "core", x: 660, y: 170, w: 150, h: 64, label: "MapDrift", sub: "eski harita" },
+    { id: "fr", kind: "core", x: 30, y: 330, w: 190, h: 60, label: "FindFileReaders", sub: "proje dışı dosya" },
+    { id: "pl", kind: "core", x: 250, y: 330, w: 230, h: 60, label: "FindProjectLevelChanges", sub: "+ RunAll" },
+    { id: "gen", kind: "core", x: 510, y: 330, w: 210, h: 60, label: "CompareGenerator…", sub: "jeneratör çıktısı" },
+    { id: "bridge", kind: "core", x: 760, y: 330, w: 200, h: 60, label: "Bridge", sub: "drift köprüsü" },
+    { id: "trace", kind: "core", x: 250, y: 440, w: 230, h: 60, label: "ImpactPropagation", sub: "isim izleme ×2" },
+    { id: "cov", kind: "core", x: 510, y: 440, w: 210, h: 60, label: "CoverageSelection", sub: "TryResolve" },
+    { id: "idx", kind: "core", x: 760, y: 440, w: 200, h: 60, label: "SourceIndexBuilder", sub: "→ SourceIndex" },
+    { id: "decide", kind: "core", x: 30, y: 540, w: 240, h: 60, label: "Decide", sub: "+ WithFileReaders" },
+    { id: "plan", kind: "data", x: 510, y: 536, w: 210, h: 68, label: "TestPlan", sub: "TestProjectSelection[]" },
+    { id: "inv", kind: "core", x: 30, y: 674, w: 240, h: 56, label: "TestInvocationBuilder", sub: "→ TestInvocation[]" },
+    { id: "run", kind: "tool", x: 330, y: 674, w: 200, h: 56, label: "TestRunner", sub: "RunAll → dotnet test" },
+    { id: "sum", kind: "data", x: 590, y: 670, w: 370, h: 64, label: "td summary + MarkdownSummary", sub: "çıkış kodu 0 / 3" },
+  ],
+  edges: [
+    { id: "g1", from: "cli", to: "git", label: "" },
+    { id: "g2", from: "git", to: "graph", label: "" },
+    { id: "g3", from: "graph", to: "msb", label: "" },
+    { id: "c1", from: "git", to: "ccr", label: "değişen .cs" },
+    { id: "c2", from: "ccr", to: "imp", label: "" },
+    { id: "c3", from: "graph", to: "imp", label: "ResolveFile" },
+    { id: "m1", from: "imp", to: "maps", label: "" },
+    { id: "m2", from: "maps", to: "drift", label: "" },
+    { id: "s1", from: "maps", to: "fr", label: "fileReads" },
+    { id: "s2", from: "imp", to: "pl", label: "Impact", lx: 28 },
+    { id: "s2b", from: "drift", to: "pl", label: "drift" },
+    { id: "s3", from: "pl", to: "gen", label: "" },
+    { id: "s7", from: "drift", to: "bridge", label: "" },
+    { id: "s4", from: "gen", to: "idx", label: "üretilmiş kod" },
+    { id: "s5", from: "idx", to: "cov", label: "" },
+    { id: "s6", from: "cov", to: "trace", label: "" },
+    { id: "s8", from: "bridge", to: "trace", label: "tohum" },
+    { id: "s9", from: "trace", to: "decide", label: "AffectedTypes" },
+    { id: "s10", from: "fr", to: "decide", label: "okuyucular", lx: 44 },
+    { id: "s11", from: "decide", to: "plan", label: "kararlar" },
+    { id: "r1", from: "plan", to: "inv", label: "Tests" },
+    { id: "r2", from: "inv", to: "run", label: "" },
+    { id: "r3", from: "run", to: "sum", label: "" },
+  ],
+  steps: [
+    {
+      title: "Komut ayrıştırılır, analiz seçenekleri kurulur", nodes: ["cli"], edges: [],
+      who: "<code>CliOptions.TryParse</code> → <code>CliApp.Run</code>",
+      file: "src/TestDetta.Cli/CliOptions.cs, CliApp.cs:25",
+      input: "<code>td test --base origin/main [--max-map-age 50] [--drift-fallback all|name] [--summary-file f] [--dry-run] -- &lt;dotnet test argümanları&gt;</code>",
+      output: "<code>AnalysisOptions { MaxMapAge = 50, DriftFallback = RunAll, GeneratedCode = new BuildGeneratedCodeReader(lf, new GeneratedCodeBuild(Build: true, Configuration)) }</code>",
+      purpose: "<code>--</code> sonrasındaki <code>-c Release</code> gibi argümanlar hem her <code>dotnet test</code>'e gider hem de jeneratör karşılaştırmasının derleme yapılandırmasını belirler.",
+      body: "<p>Çıkış kodları: 0 başarı, 1 hata, 2 kullanım hatası, 3 test başarısız. <code>--dry-run</code> komutları çalıştırmadan yazar.</p>",
+    },
+    {
+      title: "Değişen dosyalar ve merge base bulunur", nodes: ["cli", "git"], edges: ["g1"],
+      who: "<code>GitClient.ChangedFiles(root, baseRef)</code>, <code>GitClient.MergeBase</code>",
+      file: "src/TestDetta.Core/GitClient.cs",
+      input: "Depo kökü, <code>origin/main</code>",
+      output: "<code>[\"src/Calc/Calculator.cs\"]</code> (sıralı, tekrarsız, <code>.testdetta/</code> hariç) ve merge base sha'sı",
+      purpose: "Seçim, PR'ın getirdiği her şeyi görmeli: commit'lenmiş, commit'lenmemiş ve izlenmeyen dosyalar.",
+      body: C(`
+git diff --name-only --no-renames origin/main...HEAD   # merge base'ten beri commit'lenenler
+git diff --name-only --no-renames HEAD                  # staged + unstaged
+git ls-files --others --exclude-standard                # yeni, izlenmeyen dosyalar`) + "<p>Yeniden adlandırma silme + ekleme sayılır: hem eski hem yeni yol değişmiş kabul edilir.</p>",
+    },
+    {
+      title: "Proje grafiği MSBuild ile kurulur", nodes: ["git", "graph", "msb"], edges: ["g2", "g3"],
+      who: "<code>ProjectGraphLoader.Load(root)</code> → <code>MsBuildProjectEvaluator.Evaluate(root, projects)</code>",
+      file: "src/TestDetta.Core/ProjectGraphLoader.cs, src/TestDetta.Coverage/MsBuildProjectEvaluator.cs",
+      input: "Depodaki bütün <code>*.csproj/.fsproj/.vbproj</code> (bin, obj, .git hariç)",
+      output: "<code>ProjectGraph</code>: <code>ProjectNode(Path, Directory, IsTestProject, References) { OpaqueReferences, GeneratorReferences, EvaluatedItems, SymbolSets, PackageReferences, … }</code>",
+      purpose: "Hangi dosyanın hangi projeye ait olduğunu ve hangi projenin hangisine bağlı olduğunu kesin bilmek.",
+      body: ul([
+        "Önce XML okunur; sonra tek bir <code>dotnet msbuild driver.proj</code> çağrısı her framework için referansları, öğeleri (<code>Compile</code>, <code>None</code>, <code>Content</code>…), <code>DefineConstants</code>'ı raporlar. Restore ya da build yapılmaz.",
+        "Önbellek anahtarı: değerlendirici sürümü + SDK sürümü + bütün dosya yolları + proje/props/targets içerikleri. Değişmediyse saniyeler içinde <code>.testdetta/cache/graph/&lt;anahtar&gt;.json</code>'dan gelir.",
+        "<code>ReferenceOutputAssembly=\"false\"</code> ya da <code>OutputItemType</code> olan referanslar <code>OpaqueReferences</code>; <code>Analyzer</code> olanlar ayrıca <code>GeneratorReferences</code>.",
+      ]),
+    },
+    {
+      title: "C# dosyaları sözdizimi düzeyinde karşılaştırılır", nodes: ["git", "ccr"], edges: ["c1"],
+      who: "<code>CodeChangeReader.Read(root, mergeBase, changed, symbolSets)</code> → <code>CodeChangeDetector.Detect(path, old, new, symbolSets)</code>",
+      file: "src/TestDetta.Core/CodeChangeReader.cs, CodeChangeDetector.cs, CodeChange.cs",
+      input: "Merge base'teki metin (<code>git cat-file --batch</code>) ve çalışma ağacındaki metin; dosyayı derleyen projelerin önişlemci sembol kümeleri",
+      output: "<code>CodeChange(Path, IsCosmetic, AffectsWholeProject, Symbols)</code>; örnekte <code>SymbolChange(\"Calc.Calculator\", \"Tax\", Modified)</code>",
+      purpose: "Değişikliği üye düzeyine indirmek. Hiçbir şey derlenmez; Roslyn yalnız ayrıştırır.",
+      body: ul([
+        "Yalnız boşluk/yorum değiştiyse <code>IsCosmetic = true</code>: dosya yok sayılır.",
+        "Öznitelik ya da varsayılan parametre değeri değiştiyse <code>MetadataChanged = true</code> (kapsam haritası bunu cevaplayamaz).",
+        "<code>global using</code> ya da assembly özniteliği değiştiyse <code>AffectsWholeProject = true</code>.",
+        "<code>#if</code> içeren dosya her ilgili sembol kümesiyle ayrı ayrı ayrıştırılır, sonuçlar birleşir.",
+      ]),
+    },
+    {
+      title: "Etkilenen projeler bulunur", nodes: ["ccr", "imp", "graph"], edges: ["c2", "c3"],
+      who: "<code>ImpactAnalyzer.Analyze(graph, root, changed, codeChanges, packageChanges)</code>",
+      file: "src/TestDetta.Core/ImpactAnalyzer.cs, ImpactResult.cs, BuildFiles.cs",
+      input: "Grafik, değişen dosyalar, <code>CodeChange</code> listesi, <code>Directory.Packages.props</code> paket değişiklikleri",
+      output: "<code>ImpactResult(Affected, UnmappedFiles, CosmeticFiles, CodeChanges)</code>: <code>Calc</code> DirectChange, <code>Calc.Tests</code> Dependency",
+      purpose: "Proje düzeyinde güvenli üst sınırı çizmek: bir proje burada etkilenmediyse hiçbir sınıfı koşmaz.",
+      body: ul([
+        "<code>Directory.Build.props</code>, <code>global.json</code>, <code>.editorconfig</code> gibi klasör çapındaki dosyalar: altındaki her proje <code>BuildConfiguration</code>.",
+        "Sahibi olmayan dosya <code>UnmappedFiles</code>'a gider (ör. <code>testdata/rates.txt</code>).",
+        "Sahiplik <code>ProjectGraph.ResolveFile</code>: değerlendirilen öğeler, en içteki proje klasörü, importlar.",
+        "<code>PropagateToDependents</code>: bağımlı projeler genişlik öncelikli <code>Dependency</code> olur.",
+      ]),
+    },
+    {
+      title: "Haritalar yüklenir, eski haritaların farkı çıkarılır", nodes: ["imp", "maps", "drift"], edges: ["m1", "m2"],
+      who: "<code>AnalysisPipeline.LoadCoverageMaps</code>, sonra her eski harita commit'i için <code>new MapDrift(commit, distance, files, impact)</code>",
+      file: "src/TestDetta.Core/AnalysisPipeline.cs, MapDrift.cs",
+      input: "<code>.testdetta/coverage/Calc.Tests.json</code>, merge base, <code>MaxMapAge</code>",
+      output: "Test projesi → <code>CoverageMap</code>; commit → uzaklık; <code>MapDrift</code> listesi",
+      purpose: "Harita merge base'ten 50 commit'e kadar geride olabilir. Aradaki değişiklikler de bir \"değişiklik\" gibi analiz edilir ki seçim ona göre genişlesin.",
+      body: "<p>Uzaklık <code>git rev-list --count --first-parent harita..merge-base</code>. Uzaklık bilinemiyorsa (sığ klon) ya da sınırı aşıyorsa harita kullanılmaz; proje isimle izlenir.</p>",
+    },
+    {
+      title: "Proje dışı dosyaların okuyucuları bulunur", nodes: ["maps", "fr"], edges: ["s1"],
+      who: "<code>TestSelector.FindFileReaders(request)</code>",
+      file: "src/TestDetta.Core/TestSelector.FileReads.cs",
+      input: "<code>Impact.UnmappedFiles</code> ve her haritanın <code>FileReads</code> bölümü",
+      output: "Test projesi → <code>FileReaders(Project, WholeProject?, Classes)</code>",
+      purpose: "Hiçbir projeye ait olmayan, testlerin kayıt sırasında okuduğu dosyalar (ör. kökteki test verisi) yalnız okuyanları seçsin.",
+      body: ul([
+        "Okunan yol <code>/</code> ile bitiyorsa listelenmiş klasördür: altındaki her dosya eşleşir.",
+        "Okuma test dışında (ambient), başlatma kapsamında ya da fixture kurulumunda yapıldıysa projenin tamamı koşar.",
+        "Örnekte değişen dosya bir <code>.cs</code> dosyası ve sahibi var: okuyucu yok.",
+      ]),
+    },
+    {
+      title: "Projeyi tamamen koşturan değişiklikler ayrılır", nodes: ["imp", "pl", "drift"], edges: ["s2", "s2b"],
+      who: "<code>WithoutDriftedMaps</code>, <code>FindProjectLevelChanges(graph, root, changed, impact, generatorUses)</code>, <code>RunAll(graph, fallbacks)</code>",
+      file: "src/TestDetta.Core/TestSelector.cs",
+      input: "Değişen dosyalar, <code>ImpactResult</code>, drift'ler",
+      output: "Proje → gerekçe sözlüğü; ör. <code>\"tests/X.csproj\": \"depends on Lib: README changed\"</code>",
+      purpose: "Ad ya da kapsamla daraltılamayan değişiklikleri bulmak ve bütün bağımlılarını tamamen koşturmak.",
+      body: "<p>Bir proje şu durumlarda tamamen koşar:</p>" + ul([
+        "Projeye ait <code>.cs</code> olmayan bir dosya değişti (json, resx, csproj…) ya da bir derleme girdisi değişti.",
+        "Bir <code>.cs</code> dosyası karşılaştırılamadı ya da <code>AffectsWholeProject</code>.",
+        "Proje C# değil, ya da etkilenen bir projeyi derlemeden referanslıyor (opak). Opak referans bir jeneratörse bir sonraki adıma gider.",
+        "Drift'te aynı türden değişiklik varsa o haritalar düşer; <code>--drift-fallback all</code> ile proje tamamen koşar.",
+      ]) + "<p>Örnekte yalnız <code>Calculator.cs</code> değişti: tamamen koşan proje yok.</p>",
+    },
+    {
+      title: "Jeneratör değişiklikleri çıktılarıyla karşılaştırılır", nodes: ["pl", "gen"], edges: ["s3"],
+      who: "<code>CompareGeneratorOutput(request, projectLevel, uses)</code>",
+      file: "src/TestDetta.Core/TestSelector.Generators.cs",
+      input: "Etkilenen jeneratörü kullanan projeler; <code>IGeneratedCodeReader.Read(graph, root, testProject, framework)</code>",
+      output: "<code>GeneratorOutput(Changes, Current)</code>: değişen üretilmiş üyeler ve şu anki üretilmiş dosyalar",
+      purpose: "Jeneratör değiştiğinde onu kullanan projeyi körlemesine tamamen koşturmak yerine, ürettiği kodun gerçekten değişen kısmını değişiklik saymak.",
+      body: ul([
+        "Test projesi derlenir (<code>td test</code> zaten derleyecekti), PDB'deki üretilmiş kaynaklar haritadakiyle <code>GeneratedSource.Key</code> üzerinden karşılaştırılır.",
+        "Derleme başarısızsa <code>GeneratedCodeBuildException</code>: analiz durur, çünkü <code>dotnet test</code> de aynı yerde düşecekti.",
+        "Harita yoksa ya da framework'ün üretilmiş kodu kayıtlı değilse proje tamamen koşar.",
+      ]),
+    },
+    {
+      title: "Etkilenen projelerin kaynak dizini kurulur", nodes: ["gen", "idx"], edges: ["s4"],
+      who: "<code>SourceIndexBuilder.Build(graph, root, affectedProjects, generated)</code>",
+      file: "src/TestDetta.Core/SourceIndexBuilder.cs",
+      input: "Etkilenen projelerin C# dosyaları (paralel ayrıştırma) ve üretilmiş kaynaklar (<code>generated:</code> önekiyle)",
+      output: "<code>SourceIndex</code>: üye başına <code>IndexedMember(ProjectPath, TypeName, MemberName, References, IsPrivate, IsStatic, …)</code>, tür başına <code>IndexedType(RuntimeTypeName, CanContainTests, MayBeFoundByReflection, …)</code>",
+      purpose: "Hangi üyenin hangi isimleri andığını bilmek (isim izleme) ve hangi sınıfların test içerebileceğini görmek ([Fact], [Test], [TestMethod]…).",
+    },
+    {
+      title: "Kapsam haritası soruyu cevaplar (ayrıntı: Bölüm 4)", nodes: ["idx", "cov"], edges: ["s5"],
+      who: "<code>CoverageSelection.TryResolve(change, owner, reached)</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs",
+      input: "<code>SymbolChange(Calc.Calculator, Tax, Modified)</code>, sahibi <code>Calc</code>",
+      output: "Cevaplandı: <code>Calc.Tests.TaxTests</code> seçildi, kanıt <code>ran Calc.Calculator.Tax, which changed (map 9f3c…)</code>",
+      purpose: "Haritanın bildiği bir üye için \"onu hangi sınıflar çalıştırdı?\" sorusunun kesin cevabını vermek; cevap varsa isim izleme o değişiklikte durur.",
+      body: "<p>Harita şu durumlarda <b>cevaplayamaz</b> (seçtiği sınıflar yine seçili kalır, ayrıca isim izleme devam eder):</p>" + ul([
+        "Üye yeni eklenmiş (<code>Added</code>) ya da harita onu tanımıyor.",
+        "Kod testlerin dışında çalışmış ya da bir kez çalışan koddan (static ctor, önbellek doldurma, dış geri çağırma) gelmiş.",
+        "<code>MetadataChanged</code>: öznitelik ya da varsayılan değer değişmiş.",
+        "<code>.ctor</code> değiştiyse türü çalıştıran her sınıf; <code>.cctor</code> değiştiyse türün herhangi bir üyesini çalıştıran her sınıf seçilir.",
+      ]),
+    },
+    {
+      title: "İsim izleme ve drift köprüsü", nodes: ["cov", "trace", "bridge", "drift"], edges: ["s6", "s7", "s8"],
+      who: "<code>Trace(request, index, projectLevel, coverage, bridged)</code> → <code>ImpactPropagation.Seed</code> / <code>Run</code>; <code>Bridge(request, index, byName)</code>",
+      file: "src/TestDetta.Core/TestSelector.cs, ImpactPropagation.cs",
+      input: "Cevaplanmamış değişiklikler (tohum), kaynak dizini, drift değişiklikleri",
+      output: "<code>TraceResult(Propagation, Fallbacks)</code>; <code>Propagation.AffectedTypes</code>",
+      purpose: "Haritanın cevaplayamadığı değişiklikleri isimle yaymak: değişen üyeyi anan üye etkilenir, onu anan üye de, ve böyle devam eder.",
+      body: ul([
+        "İki yayılım koşar: kapsamsız (<code>byName</code>) ve kapsamlı (<code>withCoverage</code>). İkincisi haritanın cevapladığı yerde durur.",
+        "Kapsam: private üye yalnız kendi türünde, static üye türüyle nitelenmiş adla, diğerleri her yerde aranır; ama yalnız bildiren proje ve bağımlılarında.",
+        "Hiçbir şeyin anmadığı ve yansımayla bulunabilecek tür (temel sınıf/öznitelik) projeyi tamamen koşturur.",
+        "Köprü: harita commit'inden beri değişen ve bu değişikliğe isimle ulaşan her drift üyesi de tohum olur; haritanın bilmediği yolları kapatır.",
+      ]),
+    },
+    {
+      title: "Sınıf başına karar verilir", nodes: ["trace", "decide", "fr"], edges: ["s9", "s10"],
+      who: "<code>Decide(Decision)</code> → sınıf başına <code>DecideClass</code>; ardından <code>WithFileReaders</code>",
+      file: "src/TestDetta.Core/TestSelector.cs, TestSelector.FileReads.cs, TestSelection.cs",
+      input: "Aday sınıflar (testi olabilen türler + haritanın bildirdikleri), kapsam kanıtları, <code>AffectedTypes</code>, tam koşan projeler, okuyucular",
+      output: "<code>TestProjectSelection(Calc.Tests, Filtered, [\"Calc.Tests.TaxTests\"], reason) { Decisions = [ClassDecision(TaxTests, true, Coverage, …), ClassDecision(AddTests, false, Skipped, \"ran none of the changed members\")] }</code>",
+      purpose: "Her sınıf için seçildi/seçilmedi ve <b>neden</b> bilgisini üretmek; iş özeti bunu gösterir.",
+      body: "<p>Sıra: Coverage → Name → (harita yoksa) Skipped → FailedWhileRecording → SkippedWhileRecording (başka platformda kaydedildiyse) → MapMismatch → Skipped. Proje modu: tam koşan proje <code>All</code>; seçilen yok <code>Skipped</code>; hepsi seçildi <code>All</code>; aksi halde <code>Filtered</code>. Okuyucular en son eklenir (<code>FileRead</code>).</p>",
+    },
+    {
+      title: "Süre tahmini ve plan toplamları", nodes: ["decide", "plan"], edges: ["s11"],
+      who: "<code>CoverageSelection.Estimate(selection)</code>, <code>AnalysisPipeline.Plan(graph, tests, maps)</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs, AnalysisPipeline.cs",
+      input: "Haritadaki <code>timings</code> (sınıf, fixture, başlangıç saniyeleri)",
+      output: "<code>TimeEstimate(FullSeconds, SelectedSeconds)</code>, <code>TestPlan(Projects, Estimate, ProjectsWithoutTimings)</code>",
+      purpose: "\"Ne kazandık\" sorusunu cevaplamak. Etkilenmeyen projenin bütün süresi kazanç sayılır.",
+      body: C(`
+full     = startup + Σ sınıf süreleri + Σ fixture süreleri
+Filtered = startup + Σ seçilen sınıflar + kullandıkları fixture'lar
+All      = full,   Skipped = 0`),
+    },
+    {
+      title: "Komutlar kurulur, koşturulur, özetlenir", nodes: ["plan", "inv", "run", "sum"], edges: ["r1", "r2", "r3"],
+      who: "<code>CliApp.RunTests</code> → <code>TestInvocationBuilder.Build</code> → <code>TestRunner.RunAll</code> → <code>ResultWriter.WriteRunSummary</code> + <code>MarkdownSummary.Write</code>",
+      file: "src/TestDetta.Cli/CliApp.cs:173, src/TestDetta.Core/TestInvocation.cs:25, src/TestDetta.Cli/TestRunner.cs:39",
+      input: "<code>analysis.Tests</code>, <code>--</code> sonrası argümanlar",
+      output: "Konsolda \"td summary\" ve <code>$GITHUB_STEP_SUMMARY</code>'ye Markdown; çıkış kodu 3 (bir proje başarısız) ya da 0",
+      purpose: "Seçimi çalıştırmak ve her kararın gerekçesini görünür kılmak.",
+      body: C(`
+td: 1 changed file(s), 1 affected test project(s).
+Tests to run:
+  filtered  tests/Calc.Tests/Calc.Tests.csproj  (1 of 2 classes, ~0.4 s of 0.9 s)
+            Calc.Tests.TaxTests
+td summary:
+  passed  tests/Calc.Tests/Calc.Tests.csproj  (1 class, 1.8 s)
+1 project(s) run, 0 failed, 0 skipped.`),
+    },
+  ],
+};
+
+const CH_EVAL = {
+  id: "eval", short: "Değerlendirme", eyebrow: "Bölüm 5 · Corpus değerlendirmesi",
+  title: "TestDetta'nın doğruluğu nasıl ölçülür",
+  lead: `Ürünün iddiası "kaçırmadan az test koşturmak". <code>tools/TestDetta.Eval</code> bunu gerçek açık kaynak depolarda ölçer: bir üyeyi bozar (mutant), testlerin tamamını koşturup hangi sınıfların gerçekten düştüğünü bulur, TestDetta'nın seçimiyle karşılaştırır. Düşen ama seçilmeyen sınıf bir <b>kaçırmadır</b>.`,
+  width: 1000, height: 640,
+  zones: [
+    { x: 10, y: 10, w: 980, h: 150, label: "BatchRunner · depo başına" },
+    { x: 10, y: 180, w: 980, h: 210, label: "SyntheticEvaluator.Evaluate · hazırlık" },
+    { x: 10, y: 410, w: 980, h: 220, label: "mutant başına (paralel işçiler)" },
+  ],
+  nodes: [
+    { id: "quick", kind: "cmd", x: 30, y: 56, w: 200, h: 58, label: "quick-check.sh", sub: "--focus · --max-mutants" },
+    { id: "corpus", kind: "data", x: 270, y: 52, w: 190, h: 66, label: "eval/corpus.json", sub: "42 depo, sabit commit" },
+    { id: "batch", kind: "cmd", x: 500, y: 56, w: 200, h: 58, label: "BatchRunner.Run", sub: "--cache · --only" },
+    { id: "one", kind: "core", x: 740, y: 56, w: 220, h: 58, label: "EvalApp.RunOne", sub: "klon · rapor · temizlik" },
+    { id: "rec", kind: "core", x: 760, y: 216, w: 200, h: 58, label: "EvalSteps.RecordAt", sub: "td record (önbellekli)" },
+    { id: "sample", kind: "core", x: 510, y: 216, w: 210, h: 58, label: "TargetSampler", sub: "+ DataFileSampler" },
+    { id: "base", kind: "core", x: 270, y: 216, w: 200, h: 58, label: "RunBaseline", sub: "mutantsız tam koşu" },
+    { id: "cache", kind: "data", x: 30, y: 212, w: 200, h: 66, label: "OutcomeCache", sub: "sonuçlar saklı mı?" },
+    { id: "sel", kind: "core", x: 510, y: 310, w: 210, h: 58, label: "Select → Analyze", sub: "AnalysisPipeline.Run" },
+    { id: "gw", kind: "core", x: 760, y: 310, w: 200, h: 58, label: "GeneratorWorkspace", sub: "jeneratör kopyası" },
+    { id: "schema", kind: "core", x: 270, y: 310, w: 200, h: 58, label: "MutationInjector", sub: "InjectSchema" },
+    { id: "workers", kind: "core", x: 30, y: 310, w: 200, h: 58, label: "WorkerCopies", sub: "cp -c işçi kopyaları" },
+    { id: "apply", kind: "core", x: 30, y: 460, w: 200, h: 58, label: "Apply", sub: "TESTDETTA_MUTANT=id" },
+    { id: "full", kind: "tool", x: 270, y: 460, w: 200, h: 58, label: "TestExecutor.RunAll", sub: "ulaşılan projeler" },
+    { id: "confirm", kind: "core", x: 510, y: 460, w: 210, h: 58, label: "Confirm", sub: "tek başına + kontrol" },
+    { id: "verdict", kind: "data", x: 760, y: 456, w: 200, h: 66, label: "SyntheticMutant", sub: "killed · missed" },
+    { id: "report", kind: "data", x: 270, y: 556, w: 690, h: 60, label: "synthetic.json · synthetic.md · summary.md", sub: "SyntheticReport · BatchSummary" },
+  ],
+  edges: [
+    { id: "e0", from: "quick", to: "corpus", label: "" },
+    { id: "e1", from: "corpus", to: "batch", label: "" },
+    { id: "e2", from: "batch", to: "one", label: "" },
+    { id: "e3", from: "one", to: "rec", label: "", },
+    { id: "e4", from: "rec", to: "sample", label: "" },
+    { id: "e5", from: "sample", to: "base", label: "" },
+    { id: "e6", from: "base", to: "cache", label: "" },
+    { id: "e7", from: "sample", to: "sel", label: "her hedef", lx: 40 },
+    { id: "e8", from: "sel", to: "gw", label: "" },
+    { id: "e9", from: "base", to: "schema", label: "çıktı", lx: 26 },
+    { id: "e10", from: "schema", to: "workers", label: "" },
+    { id: "e11", from: "workers", to: "apply", label: "işçi", lx: 24 },
+    { id: "e12", from: "apply", to: "full", label: "" },
+    { id: "e13", from: "full", to: "confirm", label: "" },
+    { id: "e14", from: "confirm", to: "verdict", label: "" },
+    { id: "e15", from: "verdict", to: "report", label: "" },
+  ],
+  steps: [
+    {
+      title: "Corpus ve tur seçenekleri", nodes: ["corpus", "batch", "quick"], edges: ["e1", "e0"],
+      who: "<code>BatchOptions.TryParse</code> → <code>BatchRunner.Run</code>; hızlı kontrol için <code>~/sift-corpus/quick-check.sh</code>",
+      file: "tools/TestDetta.Eval/BatchRunner.cs, Corpus.cs, EvalOptions.cs",
+      input: "<code>--corpus eval/corpus.json --only fluid --out runs-x --cache ~/sift-corpus/cache --toolchains … [--focus generator|data-files] [--max-mutants n] [--data-files n] [--keep-clones]</code>",
+      output: "Depo başına <code>EvalOptions(Target, RunSettings, Output, LogLevel)</code>; <code>BatchRunner.SettingsFor(entry, options)</code>",
+      purpose: "Her depo sabit bir commit'te, kendi SDK'sı (hermetik toolchain) ve ortamıyla değerlendirilir; sonuçlar turlar arasında karşılaştırılabilir kalır.",
+    },
+    {
+      title: "Depo klonlanır, haritalar kaydedilir", nodes: ["batch", "one", "rec"], edges: ["e2", "e3"],
+      who: "<code>EvalApp.RunOne(options, output)</code> → <code>new SyntheticEvaluator(workspace, run).Evaluate(sha, request, progress)</code> → <code>EvalSteps.RecordAt(sha)</code>",
+      file: "tools/TestDetta.Eval/EvalApp.cs, SyntheticEvaluator.cs, EvalSteps.cs",
+      input: "Depo URL'si, commit, kayıt önbelleği (<code>cache/maps/&lt;repo&gt;</code>)",
+      output: "Commit'teki kapsam haritaları (ürünle aynı <code>CoverageRecorder</code>)",
+      purpose: "TestDetta'nın göreceği haritanın aynısını üretmek. Kayıt önbelleğin anahtarı kaydedici kodunun özetini içerir: kaydedici değişince haritalar yeniden çıkarılır.",
+    },
+    {
+      title: "Bozulacak üyeler örneklenir", nodes: ["rec", "sample"], edges: ["e4"],
+      who: "<code>TargetSampler.Sample(graph, root, covered, SampleRequest(Count, Seed) { Kinds, DataFiles })</code>, <code>DataFileSampler.Sample</code>",
+      file: "tools/TestDetta.Eval/TargetSampler.cs, DataFileSampler.cs, MutantKind.cs",
+      input: "Kütüphane kodundaki üyeler; haritaya göre kapsanmış olanlar (%80 kapsanmış, %20 kapsanmamış)",
+      output: "<code>SyntheticTarget(Member, Edits, Covered) { Kind }</code> listesi; tür Throw, ReturnDefault, FlipBranch, FieldValue ya da EmptyFile",
+      purpose: "Gerçekçi bir değişiklik örneği. Sıra üye + tohum özetinden gelir: aday eklenip çıkınca diğer seçimler aynı kalır, önbellek geçerli kalır.",
+      body: "<p>Her hedefin iki yüzü var: TestDetta'nın göreceği davranışı bozmayan bir <b>kaynak düzenlemesi</b> (boş bir <code>;</code> ya da parantez) ve testlerin göreceği <b>IL mutantı</b> (metot başında exception, varsayılan dönüş, dal ters çevirme).</p>",
+    },
+    {
+      title: "Mutantsız temel koşu", nodes: ["sample", "base", "cache"], edges: ["e5", "e6"],
+      who: "<code>RunBaseline(candidates)</code> ya da saklıysa <code>StoredBaselineFor</code>",
+      file: "tools/TestDetta.Eval/SyntheticEvaluator.cs",
+      input: "Test projeleri",
+      output: "<code>Baseline(Projects, Outcome, Unreported)</code>: zaten düşen sınıflar",
+      purpose: "Mutant yokken düşen sınıflar mutantın suçu sayılmaz. Bütün mutantların sonucu saklıysa derleme ve temel koşu tamamen atlanır (sıcak yol).",
+    },
+    {
+      title: "Her değişiklik için TestDetta seçim yapar", nodes: ["sample", "sel", "gw"], edges: ["e7", "e8"],
+      who: "<code>Select(sha, target, maps, mapCommit, testProjects)</code> → <code>Analyze</code>: düzenleme klona yazılır, <code>AnalysisPipeline.Run</code>, dosyalar geri yazılır",
+      file: "tools/TestDetta.Eval/SyntheticEvaluator.cs, GeneratorWorkspace.cs",
+      input: "Klonda düzenlenmiş kaynak; jeneratör değişikliğinde <code>GeneratorWorkspace.For(target, originals)</code>",
+      output: "<code>Selection(Tests, Detected, Share, Others) { StoppedOnBuild }</code>",
+      purpose: "Ürünün gerçekten yapacağı seçimi kaydetmek. Jeneratör değişikliğinde mutant jeneratör dll'ine yazılıp tüketici yeniden derlenir; TestDetta gerçek çıktı farkını görür.",
+      body: "<p>Proje düzeyi seçim (<code>dotnet-affected</code> gibi) aynı anda <code>OtherSelector.ProjectLevel</code> olarak ölçülür; site rakamlarındaki karşılaştırma buradan gelir.</p>",
+    },
+    {
+      title: "Bütün mutantlar bir kez, anahtarla yazılır", nodes: ["base", "schema", "workers"], edges: ["e9", "e10"],
+      who: "<code>TrySchema</code> → <code>MutationInjector.InjectSchema(assemblies, targets, backup)</code>; <code>Parallelism</code> → <code>WorkerCopies</code>",
+      file: "tools/TestDetta.Eval/MutationInjector.cs, WorkerCopies.cs",
+      input: "Test çıktılarındaki depo dll'leri (ve jeneratörün obj/bin dll'leri)",
+      output: "Her mutant <code>if (&lt;TestDettaMutantSwitch&gt;.Active == id) { … }</code> korumasıyla; işçi başına copy-on-write klon kopyası",
+      purpose: "Her mutant için yeniden derlemeden, ortam değişkeniyle açılıp kapanan mutantlar; birden çok mutantı aynı anda koşturabilmek.",
+      body: "<p>Şemalı temel koşu, şemasız temel koşuyla aynı sınıfları düşürmüyorsa şema kapatılır ve mutantlar tek tek yazılır.</p>",
+    },
+    {
+      title: "Mutant açılır, ulaşılan testler koşar", nodes: ["workers", "apply", "full"], edges: ["e11", "e12"],
+      who: "<code>Run(target, context, index, selection, executor)</code> → <code>Apply</code> → <code>executor.RunAll(reached, \"synthetic-&lt;id&gt;\", env)</code>",
+      file: "tools/TestDetta.Eval/SyntheticEvaluator.cs, TestExecutor.cs",
+      input: "<code>TESTDETTA_MUTANT=&lt;id&gt;</code>; çıktısında mutantlı dll olan test projeleri",
+      output: "<code>TestRunOutcome</code>: proje başına düşen sınıflar (TRX)",
+      purpose: "Gerçeği ölçmek: bu değişiklik hangi sınıfları düşürüyor?",
+      body: ul([
+        "Jeneratör mutantı: işçi kopyası yeniden kopyalanır, tüketici zinciri <code>--no-dependencies</code> ve derleyici sunucusu olmadan mutant açık derlenir (<code>CompileConsumers</code>). Derlenmeyen proje <code>(does not build)</code> sayılır.",
+        "Veri dosyası: işçi kopyasındaki dosya boşaltılır (<code>DataFile.Apply</code>).",
+        "Çöken ya da takılan koşu: yalnız TestDetta'nın dışarıda bıraktığı sınıflar koşturulur (<code>RunOutsideSelection</code>).",
+      ]),
+    },
+    {
+      title: "Kaçırma adayı doğrulanır", nodes: ["full", "confirm"], edges: ["e13"],
+      who: "<code>Confirm(missed, scope, killed, alone)</code>",
+      file: "tools/TestDetta.Eval/SyntheticEvaluator.cs",
+      input: "Düşen ama TestDetta'nın seçmediği sınıflar",
+      output: "Doğrulanmış kaçırmalar",
+      purpose: "Yanlış alarmı ayıklamak: sınıf mutantla tek başına koşturulur (tekrar düşmeli) ve mutantsız tek başına koşturulur (düşmemeli). Sıra bağımlı ya da kararsız testler kaçırma sayılmaz.",
+    },
+    {
+      title: "Hüküm saklanır ve raporlanır", nodes: ["confirm", "verdict", "cache", "report"], edges: ["e14", "e15"],
+      who: "<code>SyntheticMutant(Target, Detected, MutatedMethods, KilledClasses, MissedClasses, SelectedShare, Inconclusive)</code>; <code>Store</code> → <code>OutcomeCache</code>; <code>SyntheticReport.Write</code>, <code>BatchSummary.Write</code>",
+      file: "tools/TestDetta.Eval/SyntheticResult.cs, OutcomeCache.cs, SyntheticReport.cs, BatchSummary.cs",
+      input: "Mutantın test sonucu ve TestDetta'nın seçimi",
+      output: "<code>synthetic.json</code>, <code>synthetic.md</code>, tur <code>summary.md</code> (kaçırma oranı ve %95 üst sınırı, seçilen pay, proje düzeyi karşılaştırma)",
+      purpose: "Test sonucu (seçimden bağımsız) saklanır: sonraki turda TestDetta değişse bile testler tekrar koşmaz, yalnız seçim yeniden hesaplanır. Hızlı kontrol bu yüzden dakikalar sürer.",
+      body: "<p>Klon, hiçbir şey kaçırılmadıysa silinir; kaçırılan ya da çöken mutantların TRX raporları saklanır (<code>--keep-clones</code> hepsini tutar).</p>",
+    },
+  ],
+};
+
+const CATALOG = [
+  { name: "CliApp", file: "src/TestDetta.Cli/CliApp.cs", what: "Komut satırının girişi; komutu ilgili akışa yönlendirir.", sig: "<code>Run(string[] args, TextWriter stdout, TextWriter stderr) → int</code> (0, 1, 2, 3)", by: "Program.cs" },
+  { name: "CliOptions", file: "src/TestDetta.Cli/CliOptions.cs", what: "Komut ve seçenekleri ayrıştırır.", sig: "<code>TryParse(args, cwd, out CliOptions, out error) → bool</code>", by: "CliApp" },
+  { name: "LicenseGate", file: "src/TestDetta.Cli/LicenseGate.cs", what: "Lisansı yeniler, kontrol eder; seçime izin yoksa planı \"hepsi\"ne çevirir.", sig: "<code>Refresh(…) → Task</code>, <code>Check(…) → LicenseStatus</code>, <code>Apply(analysis, status, enforced, logger) → AnalysisResult</code>", by: "CliApp (affected, test)" },
+  { name: "License / LicenseCheck", file: "src/TestDetta.Core/Licensing/", what: "İmzalı lisans metnini doğrular; kapsam, süre ve koltuk kontrolü.", sig: "<code>License.Verify(text, keys, out error) → LicenseClaims?</code>, <code>LicenseCheck.Check(input, keys) → LicenseStatus</code>", by: "LicenseGate, LicenseCommand" },
+  { name: "AnalysisPipeline", file: "src/TestDetta.Core/AnalysisPipeline.cs", what: "Analizi uçtan uca yürütür.", sig: "<code>Run(repoPath, baseRef, AnalysisOptions) → AnalysisResult</code>", by: "CliApp, Eval (Analyze)" },
+  { name: "GitClient", file: "src/TestDetta.Core/GitClient.cs", what: "git çağrıları.", sig: "<code>ChangedFiles(root, baseRef) → string[]</code>, <code>MergeBase</code>, <code>ChangedBetween</code>, <code>FirstParentDistance → int?</code>, <code>ReadFiles(root, rev, paths)</code>, <code>TrackedFiles</code>", by: "AnalysisPipeline, CoverageRecorder" },
+  { name: "ProjectGraphLoader", file: "src/TestDetta.Core/ProjectGraphLoader.cs", what: "Proje dosyalarını bulur, XML okur, MSBuild değerlendirmesini üstüne koyar.", sig: "<code>Load(repoRoot) → ProjectGraph</code>", by: "AnalysisPipeline, CliApp (record)" },
+  { name: "MsBuildProjectEvaluator", file: "src/TestDetta.Coverage/MsBuildProjectEvaluator.cs", what: "Tek <code>dotnet msbuild</code> çağrısıyla her projeyi her framework için değerlendirir; diske önbellekler.", sig: "<code>Evaluate(root, projects) → Dictionary&lt;path, EvaluatedProject&gt;?</code>", by: "ProjectGraphLoader" },
+  { name: "ProjectGraph / ProjectNode", file: "src/TestDetta.Core/ProjectGraph.cs, ProjectNode.cs", what: "Projeler, referanslar, dosya sahipliği.", sig: "<code>ResolveFile(file) → FileOwner[]</code>, <code>WithDependents(paths)</code>, <code>DependentsOf</code>, <code>OpaqueConsumersOf</code>", by: "Her yerde" },
+  { name: "CodeChangeReader", file: "src/TestDetta.Core/CodeChangeReader.cs", what: "Merge base ile çalışma ağacındaki C# dosyalarını okur.", sig: "<code>Read(root, base, changed, symbolSets) → CodeChange[]</code>, <code>ReadBetween(…)</code>", by: "AnalysisPipeline" },
+  { name: "CodeChangeDetector", file: "src/TestDetta.Core/CodeChangeDetector.cs", what: "İki metni Roslyn ile ayrıştırıp üye düzeyinde fark çıkarır.", sig: "<code>Detect(path, old, new, symbolSets) → CodeChange(Path, IsCosmetic, AffectsWholeProject, Symbols)</code>", by: "CodeChangeReader, CompareGeneratorOutput" },
+  { name: "ImpactAnalyzer", file: "src/TestDetta.Core/ImpactAnalyzer.cs", what: "Değişen dosyalardan etkilenen projelere.", sig: "<code>Analyze(graph, root, changed, codeChanges, packageChanges) → ImpactResult</code>", by: "AnalysisPipeline (değişiklik ve drift)" },
+  { name: "MapDrift", file: "src/TestDetta.Core/MapDrift.cs", what: "Eski haritanın commit'inden merge base'e kadar olan değişiklik.", sig: "<code>MapDrift(FromCommit, Commits, ChangedFiles, Impact)</code>", by: "AnalysisPipeline → TestSelector" },
+  { name: "TestSelector", file: "src/TestDetta.Core/TestSelector*.cs", what: "Etkilenen test projelerini sınıflara indirir.", sig: "<code>Select(TestSelectionRequest) → TestProjectSelection[]</code>", by: "AnalysisPipeline" },
+  { name: "FindFileReaders", file: "src/TestDetta.Core/TestSelector.FileReads.cs", what: "Proje dışı değişen dosyaları okuyan sınıflar.", sig: "<code>FindFileReaders(request) → Dictionary&lt;path, FileReaders&gt;</code>, <code>WithFileReaders(decisions, readers, maps)</code>", by: "TestSelector.Select" },
+  { name: "CompareGeneratorOutput", file: "src/TestDetta.Core/TestSelector.Generators.cs", what: "Jeneratörün şimdi ürettiği kodu haritadakiyle karşılaştırır.", sig: "<code>CompareGeneratorOutput(request, projectLevel, uses) → GeneratorOutput(Changes, Current)</code>", by: "TestSelector.Select" },
+  { name: "BuildGeneratedCodeReader", file: "src/TestDetta.Coverage/BuildGeneratedCodeReader.cs", what: "Test projesini derleyip PDB'deki üretilmiş kaynakları okur.", sig: "<code>Read(graph, root, testProject, framework) → GeneratedCodeRead</code>", by: "CompareGeneratorOutput (IGeneratedCodeReader)" },
+  { name: "SourceIndexBuilder", file: "src/TestDetta.Core/SourceIndexBuilder.cs", what: "Etkilenen projelerin üye ve isim dizini.", sig: "<code>Build(graph, root, affected, generated) → SourceIndex</code>", by: "TestSelector.Select" },
+  { name: "CoverageSelection", file: "src/TestDetta.Core/CoverageSelection.cs", what: "Kapsam haritasıyla \"hangi sınıflar bu üyeyi çalıştırdı\" cevabı; süre tahmini.", sig: "<code>TryResolve(change, owner, reached) → bool</code>, <code>Evidence</code>, <code>Estimate(selection) → TimeEstimate</code>", by: "TestSelector (Trace, Decide)" },
+  { name: "ImpactPropagation", file: "src/TestDetta.Core/ImpactPropagation.cs", what: "İsimle genişlik öncelikli yayılım.", sig: "<code>Seed(change, project)</code>, <code>Run()</code>, <code>AffectedTypes</code>", by: "TestSelector.Trace" },
+  { name: "TestInvocationBuilder", file: "src/TestDetta.Core/TestInvocation.cs", what: "Seçimden <code>dotnet test</code> argümanları.", sig: "<code>Build(selections, root, extraArgs) → TestInvocation(Selection, Arguments, Location)[]</code>", by: "CliApp.RunTests, ResultWriter" },
+  { name: "TestFilter / DotnetTestLocation", file: "src/TestDetta.Core/TestFilter.cs, DotnetTestLocation.cs", what: "Çerçeveye göre filtre sözdizimi; nerede ve hangi modda koşulacağı.", sig: "<code>TestFilter.Arguments(classes, exclude, syntax)</code>, <code>DotnetTestLocation.For(root, project)</code>", by: "TestInvocationBuilder, CoverageRecorder" },
+  { name: "TestRunner", file: "src/TestDetta.Cli/TestRunner.cs", what: "Komutları sırayla koşturur; filtre boş kalırsa filtresiz tekrarlar.", sig: "<code>RunAll(invocations, dir, stdout) → TestRunResult[]</code>", by: "CliApp.RunTests" },
+  { name: "ResultWriter / MarkdownSummary", file: "src/TestDetta.Cli/ResultWriter.cs, MarkdownSummary.cs", what: "Konsol, JSON (<code>td affected --format json</code>) ve iş özeti çıktısı.", sig: "<code>Write(ResultReport, stdout)</code>, <code>WritePlan</code>, <code>WriteRunSummary</code>, <code>MarkdownSummary.Write(SummaryInput, writer)</code>", by: "CliApp" },
+  { name: "CoverageRecorder", file: "src/TestDetta.Coverage/CoverageRecorder.cs", what: "Bir test projesinin kaydı: derle, enstrümante et, koştur, birleştir, geri yükle.", sig: "<code>Record(RecordRequest, TextWriter) → (CoverageMap Map, bool TestsPassed)</code>", by: "CliApp.RecordCoverage, Eval" },
+  { name: "AssemblyInstrumenter", file: "src/TestDetta.Coverage/AssemblyInstrumenter.cs", what: "Mono.Cecil ile dll'lere probe ekler; yedekler ve geri yükler.", sig: "<code>Instrument(assemblies, testAssemblies, backupDir) → InstrumentationResult</code>, <code>Restore(result)</code>", by: "CoverageRecorder" },
+  { name: "FileReadCalls", file: "src/TestDetta.Coverage/FileReadCalls.cs", what: "Dosya okuyan çağrıları sarmalayıcıya yönlendirir.", sig: "<code>Wrap(module, fileRead, directoryListed) → int</code>", by: "AssemblyInstrumenter.InstrumentOne" },
+  { name: "TestDettaTracker", file: "src/TestDetta.Coverage.Runtime/TestDettaTracker.cs", what: "Test host'ta probe'ları alır, kovalara yazar, sonuç JSON'u üretir.", sig: "<code>Hit(int)</code>, <code>EnterTestInstance(object)</code>, <code>Read/Stored</code>, <code>FileRead(string)</code>, <code>WriteResults()</code>", by: "Enstrümante edilmiş kod" },
+  { name: "FileReadPaths", file: "src/TestDetta.Coverage/FileReadPaths.cs", what: "Tracker'ın gördüğü tam yolları depo yollarına çevirir.", sig: "<code>Resolve(full) → string[]</code>, <code>ResolveAll(fulls)</code>", by: "CoverageRecorder.BuildMap" },
+  { name: "GeneratedSourceReader", file: "src/TestDetta.Coverage/GeneratedSourceReader.cs", what: "PDB'ye gömülü üretilmiş kaynakları okur.", sig: "<code>Read(root, testProject, targetPath, owners, assemblies) → GeneratedSource[]</code>", by: "CoverageRecorder, BuildGeneratedCodeReader" },
+  { name: "CoverageMap / CoverageMapStore", file: "src/TestDetta.Core/CoverageMap.cs, CoverageMapStore.cs", what: "Harita modeli ve dosya biçimi (sürüm 2).", sig: "<code>PathFor(root, csproj)</code>, <code>Write(path, map)</code>, <code>Read(path) → CoverageMap?</code>", by: "Kayıt ve analiz" },
+  { name: "BatchRunner / EvalApp", file: "tools/TestDetta.Eval/", what: "Corpus turu ve tek depo değerlendirmesi.", sig: "<code>BatchRunner.Run(BatchOptions) → int</code>, <code>EvalApp.RunOne(EvalOptions, writer) → int</code>", by: "pool betikleri, quick-check.sh" },
+  { name: "SyntheticEvaluator", file: "tools/TestDetta.Eval/SyntheticEvaluator.cs", what: "Mutantları seçer, uygular, koşturur ve seçimle karşılaştırır.", sig: "<code>Evaluate(sha, SampleRequest, progress) → SyntheticRun</code>", by: "EvalApp" },
+  { name: "MutationInjector", file: "tools/TestDetta.Eval/MutationInjector.cs", what: "IL mutantlarını tek tek ya da şemayla yazar.", sig: "<code>Inject(assemblies, member, backup, kind) → Mutation</code>, <code>InjectSchema(…) → Schema</code>", by: "SyntheticEvaluator, GeneratorWorkspace" },
+  { name: "GeneratorWorkspace / GeneratorMutants", file: "tools/TestDetta.Eval/", what: "Jeneratör değişikliklerinin ürettiği kodu okur; tüketicileri mutantla derler.", sig: "<code>For(target, originals) → IGeneratedCodeReader</code>, <code>GeneratorMutants.BuildOrder(files, test)</code>", by: "SyntheticEvaluator" },
+  { name: "OutcomeCache", file: "tools/TestDetta.Eval/OutcomeCache.cs", what: "Mutant test sonuçlarını turlar arasında saklar.", sig: "<code>Find(target) → MutantOutcome?</code>, <code>Store(target, outcome)</code>", by: "SyntheticEvaluator" },
+];
+
+const CH_MAP = {
+  id: "harita", short: "Kapsam haritası", eyebrow: "Bölüm 4 · Kapsam haritası derinlemesine",
+  title: "Harita bir soruyu ne zaman cevaplar, ne zaman cevaplayamaz",
+  lead: `Seçimin kalbi tek bir soru: <i>"Bu değişen üyeyi hangi test sınıfları çalıştırdı?"</i> Soruyu ${c("CoverageSelection.TryResolve")} sorar, ${c("CoverageIndex")} haritadan cevaplar. Sol iki sütun haritanın bölümlerinin hangi sorguya dönüştüğünü, sağdaki ağaç bir değişikliğin izlediği kararı gösterir. İlk 7 adım haritanın nasıl okunduğunu, sonraki 10 adım tek tek senaryoları oynatır.`,
+  note: `<b>"Cevaplanamadı" bir kaçırma değildir.</b> Harita cevaplayamadığında da bildiği sınıflar seçili kalır (${c("SelectAll")} her durumda çalışır); ek olarak değişiklik isimle izlenir ve daha fazla sınıf seçilir. "Cevaplandı" ise isim izlemenin o değişiklikte durması demektir: kazanç buradan gelir.`,
+  legend: [["data", "harita bölümü (JSON)"], ["core", "CoverageIndex sorgusu"], ["q", "karar (TryResolve)"], ["yes", "cevaplandı"], ["no", "cevaplanamadı"]],
+  width: 1000, height: 720,
+  zones: [
+    { x: 10, y: 10, w: 230, h: 610, label: "haritanın bölümleri" },
+    { x: 250, y: 10, w: 250, h: 610, label: "CoverageIndex" },
+    { x: 520, y: 10, w: 470, h: 700, label: "CoverageSelection.TryResolve" },
+  ],
+  nodes: [
+    { id: "m_classes", kind: "data", x: 25, y: 40, w: 200, h: 56, label: "classes", sub: "sınıf → [id]" },
+    { id: "m_fix", kind: "data", x: 25, y: 120, w: 200, h: 56, label: "fixtures", sub: "fixture → [id]" },
+    { id: "m_amb", kind: "data", x: 25, y: 200, w: 200, h: 56, label: "ambient", sub: "test dışı → [id]" },
+    { id: "m_built", kind: "data", x: 25, y: 280, w: 200, h: 56, label: "builtValues", sub: "değeri kuranlar" },
+    { id: "m_init", kind: "data", x: 25, y: 360, w: 200, h: 56, label: "initialization", sub: "− linkedInitialization" },
+    { id: "m_shared", kind: "data", x: 25, y: 440, w: 200, h: 56, label: "sharedInProcess", sub: "süreçte ≥2 kova" },
+    { id: "m_ext", kind: "data", x: 25, y: 520, w: 200, h: 56, label: "externalCallbacks", sub: "3. taraf çağırır" },
+    { id: "i_run", kind: "core", x: 265, y: 40, w: 220, h: 56, label: "ClassesRunning", sub: "üye → sınıflar" },
+    { id: "i_use", kind: "core", x: 265, y: 120, w: 220, h: 56, label: "ClassesUsing", sub: "fixture → kullananlar" },
+    { id: "i_null", kind: "core", x: 265, y: 200, w: 220, h: 56, label: "_ambient", sub: "→ null (bilinmiyor)" },
+    { id: "i_init", kind: "core", x: 265, y: 360, w: 220, h: 56, label: "RanDuringInitialization", sub: "bir kez çalışan" },
+    { id: "i_bucket", kind: "core", x: 265, y: 440, w: 220, h: 56, label: "BucketsRunning", sub: "OneBucketPerProcess" },
+    { id: "i_ext", kind: "core", x: 265, y: 520, w: 220, h: 56, label: "IsExternalCallback", sub: "geri çağırma" },
+    { id: "start", kind: "cmd", x: 625, y: 30, w: 260, h: 48, label: "SymbolChange", sub: "tür · üye · tür (Added/Modified)" },
+    { id: "q1", kind: "q", x: 625, y: 100, w: 260, h: 46, label: "Static constructor mı?", sub: "" },
+    { id: "q2", kind: "q", x: 625, y: 170, w: 260, h: 46, label: "Constructor mı?", sub: "" },
+    { id: "q3", kind: "q", x: 625, y: 240, w: 260, h: 46, label: "Yeni mi / yansımayla mı?", sub: "IsAnswerable" },
+    { id: "q4", kind: "q", x: 625, y: 310, w: 260, h: 46, label: "Harita biliyor mu?", sub: "Lookup" },
+    { id: "q5", kind: "q", x: 625, y: 380, w: 260, h: 46, label: "Bir kez çalışan kod mu?", sub: "RunOnceReason" },
+    { id: "q6", kind: "q", x: 625, y: 450, w: 260, h: 46, label: "Metaveri değişti mi?", sub: "MetadataChanged" },
+    { id: "q7", kind: "q", x: 625, y: 520, w: 260, h: 46, label: "Haritalı proje var mı?", sub: "answers.Count" },
+    { id: "ok", kind: "yes", x: 540, y: 620, w: 210, h: 64, label: "Cevaplandı", sub: "isim izleme durur" },
+    { id: "no", kind: "no", x: 775, y: 620, w: 205, h: 64, label: "Cevaplanamadı", sub: "seçilen + isim izleme" },
+  ],
+  edges: [
+    { id: "x_cls", from: "m_classes", to: "i_run", label: "" },
+    { id: "x_fix", from: "m_fix", to: "i_use", label: "" },
+    { id: "x_use", from: "i_use", to: "i_run", label: "", lx: 20 },
+    { id: "x_amb", from: "m_amb", to: "i_null", label: "" },
+    { id: "x_built", from: "m_built", to: "i_run", label: "" },
+    { id: "x_init", from: "m_init", to: "i_init", label: "" },
+    { id: "x_shared", from: "m_shared", to: "i_bucket", label: "" },
+    { id: "x_ext", from: "m_ext", to: "i_ext", label: "" },
+    { id: "a_run", from: "i_run", to: "q4", label: "sınıflar" },
+    { id: "a_null", from: "i_null", to: "q4", label: "null" },
+    { id: "a_init", from: "i_init", to: "q5", label: "" },
+    { id: "a_bucket", from: "i_bucket", to: "q5", label: "" },
+    { id: "a_ext", from: "i_ext", to: "q5", label: "" },
+    { id: "t0", from: "start", to: "q1", label: "" },
+    { id: "t1", from: "q1", to: "q2", label: "hayır", lx: 26, ly: 9 },
+    { id: "t2", from: "q2", to: "q3", label: "devam", lx: 28, ly: 9 },
+    { id: "t3", from: "q3", to: "q4", label: "hayır", lx: 26, ly: 9 },
+    { id: "t4", from: "q4", to: "q5", label: "evet", lx: 24, ly: 9 },
+    { id: "t5", from: "q5", to: "q6", label: "hayır", lx: 26, ly: 9 },
+    { id: "t6", from: "q6", to: "q7", label: "hayır", lx: 26, ly: 9 },
+    { id: "t7", from: "q7", to: "ok", label: "evet" },
+    { id: "n1", from: "q1", to: "no", label: "evet", bend: { x: 220, y: 0 } },
+    { id: "n3", from: "q3", to: "no", label: "evet", bend: { x: 170, y: 0 } },
+    { id: "n4", from: "q4", to: "no", label: "hayır", bend: { x: 140, y: 0 } },
+    { id: "n5", from: "q5", to: "no", label: "evet", bend: { x: 110, y: 0 } },
+    { id: "n6", from: "q6", to: "no", label: "evet", bend: { x: 80, y: 0 } },
+    { id: "n7", from: "q7", to: "no", label: "hayır" },
+  ],
+  steps: [
+    {
+      title: "Harita yüklenir, her üye için sınıf kümesi kurulur", nodes: ["m_classes", "i_run"], edges: ["x_cls"],
+      who: "<code>new CoverageIndex(map, fixture =&gt; ClassesUsing(index, project, fixture))</code>, <code>CoverageSelection</code> kurucusunda",
+      file: "src/TestDetta.Core/CoverageIndex.cs, CoverageSelection.cs:48",
+      input: "<code>map.Methods</code> (id → <code>CoveredMethod(TypeName, MemberName)</code>) ve <code>map.Classes</code> (sınıf → id'ler)",
+      output: "<code>_classesByMember[(Calc.Calculator, Tax)] = {Calc.Tests.TaxTests}</code>; tür ve iç içe türler için <code>_classesByType</code>; üye başına kova sayısı <code>_bucketCount</code>",
+      purpose: "Soruyu sözlük aramasına indirmek. Haritada listelenip hiç çalışmamış üye de \"biliniyor\" sayılır: boş küme, yani hiçbir test çalıştırmadı.",
+      body: ul([
+        "Yalnız etkilenen test projelerinin haritaları yüklenir.",
+        "<b><code>FailedClasses == null</code> olan harita hiç kullanılmaz:</b> kayıtta adı bilinmeyen bir başarısızlık olduysa herhangi bir sınıfın kodu eksik olabilir.",
+        "Aşırı yüklemeler aynı adı paylaşır: <code>Add(int)</code> ve <code>Add(double)</code> tek kayıt; lambda, iterator ve async durum makineleri içinde bulundukları üyeye yazılır.",
+      ]),
+    },
+    {
+      title: "Fixture'ın kodu, onu kullanan sınıflara dağıtılır", nodes: ["m_fix", "i_use", "i_run"], edges: ["x_fix", "x_use"],
+      who: "<code>ClassesUsing(index, project, fixture)</code>, <code>FixtureNames</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:78",
+      input: "<code>\"App.Tests.ApiHost`1[App.Tests.BlogProfile]\"</code> gibi bir fixture adı ve kaynak dizini",
+      output: "Kodu hem <code>ApiHost</code>'u hem <code>BlogProfile</code>'ı anan test sınıfları (genelde kurucu parametresi ya da <code>IClassFixture&lt;…&gt;</code>)",
+      purpose: "Fixture kurulumu bir kez çalışır ama onu kullanan her sınıf ona bağımlıdır; kurulumun çalıştırdığı her üye bu sınıfların hepsine yazılır.",
+      body: ul([
+        "<code>[setup-scope]Ns</code> (NUnit <code>[SetUpFixture]</code>, MSTest <code>[AssemblyInitialize]</code>): o isim alanındaki ve altındaki her test sınıfı.",
+        "<b>Kullananı bulunamayan fixture'ın kodu <code>_ambient</code>'e gider:</b> \"testlerin dışında çalıştı\" sayılır, yani cevaplanamaz.",
+        "Fixture bir kova sayılır (<code>_bucketCount</code>), kaç sınıf kullanırsa kullansın.",
+      ]),
+    },
+    {
+      title: "Testlerin dışında çalışan kod \"bilinmiyor\" olur", nodes: ["m_amb", "i_null"], edges: ["x_amb"],
+      who: "<code>ClassesRunning(type, member)</code>: <code>_ambient</code> içindeyse <code>null</code> döner",
+      file: "src/TestDetta.Core/CoverageIndex.cs",
+      input: "<code>map.Ambient</code>: ilk testten önce çalışan id'ler (keşif, <code>[MemberData]</code>/<code>TestCaseSource</code> verisi)",
+      output: "<code>null</code>: \"harita cevaplayamaz\"; tür düzeyinde <code>TypeRanOutsideTests</code>",
+      purpose: "Keşifte üretilen bir veri her testi etkileyebilir ama hangi sınıfın kullandığı görünmez. Boş küme (\"kimse\") yanlış olurdu; <code>null</code> (\"bilmiyorum\") doğru cevaptır.",
+    },
+    {
+      title: "Değeri kuran kod, değeri okuyan sınıfa yazılır", nodes: ["m_built", "i_run"], edges: ["x_built"],
+      who: "<code>AddUsers(map, ids, classes)</code>; kayıtta <code>TestDettaTracker.Read/Stored</code> ve <code>BuildMap</code> içindeki <code>FieldReads</code>",
+      file: "src/TestDetta.Core/CoverageIndex.cs, src/TestDetta.Coverage/CoverageRecorder.cs",
+      input: "<code>builtValues.classes</code>: bir sınıfın okuduğu izlenen alanlara değer yazan metotlar (zincirleme)",
+      output: "Bu metotlar okuyan sınıfın kümesine eklenir, <b>kova sayılmadan</b>",
+      purpose: "Örnek: bir önbellek ilk testte doldurulur, sonraki testler yalnız okur. Okuyan sınıf, değeri kuran koda bağımlıdır; kayıt bunu alan okuma/yazma probe'larıyla bağlar.",
+      body: "<p>Kova sayılmamasının sebebi: \"bir kez çalışan kod\" kuralları kodun <i>nerede çalıştığına</i> bakar, değerin nerede kullanıldığına değil.</p>",
+    },
+    {
+      title: "Başlatma kapsamında çalışan kod işaretlenir", nodes: ["m_init", "i_init"], edges: ["x_init"],
+      who: "<code>RanDuringInitialization(type, member)</code>, <code>TypeRanDuringInitialization</code>",
+      file: "src/TestDetta.Core/CoverageIndex.cs",
+      input: "<code>initialization</code> − <code>linkedInitialization</code>: static ctor, <code>GetOrAdd</code>, <code>Lazy.Value</code> içinde çalışan ve sonucu izlenen bir alana bağlanamamış kod",
+      output: "\"Bir kez çalışan kod\" kanıtı",
+      purpose: "Böyle kod süreç başına bir kez çalışır ve yalnız onu tetikleyen ilk sınıfa yazılır; sonraki kullanıcılar haritada görünmez.",
+      body: "<p><b>Bağlanmış</b> (linked) başlatma, yani sonucu izlenen bir alana yazılan, bu listeye girmez: o kod <code>builtValues</code> üzerinden okuyan sınıflara zaten yazılmıştır. <code>docs/design/run-once-cascades.md</code>.</p>",
+    },
+    {
+      title: "Bir süreçte tek kovada çalışmak şüphelidir", nodes: ["m_shared", "i_bucket"], edges: ["x_shared"],
+      who: "<code>BucketsRunning(type, member)</code>, <code>RanInOneBucketPerProcess</code>, <code>TypeRanInOneBucketPerProcess</code>",
+      file: "src/TestDetta.Core/CoverageIndex.cs",
+      input: "<code>_bucketCount</code> ve <code>sharedInProcess</code> (bir süreçte iki ya da daha çok kovada görülen id'ler)",
+      output: "Üyeyi tek kova çalıştırdıysa ya da her süreçte yalnız bir kova çalıştırdıysa: \"önbelleğe alınan kod\" deseni",
+      purpose: "Tembel katalog ve singleton gibi kod ilk sınıfta çalışır, sonra önbellekten gelir. Tek kova bunun zayıf ama sık görülen izidir.",
+      body: "<p><b>Bu geceki corpus koşusu tam olarak bu kuralı ölçüyor</b> (\"tek kova kuralı\" kapalı). Kural kaldırılırsa seçim daralır. Kaçırma çıkarsa kural kalır ya da daraltılır.</p>",
+    },
+    {
+      title: "Üçüncü taraf kütüphanelerin geri çağırdığı kod", nodes: ["m_ext", "i_ext"], edges: ["x_ext"],
+      who: "<code>IsExternalCallback(type, member)</code>; kayıtta <code>ExternalContracts.IsCallback</code>",
+      file: "src/TestDetta.Core/CoverageIndex.cs, src/TestDetta.Coverage/ExternalContracts.cs",
+      input: "<code>externalCallbacks</code>: bir dış kütüphanenin arayüzünü uygulayan ve onun çağırdığı metotlar",
+      output: "\"Bir kez çalışan kod\" kanıtı",
+      purpose: "Kütüphane ürettiğini saklayıp sonraki sınıflara verebilir (NSubstitute'taki Castle proxy kancası). Kayıtta bu metotlar ayrıca önbellek kapsamı gibi işaretlenir.",
+    },
+    {
+      title: "Senaryo 1 · Tax'ın gövdesi değişti", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok", "i_run"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "t5", "t6", "t7"],
+      who: "<code>TryResolve(SymbolChange(\"Calc.Calculator\", \"Tax\", Modified), owner: Calc)</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:320",
+      input: "Harita: <code>\"classes\": { \"Calc.Tests.TaxTests\": [1] }</code>, <code>methods[1] = [\"Calc.Calculator\", \"Tax\"]</code>",
+      output: "<code>true</code>; <code>TaxTests</code> seçildi, kanıt <code>ran Calc.Calculator.Tax, which changed (map 9f3c…)</code>",
+      purpose: "Ana yol: her soru \"sorun yok\" der, haritanın cevabı kesindir ve isim izleme burada durur. <code>AddTests</code> seçilmez.",
+    },
+    {
+      title: "Senaryo 2 · Yeni bir metot eklendi", nodes: ["start", "q1", "q2", "q3", "no"], edges: ["t0", "t1", "t2", "n3"],
+      who: "<code>IsAnswerable</code>: <code>change.Kind == Added</code> → <code>Unanswered(change, \"added\")</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:537",
+      input: "<code>SymbolChange(\"Calc.Calculator\", \"Round\", Added)</code>",
+      output: "<code>false</code>: değişiklik isimle izlenir; <code>Round</code>'u anan kodu çalıştıran sınıflar seçilir",
+      purpose: "Harita geçmişi kaydeder. Yeni üyeyi henüz kimse çalıştırmadı ama yeni çağıranlar onu çağırıyor olabilir; bunu yalnız isimler gösterir.",
+      body: "<p>Aynı dal: tür, bir çatının yansımayla bulabileceği bir türse (temel sınıfı ya da özniteliği var ve hiçbir şey adını anmıyor), çatı onun bildirimini kodu çalıştırmadan okur. Gerekçe: <code>\"its type may be found through reflection\"</code>.</p>",
+    },
+    {
+      title: "Senaryo 3 · Static constructor değişti", nodes: ["start", "q1", "no", "i_run"], edges: ["t0", "n1"],
+      who: "<code>TryResolve</code> başı: <code>.cctor</code> → <code>SelectAll(Answers(change with { MemberName = null }, owner).Answers, …)</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:330",
+      input: "<code>SymbolChange(\"MimeKit.HtmlAttributeId\", \".cctor\", Modified)</code>",
+      output: "Türün <b>herhangi bir üyesini</b> çalıştıran her sınıf seçilir, kanıt <code>ran a member of …, whose static constructor changed</code>; ayrıca isim izleme",
+      purpose: "Static ctor süreç başına bir kez, ilk gelen sınıf için çalışır; harita kullanıcılarını adlandıramaz. Kurduğu her şeyi türün üyelerini çalıştıran sınıflar kullanır, çoğu zaman türün adını hiç anmadan (MimeKit'teki uzantı metotları).",
+    },
+    {
+      title: "Senaryo 4 · Constructor değişti", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok"], edges: ["t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7"],
+      who: "<code>.ctor</code> → önce tür çapında <code>Answers</code> ve <code>SelectAll</code>, sonra üyenin kendi sorusu",
+      file: "src/TestDetta.Core/CoverageSelection.cs:340",
+      input: "<code>SymbolChange(\"App.OrderService\", \".ctor\", Modified)</code>",
+      output: "Türü çalıştıran her sınıf (kanıt <code>ran a member of App.OrderService, whose constructor changed</code>) ve kurucuyu çalıştıranlar",
+      purpose: "Bir nesne onu kurandan fazlasına hizmet eder: DI kabının bir kez kurup her sınıfa verdiği singleton gibi. Türün bir üyesi testlerin dışında da çalıştıysa (<code>typeUsersKnown = false</code>) sonuç cevaplanamaz olur: <code>\"a member of its type ran outside any test\"</code>.",
+    },
+    {
+      title: "Senaryo 5 · Üye keşif sırasında da çalıştı", nodes: ["start", "q1", "q2", "q3", "q4", "no", "i_null"], edges: ["t0", "t1", "t2", "t3", "a_null", "n4"],
+      who: "<code>Answers</code> → <code>Lookup</code> → <code>ClassesRunning</code> <code>null</code> → <code>RanOutsideTests</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:437, :611",
+      input: "Harita: <code>\"ambient\": [7]</code>, <code>methods[7] = [\"App.Rates\", \"All\"]</code> (bir <code>[MemberData]</code> kaynağı onu çağırıyor)",
+      output: "<code>false</code>, gerekçe <code>\"it ran outside any test\"</code>",
+      purpose: "Teori verisi keşifte bir kez üretilir; hangi testin hangi satırı kullandığı görünmez. Haritanın bilmediği üye de buraya düşer: alan, sabit (derlemede gömülür), soyut üye ya da başka assembly. Gerekçe: <code>\"a map does not know it\"</code>.",
+    },
+    {
+      title: "Senaryo 6 · Önbellek doldururken çalışan kod", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "no", "i_run", "i_init"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "a_init", "n5"],
+      who: "<code>RunOnceReason(map, change)</code> → <code>RanDuringInitialization</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:562",
+      input: "<code>cache.GetOrAdd(key, k =&gt; Parse(k))</code> içinde çalışan <code>Parse</code>; harita yalnız ilk sınıfı adlandırıyor",
+      output: "O sınıf seçili kalır; gerekçe <code>\"it ran in a static constructor or cache fill\"</code>; isim izleme devam eder",
+      purpose: "Önbellekten okuyan sonraki sınıflar <code>Parse</code>'a bağımlıdır ama haritada görünmez. Sonuç bir alana bağlandıysa (linked) bu kural devreye girmez; okuyanlar <code>builtValues</code> ile zaten bilinir.",
+    },
+    {
+      title: "Senaryo 7 · Tek sınıfta çalışan singleton kurucusu", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "no", "i_bucket"], edges: ["t0", "t1", "t2", "t3", "t4", "a_bucket", "n5"],
+      who: "<code>RunOnceReason</code>: kurucu, static üye ya da yansımayla bulunabilir tür ve <code>BucketsRunning == 1 || RanInOneBucketPerProcess</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:590",
+      input: "<code>Catalog..ctor</code> yalnız <code>Calc.Tests.FirstTests</code> sırasında çalıştı",
+      output: "<code>FirstTests</code> seçili; gerekçe <code>\"a constructor or static member that ran in one bucket per process\"</code>; isim izleme",
+      purpose: "Tek kova, \"bir kez kurulup önbelleğe alındı\" deseninin izi olabilir. Corpus ölçümleri bu kuralın asıl yükünü Newtonsoft.Json, AutoMapper ve GraphQL'de taşıdığını gösteriyor; bu gecenin deneyi kuralı kapatıp kaçırma olup olmadığına bakıyor.",
+    },
+    {
+      title: "Senaryo 8 · Öznitelik ya da varsayılan değer değişti", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "no"], edges: ["t0", "t1", "t2", "t3", "t4", "t5", "n6"],
+      who: "<code>change.MetadataChanged</code> → <code>\"its metadata changed\"</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:355, CodeChangeDetector.cs",
+      input: "<code>[Range(1, 10)]</code> → <code>[Range(1, 20)]</code> ya da <code>int retries = 3</code> → <code>5</code>",
+      output: "Üyeyi çalıştıran sınıflar seçili; tür üzerinden isim izleme",
+      purpose: "Metaveri kod çalışmadan, yansımayla okunur (doğrulama, serileştirme). Çağıranlar da varsayılan değeri kendi koduna gömer. Haritanın gördüğü \"kim çalıştırdı\" burada yetmez.",
+    },
+    {
+      title: "Senaryo 9 · Bağımlı haritalı proje yok", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "no"], edges: ["t0", "t1", "t2", "t3", "t4", "t5", "t6", "n7"],
+      who: "<code>answers.Count == 0 &amp;&amp; !CoveredByFullRuns</code> → <code>\"no affected test project with a map depends on it\"</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs:356",
+      input: "Bir benchmark ya da örnek projede değişiklik; altında haritası olan test projesi yok",
+      output: "<code>false</code>: isimle izlenir (haritası olmayan projeler zaten isimle karar verir)",
+      purpose: "Cevap verecek harita yoksa \"hiçbir test çalıştırmadı\" demek yanlış olur. Altındaki tek proje zaten tamamen koşuyorsa (<code>CoveredByFullRuns</code>) cevaplanmış sayılır.",
+    },
+    {
+      title: "Senaryo 10 · İsim izlemenin ulaştığı üye", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok", "i_run"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "t5", "t6", "t7"],
+      who: "<code>TryResolve(change, owner, reached: true)</code>, <code>ImpactPropagation</code> içinden",
+      file: "src/TestDetta.Core/CoverageSelection.cs:320, ImpactPropagation.cs",
+      input: "Yeni <code>Round</code>'u çağıran ve haritada bilinen <code>Invoice.Total</code>",
+      output: "<code>Total</code>'ı çalıştıran sınıflar, kanıt <code>ran Invoice.Total, which names the changed code</code>; yayılım <code>Total</code>'da durur",
+      purpose: "Senaryo 2'nin devamı: yeni kodu harita bilmez ama onu çağıran mevcut kodu bilir. Yansımayla bulunabilir türün üyesi burada cevaplanabilir, çünkü bildirimi değişmedi, yalnız çalışınca yaptığı değişti.",
+    },
+  ],
+};
+
+// IDE shell for the atlas: Explorer (chapters → steps), four center views (Şema, Çağrı ağacı, Kod, Okuma),
+// Inspector, ⌘K palette, player and keyboard shortcuts. Content comes from the CH_* chapter objects and CATALOG.
+
+// Call trees (Çağrı ağacı): [call, depth, step index]. Positions show order and nesting, not time.
+const CALLS = {
+  record: [
+    ["CliApp.RecordCoverage", 0, 0], ["ProjectGraphLoader.Load", 1, 0], ["CoverageRecorder.Record", 1, 1],
+    ["dotnet build · FindTargetPath", 2, 2], ["GeneratedSourceReader.Read · ClassLocationReader.Read", 2, 3],
+    ["AssemblyInstrumenter.Instrument", 2, 4], ["FileReadCalls.Wrap", 3, 4], ["new RuntimeDeployment", 2, 5],
+    ["RunShards → RunShard", 2, 6], ["TestDettaTracker.Hit / Enter…", 3, 7], ["TestDettaTracker.WriteResults", 3, 8],
+    ["BuildMap", 2, 9], ["FileReadPaths.ResolveAll", 3, 9], ["Untrusted · Skipped · Reported", 2, 10],
+    ["finally: Restore", 2, 11], ["CoverageMapStore.Write", 1, 10],
+  ],
+  test: [
+    ["CliApp.Run", 0, 0], ["AnalysisPipeline.Run", 1, 1], ["GitClient.ChangedFiles · MergeBase", 2, 1],
+    ["ProjectGraphLoader.Load", 2, 2], ["MsBuildProjectEvaluator.Evaluate", 3, 2], ["CodeChangeReader.Read", 2, 3],
+    ["CodeChangeDetector.Detect", 3, 3], ["ImpactAnalyzer.Analyze", 2, 4], ["LoadCoverageMaps · MapDrift", 2, 5],
+    ["TestSelector.Select", 2, 6], ["FindFileReaders", 3, 6], ["WithoutDriftedMaps · FindProjectLevelChanges", 3, 7],
+    ["CompareGeneratorOutput", 3, 8], ["SourceIndexBuilder.Build", 3, 9], ["CoverageSelection.TryResolve", 3, 10],
+    ["Trace (ImpactPropagation) · Bridge", 3, 11], ["Decide · WithFileReaders", 3, 12], ["Estimate · Plan", 2, 13],
+    ["CliApp.RunTests", 1, 14], ["TestInvocationBuilder.Build", 2, 14], ["TestRunner.RunAll", 2, 14], ["MarkdownSummary.Write", 2, 14],
+  ],
+  harita: [
+    ["new CoverageIndex(map, …)", 0, 0], ["ClassesUsing (fixtures)", 1, 1], ["_ambient", 1, 2], ["AddUsers (builtValues)", 1, 3],
+    ["initialization − linked", 1, 4], ["_bucketCount · sharedInProcess", 1, 5], ["externalCallbacks", 1, 6],
+    ["TryResolve · S1 gövde", 0, 7], ["TryResolve · S2 eklendi", 0, 8], ["TryResolve · S3 .cctor", 0, 9], ["TryResolve · S4 .ctor", 0, 10],
+    ["TryResolve · S5 ambient", 0, 11], ["TryResolve · S6 önbellek", 0, 12], ["TryResolve · S7 tek kova", 0, 13],
+    ["TryResolve · S8 metaveri", 0, 14], ["TryResolve · S9 harita yok", 0, 15], ["TryResolve(reached) · S10", 0, 16],
+  ],
+  eval: [
+    ["BatchRunner.Run", 0, 0], ["EvalApp.RunOne", 1, 1], ["SyntheticEvaluator.Evaluate", 2, 1], ["EvalSteps.RecordAt", 3, 1],
+    ["TargetSampler.Sample · DataFileSampler.Sample", 3, 2], ["RunBaseline / StoredBaselineFor", 3, 3], ["Select → Analyze (her hedef)", 3, 4],
+    ["GeneratorWorkspace.Read", 4, 4], ["TrySchema · Parallelism", 3, 5], ["Run (her mutant, paralel)", 3, 6], ["Apply · RunAll", 4, 6],
+    ["Confirm", 4, 7], ["Store · SyntheticReport · BatchSummary", 3, 8],
+  ],
+};
+
+(function () {
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = s => document.querySelector(s);
+  const h = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const sv = (tag, attrs = {}, parent) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); if (parent) parent.appendChild(n); return n; };
+  // Authored content carries a little markup. It is parsed in an inert template and rebuilt through DOM
+  // APIs with an allowlist (tags below, class on code and span only), never written with innerHTML.
+  const ALLOWED = new Set(["B", "I", "STRONG", "EM", "CODE", "UL", "LI", "P", "BR", "SPAN", "KBD"]);
+  function sanitizedNodes(source) {
+    const out = document.createDocumentFragment();
+    for (const node of source.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) { out.append(document.createTextNode(node.textContent)); continue; }
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+      if (!ALLOWED.has(node.tagName)) { out.append(sanitizedNodes(node)); continue; }
+      const copy = document.createElement(node.tagName.toLowerCase());
+      const cls = node.getAttribute("class");
+      if (cls && (node.tagName === "CODE" || node.tagName === "SPAN")) copy.className = cls.replace(/[^\w -]/g, "");
+      copy.append(sanitizedNodes(node));
+      out.append(copy);
+    }
+    return out;
+  }
+  function setHtml(el, html) {
+    const t = document.createElement("template");
+    t.innerHTML = html || ""; // inert: a template's content is never rendered or run
+    el.replaceChildren(sanitizedNodes(t.content));
+  }
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* unavailable */ } } };
+
+  // ---------- content helpers ----------
+  const textOf = html => { const t = document.createElement("template"); t.innerHTML = html || ""; return t.content.textContent.replace(/\s+/g, " ").trim(); };
+  function split(body) {
+    const t = document.createElement("template");
+    t.innerHTML = body || "";
+    const code = [...t.content.querySelectorAll("code.sig")].map(n => { const s = n.textContent; n.remove(); return s; });
+    return { code, rest: t.content };
+  }
+  const TOKENS = /(\/\/[^\n]*|^\s*#[^\n]*)|(\$?"(?:[^"\\\n]|\\.)*")|\b(\d+(?:\.\d+)?)\b|\b(var|new|public|private|internal|static|return|if|else|foreach|in|is|null|true|false|bool|int|string|void|using|throw|try|finally|catch|readonly|sealed|class|record|with|out|ref|await|async|call|ldc\.i4)\b|\b([A-Z][A-Za-z0-9_]*)\b/gm;
+  function highlight(src) {
+    const frag = document.createDocumentFragment();
+    for (const line of src.split("\n")) {
+      const ln = h("span", "ln");
+      let last = 0;
+      for (const m of line.matchAll(TOKENS)) {
+        if (m.index > last) ln.append(document.createTextNode(line.slice(last, m.index)));
+        const [, com, str, num, kw] = m;
+        ln.append(h("span", `tk-${com ? "com" : str ? "str" : num ? "num" : kw ? "kw" : "type"}`, m[0]));
+        last = m.index + m[0].length;
+      }
+      if (last < line.length) ln.append(document.createTextNode(line.slice(last)));
+      if (!line.length) ln.append(document.createTextNode(" "));
+      frag.append(ln);
+    }
+    return frag;
+  }
+  async function copy(text, button) {
+    const old = button.textContent;
+    try { await navigator.clipboard.writeText(text); button.textContent = "Kopyalandı"; }
+    catch { button.textContent = "Seçip kopyalayın"; }
+    setTimeout(() => (button.textContent = old), 1400);
+  }
+
+  // ---------- diagram ----------
+  function anchor(node, toward) {
+    const cx = node.x + node.w / 2, cy = node.y + node.h / 2, dx = toward.x - cx, dy = toward.y - cy;
+    if (Math.abs(dx) * node.h > Math.abs(dy) * node.w) { const sx = Math.sign(dx) * node.w / 2; return { x: cx + sx, y: cy + dy * (sx / dx) }; }
+    const sy = Math.sign(dy || 1) * node.h / 2; return { x: cx + (dy ? dx * (sy / dy) : 0), y: cy + sy };
+  }
+  function drawDiagram(ch, svg) {
+    svg.replaceChildren();
+    const byId = Object.fromEntries(ch.nodes.map(n => [n.id, n]));
+    svg.setAttribute("viewBox", `0 0 ${ch.width} ${ch.height}`);
+    svg.setAttribute("role", "img"); svg.setAttribute("aria-label", ch.title + " şeması");
+    const defs = sv("defs", {}, svg);
+    for (const [id, fill] of [["ah", "var(--line2)"], ["ahon", "var(--signal)"]]) {
+      const m = sv("marker", { id: `${id}-${ch.id}`, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, defs);
+      sv("path", { d: "M0,0 L10,5 L0,10 z", style: `fill:${fill}` }, m);
+    }
+    for (const z of ch.zones || []) { const g = sv("g", { class: "zone" }, svg); sv("rect", { x: z.x, y: z.y, width: z.w, height: z.h, rx: 12 }, g); sv("text", { x: z.x + 12, y: z.y + 18 }, g).textContent = z.label; }
+    const edges = {};
+    for (const e of ch.edges) {
+      const a = byId[e.from], b = byId[e.to];
+      const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      const p1 = anchor(a, cb), p2 = anchor(b, ca);
+      const g = sv("g", { class: "edge" }, svg);
+      const d = e.bend ? `M${p1.x},${p1.y} Q${(p1.x + p2.x) / 2 + (e.bend.x || 0)},${(p1.y + p2.y) / 2 + (e.bend.y || 0)} ${p2.x},${p2.y}` : `M${p1.x},${p1.y} L${p2.x},${p2.y}`;
+      const path = sv("path", { d, "marker-end": `url(#ah-${ch.id})` }, g);
+      if (e.label) {
+        const lx = (p1.x + p2.x) / 2 + (e.bend ? (e.bend.x || 0) / 2 : 0) + (e.lx || 0);
+        const ly = (p1.y + p2.y) / 2 + (e.bend ? (e.bend.y || 0) / 2 : 0) - 6 + (e.ly || 0);
+        sv("text", { x: lx, y: ly, "text-anchor": "middle" }, g).textContent = e.label;
+      }
+      edges[e.id] = { g, path };
+    }
+    const nodes = {};
+    for (const n of ch.nodes) {
+      const g = sv("g", { class: `node k-${n.kind}` }, svg);
+      if (n.kind === "data") { const f = 12; sv("path", { class: "box", d: `M${n.x},${n.y} h${n.w - f} l${f},${f} v${n.h - f} h${-n.w} z` }, g); }
+      else sv("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: n.kind === "actor" ? n.h / 2 : n.kind === "tool" || n.kind === "q" ? 14 : 8 }, g);
+      const lines = Array.isArray(n.label) ? n.label : [n.label];
+      const total = lines.length + (n.sub ? 1 : 0), top = n.y + n.h / 2 - (total - 1) * 8 + 4;
+      lines.forEach((line, i) => (sv("text", { x: n.x + n.w / 2, y: top + i * 16, "text-anchor": "middle" }, g).textContent = line));
+      if (n.sub) sv("text", { x: n.x + n.w / 2, y: top + lines.length * 16, "text-anchor": "middle", class: "sub" }, g).textContent = n.sub;
+      nodes[n.id] = g;
+    }
+    const token = sv("circle", { r: 6, class: "token", opacity: 0 }, svg);
+    return { nodes, edges, token };
+  }
+
+  // ---------- app ----------
+  window.Atlas = { start(chapters, catalog) {
+    const all = [...chapters, { id: "katalog", short: "Bileşen kataloğu", catalog: true }];
+    const shell = $(".shell"), tree = $("#tree"), tabs = $("#tabs"), insp = $("#inspector");
+    const views = { diagram: $("#v-diagram"), calls: $("#v-calls"), code: $("#v-code"), reading: $("#v-reading"), catalog: $("#v-catalog") };
+    const svg = document.createElementNS(SVGNS, "svg");
+    const legend = h("div", "legend");
+    views.diagram.append(legend, svg);
+    const state = { ch: null, step: 0, view: store.get("atlas.view") || "diagram", timer: null };
+    let drawn = null, raf = 0;
+
+    // Explorer
+    const stepButtons = {};
+    all.forEach((ch, ci) => {
+      const wrap = h("div", "ch" + (ci === 0 ? " open" : ""));
+      const head = h("button"); head.type = "button";
+      head.append(h("span", "chev", "▶"), h("span", "num", String(ci + 1)), document.createTextNode(ch.short));
+      head.addEventListener("click", () => { wrap.classList.toggle("open"); if (ch.catalog) go(ch, 0); else if (state.ch !== ch) go(ch, 0); });
+      wrap.appendChild(head);
+      const steps = h("div", "steps");
+      stepButtons[ch.id] = [];
+      (ch.steps || []).forEach((s, si) => {
+        const b = h("button"); b.type = "button";
+        b.append(h("span", "n", String(si + 1).padStart(2, "0")), h("span", null, s.title));
+        b.dataset.text = (s.title + " " + textOf(s.who)).toLowerCase();
+        b.addEventListener("click", () => { go(ch, si); shell.classList.remove("nav-open"); });
+        steps.appendChild(b); stepButtons[ch.id].push(b);
+      });
+      wrap.appendChild(steps); tree.appendChild(wrap);
+      ch._wrap = wrap;
+    });
+    $("#tree-filter").addEventListener("input", ev => {
+      const q = ev.target.value.trim().toLowerCase();
+      for (const ch of all) {
+        let any = false;
+        for (const b of stepButtons[ch.id]) { const hit = !q || b.dataset.text.includes(q); b.hidden = !hit; any ||= hit; }
+        if (q) ch._wrap.classList.toggle("open", any);
+      }
+    });
+
+    // Tabs
+    const tabDefs = [["diagram", "Şema", "1"], ["calls", "Çağrı ağacı", "2"], ["code", "Kod", "3"], ["reading", "Okuma", "4"]];
+    for (const [id, label, key] of tabDefs) {
+      const b = h("button"); b.type = "button"; b.dataset.view = id;
+      b.append(document.createTextNode(label), h("kbd", null, key));
+      b.addEventListener("click", () => setView(id));
+      tabs.appendChild(b);
+    }
+    function setView(id) {
+      if (state.ch.catalog) return;
+      state.view = id; store.set("atlas.view", id);
+      for (const b of tabs.children) b.classList.toggle("on", b.dataset.view === id);
+      for (const [k, v] of Object.entries(views)) v.hidden = k !== id;
+      render();
+    }
+
+    // Navigation
+    function go(ch, step) {
+      const changed = state.ch !== ch;
+      state.ch = ch; state.step = Math.max(0, Math.min((ch.steps || [1]).length - 1, step));
+      if (changed && !ch.catalog) {
+        drawn = drawDiagram(ch, svg);
+        legend.replaceChildren(...(ch.legend || [["actor", "kişi / CI"], ["cmd", "komut"], ["core", "bileşen"], ["data", "veri / dosya"], ["tool", "dış araç"]]).map(([k, label]) => {
+          const s = h("span"), i = h("i"); i.style.borderColor = `var(--${({ actor: "focus", cmd: "signal", core: "line2", data: "type", tool: "muted", q: "focus", yes: "ok", no: "warn" })[k]})`;
+          s.append(i, document.createTextNode(label)); return s;
+        }));
+        ch._wrap.classList.add("open");
+      }
+      if (ch.catalog) { stop(); for (const [k, v] of Object.entries(views)) v.hidden = k !== "catalog"; tabs.hidden = true; $(".player").hidden = true; }
+      else { tabs.hidden = false; $(".player").hidden = false; for (const [k, v] of Object.entries(views)) v.hidden = k !== state.view; for (const b of tabs.children) b.classList.toggle("on", b.dataset.view === state.view); }
+      store.set("atlas.at", `${ch.id}:${state.step}`);
+      render();
+    }
+    function render() {
+      const ch = state.ch;
+      for (const [id, list] of Object.entries(stepButtons)) list.forEach((b, i) => b.classList.toggle("on", id === ch.id && i === state.step));
+      stepButtons[ch.id]?.[state.step]?.scrollIntoView({ block: "nearest" });
+      if (ch.catalog) { crumbs("Bileşen kataloğu"); renderCatalogInspector(); $("#status-left").textContent = `${catalog.length} sınıf`; return; }
+      const s = ch.steps[state.step];
+      crumbs(ch.short, s.title);
+      $("#count").textContent = `${state.step + 1} / ${ch.steps.length}`;
+      $("#scrub i").style.width = `${((state.step + 1) / ch.steps.length) * 100}%`;
+      $("#status-left").textContent = `${ch.eyebrow} · adım ${state.step + 1}/${ch.steps.length}`;
+      renderInspector(ch, s);
+      if (state.view === "diagram") renderDiagram(s);
+      if (state.view === "calls") renderCalls(ch);
+      if (state.view === "code") renderCode(s);
+      if (state.view === "reading") renderReading(ch);
+    }
+
+    function crumbs(...parts) {
+      const last = parts.pop();
+      $("#crumbs").replaceChildren(document.createTextNode(["Atlas", ...parts].join(" › ") + " › "), h("b", null, last));
+    }
+
+    function renderDiagram(s) {
+      const onN = new Set(s.nodes || []), onE = new Set(s.edges || []);
+      for (const [id, g] of Object.entries(drawn.nodes)) { g.classList.toggle("on", onN.has(id)); g.classList.toggle("dim", onN.size > 0 && !onN.has(id)); }
+      for (const [id, e] of Object.entries(drawn.edges)) {
+        e.g.classList.toggle("on", onE.has(id)); e.g.classList.toggle("dim", onE.size > 0 && !onE.has(id));
+        e.path.setAttribute("marker-end", `url(#${onE.has(id) ? "ahon" : "ah"}-${state.ch.id})`);
+      }
+      cancelAnimationFrame(raf);
+      const paths = (s.edges || []).map(id => drawn.edges[id]?.path).filter(Boolean);
+      if (!paths.length || reduced) { drawn.token.setAttribute("opacity", 0); return; }
+      const start = performance.now(), per = 800;
+      const tick = now => {
+        const t = (now - start) / per, k = Math.min(paths.length - 1, Math.floor(t)), f = Math.min(1, t - k);
+        const p = paths[k], pt = p.getPointAtLength(p.getTotalLength() * f);
+        drawn.token.setAttribute("cx", pt.x); drawn.token.setAttribute("cy", pt.y); drawn.token.setAttribute("opacity", 1);
+        if (t < paths.length) raf = requestAnimationFrame(tick); else drawn.token.setAttribute("opacity", 0);
+      };
+      raf = requestAnimationFrame(tick);
+    }
+
+    function renderCalls(ch) {
+      const rows = CALLS[ch.id] || ch.steps.map((s, i) => [s.title, 0, i]);
+      const v = views.calls; v.replaceChildren();
+      const wrap = h("div", "waterfall");
+      const ruler = h("div", "wf-ruler"); ruler.append(h("span", null, "çağrı"));
+      const ticks = h("span", "ticks"); ticks.append(h("span", null, "başla"), h("span", null, "sıra · iç içelik"), h("span", null, "bitti")); ruler.append(ticks);
+      wrap.append(ruler);
+      const colors = ["var(--signal)", "var(--focus)", "var(--type)", "var(--ok)", "var(--warn)"];
+      rows.forEach(([name, depth, step], i) => {
+        let end = i + 1; while (end < rows.length && rows[end][1] > depth) end++;
+        const row = h("div", "wf-row" + (step === state.step ? " on" : ""));
+        const nm = h("div", "nm"); nm.style.paddingLeft = `${depth * 16}px`;
+        nm.append(h("i", null, depth ? "└ " : ""), document.createTextNode(name));
+        const lane = h("div", "lane"), bar = h("b");
+        bar.style.left = `${(i / rows.length) * 100}%`; bar.style.width = `${Math.max(1.5, ((end - i) / rows.length) * 100)}%`; bar.style.background = colors[depth % colors.length];
+        lane.append(bar); row.append(nm, lane);
+        row.title = `Adım ${step + 1}: ${ch.steps[step].title}`;
+        row.addEventListener("click", () => go(ch, step));
+        wrap.append(row);
+      });
+      wrap.append(h("div", "wf-note", "Çubuklar çağrı sırasını ve iç içeliği gösterir, süreyi değil. Bir satıra tıklayınca o adım seçilir; argümanlar ve dönüş Inspector'da."));
+      v.append(wrap);
+    }
+
+    function renderCode(s) {
+      const v = views.code; v.replaceChildren();
+      const box = h("div", "codeview");
+      const { code } = split(s.body);
+      const blocks = [...code];
+      if (!blocks.length) {
+        const e = h("div", "empty"); e.append(h("b", null, "Bu adımda kod alıntısı yok."), h("span", null, "İmza ve dosya Inspector'da; yandaki adımlarda alıntılar var."));
+        box.append(e);
+      }
+      blocks.forEach((src, i) => {
+        const cb = h("div", "codeblock");
+        const head = h("div", "cb-head"); head.append(h("span", null, `${s.file ? textOf(s.file).split(",")[0] : "alıntı"} · ${i + 1}/${blocks.length}`));
+        const btn = h("button", "mini", "Kopyala"); btn.type = "button"; btn.addEventListener("click", () => copy(src, btn));
+        head.append(btn);
+        const pre = h("pre"); pre.append(highlight(src));
+        cb.append(head, pre); box.append(cb);
+      });
+      v.append(box);
+    }
+
+    function renderReading(ch) {
+      const v = views.reading; v.replaceChildren();
+      const r = h("div", "reading");
+      r.append(h("div", "kicker", ch.eyebrow), h("h1", null, ch.title));
+      const lead = h("p", "lead"); setHtml(lead, ch.lead); r.append(lead);
+      if (ch.note) { const n = h("div", "note"); setHtml(n, ch.note); r.append(n); }
+      const tl = h("div", "timeline");
+      ch.steps.forEach((s, i) => {
+        const item = h("div", "tl" + (i === state.step ? " on" : "")); item.dataset.n = String(i + 1);
+        item.append(h("h4", null, s.title), h("div", "who", textOf(s.who)));
+        const p = h("p"); setHtml(p, s.purpose); item.append(p);
+        item.addEventListener("click", () => go(ch, i));
+        tl.append(item);
+      });
+      r.append(tl); v.append(r);
+      v.querySelector(".tl.on")?.scrollIntoView({ block: "nearest" });
+    }
+
+    function section(title, content, mono) {
+      const s = h("div", "sect"); s.append(h("h3", null, title));
+      const c = h("div", "c" + (mono ? " mono" : "")); if (typeof content === "string") setHtml(c, content); else if (content instanceof DocumentFragment) c.append(sanitizedNodes(content)); else c.append(content);
+      s.append(c); return s;
+    }
+    function renderInspector(ch, s) {
+      insp.replaceChildren();
+      const head = h("div", "insp-head"); head.append(h("div", "eyebrow", `${ch.short} · adım ${state.step + 1}`), h("h2", null, s.title));
+      insp.append(head);
+      if (s.who) insp.append(section("Kim", s.who, true));
+      if (s.file) {
+        const f = h("div", "file"); const span = h("span"); setHtml(span, s.file);
+        const b = h("button", "mini", "Kopyala"); b.type = "button"; b.addEventListener("click", () => copy(textOf(s.file), b));
+        f.append(span, b); insp.append(section("Dosya", f));
+      }
+      if (s.input) insp.append(section("Girdi", s.input));
+      if (s.output) insp.append(section("Çıktı", s.output));
+      if (s.purpose) insp.append(section("Amaç", s.purpose));
+      const { code, rest } = split(s.body);
+      if (rest.textContent.trim()) insp.append(section("Ayrıntılar", rest));
+      if (code.length) {
+        const b = h("button", "mini", `Kod sekmesinde ${code.length} alıntı →`); b.type = "button"; b.addEventListener("click", () => setView("code"));
+        insp.append(section("Kod", b));
+      }
+    }
+    function renderCatalogInspector(row) {
+      insp.replaceChildren();
+      const head = h("div", "insp-head"); head.append(h("div", "eyebrow", "Bileşen kataloğu"), h("h2", null, row ? row.name : "Bir satır seçin"));
+      insp.append(head);
+      if (!row) { insp.append(section("Nasıl", "Akışlarda geçen her sınıf tek satırda. Süzmek için tablonun üstündeki kutuyu ya da <kbd>⌘K</kbd> paletini kullanın; satıra tıklayınca ayrıntı burada açılır.")); return; }
+      insp.append(section("Dosya", row.file, true), section("Ne yapar", row.what), section("Ana metot", row.sig), section("Çağıran", row.by));
+    }
+
+    // Catalog view
+    (function buildCatalog() {
+      const v = views.catalog; const box = h("div", "catalog");
+      const input = h("input"); input.type = "search"; input.id = "catalog-filter"; input.placeholder = "Süz: ör. Selector, map, record"; input.setAttribute("aria-label", "Kataloğu süz");
+      input.style.cssText = "background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:7px 10px;color:var(--fg);font:13px var(--sans);width:min(420px,100%)";
+      const table = h("table"), thead = h("thead"), hr = h("tr");
+      hr.append(h("th", null, "Sınıf"), h("th", null, "Ne yapar"), h("th", null, "Ana metot")); thead.append(hr); table.append(thead);
+      const tb = h("tbody");
+      for (const r of catalog) {
+        const tr = h("tr"); const n = h("td", "name"); n.append(document.createTextNode(r.name), h("br"), h("span", "area", r.file));
+        const w = h("td"); setHtml(w, r.what); const sg = h("td"); setHtml(sg, r.sig);
+        tr.append(n, w, sg); tr.dataset.text = (r.name + " " + r.file + " " + textOf(r.what) + " " + textOf(r.sig)).toLowerCase();
+        tr.style.cursor = "pointer"; tr.addEventListener("click", () => renderCatalogInspector(r));
+        tb.append(tr);
+      }
+      table.append(tb);
+      input.addEventListener("input", () => { const q = input.value.trim().toLowerCase(); for (const tr of tb.children) tr.hidden = q.length > 0 && !tr.dataset.text.includes(q); });
+      box.append(input, table); v.append(box);
+      Atlas.filterCatalog = q => { input.value = q; input.dispatchEvent(new Event("input")); };
+    })();
+
+    // Player
+    function stop() { clearInterval(state.timer); state.timer = null; $("#play").textContent = "▶ Oynat"; }
+    function play() {
+      if (state.timer) { stop(); return; }
+      if (state.step >= state.ch.steps.length - 1) go(state.ch, 0);
+      $("#play").textContent = "❚❚ Durdur";
+      state.timer = setInterval(() => { if (state.step >= state.ch.steps.length - 1) { stop(); return; } go(state.ch, state.step + 1); }, 4200);
+    }
+    $("#play").addEventListener("click", play);
+    $("#prev").addEventListener("click", () => { stop(); go(state.ch, state.step - 1); });
+    $("#next").addEventListener("click", () => { stop(); go(state.ch, state.step + 1); });
+    $("#scrub").addEventListener("click", ev => {
+      const r = ev.currentTarget.getBoundingClientRect(); stop();
+      go(state.ch, Math.floor(((ev.clientX - r.left) / r.width) * state.ch.steps.length));
+    });
+
+    // Palette
+    const pal = $("#palette"), palInput = $("#palette-input"), palList = $("#palette-list");
+    const items = [];
+    chapters.forEach((ch, ci) => ch.steps.forEach((s, si) => items.push({ where: `${ci + 1}.${String(si + 1).padStart(2, "0")}`, title: s.title, sub: textOf(s.who), run: () => go(ch, si) })));
+    catalog.forEach(r => items.push({ where: "sınıf", title: r.name, sub: r.file, run: () => { go(all[all.length - 1], 0); Atlas.filterCatalog(r.name.split(" ")[0]); renderCatalogInspector(r); } }));
+    let palSel = 0, palHits = [];
+    function openPalette() { pal.hidden = false; palInput.value = ""; filterPalette(); palInput.focus(); }
+    function closePalette() { pal.hidden = true; }
+    function filterPalette() {
+      const words = palInput.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      palHits = items.filter(it => { const t = (it.where + " " + it.title + " " + it.sub).toLowerCase(); return words.every(w => t.includes(w)); }).slice(0, 60);
+      palSel = 0; drawPalette();
+    }
+    function drawPalette() {
+      palList.replaceChildren(...palHits.map((it, i) => {
+        const li = h("li", i === palSel ? "on" : ""); li.setAttribute("role", "option");
+        const what = h("div", "what"); what.append(document.createTextNode(it.title), h("small", null, it.sub));
+        li.append(h("span", "where", it.where), what);
+        li.addEventListener("click", () => { closePalette(); it.run(); });
+        return li;
+      }));
+      palList.children[palSel]?.scrollIntoView({ block: "nearest" });
+    }
+    palInput.addEventListener("input", filterPalette);
+    palInput.addEventListener("keydown", ev => {
+      if (ev.key === "ArrowDown") { palSel = Math.min(palHits.length - 1, palSel + 1); drawPalette(); ev.preventDefault(); }
+      if (ev.key === "ArrowUp") { palSel = Math.max(0, palSel - 1); drawPalette(); ev.preventDefault(); }
+      if (ev.key === "Enter" && palHits[palSel]) { closePalette(); palHits[palSel].run(); }
+      if (ev.key === "Escape") closePalette();
+    });
+    pal.addEventListener("click", ev => { if (ev.target === pal) closePalette(); });
+    $("#palette-btn").addEventListener("click", openPalette);
+
+    // Keys, theme, menu
+    document.addEventListener("keydown", ev => {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "k") { ev.preventDefault(); pal.hidden ? openPalette() : closePalette(); return; }
+      if (!pal.hidden || ev.target.closest("input")) return;
+      if (ev.key === "/") { ev.preventDefault(); openPalette(); }
+      else if (ev.key === "ArrowRight") { stop(); go(state.ch, state.step + 1); }
+      else if (ev.key === "ArrowLeft") { stop(); go(state.ch, state.step - 1); }
+      else if (ev.key === " " && !ev.target.closest("button")) { ev.preventDefault(); play(); }
+      else if (["1", "2", "3", "4"].includes(ev.key)) setView(tabDefs[Number(ev.key) - 1][0]);
+    });
+    const themes = ["system", "dark", "light"];
+    function applyTheme(t) { if (t === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t); $("#theme").textContent = { system: "Tema: sistem", dark: "Tema: koyu", light: "Tema: açık" }[t]; store.set("atlas.theme", t); }
+    let theme = store.get("atlas.theme") || "system"; applyTheme(theme);
+    $("#theme").addEventListener("click", () => { theme = themes[(themes.indexOf(theme) + 1) % 3]; applyTheme(theme); });
+    $("#menu").addEventListener("click", () => shell.classList.toggle("nav-open"));
+
+    // Start where the viewer left off, or at the beginning.
+    const [atCh, atStep] = (store.get("atlas.at") || "").split(":");
+    const first = all.find(c => c.id === atCh) || chapters[0];
+    for (const b of tabs.children) b.classList.toggle("on", b.dataset.view === state.view);
+    go(first, Number(atStep) || 0);
+    if (!first.catalog) setView(state.view);
+  } };
+})();
+
+
+Atlas.start([CH_OVERVIEW, CH_RECORD, CH_TEST, CH_MAP, CH_EVAL], CATALOG);
+</script>
