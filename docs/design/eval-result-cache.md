@@ -32,6 +32,12 @@ In round 2b, 43% of the mutants failed no test, and OpenTelemetry alone took two
   member and kind, so a sample that shifts because the maps changed only computes the new mutants.
 - Nothing about a stored outcome changes: crashed, hung or unreported runs are never stored, and
   `OutcomeCache.Version` is still raised with any change to injection, runs or confirmation.
+- Each outcome stores the test projects the evaluation ran (`Evaluated`). A project whose run without
+  mutants crashed is left out of that evaluation, so its failures are not in the outcome; when a later
+  round evaluates it, the outcome is not reused (found in round 2d: Mapperly's main test project crashed
+  under load in 2c, and 2d reused 2c's outcomes, counting 1 failing mutant instead of 74). Outcomes
+  written before the field existed are not reused; the warm round-2 cache was stamped once from the
+  round that wrote it (`~/sift-corpus/stamp-outcomes.py`).
 
 After a TestDetta fix, a round then records maps only where the recorder changed, computes the
 selection for every mutant (seconds) and compares it with the stored failures. Classes that look

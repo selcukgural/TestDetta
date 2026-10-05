@@ -62,6 +62,68 @@ public sealed class EvalOutcomeCacheTests : IDisposable
         Assert.Contains(first, static m => m.Result.Contains("killed=", StringComparison.Ordinal) && !m.Result.EndsWith("killed=", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Outcomes_recorded_while_a_test_project_was_left_out_are_not_reused_once_it_runs()
+    {
+        // Other.Tests crashes its test host while the marker file exists, so the first evaluation
+        // leaves it out; the second evaluates it and must see its failures (Mapperly in round 2c/2d).
+        var marker = Path.Combine(_root, "crash-marker");
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(marker, "");
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
+        _repo.Write("src/Calc/Calc.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>
+            """);
+        _repo.Write("src/Calc/Calculator.cs", "namespace Calc; public static class Calculator { public static int Add(int a, int b) => a + b; }");
+        foreach (var name in new[] { "Calc.Tests", "Other.Tests" })
+        {
+            _repo.Write($"tests/{name}/{name}.csproj", """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                    <PackageReference Include="xunit" Version="2.9.3" />
+                    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+                    <ProjectReference Include="../../src/Calc/Calc.csproj" />
+                  </ItemGroup>
+                </Project>
+                """);
+        }
+
+        _repo.Write("tests/Calc.Tests/Tests.cs", """
+            using Xunit;
+            namespace Calc.Tests;
+            public class AddTests { [Fact] public void Adds() => Assert.Equal(3, Calculator.Add(1, 2)); }
+            """);
+        _repo.Write("tests/Other.Tests/Tests.cs", $$"""
+            using Calc;
+            using Xunit;
+            namespace Other.Tests;
+            public class SumTests { [Fact] public void Sums() => Assert.Equal(5, Calculator.Add(2, 3)); }
+            public class CrashTests
+            {
+                [Fact]
+                public void Crashes_while_the_marker_exists()
+                {
+                    if (System.IO.File.Exists(@"{{marker}}")) { System.Environment.FailFast("left out on purpose"); }
+                }
+            }
+            """);
+        _repo.Commit("base");
+
+        var cache = Path.Combine(_root, "cache");
+        var first = Evaluate(Path.Combine(_root, "first"), cache);
+        File.Delete(marker);
+        var second = Evaluate(Path.Combine(_root, "second"), cache);
+
+        Assert.Contains(first, static m => m.Result.StartsWith("Calc.Calculator.Add", StringComparison.Ordinal) && !m.Result.Contains("Other.Tests", StringComparison.Ordinal));
+        var add = second.Where(static m => m.Result.StartsWith("Calc.Calculator.Add", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(add);
+        Assert.All(add, static m => Assert.False(m.Reused));
+        Assert.Contains(add, static m => m.Result.Contains("Other.Tests: Other.Tests.SumTests", StringComparison.Ordinal));
+    }
+
     /// <summary>Runs a synthetic evaluation and returns, per mutant, its result and whether it was reused.</summary>
     /// <param name="output">Output directory of this evaluation.</param>
     /// <param name="cache">Outcome cache directory shared by the evaluations.</param>

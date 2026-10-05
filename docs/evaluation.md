@@ -28,6 +28,16 @@ selects) 91%. Median share per repository 35% (round 1: 27%).**
   machine was loaded, so only 1 mutant counted; passes when run alone, rerun in round 2d).
 - Durations are not comparable with round 1: 2c ran two repositories at once, and a locale
   change invalidated the outcome cache, so every mutant ran again.
+- **Round 2d** (2026-10-05, build `150b13b`, shared cache): AwesomeAssertions 0 missed of 63 (the MSpec
+  fix confirmed, 4.5 minutes instead of 17 with the cached outcomes), Spectre.Console 0 of 61,
+  AutoMapper 0 of 70. Mapperly again counted 1 failing mutant: its main test project ran this time,
+  but the outcomes were reused from 2c, recorded while that project was left out. Outcomes now store
+  the test projects they were recorded with and are not reused when one more is evaluated.
+- **NLog's main test project was never evaluated** (rounds 1 to 2d): its test host dies on macOS
+  when `LogEvent_OutOfMemoryException_AsyncNotCrash` throws `OutOfMemoryException` on a background
+  thread, so the baseline was incomplete and the project left out. NLog's numbers so far come from its
+  three small test projects. The corpus entry now skips that one test; round 2e reruns NLog and
+  Mapperly.
 
 ## Corpus round 1 (2026-09-30 → 2026-10-02)
 

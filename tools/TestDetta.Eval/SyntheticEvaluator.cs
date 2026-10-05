@@ -468,6 +468,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             Seconds = d.Value.Seconds,
         });
 
+    /// <summary>Names of the evaluated test projects, sorted, as an outcome stores them.</summary>
+    /// <param name="testProjects">Test projects the evaluation runs.</param>
+    private static List<string> Evaluated(List<ProjectNode> testProjects) =>
+        [.. testProjects.Select(static p => Path.GetFileNameWithoutExtension(p.Path)).Order(StringComparer.Ordinal)];
+
     /// <summary>Test project paths by file name without extension, the <c>Project</c> part of <c>Project: Class</c>.</summary>
     /// <param name="reached">Test projects of the mutant.</param>
     private static Dictionary<string, string> ProjectsByName(List<ProjectNode> reached) =>
@@ -492,7 +497,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         if (mutation.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);
-            _cache?.Store(target, new MutantOutcome(0, [], []));
+            _cache?.Store(target, new MutantOutcome(0, [], [], Evaluated(context.TestProjects)));
             return new SyntheticMutant(target, detected, 0, [], [], share, Inconclusive: false);
         }
 
@@ -530,7 +535,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             unselected = Confirm(unselected, new MutantScope(reached, index, mutation, executor), killed, alone);
         }
 
-        _cache?.Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone));
+        _cache?.Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone, Evaluated(context.TestProjects)));
         var projects = ProjectsByName(reached);
         var missed = LeftOut(tests, unselected, projects);
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
@@ -544,14 +549,22 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// The mutant's result from a stored test outcome and the current selection, without running a
     /// test: the stored failures are checked against what TestDetta selects now, and the confirmation
     /// rules of <see cref="Confirm"/> are applied to stored answers. Null when an answer is missing
-    /// (a class missed now was selected when the outcome was stored) or a failing class belongs to a
-    /// project that is no longer evaluated; the mutant is then run.
+    /// (a class missed now was selected when the outcome was stored), a failing class belongs to a
+    /// project that is no longer evaluated, or a project evaluated now was left out when the outcome
+    /// was stored; the mutant is then run.
     /// </summary>
     /// <param name="target">The mutant.</param>
     /// <param name="stored">What the tests did against it.</param>
     /// <param name="state">The mutant's analysis and the evaluated test projects.</param>
     private SyntheticMutant? FromCache(SyntheticTarget target, MutantOutcome stored, MutantRun state)
     {
+        if (stored.Evaluated is null || state.Reached.Exists(p => !stored.Evaluated.Contains(Path.GetFileNameWithoutExtension(p.Path), StringComparer.Ordinal)))
+        {
+            // Recorded while a project evaluated now was left out (or before that was stored): the
+            // project's failures are not in the outcome.
+            return null;
+        }
+
         if (stored.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);

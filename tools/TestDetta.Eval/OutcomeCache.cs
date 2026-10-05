@@ -159,4 +159,9 @@ internal sealed class OutcomeCache
 /// Classes run alone with the mutant in place, and whether they failed again; only classes that were
 /// missed when the outcome was recorded are here.
 /// </param>
-internal sealed record MutantOutcome(int MutatedMethods, List<string> Failed, Dictionary<string, bool> FailsAloneWithMutant);
+/// <param name="Evaluated">
+/// Names of the test projects the evaluation ran when the outcome was recorded. A project left out then
+/// (its run without mutants crashed) may fail now, so an outcome is reused only when every project
+/// evaluated now is in this list. Null in files written before it was stored: such outcomes are run again.
+/// </param>
+internal sealed record MutantOutcome(int MutatedMethods, List<string> Failed, Dictionary<string, bool> FailsAloneWithMutant, List<string>? Evaluated = null);
