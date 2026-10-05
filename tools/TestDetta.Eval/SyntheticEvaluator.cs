@@ -27,6 +27,18 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <summary>Builds a change that reaches a source generator, for the selection to read what it generates; set per evaluation.</summary>
     private GeneratorWorkspace? _generators;
 
+    /// <summary>
+    /// The generator mutants of the evaluation (docs/design/generator-mutants.md): the evaluated test
+    /// projects that see what the generator writes, by target.
+    /// </summary>
+    private Dictionary<SyntheticTarget, List<ProjectNode>> _generatorTests = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The generator projects and their consumers in the commit's graph; set per evaluation.</summary>
+    private GeneratorMutants? _generatorMutants;
+
+    /// <summary>The built assemblies of each generator mutant's generators in the clone, which its consumers' compilers load.</summary>
+    private readonly Dictionary<SyntheticTarget, List<string>> _generatorAssemblies = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>Evaluates sampled changes at <paramref name="sha"/>; a build failure is reported, not thrown.</summary>
     /// <param name="sha">Commit to change.</param>
     /// <param name="request">How many members to change.</param>
@@ -76,6 +88,21 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var targets = TargetSampler.Sample(graph, workspace.RepoRoot, CoveredMembers(maps), request);
             var coveredTargets = targets.Count(static t => t.Covered);
             LogSampled(targets.Count, coveredTargets);
+            var generatorMutants = new GeneratorMutants(graph);
+            _generatorMutants = generatorMutants;
+            _generatorTests = new Dictionary<SyntheticTarget, List<ProjectNode>>(ReferenceEqualityComparer.Instance);
+            foreach (var target in targets)
+            {
+                if (generatorMutants.TestProjectsReached(target.Edits.Select(static e => e.Path), candidates) is { Count: > 0 } reachedByGenerator)
+                {
+                    _generatorTests[target] = reachedByGenerator;
+                }
+            }
+
+            if (_generatorTests.Count > 0)
+            {
+                LogGeneratorMutants(_generatorTests.Count);
+            }
 
             // A stored baseline means the outcomes below were measured against it; only the mutants
             // without a stored outcome then need a build and test runs.
@@ -90,7 +117,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             // binary is touched: a hang in TestDetta's analysis then leaves the clone as it was. What the
             // baseline run wrote into the clone goes first: TestDetta would see it as a change.
             _steps.RemoveLeftBehind(untracked);
-            var selections = targets.Select(t => Select(sha, t, maps, mapCommit)).ToList();
+            var selections = targets.Select(t => Select(sha, t, maps, mapCommit, candidates)).ToList();
 
             var results = new SyntheticMutant?[targets.Count];
             var pending = new List<int>();
@@ -98,9 +125,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             {
                 var (tests, detected, share, drift) = selections[i];
                 var state = new MutantRun(tests, baseline.Projects, i + 1, detected, share) { Others = drift };
-                if (_cache?.Find(targets[i]) is { } outcome && FromCache(targets[i], outcome, state) is { } reused)
+                // An outcome stored before generator mutants compiled their consumers does not hold for one.
+                if (_cache?.Find(targets[i]) is { } outcome
+                    && (outcome.ConsumersCompiled || !_generatorTests.ContainsKey(targets[i]))
+                    && FromCache(targets[i], outcome, state) is { } reused)
                 {
-                    results[i] = reused;
+                    results[i] = reused with { StoppedOnBuild = selections[i].StoppedOnBuild };
                     continue;
                 }
 
@@ -145,6 +175,26 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var testProjects = baseline.Projects;
             var assemblies = EvalSteps.RepositoryAssemblies(
                 new ProjectAssemblies(_logger).FileNames(graph, workspace.RepoRoot), workspace.Executor.Outputs.Values);
+
+            // A generator mutant also goes into the generator's own build, which its consumers' compilers load.
+            var built = new Dictionary<string, List<string>>(Paths.Comparer);
+            foreach (var target in pending.Select(i => targets[i]).Where(_generatorTests.ContainsKey))
+            {
+                var own = new List<string>();
+                foreach (var generator in generatorMutants.Generators(target.Edits.Select(static e => e.Path)))
+                {
+                    if (!built.TryGetValue(generator.Path, out var found))
+                    {
+                        built[generator.Path] = found = GeneratorMutants.Assemblies(generator, _logger);
+                    }
+
+                    own.AddRange(found);
+                }
+
+                _generatorAssemblies[target] = own;
+            }
+
+            assemblies.AddRange([.. built.Values.SelectMany(static a => a).Distinct(StringComparer.Ordinal).Where(a => !assemblies.Contains(a, StringComparer.Ordinal))]);
             var pendingTargets = pending.Select(i => (Id: i + 1, Target: targets[i])).ToList();
             using var schema = settings.UseSchema ? TrySchema(assemblies, pendingTargets, testProjects, baseline.Outcome) : null;
             var context = new MutantContext(testProjects, maps, assemblies, baseline.Outcome, schema);
@@ -168,7 +218,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 SyntheticMutant result;
                 try
                 {
-                    result = Run(targets[i], context, i + 1, selections[i], executor);
+                    result = Run(targets[i], context, i + 1, selections[i], executor) with { StoppedOnBuild = selections[i].StoppedOnBuild };
                 }
                 finally
                 {
@@ -401,6 +451,15 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         LogExplained(targets.Count, path);
     }
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Count} sampled change(s) are in a source generator; their consumers are built with the mutant on (docs/design/generator-mutants.md)")]
+    private partial void LogGeneratorMutants(int count);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The analysis of the change to {TypeName}.{MemberName} stops on a failing build, as td test would: {Error}")]
+    private partial void LogStoppedOnBuild(string typeName, string memberName, string error);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {Index}: {Project} does not build with it (see {Log})")]
+    private partial void LogConsumerNotBuilt(int index, string project, string log);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Explained the selection of {Count} change(s) in {Path}")]
     private partial void LogExplained(int count, string path);
 
@@ -586,7 +645,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Detected">Whether TestDetta saw the change.</param>
     /// <param name="Share">Share of recorded classes TestDetta selected.</param>
     /// <param name="Others">What each other selector selected; empty without drift modes or dotnet-tia.</param>
-    private sealed record Selection(IReadOnlyList<TestProjectSelection> Tests, bool Detected, double Share, IReadOnlyDictionary<OtherSelector, OtherSelection> Others);
+    private sealed record Selection(IReadOnlyList<TestProjectSelection> Tests, bool Detected, double Share, IReadOnlyDictionary<OtherSelector, OtherSelection> Others)
+    {
+        /// <summary>See <see cref="SyntheticMutant.StoppedOnBuild"/>.</summary>
+        public bool StoppedOnBuild { get; init; }
+    }
 
     /// <summary>What one drift mode selected.</summary>
     /// <param name="Tests">Decision per affected test project.</param>
@@ -605,20 +668,39 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="target">Member to change.</param>
     /// <param name="maps">Coverage maps at the commit.</param>
     /// <param name="mapCommit">Older commit whose maps the drift modes use; null for none.</param>
-    private Selection Select(string sha, SyntheticTarget target, Dictionary<string, CoverageMap> maps, string? mapCommit)
+    /// <param name="testProjects">Test projects of the commit, which all run when the analysis stops on a failing build.</param>
+    private Selection Select(string sha, SyntheticTarget target, Dictionary<string, CoverageMap> maps, string? mapCommit, List<ProjectNode> testProjects)
     {
         // A hang in TestDetta (an exponential search, Swashbuckle 2026-10-02) would otherwise stop the
         // evaluation for good without a word; it is reported as what it is, a finding about TestDetta.
         var analyzing = Task.Run(() => Analyze(sha, target, mapCommit));
-        if (!analyzing.Wait(settings.AnalysisTimeout))
+        AnalysisResult analysis;
+        Dictionary<OtherSelector, OtherSelection> drift;
+        try
         {
-            LogAnalysisHung(target.Member.TypeName, target.Member.MemberName, settings.AnalysisTimeout.TotalMinutes);
-            throw new InvalidOperationException(
-                $"TestDetta's analysis of a change to {target.Member.TypeName}.{target.Member.MemberName} did not finish within " +
-                $"{settings.AnalysisTimeout.TotalMinutes:0.#} minute(s): a hang or a slowdown in TestDetta.");
+            // Wait throws a failed analysis's exception, wrapped.
+            if (!analyzing.Wait(settings.AnalysisTimeout))
+            {
+                LogAnalysisHung(target.Member.TypeName, target.Member.MemberName, settings.AnalysisTimeout.TotalMinutes);
+                throw new InvalidOperationException(
+                    $"TestDetta's analysis of a change to {target.Member.TypeName}.{target.Member.MemberName} did not finish within " +
+                    $"{settings.AnalysisTimeout.TotalMinutes:0.#} minute(s): a hang or a slowdown in TestDetta.");
+            }
+
+            (analysis, drift) = analyzing.Result;
+        }
+        catch (AggregateException ex) when (ex.InnerException is GeneratedCodeBuildException stopped)
+        {
+            // A generator mutant the consumers do not compile with: td test stops on the build, as dotnet
+            // test would fail on it, so nothing can be missed; judged like running every test project.
+            var error = stopped.Message.Split('\n')[0];
+            LogStoppedOnBuild(target.Member.TypeName, target.Member.MemberName, error);
+
+            List<TestProjectSelection> all = [.. testProjects.Select(static p => new TestProjectSelection(p, TestRunMode.All, [], "td test stops: the build fails"))];
+            var share = SelectedShare(all, maps);
+            return new Selection(all, Detected: true, share, new Dictionary<OtherSelector, OtherSelection> { [OtherSelector.ProjectLevel] = new(all, share) }) { StoppedOnBuild = true };
         }
 
-        var (analysis, drift) = analyzing.Result;
         var detected = analysis.Impact.CodeChanges.Any(c =>
             c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
         return new Selection(
@@ -685,7 +767,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         if (mutation.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);
-            _cache?.Store(target, new MutantOutcome(0, [], [], Evaluated(context.TestProjects)));
+            Store(target, new MutantOutcome(0, [], [], Evaluated(context.TestProjects)));
             return new SyntheticMutant(target, detected, 0, [], [], share, Inconclusive: false);
         }
 
@@ -693,24 +775,38 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var reached = context.TestProjects
             .Where(p => workspace.Executor.Outputs.TryGetValue(p.Path, out var output) && mutation.Outputs.Contains(output))
             .ToList();
-        var scope = new MutantScope(reached, index, mutation, executor);
+
+        // A generator mutant also reaches the test projects that see what the generator writes, built with
+        // the mutant on in a copy of the worker's clone; one that does not build fails as a whole
+        // (docs/design/generator-mutants.md). Control runs without the mutant stay in the worker's clone.
+        using var compiled = _generatorTests.TryGetValue(target, out var seeing) ? CompileConsumers(target, seeing, index, mutation, executor) : null;
+        var notBuilt = compiled?.NotBuilt ?? [];
+        if (compiled is not null)
+        {
+            reached = context.TestProjects.FindAll(p => (reached.Contains(p) || seeing!.Contains(p)) && !notBuilt.Contains(p));
+        }
+
+        var runner = compiled?.Executor ?? executor;
+        var scope = new MutantScope(reached, index, mutation, runner) { Control = executor };
 
         // A mutant whose full run crashed or hung does so again, and only what TestDetta left out can
         // hold a miss: the full run, which mostly waits for its timeout, is not repeated.
         if (_cache?.Find(target) is { FullRunIncomplete: true } known && EvaluatedAll(known, context.TestProjects))
         {
             LogFullRunSkipped(index);
-            return OutsideAndStore(target, state with { Reached = reached }, scope, context);
+            return WithBuildFailures(OutsideAndStore(target, state with { Reached = reached }, scope, context), notBuilt, state);
         }
 
         // A project that wrote no report this time died with the mutant in place, like a crash.
-        var run = executor.RunAll(reached, $"synthetic-{index}", mutation.Environment);
+        var run = runner.RunAll(reached, $"synthetic-{index}", mutation.Environment);
         if (!run.Complete)
         {
-            return OutsideAndStore(target, state with { Reached = reached }, scope, context);
+            return WithBuildFailures(OutsideAndStore(target, state with { Reached = reached }, scope, context), notBuilt, state);
         }
 
-        var killed = new List<string>();
+        // A project that does not build is a failure no rerun changes: not confirmed alone.
+        var killed = notBuilt.ConvertAll(static p => DoesNotBuild(p));
+        var unbuiltMissed = notBuilt.Where(p => !SelectedByAll(state, p.Path, GeneratorMutants.DoesNotBuild)).Select(static p => DoesNotBuild(p)).ToList();
         var unselected = new List<string>();
         foreach (var (project, failed) in run.FailedByProject)
         {
@@ -730,11 +826,17 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         var alone = new Dictionary<string, bool>(StringComparer.Ordinal);
         if (unselected.Count > 0)
         {
-            unselected = Confirm(unselected, new MutantScope(reached, index, mutation, executor), killed, alone);
+            unselected = Confirm(unselected, scope, killed, alone);
         }
 
-        _cache?.Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone, Evaluated(context.TestProjects)));
-        var projects = ProjectsByName(reached);
+        foreach (var unbuilt in unbuiltMissed)
+        {
+            alone[unbuilt] = true;
+            unselected.Add(unbuilt);
+        }
+
+        Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone, Evaluated(context.TestProjects)));
+        var projects = ProjectsByName([.. reached, .. notBuilt]);
         var missed = LeftOut(tests, unselected, projects);
         LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
         return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false)
@@ -755,12 +857,123 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     private SyntheticMutant OutsideAndStore(SyntheticTarget target, MutantRun state, MutantScope scope, MutantContext context)
     {
         var result = RunOutsideSelection(target, state, scope);
-        _cache?.Store(target, new MutantOutcome(scope.Mutation.MutatedMethods, [], [], Evaluated(context.TestProjects))
+        Store(target, new MutantOutcome(scope.Mutation.MutatedMethods, [], [], Evaluated(context.TestProjects))
         {
             FullRunIncomplete = true,
             NothingMissedWith = !result.Inconclusive && result.MissedClasses.Count == 0 ? SelectionKey(state.Tests) : null,
         });
         return result;
+    }
+
+    /// <summary>Stores a test outcome, marked when the mutant's generator consumers were compiled with it.</summary>
+    /// <param name="target">The mutant.</param>
+    /// <param name="outcome">What the tests did.</param>
+    private void Store(SyntheticTarget target, MutantOutcome outcome) =>
+        _cache?.Store(target, outcome with { ConsumersCompiled = _generatorTests.ContainsKey(target) });
+
+    /// <summary>The killed class of a test project that does not build with a generator mutant.</summary>
+    /// <param name="project">The test project.</param>
+    private static string DoesNotBuild(ProjectNode project) => $"{Path.GetFileNameWithoutExtension(project.Path)}: {GeneratorMutants.DoesNotBuild}";
+
+    /// <summary>
+    /// <paramref name="result"/> of a run outside the selection, with the test projects that did not build
+    /// with the mutant as killed, and as missed where the selection ran nothing of them.
+    /// </summary>
+    /// <param name="result">The mutant's result.</param>
+    /// <param name="notBuilt">Test projects that did not build with it.</param>
+    /// <param name="state">The mutant's selections.</param>
+    private static SyntheticMutant WithBuildFailures(SyntheticMutant result, List<ProjectNode> notBuilt, MutantRun state) =>
+        notBuilt.Count == 0 ? result : result with
+        {
+            KilledClasses = [.. result.KilledClasses, .. notBuilt.Select(DoesNotBuild)],
+            MissedClasses = [.. result.MissedClasses, .. notBuilt.Where(p => !EvalSteps.IsSelected(state.Tests, p.Path, GeneratorMutants.DoesNotBuild)).Select(DoesNotBuild)],
+            Inconclusive = false,
+            CaughtByCrash = false,
+        };
+
+    /// <summary>
+    /// Builds the test projects that see what a mutant's generator writes, with the mutant on, in a new
+    /// copy of the worker's clone: each consumer, the projects after it and the test project, one by one
+    /// without their dependencies (see <see cref="GeneratorMutants.BuildOrder"/>), without a compiler
+    /// server, which would keep the generator it loaded before. A test project one of whose builds fails
+    /// does not build.
+    /// </summary>
+    /// <param name="target">The generator mutant.</param>
+    /// <param name="testProjects">Test projects that see what the generator writes.</param>
+    /// <param name="index">The mutant's number.</param>
+    /// <param name="mutation">The applied mutant, whose switch the builds get.</param>
+    /// <param name="executor">The worker's executor, whose clone is copied.</param>
+    private CompiledConsumers CompileConsumers(SyntheticTarget target, List<ProjectNode> testProjects, int index, ActiveMutant mutation, TestExecutor executor)
+    {
+        var root = executor.Root + $".generator-{index}";
+        WorkerCopies.Remove(root);
+        WorkerCopies.Copy(executor.Root, root);
+        var compiled = new CompiledConsumers(root, executor.InCopy(root));
+        try
+        {
+            string InCopy(string path) => Path.Combine(root, Path.GetRelativePath(workspace.RepoRoot, path));
+            GeneratorMutants.Touch(_generatorAssemblies.GetValueOrDefault(target, []).Where(a => Paths.IsUnder(a, workspace.RepoRoot)).Select(InCopy).Where(File.Exists));
+            var dotnet = new DotnetProcess(_logger);
+            var built = new Dictionary<string, bool>(Paths.Comparer);
+            var files = target.Edits.Select(static e => e.Path).ToList();
+            foreach (var testProject in testProjects)
+            {
+                foreach (var project in _generatorMutants!.BuildOrder(files, testProject))
+                {
+                    if (!built.TryGetValue(project.Path, out var ok))
+                    {
+                        List<string> arguments = ["build", InCopy(project.Path), "-c", "Debug", "--no-dependencies", .. GeneratorMutants.NoCompilerServer];
+                        if (project.IsTestProject && settings.Framework is { } framework)
+                        {
+                            arguments.AddRange(["-f", framework]);
+                        }
+
+                        var logPath = Path.Combine(executor.LogDirectory, $"synthetic-{index}-build-{Path.GetFileNameWithoutExtension(project.Path)}.log");
+                        using (var log = File.CreateText(logPath))
+                        {
+                            ok = dotnet.Run(arguments, Path.GetDirectoryName(InCopy(project.Path))!, mutation.Environment ?? new Dictionary<string, string>(), log, ConsumerBuildTimeout) == 0;
+                        }
+
+                        built[project.Path] = ok;
+                        if (!ok)
+                        {
+                            LogConsumerNotBuilt(index, project.Path, logPath);
+                        }
+                    }
+
+                    if (!ok)
+                    {
+                        compiled.NotBuilt.Add(testProject);
+                        break;
+                    }
+                }
+            }
+
+            return compiled;
+        }
+        catch
+        {
+            compiled.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Longest a generator mutant's build of one test project may take.</summary>
+    private static readonly TimeSpan ConsumerBuildTimeout = TimeSpan.FromMinutes(30);
+
+    /// <summary>A copy of a worker's clone whose generator consumers were built with one mutant on; deleted when disposed.</summary>
+    /// <param name="root">Root of the copy.</param>
+    /// <param name="executor">Runs the tests in the copy.</param>
+    private sealed class CompiledConsumers(string root, TestExecutor executor) : IDisposable
+    {
+        /// <summary>Runs the tests in the copy.</summary>
+        public TestExecutor Executor { get; } = executor;
+
+        /// <summary>Test projects that did not build with the mutant.</summary>
+        public List<ProjectNode> NotBuilt { get; } = [];
+
+        /// <summary>Deletes the copy.</summary>
+        public void Dispose() => WorkerCopies.Remove(root);
     }
 
     /// <summary>
@@ -884,7 +1097,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <summary>Whether a class fails alone without any mutant, from this run or the cache; null when unknown.</summary>
     /// <param name="testClass">Test class (<c>Project: Class</c>).</param>
     private bool? KnownFailsAlone(string testClass) =>
-        _failsAlone.TryGetValue(testClass, out var fails) ? fails : _cache?.FailsAlone(testClass);
+        testClass.EndsWith(": " + GeneratorMutants.DoesNotBuild, StringComparison.Ordinal) ? false
+        : _failsAlone.TryGetValue(testClass, out var fails) ? fails : _cache?.FailsAlone(testClass);
 
     /// <summary>One mutant's state while it is evaluated.</summary>
     /// <param name="Tests">TestDetta's decision per affected test project.</param>
@@ -961,7 +1175,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Index">Number of the mutant, for log files.</param>
     /// <param name="Mutation">The applied mutant, lifted for control runs.</param>
     /// <param name="Executor">Runs the tests, in the worker's copy of the clone.</param>
-    private sealed record MutantScope(List<ProjectNode> Reached, int Index, ActiveMutant Mutation, TestExecutor Executor);
+    private sealed record MutantScope(List<ProjectNode> Reached, int Index, ActiveMutant Mutation, TestExecutor Executor)
+    {
+        /// <summary>Runs the control runs without the mutant: the worker's clone when the mutant was compiled into a copy of it.</summary>
+        public TestExecutor? Control { get; init; }
+    }
 
     /// <summary>
     /// Whether a test class fails when it runs alone without any mutant, by <c>Project: Class</c>.
@@ -1015,7 +1233,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             RunOutcome control;
             using (scope.Mutation.Lift())
             {
-                control = RunAlone(unknown, scope, $"synthetic-{scope.Index}-control", environment: null);
+                control = RunAlone(unknown, scope with { Executor = scope.Control ?? scope.Executor }, $"synthetic-{scope.Index}-control", environment: null);
             }
 
             // A control run that crashed proves nothing; the miss stands and the class is asked again next time.

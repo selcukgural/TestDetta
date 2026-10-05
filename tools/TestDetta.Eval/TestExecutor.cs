@@ -86,6 +86,13 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         return new TestExecutor(context with { RepoRoot = root }, logger) { _state = _state, Outputs = Outputs, _environment = environment };
     }
 
+    /// <summary>Root of the clone, or of the copy, this executor runs in.</summary>
+    public string Root => context.RepoRoot;
+
+    /// <summary>An executor like this one, with its environment, that runs in another copy of the clone; see <see cref="In"/>.</summary>
+    /// <param name="root">Root of the copy.</param>
+    public TestExecutor InCopy(string root) => In(root, _environment);
+
     /// <summary>Environment every process of this executor gets, before a run's own variables; see <see cref="In"/>.</summary>
     private IReadOnlyDictionary<string, string> _environment = new Dictionary<string, string>();
 

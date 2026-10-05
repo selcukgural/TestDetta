@@ -242,6 +242,18 @@ internal static class BatchSummary
                 }
 
                 killing++;
+                if (mutant.GetProperty("missed").GetArrayLength() > 0)
+                {
+                    missed++;
+                    missedNames.Add(mutant.GetProperty("target").GetString()!);
+                }
+
+                // Its analysis stopped on a failing build: a miss is judged, a share is not.
+                if (Optional(mutant, "stoppedOnBuild")?.GetBoolean() == true)
+                {
+                    continue;
+                }
+
                 syntheticKilling++;
                 selected += mutant.GetProperty("selectedShare").GetDouble();
                 failing.Add((mutant.GetProperty("selectedShare").GetDouble(), mutant.GetProperty("killed").GetArrayLength()));
@@ -256,11 +268,6 @@ internal static class BatchSummary
                 {
                     dotnetAffectedMutants++;
                     dotnetAffected += tool.GetProperty("selectedShare").GetDouble();
-                }
-                if (mutant.GetProperty("missed").GetArrayLength() > 0)
-                {
-                    missed++;
-                    missedNames.Add(mutant.GetProperty("target").GetString()!);
                 }
             }
 

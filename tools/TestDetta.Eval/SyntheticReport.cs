@@ -63,6 +63,12 @@ internal static class SyntheticReport
             $"- Changes TestDetta did not see: {undetected.Count} ({undetected.Count(static m => m.Killing)} of them failed a test)");
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Selected on average: {Average(mutants):P0} of {run.TestClasses} recorded test classes; {Average(killing):P0} for failing mutants");
+        if (mutants.Count(static m => m.StoppedOnBuild) is > 0 and var stopped)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"- Stopped on a failing build, as td test would (a generator mutant its consumers do not compile with; not in the averages): {stopped}");
+        }
+
         if (OverSelection(killing, run.TestClasses) is { } ratio)
         {
             text.AppendLine(CultureInfo.InvariantCulture,
@@ -269,6 +275,11 @@ internal static class SyntheticReport
                 json.WriteBoolean("inconclusive", mutant.Inconclusive);
                 json.WriteBoolean("caughtByCrash", mutant.CaughtByCrash);
                 json.WriteBoolean("reused", mutant.Reused);
+                if (mutant.StoppedOnBuild)
+                {
+                    json.WriteBoolean("stoppedOnBuild", true);
+                }
+
                 json.WriteNumber("selectedShare", Math.Round(mutant.SelectedShare, 4));
                 WriteStrings(json, "killed", mutant.KilledClasses);
                 WriteStrings(json, "missed", mutant.MissedClasses);
@@ -329,7 +340,7 @@ internal static class SyntheticReport
     /// <param name="killing">Mutants that failed at least one class.</param>
     /// <param name="testClasses">Recorded test classes the selected share is taken of.</param>
     private static double? OverSelection(List<SyntheticMutant> killing, int testClasses) =>
-        OverSelection(killing.Select(static m => (m.SelectedShare, m.KilledClasses.Count)), testClasses);
+        OverSelection(killing.Where(static m => !m.StoppedOnBuild).Select(static m => (m.SelectedShare, m.KilledClasses.Count)), testClasses);
 
     /// <summary>See <see cref="OverSelection(List{SyntheticMutant}, int)"/>; from selected shares and failed class counts, as the reports hold them.</summary>
     /// <param name="killing">Selected share and number of failed classes of each failing mutant.</param>
@@ -350,10 +361,10 @@ internal static class SyntheticReport
         return ratios.Count % 2 == 1 ? ratios[ratios.Count / 2] : (ratios[(ratios.Count / 2) - 1] + ratios[ratios.Count / 2]) / 2;
     }
 
-    /// <summary>Mean selected share, 0 for no mutants.</summary>
+    /// <summary>Mean selected share, 0 for no mutants; one whose analysis stopped on a failing build selected nothing and is left out.</summary>
     /// <param name="mutants">Mutants.</param>
     private static double Average(IReadOnlyCollection<SyntheticMutant> mutants) =>
-        mutants.Count == 0 ? 0 : mutants.Average(static m => m.SelectedShare);
+        mutants.Where(static m => !m.StoppedOnBuild).Select(static m => m.SelectedShare).DefaultIfEmpty(0).Average();
 
     /// <summary><c>Type.Member</c> of a mutant.</summary>
     /// <param name="mutant">Mutant.</param>

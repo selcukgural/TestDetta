@@ -116,9 +116,10 @@ answers, both precise only with recording:
 - **`td affected`** reads an existing build newer than the sources; `--build` builds.
 - **Evaluation.** The selection of a change that reaches a generator builds the change in a copy of the
   clone (`GeneratorWorkspace`), so the clone's binaries the mutants run never hold it, and stores the
-  read with the outcomes. The user's idea for a cheaper path: write the mutants into the generator's
-  assembly behind switches, as for the tests, and rerun only the consumer's compile per mutant with the
-  switch set (no shared compiler server, forced compile). To do once the simple path is measured.
+  read with the outcomes. Since 2026-10-05 a change to a generator is read with its mutant in the
+  generator, and the tests run against consumers compiled with it (docs/design/generator-mutants.md,
+  after the user's idea: the mutants behind switches in the generator's assembly, the consumers
+  compiled again with the switch set and no compiler server).
 
 ## What the evaluation can and cannot show (2026-10-05)
 
@@ -132,7 +133,8 @@ catches every failure once the generator rule is gone, not that a changed output
 path is covered by `GeneratorOutputTests` only. The evaluation has never produced a failure caused by a
 generator either: the old rule ran those projects completely, so it could not miss one, and nothing
 measured it. Measuring it needs the user's switch approach: the mutant also written into the
-generator's assembly, the consumer compiled with the switch on, and the tests run against that build.
+generator's assembly, the consumer compiled with the switch on, and the tests run against that build
+(docs/design/generator-mutants.md).
 
 ## Measurement before shipping
 

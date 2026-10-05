@@ -498,6 +498,13 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     public static bool IsSelected(IReadOnlyList<TestProjectSelection> tests, string project, string testClass)
     {
         var selection = tests.FirstOrDefault(t => string.Equals(t.Project.Path, project, StringComparison.Ordinal));
+
+        // A project that does not build fails dotnet test as soon as anything of it runs.
+        if (testClass == GeneratorMutants.DoesNotBuild)
+        {
+            return selection is { Mode: TestRunMode.All } or { Mode: TestRunMode.Filtered, TestClasses.Count: > 0 };
+        }
+
         return selection?.Mode switch
         {
             TestRunMode.All => true,

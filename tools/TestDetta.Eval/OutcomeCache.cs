@@ -229,4 +229,10 @@ internal sealed record MutantOutcome(int MutatedMethods, List<string> Failed, Di
     /// run missed a class or did not complete.
     /// </summary>
     public string? NothingMissedWith { get; init; }
+
+    /// <summary>
+    /// True when the mutant is in a source generator and the test projects that see what it writes were
+    /// built with it (docs/design/generator-mutants.md); an outcome without it does not hold for such a mutant.
+    /// </summary>
+    public bool ConsumersCompiled { get; init; }
 }

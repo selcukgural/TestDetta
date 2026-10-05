@@ -8,6 +8,13 @@ namespace TestDetta.Core;
 /// <param name="Generator">The affected generator project.</param>
 internal sealed record GeneratorUse(ProjectNode Consumer, ProjectNode Generator);
 
+/// <summary>
+/// The build that shows what an affected source generator writes failed: the selection stops there,
+/// since <c>dotnet test</c> would fail the same way (docs/design/generator-output-changes.md).
+/// </summary>
+/// <param name="message">The test project and the compiler's errors.</param>
+public sealed class GeneratedCodeBuildException(string message) : InvalidOperationException(message);
+
 /// <summary>What the generators write now, compared with the maps (docs/design/generator-output-changes.md).</summary>
 /// <param name="Changes">Generated members that differ from the recorded ones, each with the project it is compiled into.</param>
 /// <param name="Current">The generated files read from the build, which replace the recorded ones in the index.</param>
@@ -87,7 +94,7 @@ public sealed partial class TestSelector
 
                     if (read.BuildErrors is { } errors)
                     {
-                        throw new InvalidOperationException(
+                        throw new GeneratedCodeBuildException(
                             $"Building {Path.GetFileName(test.Path)} to see what {generators} generates failed; dotnet test would fail the same way:{Environment.NewLine}{errors}");
                     }
 

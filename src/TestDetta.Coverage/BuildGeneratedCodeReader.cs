@@ -10,7 +10,11 @@ namespace TestDetta.Coverage;
 /// (<c>td affected</c>, which never builds unless asked).
 /// </param>
 /// <param name="Configuration">Configuration to build and read, as <c>dotnet test -c</c> gets it.</param>
-public sealed record GeneratedCodeBuild(bool Build, string Configuration = "Debug");
+public sealed record GeneratedCodeBuild(bool Build, string Configuration = "Debug")
+{
+    /// <summary>More <c>dotnet build</c> arguments, such as MSBuild properties; none by default.</summary>
+    public IReadOnlyList<string> Arguments { get; init; } = [];
+}
 
 /// <summary>
 /// Reads what source generators write into a test project's build of the current sources, for the
@@ -51,6 +55,7 @@ public sealed partial class BuildGeneratedCodeReader(ILoggerFactory loggerFactor
                 arguments.AddRange(["-f", framework]);
             }
 
+            arguments.AddRange(build.Arguments);
             using var output = new StringWriter();
             var exitCode = dotnet.Run(arguments, directory, new Dictionary<string, string>(), output, BuildTimeout);
             if (exitCode != 0)

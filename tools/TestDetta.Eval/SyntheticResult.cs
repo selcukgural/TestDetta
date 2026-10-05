@@ -23,6 +23,13 @@ internal sealed record SyntheticMutant(
     /// </summary>
     public bool CaughtByCrash { get; init; }
 
+    /// <summary>
+    /// True when TestDetta's analysis stopped on a build that fails with the mutant (a generator mutant its
+    /// consumers do not compile with), as <c>td test</c> would: it counts for misses, judged like a full run,
+    /// but not for the selected share, since nothing was selected.
+    /// </summary>
+    public bool StoppedOnBuild { get; init; }
+
     /// <summary>True when the test outcome came from the <see cref="OutcomeCache"/> and only the selection was computed now.</summary>
     public bool Reused { get; init; }
 

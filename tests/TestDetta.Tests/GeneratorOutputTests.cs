@@ -91,7 +91,7 @@ public sealed class GeneratorOutputTests : IDisposable
         var reader = new FakeReader(GeneratedCodeRead.Failed("Calc.cs(1,40): error CS1002: ; expected"));
         _repo.Replace("src/Lib/Calc.cs", "=> 2", "=> 3");
 
-        var error = Assert.Throws<InvalidOperationException>(() => Select(reader));
+        var error = Assert.Throws<GeneratedCodeBuildException>(() => Select(reader));
 
         Assert.Contains("error CS1002", error.Message, StringComparison.Ordinal);
         Assert.Contains("dotnet test would fail the same way", error.Message, StringComparison.Ordinal);
