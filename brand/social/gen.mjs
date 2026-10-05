@@ -72,3 +72,6 @@ writeFileSync("linkedin-cover-dark.svg", cover(ink, cream, mint, "#a3aab0", "#26
 writeFileSync("bluesky-avatar.svg", profile(ink, cream, mint));
 writeFileSync("bluesky-banner-light.svg", header(cream, ink, green, muted, cell));
 writeFileSync("bluesky-banner-dark.svg", header(ink, cream, mint, "#a3aab0", "#262b30"));
+
+// GitHub organization avatar: shown as a rounded square, rendered at GitHub's recommended 500x500.
+writeFileSync("github-avatar.svg", profile(ink, cream, mint));
