@@ -72,6 +72,33 @@ public sealed class CodeChangeDetectorTests
     }
 
     [Fact]
+    public void Extension_block_members_are_members_of_the_enclosing_class()
+    {
+        // C# 14 compiles them to static methods of TextExtensions, where a coverage map records them;
+        // the block itself has no name, and was read as a nested type called "".
+        const string extensions = """
+            namespace App;
+            public static class TextExtensions
+            {
+                extension(string text)
+                {
+                    public bool IsBlank => text.Trim().Length == 0;
+                    public string Shout() => text.ToUpperInvariant();
+                }
+
+                extension(int number)
+                {
+                    public string Shout() => number.ToString();
+                }
+            }
+            """;
+
+        var change = Detect(extensions, extensions.Replace("text.ToUpperInvariant()", "text.ToUpperInvariant() + \"!\""));
+
+        Assert.Equal([new SymbolChange("App.TextExtensions", "Shout(string)", SymbolChangeKind.Modified)], change.Symbols);
+    }
+
+    [Fact]
     public void Type_declaration_change_is_a_type_level_change()
     {
         var change = Detect(Original, Original.Replace("public class OrderService", "public sealed class OrderService : IDisposable"));

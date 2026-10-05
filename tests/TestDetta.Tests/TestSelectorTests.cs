@@ -342,6 +342,37 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
+    public void Map_of_an_older_format_is_ignored_and_the_change_is_traced_by_name()
+    {
+        // Recorded by an earlier TestDetta, it lacks generated sources; reading it crashed the command.
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.OrderServiceTests", [("Shop.OrderService", "Checkout")]));
+        var path = CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Shop.Tests/Shop.Tests.csproj"));
+        var older = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path), "\"version\"\\s*:\\s*\\d+", "\"version\": 1");
+        Assert.NotEqual(File.ReadAllText(path), older);
+        File.WriteAllText(path, older);
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * 0.25m");
+
+        // With the map only TaxTests would run; by name, OrderServiceTests reaches Tax too.
+        Assert.Contains("Shop.Tests.OrderServiceTests", Select().TestClasses);
+    }
+
+    [Fact]
+    public void Removed_type_that_nothing_names_falls_back_to_the_whole_project_even_with_a_map()
+    {
+        // The map knows who ran it, not who found it through reflection; generated code that is in no
+        // source file is not a removal (see Generated_type_reached_by_name_...), a deleted file is.
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]),
+                 ("Shop.Tests.SlugTests", [("Shop.PingHandler", "Handle")]));
+        File.Delete(Path.Combine(_repo.Root, "src/Shop/PingHandler.cs"));
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains(" was removed and nothing names it", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Private_member_names_do_not_spread_to_other_types()
     {
         // Both test classes have a private helper called Build; changing one must not select the other.
@@ -462,7 +493,8 @@ public sealed class TestSelectorTests : IDisposable
     {
         // A source generator wrote a part of SlugTests that reads Rates.Vat; the source tree has no
         // trace of it, only the map, which read it from the test assembly's PDB.
-        _generated = [new GeneratedType("tests/Shop.Tests/Shop.Tests.csproj", "Shop.Tests.SlugTests", ["Rates", "Vat"])];
+        _generated = [new GeneratedSource("tests/Shop.Tests/Shop.Tests.csproj", "obj/Gen/SlugTests.g.cs",
+            "namespace Shop.Tests; public partial class SlugTests { private static decimal Rate() => Shop.Rates.Vat; }")];
         _repo.Write("src/Shop/Rates.cs", "namespace Shop; public static class Rates { public const decimal Vat = 0.2m; }");
         _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * Rates.Vat");
         _repo.Commit("extract rate");
@@ -657,6 +689,39 @@ public sealed class TestSelectorTests : IDisposable
 
         Assert.Equal(TestRunMode.Filtered, selection.Mode);
         Assert.Equal(["Shop.Tests.HostTests", "Shop.Tests.PingTests", "Shop.Tests.SlugTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void Generated_type_reached_by_name_is_answered_by_the_classes_that_ran_it()
+    {
+        // A source generator (Meziantou.Polyfill, PolySharp) wrote Polyfills into Shop; only the map knows
+        // it. A constant is inlined, so its change is traced by name and reaches Polyfills.Scale, which
+        // reads it. Generated code is indexed like source: the classes that ran Scale answer for it, not
+        // the whole project as for a removed type, nor every class that ran any member of Polyfills
+        // (Mapperly: 987 members run by 89 of 100 classes).
+        WriteHandlerTests();
+        _generated = [new GeneratedSource("src/Shop/Shop.csproj", "obj/Gen/Polyfills.g.cs", """
+            namespace Shop;
+            public static class Polyfills
+            {
+                public static decimal Scale(decimal value) => value * Rates.Vat;
+                public static string Normalize(string value) => value.Trim();
+            }
+            """)];
+        _repo.Write("src/Shop/Rates.cs", "namespace Shop; public static class Rates { public const decimal Vat = 0.2m; }");
+        _repo.Replace("src/Shop/PriceCalculator.cs", "net * 0.2m", "net * Rates.Vat");
+        _repo.Commit("extract rate");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PriceCalculator", "Tax")]),
+                 ("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
+                 ("Shop.Tests.PingTests", [("Shop.Polyfills", "Scale")]),
+                 ("Shop.Tests.HostTests", [("Shop.Polyfills", "Scale")]),
+                 ("Shop.Tests.OrderServiceTests", [("Shop.Polyfills", "Normalize")]));
+        _repo.Replace("src/Shop/Rates.cs", "0.2m", "0.25m");
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode} {selection.Reason}");
+        Assert.Equal(["Shop.Tests.HostTests", "Shop.Tests.PingTests", "Shop.Tests.TaxTests"], selection.TestClasses);
     }
 
     [Fact]
@@ -944,7 +1009,7 @@ public sealed class TestSelectorTests : IDisposable
                 new Dictionary<string, double> { ["A.Tests.BTests"] = 1.5 },
                 new Dictionary<string, double> { ["A.Tests.Host`1"] = 0.25 }))
         {
-            Generated = [new GeneratedType("tests/A.Tests/A.Tests.csproj", "A.Tests.BTests", ["Register", "Run"])],
+            Generated = [new GeneratedSource("tests/A.Tests/A.Tests.csproj", "obj/Gen/BTests.g.cs", "partial class BTests { void Register() => Run(); }")],
             ExternalCallbacks = [1],
         };
         var path = Path.Combine(_repo.Root, "map.json");
@@ -960,9 +1025,7 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal(0.25, read.Timings.FixtureSeconds["A.Tests.Host`1"]);
         Assert.Equal(map.Commit, read.Commit);
         Assert.Equal([1], read.ExternalCallbacks);
-        var generated = Assert.Single(read.Generated);
-        Assert.Equal(("tests/A.Tests/A.Tests.csproj", "A.Tests.BTests"), (generated.Project, generated.TypeName));
-        Assert.Equal(["Register", "Run"], generated.References);
+        Assert.Equal(map.Generated, read.Generated);
     }
 
     private CoverageMap Map(string commit, List<CoveredMethod> methods, Dictionary<string, IReadOnlyList<int>> byClass) =>
@@ -983,7 +1046,7 @@ public sealed class TestSelectorTests : IDisposable
     private readonly List<(string Type, string Member)> _ambient = [];
 
     /// <summary>Generated code the next <see cref="WriteMap"/> includes.</summary>
-    private List<GeneratedType> _generated = [];
+    private List<GeneratedSource> _generated = [];
 
     /// <summary>Classes the next <see cref="WriteMap"/> says failed while recording; null for "unknown".</summary>
     private IReadOnlySet<string>? _failed = new HashSet<string>();
@@ -1005,6 +1068,18 @@ public sealed class TestSelectorTests : IDisposable
             new("Shop.Slug", "Make"), new("Shop.PingHandler", "Handle"), new("Shop.Report", "Title"),
             new("Shop.PriceCalculator", "op_Addition"),
         };
+
+        // Generated code is in no source file; the map knows it from the assembly.
+        foreach (var (_, ran) in classes)
+        {
+            foreach (var (type, member) in ran)
+            {
+                if (!methods.Contains(new CoveredMethod(type, member)))
+                {
+                    methods.Add(new CoveredMethod(type, member));
+                }
+            }
+        }
 
         var byClass = new Dictionary<string, IReadOnlyList<int>>();
         foreach (var (testClass, ran) in classes)

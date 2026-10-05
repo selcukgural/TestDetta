@@ -15,13 +15,13 @@ internal static class GeneratedSources
     private static readonly Guid EmbeddedSource = new("0E8A571B-6926-466E-B4AD-8AB04611F5FE");
 
     /// <summary>
-    /// Texts of the generated documents of <paramref name="assemblyPath"/>: embedded sources whose
-    /// path is not a file on disk. Empty when the assembly has no portable PDB.
+    /// The generated documents of <paramref name="assemblyPath"/>: embedded sources whose path is not a
+    /// file on disk, with that path. Empty when the assembly has no portable PDB.
     /// </summary>
     /// <param name="assemblyPath">Compiled assembly.</param>
-    public static List<string> Read(string assemblyPath)
+    public static List<(string Name, string Text)> Read(string assemblyPath)
     {
-        var texts = new List<string>();
+        var texts = new List<(string Name, string Text)>();
         try
         {
             using var pe = new PEReader(File.OpenRead(assemblyPath));
@@ -34,7 +34,8 @@ internal static class GeneratedSources
             var reader = provider.GetMetadataReader();
             foreach (var handle in reader.Documents)
             {
-                if (File.Exists(reader.GetString(reader.GetDocument(handle).Name)))
+                var name = reader.GetString(reader.GetDocument(handle).Name);
+                if (File.Exists(name))
                 {
                     continue;
                 }
@@ -44,7 +45,7 @@ internal static class GeneratedSources
                     var information = reader.GetCustomDebugInformation(informationHandle);
                     if (reader.GetGuid(information.Kind) == EmbeddedSource)
                     {
-                        texts.Add(Decode(reader.GetBlobBytes(information.Value)));
+                        texts.Add((name, Decode(reader.GetBlobBytes(information.Value))));
                     }
                 }
             }

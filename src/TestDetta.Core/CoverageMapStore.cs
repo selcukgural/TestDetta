@@ -8,6 +8,13 @@ public static class CoverageMapStore
     /// <summary>Directory, relative to the repository root, that holds one map per test project.</summary>
     public const string Directory = ".testdetta/coverage";
 
+    /// <summary>
+    /// Format of the maps written. 2 (2026-10-05): generated code is stored as its source instead of
+    /// the names each generated type mentions. A map of another format is not read: one recorded
+    /// before lacks what the selection now needs to see generated callers.
+    /// </summary>
+    public const int Version = 2;
+
     /// <summary>Path of the map for <paramref name="testProjectPath"/>.</summary>
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="testProjectPath">Path of the test project's .csproj file.</param>
@@ -24,7 +31,7 @@ public static class CoverageMapStore
         using var json = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
 
         json.WriteStartObject();
-        json.WriteNumber("version"u8, 1);
+        json.WriteNumber("version"u8, Version);
         json.WriteString("testProject"u8, map.TestProject);
         json.WriteString("commit"u8, map.Commit);
         json.WriteString("recordedAt"u8, map.Header.RecordedAt);
@@ -69,19 +76,15 @@ public static class CoverageMapStore
             WriteIds(json, "externalCallbacks", callbacks);
         }
 
+        // Generated files can be large (a polyfill package writes hundreds of members); compressed,
+        // they cost a fraction of the map.
         json.WriteStartArray("generated"u8);
-        foreach (var type in map.Generated)
+        foreach (var source in map.Generated)
         {
             json.WriteStartArray();
-            json.WriteStringValue(type.Project);
-            json.WriteStringValue(type.TypeName);
-            json.WriteStartArray();
-            foreach (var name in type.References)
-            {
-                json.WriteStringValue(name);
-            }
-
-            json.WriteEndArray();
+            json.WriteStringValue(source.Project);
+            json.WriteStringValue(source.Name);
+            json.WriteBase64StringValue(Compress(source.Text));
             json.WriteEndArray();
         }
 
@@ -149,9 +152,9 @@ public static class CoverageMapStore
         {
             using var document = JsonDocument.Parse(File.ReadAllBytes(path));
             var root = document.RootElement;
-            if (root.GetProperty("version").GetInt32() != 1)
+            if (root.GetProperty("version").GetInt32() is var version && version != Version)
             {
-                throw new InvalidDataException($"{path} has an unsupported coverage map version.");
+                throw new InvalidDataException($"{path} is a coverage map of format {version}, this TestDetta reads format {Version}; record the maps again.");
             }
 
             var methods = new List<CoveredMethod>();
@@ -224,20 +227,39 @@ public static class CoverageMapStore
         }
     }
 
-    /// <summary>Reads <c>[project, type, [names]]</c> entries.</summary>
+    /// <summary>Reads <c>[project, name, compressed text]</c> entries.</summary>
     /// <param name="element">The "generated" array.</param>
-    private static List<GeneratedType> ReadGenerated(JsonElement element)
+    private static List<GeneratedSource> ReadGenerated(JsonElement element)
     {
-        var types = new List<GeneratedType>();
+        var sources = new List<GeneratedSource>();
         foreach (var entry in element.EnumerateArray())
         {
-            types.Add(new GeneratedType(
-                entry[0].GetString()!,
-                entry[1].GetString()!,
-                [.. entry[2].EnumerateArray().Select(static n => n.GetString()!)]));
+            sources.Add(new GeneratedSource(entry[0].GetString()!, entry[1].GetString()!, Decompress(entry[2].GetBytesFromBase64())));
         }
 
-        return types;
+        return sources;
+    }
+
+    /// <summary>A text as gzip-compressed UTF-8.</summary>
+    /// <param name="text">The text.</param>
+    private static byte[] Compress(string text)
+    {
+        using var output = new MemoryStream();
+        using (var gzip = new System.IO.Compression.GZipStream(output, System.IO.Compression.CompressionLevel.SmallestSize))
+        {
+            gzip.Write(System.Text.Encoding.UTF8.GetBytes(text));
+        }
+
+        return output.ToArray();
+    }
+
+    /// <summary>The text of <see cref="Compress"/>'s output.</summary>
+    /// <param name="data">Gzip-compressed UTF-8.</param>
+    private static string Decompress(byte[] data)
+    {
+        using var gzip = new System.IO.Compression.GZipStream(new MemoryStream(data), System.IO.Compression.CompressionMode.Decompress);
+        using var reader = new StreamReader(gzip, System.Text.Encoding.UTF8);
+        return reader.ReadToEnd();
     }
 
     /// <summary>Writes class locations as <c>{"class": [[file, line], ...]}</c>, sorted by class so the file is stable.</summary>

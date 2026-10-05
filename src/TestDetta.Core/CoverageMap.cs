@@ -129,10 +129,10 @@ public sealed record CoverageMap(
     public IReadOnlyList<int>? ExternalCallbacks { get; init; }
 
     /// <summary>
-    /// Code source generators wrote into the recorded assemblies, read from their PDBs. It is not in
-    /// the source tree, so the source index adds it from here for name tracing.
+    /// Files source generators wrote into the recorded assemblies, read from their PDBs. They are not
+    /// in the source tree, so the source index adds them from here, as sources of their projects.
     /// </summary>
-    public IReadOnlyList<GeneratedType> Generated { get; init; } = [];
+    public IReadOnlyList<GeneratedSource> Generated { get; init; } = [];
 
     /// <summary>
     /// Test classes (runtime names) the test reports listed although none of their tests executed:

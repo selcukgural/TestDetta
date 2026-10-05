@@ -208,7 +208,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         var distances = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
         foreach (var project in graph.Projects)
         {
-            if (!project.IsTestProject || CoverageMapStore.Read(CoverageMapStore.PathFor(root, project.Path)) is not { } map)
+            if (!project.IsTestProject || ReadMap(root, project) is not { } map)
             {
                 continue;
             }
@@ -238,6 +238,29 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
 
         return (maps, commits);
     }
+
+    /// <summary>
+    /// The coverage map of <paramref name="project"/>, or null when it has none or it cannot be used: a
+    /// map of an older format (recorded by an earlier TestDetta) or a damaged file is left out, and its
+    /// project is selected without coverage, which selects more, never less.
+    /// </summary>
+    /// <param name="root">Repository root.</param>
+    /// <param name="project">A test project.</param>
+    private CoverageMap? ReadMap(string root, ProjectNode project)
+    {
+        try
+        {
+            return CoverageMapStore.Read(CoverageMapStore.PathFor(root, project.Path));
+        }
+        catch (InvalidDataException ex)
+        {
+            LogUnreadableMap(project.Path, ex.Message);
+            return null;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Ignoring the coverage map of {Project}: {Reason}")]
+    private partial void LogUnreadableMap(string project, string reason);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Ignoring the coverage map of {Project}: recorded at {MapCommit}, which is not an ancestor of the base {BaseCommit} within {MaxMapAge} commit(s). Run 'td record' on a newer commit")]

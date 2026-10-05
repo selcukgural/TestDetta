@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using TestDetta.Core;
 using TestDetta.Coverage;
 
 namespace TestDetta.Tests;
@@ -45,12 +44,12 @@ public sealed class GeneratedSourcesTests : IDisposable
         Assert.True(build.ExitCode == 0, buildOutput);
 
         var sources = GeneratedSources.Read(Path.Combine(_repo.Root, "src/Logs/bin/Debug/net10.0/Logs.dll"));
-        var types = GeneratedCode.Collect("src/Logs/Logs.csproj", sources);
 
         // The generated body of Saved calls into the logging API; the hand-written file is not included.
-        var log = Assert.Single(types, t => t.TypeName == "Logs.Log");
-        Assert.Contains("ILogger", log.References);
-        Assert.DoesNotContain(sources, s => s.Contains("public static partial void Saved(ILogger logger, int id);", StringComparison.Ordinal));
+        var log = Assert.Single(sources, static s => s.Text.Contains("partial class Log", StringComparison.Ordinal));
+        Assert.Contains("ILogger", log.Text, StringComparison.Ordinal);
+        Assert.EndsWith(".cs", log.Name, StringComparison.Ordinal);
+        Assert.DoesNotContain(sources, static s => s.Text.Contains("public static partial void Saved(ILogger logger, int id);", StringComparison.Ordinal));
     }
 
     public void Dispose() => _repo.Dispose();

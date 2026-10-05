@@ -364,6 +364,21 @@ internal static class DeclarationWalker
                     Visit(ns, containingType: null, Qualify(currentNamespace, ns.Name.ToString()), result);
                     break;
 
+                // C# 14 compiles extension members to static methods of the enclosing class, which is
+                // where a coverage map records them; the block has no name of its own (read as a
+                // nested type called "" before, coverage never found its members).
+                case ExtensionBlockDeclarationSyntax extension when containingType is not null:
+                    foreach (var member in extension.Members)
+                    {
+                        var extensionMember = ExtensionMemberIdentity(member, extension);
+                        Add(
+                            result,
+                            $"{containingType.TypeName}::{extensionMember}",
+                            containingType with { MemberName = extensionMember, Node = member, Descend = DescendAll });
+                    }
+
+                    break;
+
                 case BaseTypeDeclarationSyntax type:
                     var identity = TypeIdentity(type);
                     var typeDeclaration = new Declaration(
@@ -409,6 +424,32 @@ internal static class DeclarationWalker
         {
             unique = $"{key}#{n}";
         }
+    }
+
+    /// <summary>
+    /// Signature of a member of an extension block: an instance member takes the receiver as its first
+    /// parameter, as it is compiled, which also tells the same member of two blocks apart
+    /// (<c>Shout(string)</c> and <c>Shout(int)</c>); a static one is as declared.
+    /// </summary>
+    /// <param name="member">Member declared in the block.</param>
+    /// <param name="extension">The extension block.</param>
+    private static string ExtensionMemberIdentity(MemberDeclarationSyntax member, ExtensionBlockDeclarationSyntax extension)
+    {
+        var identity = MemberIdentity(member);
+        if (member.Modifiers.Any(SyntaxKind.StaticKeyword) || extension.ParameterList is not { Parameters.Count: > 0 } receiver)
+        {
+            return identity;
+        }
+
+        var receiverText = Parameters(receiver);
+        var open = identity.IndexOf('(', StringComparison.Ordinal);
+        if (open < 0)
+        {
+            return $"{identity}({receiverText})";
+        }
+
+        var separator = identity[open + 1] == ')' ? string.Empty : ",";
+        return string.Concat(identity.AsSpan(0, open + 1), receiverText, separator, identity.AsSpan(open + 1));
     }
 
     /// <summary>Type name with generic arity, such as <c>Box`1</c>.</summary>

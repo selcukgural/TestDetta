@@ -599,10 +599,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="request">What is being recorded.</param>
     /// <param name="targetPath">Test assembly.</param>
     /// <param name="assemblies">Repository assemblies in the test output.</param>
-    private List<GeneratedType> ReadGenerated(RecordRequest request, string targetPath, List<string> assemblies)
+    private List<GeneratedSource> ReadGenerated(RecordRequest request, string targetPath, List<string> assemblies)
     {
         var owners = AssemblyOwners(request);
-        var generated = new List<GeneratedType>();
+        var generated = new List<GeneratedSource>();
         foreach (var assembly in assemblies.Append(targetPath).Distinct(StringComparer.Ordinal))
         {
             var owner = string.Equals(assembly, targetPath, StringComparison.Ordinal)
@@ -615,11 +615,23 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
 
             var project = Path.GetRelativePath(request.RepoRoot, owner!.Path).Replace('\\', '/');
-            generated.AddRange(GeneratedCode.Collect(project, sources));
+            generated.AddRange(sources.Select(source => new GeneratedSource(project, GeneratedName(request.RepoRoot, source.Name), source.Text)));
         }
 
         LogGenerated(request.TestProject.Path, generated.Count);
         return generated;
+    }
+
+    /// <summary>
+    /// A generated file's PDB path relative to the repository when it lies inside it (the compiler names
+    /// it under the project's <c>obj</c> directory), so a map does not depend on where the clone was.
+    /// </summary>
+    /// <param name="repoRoot">Repository root.</param>
+    /// <param name="name">Path of the document in the PDB.</param>
+    private static string GeneratedName(string repoRoot, string name)
+    {
+        var relative = Path.GetRelativePath(repoRoot, name);
+        return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? name : relative.Replace('\\', '/');
     }
 
     /// <summary>The repository's own assemblies found in the test output, except TestDetta's runtime.</summary>
@@ -982,7 +994,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Warning, Message = "{TestClass} ran but left no coverage; it will always be selected")]
     private partial void LogUnrecordedClass(string testClass);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "{Project}: {Count} generated type(s) read from PDBs")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Project}: {Count} generated file(s) read from PDBs")]
     private partial void LogGenerated(string project, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Instrumenting {Count} assembly(ies) in {Directory}")]

@@ -42,10 +42,10 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="projects">Normalized .csproj paths whose files are indexed.</param>
     /// <param name="generated">
-    /// Code source generators wrote, from coverage maps; each type becomes one member of its project
-    /// that mentions the generated names, so name tracing reaches generated callers.
+    /// Files source generators wrote, from coverage maps; each is indexed as a source of its project,
+    /// so generated callers and generated types are seen like hand-written ones.
     /// </param>
-    public SourceIndex Build(ProjectGraph graph, string repoRoot, IReadOnlySet<string> projects, IEnumerable<GeneratedType>? generated = null)
+    public SourceIndex Build(ProjectGraph graph, string repoRoot, IReadOnlySet<string> projects, IEnumerable<GeneratedSource>? generated = null)
     {
         var stopwatch = Stopwatch.StartNew();
         var files = new List<(string Path, ProjectNode Owner)>();
@@ -63,6 +63,8 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
         var perFile = new ConcurrentBag<FileIndex>();
         Parallel.ForEach(files, file => perFile.Add(IndexFile(file.Path, file.Owner)));
+        var generatedFiles = GeneratedFiles(graph, repoRoot, projects, generated ?? []);
+        Parallel.ForEach(generatedFiles, file => perFile.Add(IndexText(SourceText.From(file.Source.Text), file.Path, file.Owner)));
 
         // Merge in a fixed order so the result, and anything logged from it, is deterministic.
         var members = new List<IndexedMember>();
@@ -89,53 +91,44 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         }
 
         MarkTestClasses(types);
-        AddGenerated(graph, repoRoot, projects, generated ?? [], members);
 
-        LogIndexed(files.Count, projects.Count, members.Count, stopwatch.ElapsedMilliseconds);
+        LogIndexed(files.Count + generatedFiles.Count, projects.Count, members.Count, stopwatch.ElapsedMilliseconds);
         return new SourceIndex(members, types);
     }
 
-    /// <summary>Name of the member that stands for a type's generated code.</summary>
-    public const string GeneratedMember = "<generated>";
-
     /// <summary>
-    /// Adds one member per generated type of an indexed project. It may run without being named
-    /// (generated registrations run from attributes and module initializers), so a change reaching
-    /// it spreads to its type.
+    /// The generated files of indexed projects, each once (every map of a test project carries the
+    /// generated files of the assemblies it loaded), with a path no file on disk has: a change in the
+    /// repository is never a change to generated code it did not write.
     /// </summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="projects">Indexed projects.</param>
-    /// <param name="generated">Generated types from coverage maps; the same type may come from several maps.</param>
-    /// <param name="members">Indexed members; updated in place.</param>
-    private static void AddGenerated(
+    /// <param name="generated">Generated files from coverage maps.</param>
+    private static List<(GeneratedSource Source, string Path, ProjectNode Owner)> GeneratedFiles(
         ProjectGraph graph,
         string repoRoot,
         IReadOnlySet<string> projects,
-        IEnumerable<GeneratedType> generated,
-        List<IndexedMember> members)
+        IEnumerable<GeneratedSource> generated)
     {
+        var files = new List<(GeneratedSource, string, ProjectNode)>();
         var seen = new HashSet<(string, string)>();
-        foreach (var type in generated)
+        foreach (var source in generated)
         {
-            var project = Paths.Normalize(Path.Combine(repoRoot, type.Project));
-            if (!projects.Contains(project) || !seen.Add((project, type.TypeName)) || graph.Find(project) is not { } owner)
+            var project = Paths.Normalize(Path.Combine(repoRoot, source.Project));
+            if (!projects.Contains(project) || !seen.Add((project, source.Name)) || graph.Find(project) is not { } owner)
             {
                 continue;
             }
 
-            members.Add(new IndexedMember(
-                project,
-                owner.IsTestProject,
-                type.TypeName,
-                GeneratedMember,
-                [],
-                MayBeCalledImplicitly: true,
-                IsPrivate: false,
-                IsStatic: false,
-                type.References.ToFrozenSet(StringComparer.Ordinal)));
+            files.Add((source, $"{GeneratedPathPrefix}{source.Project}/{source.Name}", owner));
         }
+
+        return files;
     }
+
+    /// <summary>Start of the path a generated file is indexed under.</summary>
+    internal const string GeneratedPathPrefix = "generated:";
 
     /// <summary>Key of a type in the index: the same source type compiled by two projects is two entries.</summary>
     /// <param name="type">Indexed type.</param>
@@ -217,12 +210,16 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <param name="owner">Project that compiles the file.</param>
     private static FileIndex IndexFile(string path, ProjectNode owner)
     {
-        SourceText text;
-        using (var stream = File.OpenRead(path))
-        {
-            text = SourceText.From(stream);
-        }
+        using var stream = File.OpenRead(path);
+        return IndexText(SourceText.From(stream), path, owner);
+    }
 
+    /// <summary>Indexes the declarations and top-level statements of one source text.</summary>
+    /// <param name="text">The source.</param>
+    /// <param name="path">Normalized file path, or the name a generated file is indexed under.</param>
+    /// <param name="owner">Project that compiles it.</param>
+    private static FileIndex IndexText(SourceText text, string path, ProjectNode owner)
+    {
         var members = new List<IndexedMember>();
         var types = new List<IndexedType>();
 
