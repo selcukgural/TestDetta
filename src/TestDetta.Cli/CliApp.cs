@@ -100,6 +100,7 @@ internal static partial class CliApp
                 Drifts = analysis.Drifts,
                 License = analysis.License,
                 LicenseEnforced = analysis.LicenseEnforced,
+                UnmappedFilesRead = analysis.UnmappedFilesRead,
             },
             stdout);
         return Success;

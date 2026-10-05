@@ -60,6 +60,9 @@ public enum ClassDecisionKind
     /// <summary>Its whole project runs: the change cannot be narrowed below the project.</summary>
     WholeProject,
 
+    /// <summary>It read a changed file that no project owns while the map was recorded (docs/design/runtime-file-reads.md).</summary>
+    FileRead,
+
     /// <summary>Nothing connects it to the change.</summary>
     Skipped,
 }

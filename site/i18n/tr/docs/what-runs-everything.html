@@ -1,4 +1,4 @@
-<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: 2e6651125f24 -->
+<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: e791b07bb110 -->
 <h1>Neler her şeyi çalıştırır</h1>
 <p class="lead">Değişikliklerin çoğu birkaç test sınıfı seçer. Bazıları güvenli bir şekilde daraltılamaz; bu yüzden {{name}} bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırır. Bu sayfa hepsini listeler; böylece geniş bir seçim asla sürpriz olmaz.</p>
 
@@ -39,9 +39,9 @@
 </ul>
 <p>Hiç harita olmaması her şeyi çalıştırmaz: seçim isimle izlemeye geri döner; bu, kapsam verisinden daha geniştir ama yine de dardır.</p>
 
-<h2 id="ignored">Yok sayılan dosyalar</h2>
-<p>Hiçbir proje klasörünün içinde olmayan değişmiş bir dosya, örneğin <code>README.md</code>, <code>.github/</code> altındaki dosyalar ya da depo kökündeki bir script, hiçbir projeye ait değildir ve hiçbir şey seçmez. Çıktıda eşlenmemiş (unmapped) olarak listelenir.</p>
-<div class="callout"><p>Testleriniz hiçbir proje klasörünün içinde olmayan bir dosyayı okuyorsa, o dosyadaki bir değişiklik onları seçmez. Bu tür dosyaları test projesinin içinde tutun ya da <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code> gibi projenin öğeleri olarak listeleyin. Böylece dosya nerede olursa olsun projeye ait olur; değiştirilmesi ya da silinmesi projeyi çalıştırır.</p></div>
+<h2 id="ignored">Hiçbir projeye ait olmayan dosyalar</h2>
+<p>Hiçbir proje klasörünün içinde olmayan değişmiş bir dosya, örneğin <code>README.md</code>, <code>.github/</code> altındaki dosyalar ya da depo kökündeki test verileri, hiçbir projeye ait değildir. Kapsam haritası kaydedilirken bir test onu bir yol ile okuduysa, o dosyadaki bir değişiklik ya da bir testin listelediği bir klasöre eklenen yeni bir dosya, onu okuyan test sınıflarını çalıştırır. Herhangi bir testin dışında, bir fixture'ın kurulumunda ya da testlerin paylaştığı bir şey hazırlanırken yapılan bir okuma test projesinin tamamını çalıştırır. Kaydedilen hiçbir testin okumadığı bir dosya hiçbir şey seçmez. Çıktı bu dosyaları kaydedilen testlerin okuduğu ve hiçbir testin okumadığı diye sayar.</p>
+<div class="callout"><p>Okumalar deponun kendi projelerinin kodunda kaydedilir; üçüncü taraf kütüphanelerin içinde (örneğin <code>.verified</code> dosyalarını okuyan bir snapshot kütüphanesi) kaydedilmez ve yalnızca okumaları kaydeden bir sürümle kaydedilmiş kapsam haritalarında bulunur. Bu şekilde okunan dosyaları test projesinin içinde tutun ya da <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code> gibi projenin öğeleri olarak listeleyin. Böylece dosya nerede olursa olsun projeye ait olur; değiştirilmesi ya da silinmesi projeyi çalıştırır.</p></div>
 <p>Bir istisna: hiçbir projenin sahiplenmediği bir kaynak ya da derleme dosyası (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>), import'ları tam olarak çözümlenemeyen her projenin derleme girdisi sayılır; dolayısıyla o projeler çalışır.</p>
 
 <h2 id="related">İlgili sayfalar</h2>

@@ -33,6 +33,11 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
         return [.. files];
     }
 
+    /// <summary>Files git tracks in the working tree, relative to <paramref name="repoRoot"/> with '/' separators.</summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <exception cref="InvalidOperationException">git failed.</exception>
+    public IReadOnlyList<string> TrackedFiles(string repoRoot) => Run(repoRoot, logOutput: false, "-c", "core.quotePath=false", "ls-files");
+
     /// <summary>Full hash of the commit HEAD points to.</summary>
     /// <param name="repoRoot">Repository root directory.</param>
     /// <exception cref="InvalidOperationException">git failed, for example in a repository without commits.</exception>

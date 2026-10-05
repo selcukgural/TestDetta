@@ -157,6 +157,12 @@ public static class TestDettaTracker
     /// </summary>
     private static readonly ulong[] LinkedBits = new ulong[Words];
 
+    /// <summary>
+    /// Files read and directories listed (ending in <c>/</c>) inside an initialization scope: the data
+    /// usually serves every later user, as the code run there does (docs/design/runtime-file-reads.md).
+    /// </summary>
+    private static readonly HashSet<string> InitializationFiles = new(StringComparer.Ordinal);
+
     /// <summary>Methods that ran inside an initialization scope whose result left through a path no probe sees (unlinked).</summary>
     private static readonly ulong[] UnlinkedBits = new ulong[Words];
 
@@ -235,6 +241,50 @@ public static class TestDettaTracker
         }
 
         Remember(id);
+    }
+
+    /// <summary>
+    /// Records that the current bucket read the file at <paramref name="path"/>, resolved against the
+    /// current directory as the call resolves it. Called before a file-reading call of instrumented code
+    /// (docs/design/runtime-file-reads.md); a path that cannot be resolved is left to the call to reject.
+    /// </summary>
+    /// <param name="path">The path the code passes.</param>
+    public static void FileRead(string? path) => NoteFile(path, directory: false);
+
+    /// <summary>Records that the current bucket listed (or checked) the directory at <paramref name="path"/>; see <see cref="FileRead"/>.</summary>
+    /// <param name="path">The path the code passes.</param>
+    public static void DirectoryListed(string? path) => NoteFile(path, directory: true);
+
+    /// <summary>Adds a full path, a directory with a trailing <c>/</c>, to the bucket a hit would go to.</summary>
+    /// <param name="path">The path the code passes.</param>
+    /// <param name="directory">True for a directory.</param>
+    private static void NoteFile(string? path, bool directory)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        string full;
+        try
+        {
+            full = Path.GetFullPath(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
+        {
+            return;
+        }
+
+        full = full.Replace('\\', '/');
+        if (directory)
+        {
+            full = full.TrimEnd('/') + "/";
+        }
+
+        lock (Gate)
+        {
+            (_typeInitializerDepth != 0 || _cacheDepth != 0 ? InitializationFiles : BucketForHit().Files).Add(full);
+        }
     }
 
     /// <summary>
@@ -1022,6 +1072,7 @@ public static class TestDettaTracker
                 }
 
                 json.WriteEndObject();
+                WriteFileReads(json);
                 WriteSeconds(json, "classSeconds", Classes);
                 WriteSeconds(json, "fixtureSeconds", Fixtures);
                 json.WriteNumber("startupSeconds", _startupSeconds);
@@ -1049,6 +1100,9 @@ public static class TestDettaTracker
 
         /// <summary>Runtime type of the test instance last entered for this class; null until one was.</summary>
         public Type? InstanceType { get; set; }
+
+        /// <summary>Full paths of the files read and directories listed (ending in <c>/</c>); see <see cref="FileRead"/>.</summary>
+        public HashSet<string> Files { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
         /// <see cref="Stopwatch"/> ticks during which this was the bucket entered last. Because
@@ -1174,6 +1228,41 @@ public static class TestDettaTracker
         }
 
         json.WriteEndObject();
+    }
+
+    /// <summary>
+    /// Writes <c>fileReads</c>: the files and directories each class and fixture read, those read
+    /// outside every test (ambient) and those read inside an initialization scope.
+    /// </summary>
+    /// <param name="json">Writer positioned inside the results object.</param>
+    private static void WriteFileReads(Utf8JsonWriter json)
+    {
+        json.WriteStartObject("fileReads");
+        foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, Bucket>)>)[("classes", Classes), ("fixtures", Fixtures)])
+        {
+            json.WriteStartObject(name);
+            foreach (var bucket in buckets.Values.Where(static b => b.Files.Count > 0))
+            {
+                WritePaths(json, bucket.Name, bucket.Files);
+            }
+
+            json.WriteEndObject();
+        }
+
+        WritePaths(json, "ambient", Startup.Files);
+        WritePaths(json, "initialization", InitializationFiles);
+        json.WriteEndObject();
+
+        static void WritePaths(Utf8JsonWriter json, string name, HashSet<string> paths)
+        {
+            json.WriteStartArray(name);
+            foreach (var path in paths.Order(StringComparer.Ordinal))
+            {
+                json.WriteStringValue(path);
+            }
+
+            json.WriteEndArray();
+        }
     }
 
     /// <summary>Seconds since this process started; 0 when the platform does not report a start time.</summary>

@@ -21,6 +21,12 @@ public sealed record AnalysisResult(
     /// <summary>What to run per affected test project.</summary>
     public IReadOnlyList<TestProjectSelection> Tests => Plan.Projects;
 
+    /// <summary>
+    /// The changed files outside every project that a coverage map recorded a test reading
+    /// (docs/design/runtime-file-reads.md); null when no map recorded reads, so nothing is known.
+    /// </summary>
+    public IReadOnlyList<string>? UnmappedFilesRead { get; init; }
+
     /// <summary>The license check of this run (docs/design/licensing.md); null when it was not checked.</summary>
     public Licensing.LicenseStatus? License { get; init; }
 
@@ -96,7 +102,11 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>(), new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()))
             .Select(new TestSelectionRequest(graph, root, changed, impact, maps) { Drifts = drifts, DriftFallback = options.DriftFallback, GeneratedCode = options.GeneratedCode });
 
-        return new AnalysisResult(root, changed, graph, impact, Plan(graph, tests, maps)) { Drifts = drifts };
+        return new AnalysisResult(root, changed, graph, impact, Plan(graph, tests, maps))
+        {
+            Drifts = drifts,
+            UnmappedFilesRead = TestSelector.FilesRead(impact.UnmappedFiles, maps),
+        };
     }
 
     /// <summary>The symbol sets of every project that compiles a file, by repository-relative path.</summary>

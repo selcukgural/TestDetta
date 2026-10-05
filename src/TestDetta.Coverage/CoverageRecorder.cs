@@ -724,11 +724,13 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var builtClasses = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var builtFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var builtAmbient = new SortedSet<int>();
+        var reads = new RawFileReads();
 
         foreach (var file in resultsFiles)
         {
             using var document = ReadResults(file);
             var root = document.RootElement;
+            reads.Add(root);
             // Ids past the methods are tracked fields a bucket read; what built their values in this
             // process counts for the bucket through the value.
             var fieldReads = new FieldReads(root.TryGetProperty("methodCount", out var count) ? count.GetInt32() : methods.Count, Builders(root));
@@ -776,7 +778,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var fixtures = Freeze(mergedFixtures);
         int[] ambient = [.. ambientIds];
 
-        var commit = new GitClient(loggerFactory.CreateLogger<GitClient>()).Head(request.RepoRoot);
+        var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
+        var commit = git.Head(request.RepoRoot);
         LogRecorded(request.TestProject.Path, classes.Count, fixtures.Count, methods.Count);
 
         var header = new CoverageMapHeader(
@@ -794,7 +797,63 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             LinkedInitialization = [.. initialization.Where(id => linked.Contains(id) && !unlinked.Contains(id))],
             SharedInProcess = [.. sharedInProcess],
             BuiltValues = new CoverageHits(Freeze(builtClasses), Freeze(builtFixtures), [.. builtAmbient]),
+            FileReads = reads.Seen ? reads.Resolve(new FileReadPaths(request.RepoRoot, git.TrackedFiles(request.RepoRoot))) : null,
         };
+    }
+
+    /// <summary>The <c>fileReads</c> of every process's results, as full paths, until they are resolved.</summary>
+    private sealed class RawFileReads
+    {
+        private readonly Dictionary<string, HashSet<string>> _classes = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> _fixtures = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _ambient = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _initialization = new(StringComparer.Ordinal);
+
+        /// <summary>True once some process wrote <c>fileReads</c>: a tracker that records them ran.</summary>
+        public bool Seen { get; private set; }
+
+        /// <summary>Adds one process's reads.</summary>
+        /// <param name="root">The process's results.</param>
+        public void Add(JsonElement root)
+        {
+            if (!root.TryGetProperty("fileReads", out var reads))
+            {
+                return;
+            }
+
+            Seen = true;
+            foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, HashSet<string>>)>)[("classes", _classes), ("fixtures", _fixtures)])
+            {
+                foreach (var bucket in reads.GetProperty(name).EnumerateObject())
+                {
+                    if (!buckets.TryGetValue(bucket.Name, out var set))
+                    {
+                        buckets[bucket.Name] = set = new HashSet<string>(StringComparer.Ordinal);
+                    }
+
+                    set.UnionWith(bucket.Value.EnumerateArray().Select(static p => p.GetString()!));
+                }
+            }
+
+            _ambient.UnionWith(reads.GetProperty("ambient").EnumerateArray().Select(static p => p.GetString()!));
+            _initialization.UnionWith(reads.GetProperty("initialization").EnumerateArray().Select(static p => p.GetString()!));
+        }
+
+        /// <summary>The reads as repository paths; classes and fixtures left with none are left out.</summary>
+        /// <param name="paths">Resolves full paths.</param>
+        public FileReads Resolve(FileReadPaths paths) => new(
+            Resolve(_classes, paths),
+            Resolve(_fixtures, paths),
+            paths.ResolveAll(_ambient),
+            paths.ResolveAll(_initialization));
+
+        /// <summary>Resolves the reads of each class or fixture.</summary>
+        /// <param name="buckets">Full paths by bucket.</param>
+        /// <param name="paths">Resolves full paths.</param>
+        private static Dictionary<string, IReadOnlyList<string>> Resolve(Dictionary<string, HashSet<string>> buckets, FileReadPaths paths) =>
+            buckets.Select(b => (b.Key, Paths: paths.ResolveAll(b.Value)))
+                .Where(static b => b.Paths.Count > 0)
+                .ToDictionary(static b => b.Key, static b => b.Paths, StringComparer.Ordinal);
     }
 
     /// <summary>

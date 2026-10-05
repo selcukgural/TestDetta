@@ -95,6 +95,16 @@ public static class CoverageMapStore
 
         json.WriteEndArray();
 
+        if (map.FileReads is { } reads)
+        {
+            json.WriteStartObject("fileReads"u8);
+            WritePaths(json, "classes", reads.Classes);
+            WritePaths(json, "fixtures", reads.Fixtures);
+            WriteStrings(json, "ambient", reads.Ambient);
+            WriteStrings(json, "initialization", reads.Initialization);
+            json.WriteEndObject();
+        }
+
         if (map.FailedClasses is { } failed)
         {
             json.WriteStartArray("failedClasses"u8);
@@ -244,6 +254,9 @@ public static class CoverageMapStore
                     ? [.. generatedFrameworks.EnumerateArray().Select(static f => f.GetString()!)]
                     : null,
                 ClassLocations = root.TryGetProperty("classLocations", out var locations) ? ReadLocations(locations) : null,
+                FileReads = root.TryGetProperty("fileReads", out var reads)
+                    ? new FileReads(ReadPaths(reads.GetProperty("classes")), ReadPaths(reads.GetProperty("fixtures")), ReadStrings(reads.GetProperty("ambient")), ReadStrings(reads.GetProperty("initialization")))
+                    : null,
             };
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
@@ -251,6 +264,45 @@ public static class CoverageMapStore
             throw new InvalidDataException($"{path} is not a valid coverage map: {ex.Message}", ex);
         }
     }
+
+    /// <summary>Writes <c>{"name": ["path", ...]}</c> sorted by name, for the file reads of classes or fixtures.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="name">Property name.</param>
+    /// <param name="paths">Paths by class or fixture.</param>
+    private static void WritePaths(Utf8JsonWriter json, string name, IReadOnlyDictionary<string, IReadOnlyList<string>> paths)
+    {
+        json.WriteStartObject(name);
+        foreach (var (key, values) in paths.OrderBy(static p => p.Key, StringComparer.Ordinal))
+        {
+            WriteStrings(json, key, values);
+        }
+
+        json.WriteEndObject();
+    }
+
+    /// <summary>Writes an array of strings.</summary>
+    /// <param name="json">Writer positioned inside an object.</param>
+    /// <param name="name">Property name.</param>
+    /// <param name="values">The strings.</param>
+    private static void WriteStrings(Utf8JsonWriter json, string name, IReadOnlyList<string> values)
+    {
+        json.WriteStartArray(name);
+        foreach (var value in values)
+        {
+            json.WriteStringValue(value);
+        }
+
+        json.WriteEndArray();
+    }
+
+    /// <summary>Reads what <see cref="WritePaths"/> wrote.</summary>
+    /// <param name="element">The object.</param>
+    private static Dictionary<string, IReadOnlyList<string>> ReadPaths(JsonElement element) =>
+        element.EnumerateObject().ToDictionary(static p => p.Name, static p => ReadStrings(p.Value), StringComparer.Ordinal);
+
+    /// <summary>Reads an array of strings.</summary>
+    /// <param name="element">The array.</param>
+    private static IReadOnlyList<string> ReadStrings(JsonElement element) => [.. element.EnumerateArray().Select(static v => v.GetString()!)];
 
     /// <summary>Reads <c>[project, name, compressed text, framework?]</c> entries.</summary>
     /// <param name="element">The "generated" array.</param>

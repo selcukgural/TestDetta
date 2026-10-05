@@ -1,4 +1,4 @@
-<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 2e6651125f24 -->
+<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: e791b07bb110 -->
 <h1>Qué lo ejecuta todo</h1>
 <p class="lead">La mayoría de los cambios seleccionan unas pocas clases de prueba. Algunos no se pueden acotar de forma segura, así que {{name}} ejecuta un proyecto de pruebas completo o todos los proyectos bajo una carpeta. Esta página los enumera todos, para que una selección amplia nunca te sorprenda.</p>
 
@@ -39,9 +39,9 @@
 </ul>
 <p>No tener ningún mapa no lo ejecuta todo: la selección recurre al rastreo por nombre, que es más amplio que la cobertura pero sigue siendo acotado.</p>
 
-<h2 id="ignored">Archivos que se ignoran</h2>
-<p>Un archivo modificado fuera de todas las carpetas de proyecto, como <code>README.md</code>, los archivos bajo <code>.github/</code> o un script en la raíz del repositorio, no pertenece a ningún proyecto y no selecciona nada. Aparece en la salida como no asignado.</p>
-<div class="callout"><p>Si tus pruebas leen un archivo que está fuera de todas las carpetas de proyecto, un cambio en él no las seleccionará. Mantén esos archivos dentro del proyecto de pruebas o decláralos como elementos suyos, por ejemplo <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code>. Así el archivo pertenece al proyecto esté donde esté, y cambiarlo o borrarlo ejecuta el proyecto.</p></div>
+<h2 id="ignored">Archivos fuera de todos los proyectos</h2>
+<p>Un archivo modificado fuera de todas las carpetas de proyecto, como <code>README.md</code>, los archivos bajo <code>.github/</code> o datos de prueba en la raíz del repositorio, no pertenece a ningún proyecto. Si una prueba lo leyó mediante una ruta mientras se grababa el mapa de cobertura, un cambio en él, o un archivo nuevo en una carpeta que una prueba listó, ejecuta las clases de prueba que lo leyeron. Una lectura fuera de cualquier prueba, en la preparación de un fixture o al inicializar algo que las pruebas comparten ejecuta el proyecto de pruebas entero. Un archivo que ninguna prueba grabada leyó no selecciona nada. La salida cuenta estos archivos como leídos por pruebas grabadas o no leídos por ninguna.</p>
+<div class="callout"><p>Las lecturas se graban en el código de los propios proyectos del repositorio, no dentro de bibliotecas de terceros (una biblioteca de snapshots que lee sus archivos <code>.verified</code>, por ejemplo), y solo en mapas de cobertura grabados por una versión que las graba. Mantén los archivos leídos de esa forma dentro del proyecto de pruebas o decláralos como elementos suyos, por ejemplo <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code>. Así el archivo pertenece al proyecto esté donde esté, y cambiarlo o borrarlo ejecuta el proyecto.</p></div>
 <p>Una excepción: un archivo de código fuente o de compilación que ningún proyecto reclama (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>) cuenta como entrada de compilación de todos los proyectos cuyos imports no se pudieron resolver por completo, así que esos se ejecutan.</p>
 
 <h2 id="related">Páginas relacionadas</h2>

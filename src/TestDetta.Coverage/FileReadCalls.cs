@@ -1,0 +1,162 @@
+using System.Collections.Frozen;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using TestDetta.Coverage.Runtime;
+
+namespace TestDetta.Coverage;
+
+/// <summary>
+/// Sends the calls of an instrumented module that read a file or list a directory by a path through a
+/// wrapper that tells the tracker the path first (docs/design/runtime-file-reads.md). Each wrapper is a
+/// static method of a type added to the module, with the call's own arguments and result: it reports
+/// the path argument, then makes the original call. The call instruction becomes a call of the wrapper,
+/// which takes and leaves the same stack, so nothing around it moves.
+/// </summary>
+internal static class FileReadCalls
+{
+    /// <summary>Name of the type that holds the wrappers.</summary>
+    public const string HolderName = "<TestDettaFileReads>";
+
+    /// <summary>
+    /// Methods and constructors whose first parameter is a path, by declaring type and name, with
+    /// true for a directory. Only overloads whose first parameter is a <c>string</c> are wrapped.
+    /// </summary>
+    private static readonly FrozenDictionary<string, bool> Readers = new Dictionary<string, bool>(StringComparer.Ordinal)
+    {
+        ["System.IO.File::ReadAllText"] = false,
+        ["System.IO.File::ReadAllTextAsync"] = false,
+        ["System.IO.File::ReadAllLines"] = false,
+        ["System.IO.File::ReadAllLinesAsync"] = false,
+        ["System.IO.File::ReadAllBytes"] = false,
+        ["System.IO.File::ReadAllBytesAsync"] = false,
+        ["System.IO.File::ReadLines"] = false,
+        ["System.IO.File::ReadLinesAsync"] = false,
+        ["System.IO.File::OpenRead"] = false,
+        ["System.IO.File::OpenText"] = false,
+        ["System.IO.File::Open"] = false,
+        ["System.IO.File::OpenHandle"] = false,
+        ["System.IO.File::Exists"] = false,
+        ["System.IO.File::Copy"] = false,
+        ["System.IO.FileStream::.ctor"] = false,
+        ["System.IO.StreamReader::.ctor"] = false,
+        ["System.IO.FileInfo::.ctor"] = false,
+        ["System.Xml.Linq.XDocument::Load"] = false,
+        ["System.Xml.Linq.XElement::Load"] = false,
+        ["System.Xml.XmlReader::Create"] = false,
+        ["System.Xml.XmlDocument::Load"] = false,
+        ["System.IO.Directory::Exists"] = true,
+        ["System.IO.Directory::GetFiles"] = true,
+        ["System.IO.Directory::GetDirectories"] = true,
+        ["System.IO.Directory::GetFileSystemEntries"] = true,
+        ["System.IO.Directory::EnumerateFiles"] = true,
+        ["System.IO.Directory::EnumerateDirectories"] = true,
+        ["System.IO.Directory::EnumerateFileSystemEntries"] = true,
+        ["System.IO.DirectoryInfo::.ctor"] = true,
+    }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>Wraps every file-reading call in the bodies of <paramref name="module"/>.</summary>
+    /// <param name="module">Module being instrumented.</param>
+    /// <param name="fileRead">Reference to <see cref="TestDettaTracker.FileRead"/> in the module.</param>
+    /// <param name="directoryListed">Reference to <see cref="TestDettaTracker.DirectoryListed"/> in the module.</param>
+    /// <returns>The number of calls wrapped.</returns>
+    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed)
+    {
+        TypeDefinition? holder = null;
+        var wrappers = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
+        var wrapped = 0;
+        foreach (var method in module.GetTypes().SelectMany(static t => t.Methods).Where(static m => m.HasBody).ToList())
+        {
+            foreach (var instruction in method.Body.Instructions)
+            {
+                if (instruction.OpCode.Code is not (Code.Call or Code.Callvirt or Code.Newobj)
+                    || instruction.Operand is not MethodReference target
+                    || Directory(target) is not { } directory
+                    || instruction.Previous?.OpCode.OpCodeType == OpCodeType.Prefix)
+                {
+                    continue;
+                }
+
+                var key = $"{instruction.OpCode.Code}|{target.FullName}";
+                if (!wrappers.TryGetValue(key, out var wrapper))
+                {
+                    holder ??= AddHolder(module);
+                    wrapper = Wrapper(module, holder, target, instruction.OpCode, directory ? directoryListed : fileRead, wrappers.Count);
+                    wrappers[key] = wrapper;
+                }
+
+                instruction.OpCode = OpCodes.Call;
+                instruction.Operand = wrapper;
+                wrapped++;
+            }
+        }
+
+        return wrapped;
+    }
+
+    /// <summary>For a call to wrap, whether its path names a directory; null for any other call.</summary>
+    /// <param name="target">The called method.</param>
+    private static bool? Directory(MethodReference target) =>
+        target is not GenericInstanceMethod
+        && target.DeclaringType is not GenericInstanceType
+        && target.Parameters.Count > 0
+        && target.Parameters[0].ParameterType.FullName == "System.String"
+        && Readers.TryGetValue($"{target.DeclaringType.FullName}::{target.Name}", out var directory)
+            ? directory
+            : null;
+
+    /// <summary>Adds the internal static type that holds the wrappers.</summary>
+    /// <param name="module">Module being instrumented.</param>
+    private static TypeDefinition AddHolder(ModuleDefinition module)
+    {
+        var holder = new TypeDefinition(
+            string.Empty,
+            HolderName,
+            TypeAttributes.NotPublic | TypeAttributes.Abstract | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit,
+            module.TypeSystem.Object);
+        module.Types.Add(holder);
+        return holder;
+    }
+
+    /// <summary>
+    /// A static method with the arguments of <paramref name="target"/> (the object first, for an
+    /// instance method) and its result (the new object, for a constructor) that reports the path
+    /// argument through <paramref name="probe"/> and then makes the call as <paramref name="opCode"/> did.
+    /// </summary>
+    /// <param name="module">Module being instrumented.</param>
+    /// <param name="holder">Type that holds the wrappers.</param>
+    /// <param name="target">The wrapped method.</param>
+    /// <param name="opCode">The original call instruction's opcode.</param>
+    /// <param name="probe">Tracker method that takes the path.</param>
+    /// <param name="number">A number that makes the wrapper's name unique.</param>
+    private static MethodDefinition Wrapper(ModuleDefinition module, TypeDefinition holder, MethodReference target, OpCode opCode, MethodReference probe, int number)
+    {
+        var constructor = opCode.Code == Code.Newobj;
+        var returnType = constructor ? target.DeclaringType : target.ReturnType;
+        var wrapper = new MethodDefinition(
+            $"{target.DeclaringType.Name}_{(constructor ? "new" : target.Name)}_{number}",
+            MethodAttributes.Assembly | MethodAttributes.Static | MethodAttributes.HideBySig,
+            returnType);
+        if (target.HasThis && !constructor)
+        {
+            wrapper.Parameters.Add(new ParameterDefinition(target.DeclaringType));
+        }
+
+        foreach (var parameter in target.Parameters)
+        {
+            wrapper.Parameters.Add(new ParameterDefinition(parameter.ParameterType));
+        }
+
+        var il = wrapper.Body.GetILProcessor();
+        il.Emit(OpCodes.Ldarg, wrapper.Parameters[target.HasThis && !constructor ? 1 : 0]);
+        il.Emit(OpCodes.Call, probe);
+        foreach (var parameter in wrapper.Parameters)
+        {
+            il.Emit(OpCodes.Ldarg, parameter);
+        }
+
+        il.Emit(opCode, module.ImportReference(target));
+        il.Emit(OpCodes.Ret);
+        holder.Methods.Add(wrapper);
+        return wrapper;
+    }
+}

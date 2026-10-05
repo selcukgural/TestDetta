@@ -1,4 +1,4 @@
-<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: 59924c824917 -->
+<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: 3f75041f2001 -->
 <h1>Limitaciones</h1>
 <p class="lead">Donde {{name}} no puede ver algo, selecciona más. Esta página enumera esos casos, para que sepas cuándo una selección es más amplia de lo necesario, y los pocos casos en los que un patrón escrito a mano puede ocultar una prueba.</p>
 
@@ -20,7 +20,7 @@
 <ul>
   <li>No se ven los elementos que solo añaden los props de un paquete o solo una condición <code>Release</code>.</li>
   <li>Un proyecto que MSBuild no puede evaluar se lee como XML, al igual que los imports.</li>
-  <li>Un archivo modificado dentro de la carpeta de un proyecto que el proyecto no compila cuenta como un cambio en ese proyecto. Un archivo fuera de todas las carpetas de proyecto no selecciona nada; consulta <a href="/docs/what-runs-everything/#ignored">archivos que se ignoran</a>.</li>
+  <li>Un archivo modificado dentro de la carpeta de un proyecto que el proyecto no compila cuenta como un cambio en ese proyecto. Un archivo fuera de todas las carpetas de proyecto solo selecciona las pruebas que lo leyeron; consulta <a href="/docs/what-runs-everything/#ignored">archivos fuera de todos los proyectos</a>.</li>
   <li>Los proyectos de pruebas también se reconocen por un nombre <code>*.Tests</code> o <code>*.Test</code>.</li>
 </ul>
 
@@ -28,7 +28,7 @@
 <p>{{name}} ve tu código fuente, tus archivos de proyecto y lo que ejecutaron tus pruebas durante el registro. No puede ver:</p>
 <ul>
   <li><strong>Servicios externos y bases de datos.</strong> Un cambio en otro sistema, como una migración de esquema aplicada en otro lugar o una API a la que llaman tus pruebas, aquí no selecciona nada.</li>
-  <li><strong>Archivos leídos en tiempo de ejecución desde fuera de las carpetas de proyecto</strong>, como datos de prueba compartidos en la raíz del repositorio. Mantenlos dentro del proyecto de pruebas; consulta <a href="/docs/what-runs-everything/#ignored">archivos que se ignoran</a>.</li>
+  <li><strong>Archivos que código de terceros lee en tiempo de ejecución desde fuera de las carpetas de proyecto</strong>, como los archivos de una biblioteca de snapshots en la raíz del repositorio. Las lecturas de tu propio código se graban; consulta <a href="/docs/what-runs-everything/#ignored">archivos fuera de todos los proyectos</a>.</li>
   <li><strong>El entorno</strong>: variables, ajustes de la máquina y herramientas instaladas que difieren entre ejecuciones.</li>
 </ul>
 <p>Los cambios de versión de los paquetes sí se ven: un cambio de <code>PackageVersion</code> en <code>Directory.Packages.props</code> ejecuta los proyectos que hacen referencia al paquete, y un cambio de <code>PackageReference</code> es un cambio en el archivo de proyecto.</p>

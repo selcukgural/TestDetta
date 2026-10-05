@@ -28,6 +28,21 @@ public sealed record CoverageHits(
     IReadOnlyList<int> Ambient);
 
 /// <summary>
+/// Files the tests read and directories they listed while recording (docs/design/runtime-file-reads.md):
+/// repository-relative paths with '/' separators, a directory ending in '/'. A read of a copy in a
+/// build output stands for the repository file it was copied from.
+/// </summary>
+/// <param name="Classes">Test class (runtime name) to what its tests read.</param>
+/// <param name="Fixtures">Fixture name to what its setup read; credited to every class that uses it.</param>
+/// <param name="Ambient">Read outside every test and fixture: every test of the project may depend on it.</param>
+/// <param name="Initialization">Read inside an initialization scope (a static constructor, a cache fill), once for every later user.</param>
+public sealed record FileReads(
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Classes,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Fixtures,
+    IReadOnlyList<string> Ambient,
+    IReadOnlyList<string> Initialization);
+
+/// <summary>
 /// Time spent in each test class and fixture while recording. Recording runs one test at a time,
 /// instrumented, so the absolute numbers are higher than a normal run; the proportions are what
 /// estimates rely on.
@@ -133,6 +148,9 @@ public sealed record CoverageMap(
     /// in the source tree, so the source index adds them from here, as sources of their projects.
     /// </summary>
     public IReadOnlyList<GeneratedSource> Generated { get; init; } = [];
+
+    /// <summary>What the tests read by a path; null for a map recorded before reads were (it can answer nothing about them).</summary>
+    public FileReads? FileReads { get; init; }
 
     /// <summary>
     /// Test classes (runtime names) the test reports listed although none of their tests executed:

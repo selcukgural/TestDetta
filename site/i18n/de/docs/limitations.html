@@ -1,4 +1,4 @@
-<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: 59924c824917 -->
+<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: 3f75041f2001 -->
 <h1>Einschränkungen</h1>
 <p class="lead">Wo {{name}} etwas nicht sehen kann, wählt es mehr aus. Diese Seite listet diese Stellen auf, damit Sie wissen, wann eine Auswahl breiter ist als nötig, sowie die wenigen Fälle, in denen ein handgeschriebenes Muster einen Test verbergen kann.</p>
 
@@ -20,7 +20,7 @@
 <ul>
   <li>Elemente, die nur die Props eines Pakets oder nur eine <code>Release</code>-Bedingung hinzufügen, werden nicht erkannt.</li>
   <li>Ein Projekt, das MSBuild nicht auswerten kann, wird als XML gelesen, ebenso Importe.</li>
-  <li>Eine geänderte Datei in einem Projektordner, die das Projekt nicht kompiliert, zählt als Änderung an diesem Projekt. Eine Datei außerhalb aller Projektordner wählt nichts aus; siehe <a href="/docs/what-runs-everything/#ignored">ignorierte Dateien</a>.</li>
+  <li>Eine geänderte Datei in einem Projektordner, die das Projekt nicht kompiliert, zählt als Änderung an diesem Projekt. Eine Datei außerhalb aller Projektordner wählt nur die Tests aus, die sie gelesen haben; siehe <a href="/docs/what-runs-everything/#ignored">Dateien außerhalb aller Projekte</a>.</li>
   <li>Testprojekte werden auch an einem Namen der Form <code>*.Tests</code> oder <code>*.Test</code> erkannt.</li>
 </ul>
 
@@ -28,7 +28,7 @@
 <p>{{name}} sieht Ihren Quellcode, Ihre Projektdateien und das, was Ihre Tests bei der Aufzeichnung ausgeführt haben. Nicht sehen kann es:</p>
 <ul>
   <li><strong>Externe Dienste und Datenbanken.</strong> Eine Änderung in einem anderen System, etwa eine anderswo angewendete Schemamigration oder eine API, die Ihre Tests aufrufen, wählt hier nichts aus.</li>
-  <li><strong>Dateien, die zur Laufzeit von außerhalb der Projektordner gelesen werden</strong>, etwa gemeinsame Testdaten im Stammverzeichnis des Repositorys. Legen Sie sie in das Testprojekt; siehe <a href="/docs/what-runs-everything/#ignored">ignorierte Dateien</a>.</li>
+  <li><strong>Dateien, die zur Laufzeit von Code eines Drittanbieters außerhalb der Projektordner gelesen werden</strong>, etwa die Dateien einer Snapshot-Bibliothek im Stammverzeichnis des Repositorys. Lesezugriffe Ihres eigenen Codes werden aufgezeichnet; siehe <a href="/docs/what-runs-everything/#ignored">Dateien außerhalb aller Projekte</a>.</li>
   <li><strong>Umgebung</strong>: Variablen, Rechnereinstellungen und installierte Tools, die sich zwischen Läufen unterscheiden.</li>
 </ul>
 <p>Änderungen an Paketversionen werden erkannt: Eine <code>PackageVersion</code>-Änderung in <code>Directory.Packages.props</code> führt die Projekte aus, die das Paket referenzieren, und eine <code>PackageReference</code>-Änderung ist eine Änderung an der Projektdatei.</p>

@@ -16,10 +16,12 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     /// <returns>One entry per affected test project, ordered by path.</returns>
     public IReadOnlyList<TestProjectSelection> Select(TestSelectionRequest request)
     {
+        // Files no project owns select the tests that read them (docs/design/runtime-file-reads.md).
+        var readers = FindFileReaders(request);
         var affectedTests = request.Impact.Tests.ToList();
         if (affectedTests.Count == 0)
         {
-            return [];
+            return WithFileReaders([], readers, request.CoverageMaps);
         }
 
         (request, var driftRunAll) = WithoutDriftedMaps(request);
@@ -49,6 +51,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             : byName;
 
         var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { DriftRunAll = driftRunAll });
+        decisions = WithFileReaders(decisions, readers, request.CoverageMaps);
         for (var i = 0; i < decisions.Count; i++)
         {
             decisions[i] = decisions[i] with { Estimate = coverage.Estimate(decisions[i]) };

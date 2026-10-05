@@ -1,6 +1,6 @@
 # Files tests read at run time
 
-Status: proposed 2026-10-05; in v1 (user decision, 2026-10-05), after the switch-based evaluation of generator changes.
+Status: file reads implemented 2026-10-05 (see "As built"); process starts not yet. In v1 (user decision, 2026-10-05).
 
 ## Problem
 
@@ -69,3 +69,30 @@ reference no test started or read is build order only.
 
 The docs ("What runs everything", "Files that are ignored") tell users to list such files as items of
 the test project; a change or a deletion then runs the project.
+
+## As built (file reads, 2026-10-05)
+
+- **Instrumenter** (`FileReadCalls`): every call in an instrumented module to one of a fixed list of
+  methods and constructors whose first parameter is a `string` path (`File.ReadAllText` and its
+  kin, `File.Open*`, `File.Exists`, `File.Copy`, `FileStream`, `StreamReader`, `FileInfo`,
+  `XDocument.Load`, `XElement.Load`, `XmlReader.Create`, `XmlDocument.Load`; directories:
+  `Directory.Get*`, `Enumerate*`, `Exists`, `DirectoryInfo`) becomes a call of a generated static
+  wrapper in `<TestDettaFileReads>` with the same arguments and result, which reports the path and
+  makes the original call. No stack analysis, any argument count.
+- **Tracker**: `FileRead`/`DirectoryListed` resolve the path against the current directory and add it
+  to the bucket a hit would go to; inside a static constructor or cache fill, to a separate
+  initialization set. Results gain `fileReads` (classes, fixtures, ambient, initialization).
+- **Map**: optional `fileReads` section, no format change; a map without it knows no reads.
+  `FileReadPaths` keeps repository paths only (outside, `.git/` and `.testdetta/` dropped); a copy under
+  `bin`/`obj` stands for the tracked files with its name and content (its name alone when no content
+  matches), a copy that does not exist for nothing, and a listed output folder for the files in it and
+  the folders they came from.
+- **Selection** (`TestSelector.FileReads`): a changed file no project owns selects the classes that read
+  it or listed a folder above it (decision kind `FileRead`, evidence "read <file> (map <commit>)"), added
+  to what the code changes select. A read outside the tests, while initializing, or **in a fixture's
+  setup runs the whole project** (unlike the design above: the fixture's users need the source index of
+  a project the changes may not otherwise reach). Output: "N changed file(s) outside any project: M read
+  by recorded tests, K read by none (ignored)".
+- **Not yet**: the drift bridge's literal search for classes changed since the map, process starts, and
+  the corpus mode that changes data files. Reads by third-party code (snapshot libraries) stay unseen;
+  the docs say so.

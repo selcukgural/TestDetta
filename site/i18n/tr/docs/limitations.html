@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 59924c824917 -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 3f75041f2001 -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -20,7 +20,7 @@
 <ul>
   <li>Yalnızca bir paketin props dosyalarının eklediği ya da yalnızca bir <code>Release</code> koşulunun eklediği öğeler görülmez.</li>
   <li>MSBuild'in değerlendiremediği bir proje, import'ları gibi XML olarak okunur.</li>
-  <li>Bir proje klasörünün içinde olup projenin derlemediği değişen bir dosya, o projede yapılmış bir değişiklik sayılır. Hiçbir proje klasörünün içinde olmayan bir dosya hiçbir şey seçmez; bkz. <a href="/docs/what-runs-everything/#ignored">yok sayılan dosyalar</a>.</li>
+  <li>Bir proje klasörünün içinde olup projenin derlemediği değişen bir dosya, o projede yapılmış bir değişiklik sayılır. Hiçbir proje klasörünün içinde olmayan bir dosya yalnızca onu okuyan testleri seçer; bkz. <a href="/docs/what-runs-everything/#ignored">hiçbir projeye ait olmayan dosyalar</a>.</li>
   <li>Test projeleri ayrıca <code>*.Tests</code> ya da <code>*.Test</code> adından da tanınır.</li>
 </ul>
 
@@ -28,7 +28,7 @@
 <p>{{name}} kaynak kodunuzu, proje dosyalarınızı ve kayıt sırasında testlerinizin neleri çalıştırdığını görür. Şunları göremez:</p>
 <ul>
   <li><strong>Harici servisler ve veritabanları.</strong> Başka bir sistemdeki değişiklik, örneğin başka bir yerde uygulanan bir şema migration'ı ya da testlerinizin çağırdığı bir API, burada hiçbir şey seçmez.</li>
-  <li><strong>Çalışma zamanında proje klasörlerinin dışından okunan dosyalar</strong>, örneğin depo kökündeki paylaşılan test verileri. Bunları test projesinin içinde tutun; bkz. <a href="/docs/what-runs-everything/#ignored">yok sayılan dosyalar</a>.</li>
+  <li><strong>Çalışma zamanında üçüncü taraf kodun proje klasörlerinin dışından okuduğu dosyalar</strong>, örneğin depo kökündeki bir snapshot kütüphanesinin dosyaları. Kendi kodunuzun okumaları kaydedilir; bkz. <a href="/docs/what-runs-everything/#ignored">hiçbir projeye ait olmayan dosyalar</a>.</li>
   <li><strong>Ortam</strong>: çalıştırmalar arasında farklılık gösteren değişkenler, makine ayarları ve kurulu araçlar.</li>
 </ul>
 <p>Paket sürümü değişiklikleri görülür: <code>Directory.Packages.props</code> içindeki bir <code>PackageVersion</code> değişikliği paketi referans alan projeleri çalıştırır, bir <code>PackageReference</code> değişikliği ise proje dosyasında yapılmış bir değişikliktir.</p>

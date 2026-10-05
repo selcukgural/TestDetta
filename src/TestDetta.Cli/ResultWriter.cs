@@ -34,6 +34,9 @@ internal sealed record ResultReport(
 
     /// <summary>True when the license decided the run (see <see cref="AnalysisResult.LicenseEnforced"/>).</summary>
     public bool LicenseEnforced { get; init; }
+
+    /// <summary>See <see cref="AnalysisResult.UnmappedFilesRead"/>.</summary>
+    public IReadOnlyList<string>? UnmappedFilesRead { get; init; }
 }
 
 /// <summary>Prints an analysis result on stdout in the format chosen on the command line.</summary>
@@ -137,7 +140,11 @@ internal static class ResultWriter
 
         if (report.Result.UnmappedFiles.Count > 0)
         {
-            stdout.WriteLine($"{report.Result.UnmappedFiles.Count} changed file(s) outside any project (ignored).");
+            // With maps that recorded file reads, a file outside every project runs the tests that read it.
+            var read = report.UnmappedFilesRead?.Count ?? 0;
+            stdout.WriteLine(report.UnmappedFilesRead is null
+                ? $"{report.Result.UnmappedFiles.Count} changed file(s) outside any project (ignored)."
+                : $"{report.Result.UnmappedFiles.Count} changed file(s) outside any project: {read} read by recorded tests, {report.Result.UnmappedFiles.Count - read} read by none (ignored).");
         }
 
         foreach (var drift in report.Drifts)

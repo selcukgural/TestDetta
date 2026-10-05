@@ -164,7 +164,9 @@ and the details are in [docs/ci.md](docs/ci.md).
   configuration and without a restore. Items only a package's props add, or only a `Release`
   condition adds, are not seen. A project MSBuild cannot evaluate is read as XML, as are imports.
   A changed file inside a project folder that the project does not compile counts as a change to
-  that project; a file outside every project folder (README, `.github/`) selects nothing. Test
+  that project; a file outside every project folder (README, `.github/`, shared test data) selects
+  only the test classes that read it by a path while the map was recorded (reads in the repository's
+  own code; docs/design/runtime-file-reads.md), and nothing when no test read it. Test
   projects are also recognised by a `*.Tests`/`*.Test` name.
 - C# files are parsed with each target framework's real preprocessor symbols, and also with no
   symbols and with every symbol their `#if`s name, so code under any active condition is seen.
