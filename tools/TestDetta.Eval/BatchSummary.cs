@@ -113,7 +113,8 @@ internal static class BatchSummary
                 [.. r.GetProperty("missedMutants").EnumerateArray().Select(static m => m.GetString()!)])
             {
                 Sha = r.GetProperty("sha").GetString(),
-                TestDettaCommit = r.GetProperty("testdettaCommit").GetString(),
+                // Runs before the rename to TestDetta (round 2c and earlier) wrote siftCommit.
+                TestDettaCommit = (Optional(r, "testdettaCommit") ?? Optional(r, "siftCommit"))?.GetString(),
                 Toolchain = r.GetProperty("toolchain").GetString(),
                 Seconds = r.GetProperty("seconds").GetDouble(),
                 Reused = r.GetProperty("reused").GetInt32(),
@@ -213,7 +214,7 @@ internal static class BatchSummary
         if (syntheticReport is { } synthetic)
         {
             sha = Optional(synthetic.RootElement, "sha")?.GetString();
-            testdettaCommit = Optional(synthetic.RootElement, "testdettaCommit")?.GetString();
+            testdettaCommit = (Optional(synthetic.RootElement, "testdettaCommit") ?? Optional(synthetic.RootElement, "siftCommit"))?.GetString();
             toolchain = Optional(synthetic.RootElement, "toolchain")?.GetString();
             seconds = Optional(synthetic.RootElement, "seconds")?.GetDouble() ?? 0;
             var failing = new List<(double, int)>();

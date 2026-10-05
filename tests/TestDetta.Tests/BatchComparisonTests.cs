@@ -64,6 +64,21 @@ public sealed class BatchComparisonTests : IDisposable
         Assert.Contains("Nothing changed", BatchComparison.Write(_directory, _directory), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void A_summary_written_before_the_rename_still_reads()
+    {
+        var old = Path.Combine(_directory, "old");
+        Directory.CreateDirectory(old);
+        File.WriteAllText(Path.Combine(old, "summary.json"), """
+            { "repositories": [ { "name": "a", "status": "done", "killing": 3, "missed": 0, "selectedShare": 0.5, "syntheticKilling": 3,
+              "commits": 0, "missedMutants": [], "sha": "abcdef1234", "siftCommit": "c0ffee", "toolchain": "SDK", "seconds": 9, "reused": 0 } ] }
+            """);
+
+        var read = Assert.Single(BatchSummary.ReadSummary(old)!);
+
+        Assert.Equal("c0ffee", read.TestDettaCommit);
+    }
+
     private static BatchSummary.RepositoryTotals Totals(string name, string sha, double share = 0.2, int killing = 10, int missed = 0, string status = "done", double seconds = 300) =>
         new(new CorpusEntry { Name = name, Url = string.Empty }, status, killing, missed, share * killing, killing, 0, 0, 0, [])
         {
