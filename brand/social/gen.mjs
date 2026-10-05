@@ -66,3 +66,9 @@ ${cells}
 };
 writeFileSync("linkedin-cover-light.svg", cover(cream, ink, green, muted, cell));
 writeFileSync("linkedin-cover-dark.svg", cover(ink, cream, mint, "#a3aab0", "#262b30"));
+
+// Bluesky: the same 3:1 banner and square avatar as X (shown as a circle), rendered at Bluesky's
+// larger sizes (3000x1000 and 1000x1000) from these copies.
+writeFileSync("bluesky-avatar.svg", profile(ink, cream, mint));
+writeFileSync("bluesky-banner-light.svg", header(cream, ink, green, muted, cell));
+writeFileSync("bluesky-banner-dark.svg", header(ink, cream, mint, "#a3aab0", "#262b30"));
