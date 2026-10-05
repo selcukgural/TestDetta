@@ -96,3 +96,26 @@ the test project; a change or a deletion then runs the project.
 - **Not yet**: the drift bridge's literal search for classes changed since the map, process starts, and
   the corpus mode that changes data files. Reads by third-party code (snapshot libraries) stay unseen;
   the docs say so.
+
+## Open question for the owner: process starts and build-time tools (2026-10-05)
+
+Narrowing the `ReferenceOutputAssembly="false"` rule with runtime tracking (process starts, and
+`Assembly.LoadFrom` as a file read) sees what tests do with the reference's output at run time, but not
+what the build does with it: a tool project that a custom target runs during the build (`Exec`, an
+MSBuild task) to write code or files into the consumer. A change to such a tool changes the consumer
+without any test starting it, so "no test started or read it, so it is build order only" could miss.
+Options:
+
+1. Narrow only when the consumer's build runs nothing of the reference: no target of the consumer (or
+   of an import it uses) names the reference's output or project, checked from the MSBuild evaluation.
+   Precise for protobuf-net (BuildTools is listed for build order only), but the check reads targets
+   and may need care for wildcards and imported targets.
+2. Narrow, and compare what the build writes, as B does for generators: build the consumer before and
+   after and compare its intermediate outputs (generated `.cs` files under `obj`). Safe, costs a build
+   per affected consumer, like B.
+3. Leave the rule as it is (whole consumer) and narrow only through the runtime reads of the
+   consumer's tests where the reference is an executable they start (LibGit2Sharp's test app), which
+   still needs 1 or 2 to rule out a build-time use.
+
+Recommendation: 1 first (cheap, covers protobuf-net and LibGit2Sharp), with 2 as the fallback when the
+check finds a target that uses the output.
