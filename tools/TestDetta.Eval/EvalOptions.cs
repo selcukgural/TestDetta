@@ -60,6 +60,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --compare-affected <exe>  Also select each synthetic change with dotnet-affected (its executable),
                                  running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
+          --data-files <n>       Also empty n data files outside every project, one change each, to check that
+                                 the tests reading them are selected (needs maps with file reads)
           --keep-clones          Keep the clone and every test report when the evaluation ends (default: a
                                  clone is deleted when nothing was missed, and the test reports of mutants
                                  that were neither missed nor crashed once they are read)
@@ -291,6 +293,16 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { MapAge = mapAge };
                     break;
 
+                case "--data-files":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var files) || files < 0)
+                    {
+                        error = $"--data-files needs a number, not {value}";
+                        return false;
+                    }
+
+                    run = run with { DataFiles = files };
+                    break;
+
                 case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed" or "--mutant-parallelism":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg is "--parallel" or "--mutant-parallelism"))
                     {
@@ -425,6 +437,12 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// neither missed nor crashed: their outcomes are in the results and the outcome cache.
     /// </summary>
     public bool KeepClones { get; init; }
+
+    /// <summary>
+    /// Data files outside every project to empty, one change each, after the member changes
+    /// (<see cref="DataFileSampler"/>); 0 for none.
+    /// </summary>
+    public int DataFiles { get; init; }
 
     /// <summary>Solution dotnet-tia analyses, relative to the repository root; null to let it discover one.</summary>
     public string? TiaSolution { get; init; }

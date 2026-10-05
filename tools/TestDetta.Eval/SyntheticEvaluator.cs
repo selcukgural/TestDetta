@@ -86,6 +86,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var candidates = _steps.TestProjects(graph);
             var testClasses = maps.Values.Sum(static m => m.Classes.Count);
             var targets = TargetSampler.Sample(graph, workspace.RepoRoot, CoveredMembers(maps), request);
+
+            // After the members, so the member sample and its stored outcomes stay as they were.
+            targets.AddRange(DataFileSampler.Sample(graph, workspace.RepoRoot, maps.Values, request.DataFiles, request.Seed));
             var coveredTargets = targets.Count(static t => t.Covered);
             LogSampled(targets.Count, coveredTargets);
             var generatorMutants = new GeneratorMutants(graph);
@@ -501,7 +504,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         var schema = MutationInjector.InjectSchema(
             assemblies,
-            [.. targets.Select(static t => new SchemaTarget(t.Id, t.Target.Member, t.Target.Kind))],
+            [.. targets.Where(static t => t.Target.Kind != MutantKind.EmptyFile).Select(static t => new SchemaTarget(t.Id, t.Target.Member, t.Target.Kind))],
             Path.Combine(workspace.MapCache, "..", "schema-backup"));
         var check = workspace.Executor.RunAll(testProjects, "baseline-schema");
         var same = check.Complete && testProjects.All(p =>
@@ -599,11 +602,18 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         /// <summary>Environment of the test processes that turns it on; null when written in.</summary>
         public IReadOnlyDictionary<string, string>? Environment { get; } = environment;
 
+        /// <summary>The emptied data file of a <see cref="MutantKind.EmptyFile"/> change; null for a member's mutant.</summary>
+        public DataFile? File { get; init; }
+
         /// <summary>Takes the mutant away until the result is disposed (nothing to do with a schema).</summary>
-        public IDisposable Lift() => mutation?.Lift() ?? Nothing.Instance;
+        public IDisposable Lift() => File?.Lift() ?? mutation?.Lift() ?? Nothing.Instance;
 
         /// <summary>Puts the original files back when the mutant was written in alone.</summary>
-        public void Dispose() => mutation?.Dispose();
+        public void Dispose()
+        {
+            mutation?.Dispose();
+            File?.Dispose();
+        }
 
         /// <summary>A lift that changes nothing.</summary>
         private sealed class Nothing : IDisposable
@@ -622,8 +632,19 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="target">The mutant.</param>
     /// <param name="context">What the mutants of the commit share.</param>
     /// <param name="index">1-based position in the sample, which is its schema id.</param>
-    private ActiveMutant Apply(SyntheticTarget target, MutantContext context, int index)
+    /// <param name="executor">The worker's executor, in whose copy of the clone a data file is emptied.</param>
+    private ActiveMutant Apply(SyntheticTarget target, MutantContext context, int index, TestExecutor executor)
     {
+        // A data file is emptied in the worker's copy, where every test project may read it.
+        if (target.Kind == MutantKind.EmptyFile)
+        {
+            var path = Path.Combine(executor.Root, Path.GetRelativePath(workspace.RepoRoot, target.Edits[0].Path));
+            return new ActiveMutant(1, workspace.Executor.Outputs.Values.ToHashSet(StringComparer.Ordinal), environment: null, mutation: null)
+            {
+                File = new DataFile(path).Apply(),
+            };
+        }
+
         if (context.Schema is { } schema)
         {
             var entry = schema.Entries.GetValueOrDefault(index);
@@ -702,8 +723,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             return new Selection(all, Detected: true, share, new Dictionary<OtherSelector, OtherSelection> { [OtherSelector.ProjectLevel] = new(all, share) }) { StoppedOnBuild = true };
         }
 
-        var detected = analysis.Impact.CodeChanges.Any(c =>
-            c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
+        // A data file is seen when TestDetta runs something for it: its readers.
+        var detected = target.Kind == MutantKind.EmptyFile
+            ? analysis.Tests.Any(static t => t.Mode != TestRunMode.Skipped)
+            : analysis.Impact.CodeChanges.Any(c => c.AffectsWholeProject || c.Symbols.Any(s => s.TypeName == target.Member.TypeName));
         return new Selection(
             analysis.Tests,
             detected,
@@ -764,7 +787,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         var (tests, detected, share, drift) = selection;
         var state = new MutantRun(tests, context.TestProjects, index, detected, share) { Others = drift };
-        using var mutation = Apply(target, context, index);
+        using var mutation = Apply(target, context, index, executor);
         if (mutation.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);

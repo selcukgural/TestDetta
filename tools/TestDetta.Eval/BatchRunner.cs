@@ -129,6 +129,16 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     only.UnionWith(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                     break;
 
+                case "--data-files":
+                    if (!int.TryParse(value, CultureInfo.InvariantCulture, out var files) || files < 0)
+                    {
+                        error = $"--data-files needs a number, not {value}";
+                        return false;
+                    }
+
+                    overrides = overrides with { DataFiles = files };
+                    break;
+
                 case "--synthetic" or "--mutant-parallelism" or "--parallel":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 1)
                     {
@@ -203,7 +213,8 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 /// repository's own commit, toolchain and environment.
 /// </param>
 /// <param name="KeepClones">Keep every clone and test report; see <see cref="RunSettings.KeepClones"/>.</param>
-internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false, bool KeepClones = false);
+/// <param name="DataFiles">Data files to empty per repository; see <see cref="RunSettings.DataFiles"/>.</param>
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false, bool KeepClones = false, int DataFiles = 0);
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -302,6 +313,7 @@ internal static partial class BatchRunner
             AffectedCli = options.Overrides.AffectedCli,
             ExplainOnly = options.Overrides.Explain,
             KeepClones = options.Overrides.KeepClones,
+            DataFiles = options.Overrides.DataFiles,
             TiaSolution = entry.TiaSolution,
             Toolchain = entry.Toolchain?.ToToolchain(),
             Environment = entry.Environment ?? new Dictionary<string, string>(),

@@ -93,8 +93,11 @@ the test project; a change or a deletion then runs the project.
   setup runs the whole project** (unlike the design above: the fixture's users need the source index of
   a project the changes may not otherwise reach). Output: "N changed file(s) outside any project: M read
   by recorded tests, K read by none (ignored)".
-- **Not yet**: the drift bridge's literal search for classes changed since the map, process starts, and
-  the corpus mode that changes data files. Reads by third-party code (snapshot libraries) stay unseen;
+- **Evaluation**: `--data-files <n>` (eval and corpus runs) empties n tracked text files outside every
+  project after the member changes, most of them files some map recorded a read of
+  (`DataFileSampler`, mutant kind `empty-file`, never part of `all`). The full run with the file emptied
+  is the ground truth, as for member mutants; `EvalDataFileTests` runs it end to end.
+- **Not yet**: the drift bridge's literal search for classes changed since the map, and process starts. Reads by third-party code (snapshot libraries) stay unseen;
   the docs say so.
 
 ## Open question for the owner: process starts and build-time tools (2026-10-05)

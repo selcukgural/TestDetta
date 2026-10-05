@@ -14,6 +14,12 @@ internal enum MutantKind
 
     /// <summary>A field's constant initial value changes: numbers by one, booleans flip, strings get a suffix.</summary>
     FieldValue,
+
+    /// <summary>
+    /// A data file outside every project is emptied (<see cref="DataFileSampler"/>, <c>--data-files</c>);
+    /// not one of the member kinds, so <c>all</c> leaves it out.
+    /// </summary>
+    EmptyFile,
 }
 
 /// <summary>Names of <see cref="MutantKind"/> on the command line and in reports.</summary>
@@ -26,6 +32,7 @@ internal static class MutantKinds
         (MutantKind.ReturnDefault, "return-default"),
         (MutantKind.FlipBranch, "flip-branch"),
         (MutantKind.FieldValue, "field-value"),
+        (MutantKind.EmptyFile, "empty-file"),
     ];
 
     /// <summary>The name of <paramref name="kind"/>.</summary>
@@ -44,11 +51,11 @@ internal static class MutantKinds
         {
             if (part == "all")
             {
-                kinds.UnionWith(Names.Select(static n => n.Kind));
+                kinds.UnionWith(Names.Select(static n => n.Kind).Where(static k => k != MutantKind.EmptyFile));
                 continue;
             }
 
-            var match = Array.FindIndex(Names, n => string.Equals(n.Name, part, StringComparison.OrdinalIgnoreCase));
+            var match = Array.FindIndex(Names, n => n.Kind != MutantKind.EmptyFile && string.Equals(n.Name, part, StringComparison.OrdinalIgnoreCase));
             if (match < 0)
             {
                 error = $"Unknown mutant kind '{part}'; use {string.Join(", ", Names.Select(static n => n.Name))} or all";

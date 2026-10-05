@@ -50,6 +50,23 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void Data_files_are_a_count_of_their_own_and_not_a_mutant_kind()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--data-files", "5"], out var options, out var error), error);
+        Assert.Equal(5, options.Run.DataFiles);
+        Assert.False(EvalOptions.TryParse(["--repo", "r", "--data-files", "-1"], out _, out _));
+
+        var entry = new CorpusEntry { Name = "polly", Url = "https://example.com/polly.git", Synthetic = 100 };
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--data-files", "3"], out var batch, out error), error);
+        Assert.Equal(3, BatchRunner.SettingsFor(entry, batch).Run.DataFiles);
+
+        // The member kinds stay what they were: all leaves data files out, and the name is not a kind.
+        Assert.True(MutantKinds.TryParse("all", out var all, out _));
+        Assert.DoesNotContain(MutantKind.EmptyFile, all);
+        Assert.False(MutantKinds.TryParse("empty-file", out _, out _));
+    }
+
+    [Fact]
     public void Keep_clones_reaches_every_repository_and_takes_no_value()
     {
         var entry = new CorpusEntry { Name = "polly", Url = "https://example.com/polly.git", Synthetic = 100 };

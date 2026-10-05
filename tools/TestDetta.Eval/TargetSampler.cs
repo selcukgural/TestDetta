@@ -44,6 +44,9 @@ internal sealed record SampleRequest(int Count, int Seed, double CoveredShare = 
     /// initial value join the sample only when <see cref="MutantKind.FieldValue"/> is on.
     /// </summary>
     public IReadOnlySet<MutantKind> Kinds { get; init; } = new HashSet<MutantKind> { MutantKind.Throw };
+
+    /// <summary>Data files to empty after the members; see <see cref="RunSettings.DataFiles"/>.</summary>
+    public int DataFiles { get; init; }
 }
 
 /// <summary>
