@@ -70,7 +70,44 @@ public sealed class RecordingFingerprintTests : IDisposable
         Assert.NotEqual(Fingerprint(root, shared), Fingerprint(root, changed));
     }
 
+    [Fact]
+    public void Commit_id_in_the_version_of_a_root_assembly_keeps_the_fingerprint()
+    {
+        // The SDK writes the commit into AssemblyInformationalVersion (1.0.0+<sha>): every TestDetta commit
+        // recorded every repository again, though the recorder's code had not changed.
+        var (_, shared) = Build(reachedValue: 1, unreachedValue: 1, implementationValue: 1);
+        var first = WriteRoot("first", "1.0.0+d73d37a7a8174a3e4c74d30e046e68e35591e94f", constant: 1);
+        var second = WriteRoot("second", "1.0.0+d1f815bb5ae20b5c8684a07cf27fd593315f3c91", constant: 1);
+
+        Assert.Equal(Fingerprint(first, shared), Fingerprint(second, shared));
+    }
+
+    [Fact]
+    public void Change_to_any_method_of_a_root_assembly_changes_the_fingerprint()
+    {
+        var (_, shared) = Build(reachedValue: 1, unreachedValue: 1, implementationValue: 1);
+        var first = WriteRoot("first", "1.0.0", constant: 1);
+        var second = WriteRoot("second", "1.0.0", constant: 2);
+
+        Assert.NotEqual(Fingerprint(first, shared), Fingerprint(second, shared));
+    }
+
     private static string Fingerprint(string root, string shared) => RecordingFingerprint.Compute([root], shared, []);
+
+    /// <summary>A root assembly with the given informational version and a method returning <paramref name="constant"/>.</summary>
+    private string WriteRoot(string name, string version, int constant)
+    {
+        var folder = Path.Combine(_directory, "root-" + name);
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "Root.dll");
+        using var root = AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition("Root", new Version(1, 0)), "Root", ModuleKind.Dll);
+        var module = root.MainModule;
+        var attribute = module.ImportReference(typeof(System.Reflection.AssemblyInformationalVersionAttribute).GetConstructor([typeof(string)]));
+        root.CustomAttributes.Add(new CustomAttribute(attribute) { ConstructorArguments = { new CustomAttributeArgument(module.TypeSystem.String, version) } });
+        module.Types.Add(ClassReturning(module, "Recorder", constant));
+        root.Write(path);
+        return path;
+    }
 
     /// <summary>
     /// Writes a shared assembly with a reached class, an unreached class, an interface and its

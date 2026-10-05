@@ -46,8 +46,10 @@ missed are still confirmed alone, from the cache when known.
 ### 2. A recording key that follows the recorder's code, not all of Core
 
 The recording key keeps everything it has today (the recording version, framework, parallelism,
-setup, projects, toolchain, environment) and the full hashes of `TestDetta.Coverage` and
-`TestDetta.Coverage.Runtime`. In place of the hash of the whole `TestDetta.Core` assembly it takes
+setup, projects, toolchain, environment) and the full code of `TestDetta.Coverage` and
+`TestDetta.Coverage.Runtime`: every type's members and IL and every embedded resource, not the file
+bytes, which carry the commit id (`AssemblyInformationalVersion` is `1.0.0+<sha>`; until 2026-10-05
+every TestDetta commit recorded every repository again). In place of the hash of the whole `TestDetta.Core` assembly it takes
 a fingerprint of **the Core code the recorder can reach**:
 
 - Start from every type in the two coverage assemblies. Follow every reference into Core from their

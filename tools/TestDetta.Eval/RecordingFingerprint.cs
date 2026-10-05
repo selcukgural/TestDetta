@@ -9,7 +9,8 @@ namespace TestDetta.Eval;
 /// <summary>
 /// A hash of the code that decides a coverage recording, so cached maps survive TestDetta changes that
 /// recording never runs (docs/design/eval-result-cache.md, part 2). The root assemblies (coverage and
-/// tracker) count in full. Of the shared assembly (core), only the types the roots can reach count:
+/// tracker) count in full, by their types and resources rather than their bytes, which carry the
+/// commit id. Of the shared assembly (core), only the types the roots can reach count:
 /// every reference from signatures, base types, attributes, fields and method bodies is followed,
 /// type by type, and an interface or abstract type in the set brings every type that implements or
 /// derives from it. Reached types are hashed by their members and IL, with operands written as names
@@ -18,7 +19,7 @@ namespace TestDetta.Eval;
 internal static class RecordingFingerprint
 {
     /// <summary>
-    /// Hashes <paramref name="roots"/> in full and the part of <paramref name="shared"/> they, or the
+    /// Hashes the code of <paramref name="roots"/> in full and the part of <paramref name="shared"/> they, or the
     /// <paramref name="sharedRoots"/>, can reach.
     /// </summary>
     /// <param name="roots">Assemblies whose every type counts, such as the coverage recorder.</param>
@@ -27,14 +28,14 @@ internal static class RecordingFingerprint
     public static string Compute(IReadOnlyList<string> roots, string shared, IReadOnlyList<string> sharedRoots)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var text = new StringBuilder();
         foreach (var root in roots)
         {
-            hash.AppendData(File.ReadAllBytes(root));
+            DescribeRoot(root, text, hash);
         }
 
         using var module = ModuleDefinition.ReadModule(shared);
         var reached = Reach(roots, module, sharedRoots);
-        var text = new StringBuilder();
         foreach (var type in reached.OrderBy(static t => t.FullName, StringComparer.Ordinal))
         {
             Describe(type, text);
@@ -42,6 +43,31 @@ internal static class RecordingFingerprint
 
         hash.AppendData(Encoding.UTF8.GetBytes(text.ToString()));
         return Convert.ToHexStringLower(hash.GetHashAndReset());
+    }
+
+    /// <summary>
+    /// Describes every type of a root assembly and hashes its embedded resources: its code, not its
+    /// bytes. The bytes change with every commit, because the SDK writes the commit id into
+    /// <c>AssemblyInformationalVersion</c>; hashing them recorded every repository again after any
+    /// TestDetta commit.
+    /// </summary>
+    /// <param name="root">Root assembly.</param>
+    /// <param name="text">Receives the type descriptions.</param>
+    /// <param name="hash">Receives the resources.</param>
+    private static void DescribeRoot(string root, StringBuilder text, IncrementalHash hash)
+    {
+        using var module = ModuleDefinition.ReadModule(root);
+        text.Append("root ").AppendLine(module.Assembly.Name.Name);
+        foreach (var type in module.Types.OrderBy(static t => t.FullName, StringComparer.Ordinal))
+        {
+            Describe(type, text);
+        }
+
+        foreach (var resource in module.Resources.OfType<EmbeddedResource>().OrderBy(static r => r.Name, StringComparer.Ordinal))
+        {
+            text.Append("resource ").AppendLine(resource.Name);
+            hash.AppendData(resource.GetResourceData());
+        }
     }
 
     /// <summary>Full names of the outermost shared types that count, for tests and diagnostics.</summary>
