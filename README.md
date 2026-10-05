@@ -40,7 +40,7 @@ A filter that matches no test is treated as a TestDetta bug: the project is run 
 |---|---|
 | `td affected [--format text\|json\|paths\|commands]` | Print what a change affects and why. |
 | `td test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
-| `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. |
+| `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. A test project that does not build or run on the machine (a mobile app without its workload) gets no map and is decided by name; the command fails only when no map could be written. |
 | `td license status` | Check the license and show what it covers. |
 | `td license install <license\|file>` | Store a license in `~/.testdetta/license`, for machines where no CI secret can hold it. |
 

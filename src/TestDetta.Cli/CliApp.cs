@@ -206,7 +206,10 @@ internal static partial class CliApp
 
     /// <summary>
     /// Carries out <c>td record</c>: records one coverage map per test project. A project whose
-    /// tests fail is still recorded, because failing tests ran the code they cover.
+    /// tests fail is still recorded, because failing tests ran the code they cover. A project that
+    /// does not build or run here (a mobile app that needs a workload the machine lacks, a recording
+    /// that hangs) gets no map and the others are still recorded: selection decides a project without
+    /// a map by name, which is wider but safe. The run fails only when no map was written at all.
     /// </summary>
     /// <param name="options">Parsed command line.</param>
     /// <param name="loggerFactory">Creates the recorder's loggers.</param>
@@ -233,6 +236,7 @@ internal static partial class CliApp
 
             var recorder = new TestDetta.Coverage.CoverageRecorder(loggerFactory);
             var allPassed = true;
+            var notRecorded = 0;
             var summary = new List<string>();
             var written = new List<string>();
 
@@ -248,6 +252,14 @@ internal static partial class CliApp
                 {
                     // Not a reason to fail the run: selection decides for this project by name.
                     summary.Add($"  skipped   {Path.GetRelativePath(root, project.Path)}: {ex.Message}");
+                    continue;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    LogNotRecorded(logger, project.Path, ex.Message);
+                    summary.Add($"  not recorded  {Path.GetRelativePath(root, project.Path)}: {ex.Message}");
+                    summary.Add("    selection decides this project by name until it has a map");
+                    notRecorded++;
                     continue;
                 }
 
@@ -288,6 +300,12 @@ internal static partial class CliApp
             foreach (var line in summary)
             {
                 stdout.WriteLine(line);
+            }
+
+            if (written.Count == 0 && notRecorded > 0)
+            {
+                stderr.WriteLine("td: no test project could be recorded.");
+                return Failure;
             }
 
             return allPassed ? Success : TestsFailed;
@@ -342,4 +360,7 @@ internal static partial class CliApp
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Analysis failed")]
     private static partial void LogFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Project} was not recorded and gets no coverage map: {Reason}")]
+    private static partial void LogNotRecorded(ILogger logger, string project, string reason);
 }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using TestDetta.Cli;
 using TestDetta.Core;
 using TestDetta.Coverage;
 
@@ -92,6 +93,34 @@ public sealed class CoverageRecorderTests : IDisposable
             }
             """);
         _repo.Commit("base");
+    }
+
+    [Fact]
+    public void A_test_project_that_does_not_build_gets_no_map_and_the_others_are_still_recorded()
+    {
+        // Like OpenTelemetry's Android test app on a machine without the Android workload.
+        _repo.Write("tests/Broken.Tests/Broken.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Broken.Tests/Tests.cs", "namespace Broken.Tests; public class BrokenTests { this does not compile }");
+        _repo.Commit("broken test project");
+        var root = new GitClient(NullLogger<GitClient>.Instance).TopLevel(_repo.Root);
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        var exit = CliApp.Run(["record", "--repo", _repo.Root], stdout, stderr);
+
+        Assert.True(exit == 0, $"{stdout}\n{stderr}");
+        Assert.True(File.Exists(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Calc.Tests/Calc.Tests.csproj"))));
+        Assert.False(File.Exists(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Broken.Tests/Broken.Tests.csproj"))));
+        Assert.Contains("not recorded  tests/Broken.Tests/Broken.Tests.csproj: Building Broken.Tests.csproj failed", stdout.ToString());
     }
 
     [Fact]
