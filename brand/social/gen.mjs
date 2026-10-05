@@ -41,3 +41,28 @@ ${cells}
 };
 writeFileSync("x-header-light.svg", header(cream, ink, green, muted, cell));
 writeFileSync("x-header-dark.svg", header(ink, cream, mint, "#a3aab0", "#262b30"));
+
+// LinkedIn page logo: square (LinkedIn shows it with square corners), same mark as the X profile.
+writeFileSync("linkedin-logo.svg", profile(ink, cream, mint));
+
+// LinkedIn cover: 1128x191. On desktop the page logo covers x 33..261 from y 68 down (measured on a
+// live page), so the text starts at x 310; the grid uses fewer, taller columns to leave a gap after it.
+const cover = (bg, fg, accent, sub, off) => {
+  const lcols = 32, lpitch = 11, lsize = 9, lrows = Math.ceil(total / lcols);
+  const gx = 1128 - 56 - lcols * lpitch + (lpitch - lsize), gy = 38;
+  let cells = "";
+  for (let i = 0; i < total; i++) {
+    const x = gx + (i % lcols) * lpitch, y = gy + Math.floor(i / lcols) * lpitch;
+    cells += `<rect x="${x}" y="${y}" width="${lsize}" height="${lsize}" rx="2" fill="${picked.has(i) ? accent : off}"/>`;
+  }
+  const font = `font-family="IBM Plex Sans"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1128" height="191" viewBox="0 0 1128 191">
+<rect width="1128" height="191" fill="${bg}"/>
+<text ${font} font-weight="700" font-size="30" fill="${fg}" letter-spacing="-0.6"><tspan x="310" y="72">Run only the .NET tests</tspan><tspan x="310" y="108">your change can <tspan fill="${accent}">break.</tspan></tspan></text>
+<text x="311" y="140" ${font} font-size="15" fill="${sub}">Test impact analysis for .NET · testdetta.com</text>
+${cells}
+<text x="${gx}" y="${gy + lrows * lpitch + 18}" ${font} font-weight="600" font-size="13" fill="${accent}">8 of 274 test classes ran · 22.4 s instead of 5 m 59 s</text>
+</svg>`;
+};
+writeFileSync("linkedin-cover-light.svg", cover(cream, ink, green, muted, cell));
+writeFileSync("linkedin-cover-dark.svg", cover(ink, cream, mint, "#a3aab0", "#262b30"));
