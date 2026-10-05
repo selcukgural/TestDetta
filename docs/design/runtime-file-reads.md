@@ -119,3 +119,13 @@ Options:
 
 Recommendation: 1 first (cheap, covers protobuf-net and LibGit2Sharp), with 2 as the fallback when the
 check finds a target that uses the output.
+
+What the two repositories do (checked 2026-10-05):
+
+- protobuf-net.Core references BuildTools only to have it built for the package: the output is named
+  by `None` items with `Pack="true"` (and BuildTools' props file, renamed into the package). No target
+  runs it. Option 1 must therefore ignore items whose only use is packing (`Pack="true"`).
+- LibGit2Sharp.Tests references NativeLibraryLoadTestApp (x86, x64) only when `TargetFramework` is
+  `net472`, with `OutputItemType="TestAppExe"`; its own target `CopyTestAppExes` copies the exe next to
+  the tests, which start it. On macOS net472 is not built, so the 100% selected there needs its own look
+  (the condition may not reach the graph, or another rule runs the project).
