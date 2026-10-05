@@ -40,8 +40,8 @@ internal sealed partial class DotnetProcess(ILogger logger)
     /// <param name="workingDirectory">Directory the process runs in.</param>
     /// <param name="environment">Extra environment variables for the process.</param>
     /// <param name="output">Receives stdout and stderr of the process.</param>
-    /// <param name="limits">How long it may run, and how long its process tree may sit idle.</param>
-    /// <returns>The exit code, or <see cref="TimedOut"/> when it was killed for either limit.</returns>
+    /// <param name="limits">How long it may run, how long its process tree may sit idle, and how much memory it may hold.</param>
+    /// <returns>The exit code, or <see cref="TimedOut"/> when it was killed for any limit.</returns>
     public int Run(
         IReadOnlyList<string> arguments,
         string workingDirectory,
@@ -65,15 +65,17 @@ internal sealed partial class DotnetProcess(ILogger logger)
     }
 
     /// <summary>
-    /// Waits for <paramref name="process"/> to exit; false when it ran past the timeout, or when its
-    /// whole process tree used almost no CPU for the idle limit (a deadlock: waiting longer changes nothing).
+    /// Waits for <paramref name="process"/> to exit; false when it ran past the timeout, when its whole
+    /// process tree used almost no CPU for the idle limit (a deadlock: waiting longer changes nothing),
+    /// or when the tree crossed the memory limit (an allocation without end, which would take the
+    /// machine down with it).
     /// </summary>
     /// <param name="process">Started process.</param>
-    /// <param name="limits">Timeout and idle limit.</param>
+    /// <param name="limits">Timeout, idle and memory limits.</param>
     internal bool WaitWithin(Process process, RunLimits limits)
     {
         var deadline = limits.Timeout is { } timeout ? Stopwatch.GetTimestamp() + (long)(timeout.TotalSeconds * Stopwatch.Frequency) : long.MaxValue;
-        if (limits.Idle is not { } idle || !ProcessTreeWatch.IsSupported)
+        if (limits.Idle is null && limits.Memory is null || !ProcessTreeWatch.IsSupported)
         {
             if (process.WaitForExit(limits.Timeout ?? Forever))
             {
@@ -84,12 +86,20 @@ internal sealed partial class DotnetProcess(ILogger logger)
             return false;
         }
 
-        var sample = TimeSpan.FromTicks(Math.Max(TimeSpan.TicksPerSecond / 4, Math.Min(idle.Ticks / 10, TimeSpan.FromSeconds(30).Ticks)));
-        var started = Stopwatch.GetTimestamp();
-        var detector = new IdleDetector(idle);
-        if (ProcessTreeWatch.TreeCpuSeconds(process.Id) is { } initial)
+        // Idleness needs minutes to show, memory can fill in seconds.
+        var sample = limits.Idle is { } idle
+            ? TimeSpan.FromTicks(Math.Max(TimeSpan.TicksPerSecond / 4, Math.Min(idle.Ticks / 10, TimeSpan.FromSeconds(30).Ticks)))
+            : TimeSpan.FromSeconds(30);
+        if (limits.Memory is not null && sample > MemorySample)
         {
-            detector.Observe(TimeSpan.Zero, initial);
+            sample = MemorySample;
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var detector = limits.Idle is { } window ? new IdleDetector(window) : null;
+        if (detector is not null && ProcessTreeWatch.Measure(process.Id) is { } initial)
+        {
+            detector.Observe(TimeSpan.Zero, initial.CpuSeconds);
         }
 
         while (!process.WaitForExit(sample))
@@ -101,15 +111,55 @@ internal sealed partial class DotnetProcess(ILogger logger)
                 return false;
             }
 
-            if (ProcessTreeWatch.TreeCpuSeconds(process.Id) is { } cpu && detector.Observe(Stopwatch.GetElapsedTime(started, now), cpu))
+            if (ProcessTreeWatch.Measure(process.Id) is not { } usage)
             {
-                LogIdle(idle.TotalSeconds, IdleDetector.IdleCpuShare * 100);
+                continue;
+            }
+
+            if (limits.Memory is { } memory && OverMemory(memory, usage.ResidentBytes))
+            {
+                return false;
+            }
+
+            if (detector is not null && detector.Observe(Stopwatch.GetElapsedTime(started, now), usage.CpuSeconds))
+            {
+                LogIdle(limits.Idle!.Value.TotalSeconds, IdleDetector.IdleCpuShare * 100);
                 return false;
             }
         }
 
         return true;
     }
+
+    /// <summary>How often a tree with a memory limit is measured: fast enough to stop one that allocates gigabytes a second.</summary>
+    private static readonly TimeSpan MemorySample = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// True (and logged) when a tree holding <paramref name="treeBytes"/> must be killed under
+    /// <paramref name="memory"/>. The machine's free memory is only read for a tree large enough to
+    /// matter, which keeps the check to one <c>ps</c> call for most samples.
+    /// </summary>
+    /// <param name="memory">The limit.</param>
+    /// <param name="treeBytes">Memory the tree holds.</param>
+    private bool OverMemory(MemoryLimit memory, long treeBytes)
+    {
+        if (memory.Exceeds(treeBytes))
+        {
+            LogOverMemory(treeBytes / GigaByte, memory.TreeBytes / GigaByte);
+            return true;
+        }
+
+        if (!memory.CountsUnderPressure(treeBytes) || ProcessTreeWatch.FreeMemoryPercent() is not { } free || !memory.UnderPressure(free))
+        {
+            return false;
+        }
+
+        LogMemoryPressure(treeBytes / GigaByte, free);
+        return true;
+    }
+
+    /// <summary>Bytes in a gigabyte, for log messages.</summary>
+    private const double GigaByte = 1024d * 1024 * 1024;
 
     /// <summary>What <see cref="Run(IReadOnlyList{string}, string, IReadOnlyDictionary{string, string}, TextWriter, TimeSpan?)"/> returns for a process it killed after its timeout or idle limit; no real exit code is negative on Unix.</summary>
     public const int TimedOut = -1;
@@ -267,6 +317,12 @@ internal sealed partial class DotnetProcess(ILogger logger)
     [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet and its children used less than {Percent:0.#} % of a core for {Seconds:0} s and were killed as stuck")]
     private partial void LogIdle(double seconds, double percent);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet and its children held {Gigabytes:0.0} GB, more than the limit of {Limit:0.0} GB, and were killed")]
+    private partial void LogOverMemory(double gigabytes, double limit);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet and its children held {Gigabytes:0.0} GB while only {Free} % of the machine's memory was free, and were killed")]
+    private partial void LogMemoryPressure(double gigabytes, int free);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "dotnet did not finish within {Seconds:0} s and was killed")]
     private partial void LogTimedOut(double seconds);
 
@@ -280,4 +336,5 @@ internal sealed partial class DotnetProcess(ILogger logger)
 /// Longest its process tree may use almost no CPU (<see cref="IdleDetector.IdleCpuShare"/> of a core)
 /// before it is killed as stuck; null to wait for the timeout only.
 /// </param>
-internal sealed record RunLimits(TimeSpan? Timeout, TimeSpan? Idle = null);
+/// <param name="Memory">When its process tree is killed for the memory it holds; null for never.</param>
+internal sealed record RunLimits(TimeSpan? Timeout, TimeSpan? Idle = null, MemoryLimit? Memory = null);

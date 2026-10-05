@@ -27,15 +27,66 @@ public sealed class ProcessTreeWatchTests
     public void Tree_cpu_adds_up_the_root_and_every_descendant_only()
     {
         const string ps = """
-              1     0   9:00.00
-            100     1   0:01.00
-            101   100   0:02.50
+              1     0   9:00.00   1000
+            100     1   0:01.00   2048
+            101   100   0:02.50   1024
             102   101   0:00.50
-            200     1   5:00.00
+            200     1   5:00.00   9999
             """;
 
-        Assert.Equal(4.0, ProcessTreeWatch.Sum(ps, 100)!.Value, 3);
+        var tree = ProcessTreeWatch.Sum(ps, 100)!;
+        Assert.Equal(4.0, tree.CpuSeconds, 3);
+        Assert.Equal(3072L * 1024, tree.ResidentBytes);
         Assert.Null(ProcessTreeWatch.Sum(ps, 999));
+    }
+
+    [Fact]
+    public void Free_memory_is_read_from_meminfo_as_available_of_total()
+    {
+        const string meminfo = """
+            MemTotal:       16000000 kB
+            MemFree:          500000 kB
+            MemAvailable:    2400000 kB
+            """;
+
+        Assert.Equal(15, ProcessTreeWatch.FreePercentFromMeminfo(meminfo));
+        Assert.Null(ProcessTreeWatch.FreePercentFromMeminfo("MemTotal: 16000000 kB"));
+    }
+
+    [Fact]
+    public void A_large_tree_is_killed_when_the_machine_is_nearly_out_and_a_small_one_is_not()
+    {
+        var limit = new MemoryLimit(TreeBytes: 24L << 30, PressureFreePercent: 10, PressureTreeBytes: 4L << 30);
+
+        Assert.True(limit.Exceeds(25L << 30));
+        Assert.False(limit.Exceeds(20L << 30));
+        Assert.True(limit.CountsUnderPressure(5L << 30) && limit.UnderPressure(8));
+        Assert.False(limit.CountsUnderPressure(1L << 30));
+        Assert.False(limit.UnderPressure(40));
+        Assert.False(limit.UnderPressure(null));
+    }
+
+    [Fact]
+    public void A_tree_over_its_memory_limit_is_stopped_and_one_within_it_runs_to_the_end()
+    {
+        if (!ProcessTreeWatch.IsSupported)
+        {
+            return;
+        }
+
+        var dotnet = new DotnetProcess(NullLogger.Instance);
+        var limit = new MemoryLimit(TreeBytes: 100L << 20, PressureFreePercent: 0, PressureTreeBytes: long.MaxValue);
+
+        using (var hungry = Process.Start("perl", ["-e", "$x = 'a' x (300 * 1024 * 1024); sleep 30"]))
+        {
+            var watch = Stopwatch.StartNew();
+            Assert.False(dotnet.WaitWithin(hungry, new RunLimits(TimeSpan.FromSeconds(25), Memory: limit)));
+            Assert.InRange(watch.Elapsed.TotalSeconds, 0, 15);
+            hungry.Kill();
+        }
+
+        using var modest = Process.Start("perl", ["-e", "$x = 'a' x (10 * 1024 * 1024); sleep 1"]);
+        Assert.True(dotnet.WaitWithin(modest, new RunLimits(TimeSpan.FromSeconds(25), Memory: limit)));
     }
 
     [Fact]
