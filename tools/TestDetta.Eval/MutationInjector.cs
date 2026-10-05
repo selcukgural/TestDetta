@@ -19,8 +19,8 @@ internal sealed record Mutation(IReadOnlyDictionary<string, string> Backups, int
     {
         foreach (var (original, backup) in Backups)
         {
-            File.Move(original, original + ".mutant", overwrite: true);
-            File.Copy(backup, original, overwrite: true);
+            FileRetry.Run(() => File.Move(original, original + ".mutant", overwrite: true));
+            FileRetry.Run(() => File.Copy(backup, original, overwrite: true));
         }
 
         return new Restore(Backups.Keys);
@@ -39,7 +39,37 @@ internal sealed class Restore(IEnumerable<string> originals) : IDisposable
     {
         foreach (var original in originals)
         {
-            File.Move(original + ".mutant", original, overwrite: true);
+            FileRetry.Run(() => File.Move(original + ".mutant", original, overwrite: true));
+        }
+    }
+}
+
+/// <summary>
+/// Retries a write to an assembly a test host may still hold: .NET locks files it opens on Unix too, and a
+/// host killed for a time or memory limit lets go of its assemblies only once its whole process tree
+/// has exited (Mapperly 2026-10-06, after the memory guard killed the schema check).
+/// </summary>
+internal static class FileRetry
+{
+    /// <summary>How long a file may stay locked before the failure stands.</summary>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
+    /// <summary>Runs <paramref name="write"/>, again after a short wait while the file is held by another process.</summary>
+    /// <param name="write">The file operation.</param>
+    public static void Run(Action write)
+    {
+        var deadline = DateTime.UtcNow + Patience;
+        while (true)
+        {
+            try
+            {
+                write();
+                return;
+            }
+            catch (IOException ex) when (ex is not FileNotFoundException and not DirectoryNotFoundException && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(250);
+            }
         }
     }
 }
@@ -123,7 +153,7 @@ internal static class MutationInjector
     {
         foreach (var (original, backup) in backups)
         {
-            File.Copy(backup, original, overwrite: true);
+            FileRetry.Run(() => File.Copy(backup, original, overwrite: true));
             File.Delete(backup);
         }
     }
@@ -296,7 +326,7 @@ internal static class MutationInjector
             return changed;
         }
 
-        module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
+        FileRetry.Run(() => module.Write(path, new WriterParameters { WriteSymbols = hasSymbols }));
         return changed;
     }
 
