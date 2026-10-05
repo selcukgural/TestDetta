@@ -56,4 +56,15 @@ analysis, measured on the first three repositories.)
    interceptors): already a backlog item. Roslyn calls an analyzer per compilation; the callback rule
    treats it as a cached result.
 
+5. **References that exist for another framework only** (LibGit2Sharp, 100% selected; found
+   2026-10-05). LibGit2Sharp.Tests references NativeLibraryLoadTestApp (x86, x64) only when
+   `TargetFramework` is `net472`, without compiling against it. The graph merges the references of all
+   frameworks, so every change to LibGit2Sharp (which the test app references) affects the test app,
+   and the opaque-reference rule runs the whole test project, also when the tests run for net8.0 only
+   (the corpus passes `-f net8.0`; so may a team's `dotnet-test-args`). Candidate: keep the frameworks a
+   reference holds for in the graph, and when the frameworks that run are known (`-f` in the test
+   arguments, or every map recorded with `-f` for one framework), ignore references that hold only
+   for others. Needs the owner's view, since without `-f` dotnet test runs every framework, net472
+   included where it can run (Windows), and there the reference is real.
+
 Each candidate ships only with a red test first and the stored-outcome miss check on the corpus.
