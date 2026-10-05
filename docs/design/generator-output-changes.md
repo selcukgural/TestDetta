@@ -92,11 +92,11 @@ answers, both precise only with recording:
   `GeneratorReferences` (`OutputItemType="Analyzer"`) from the MSBuild evaluation (evaluator version 4)
   and from a literal attribute in the project file. A package generator changes only with its version.
   `ReferenceOutputAssembly="false"` alone stays opaque: the consumer runs completely, as before.
-- **One framework only, for now.** `dotnet test` runs every framework of a test project, and a
-  generator may write other code for another one (a polyfill the framework lacks), while the map holds
-  the generated code of the framework it was recorded for. A test project with several frameworks
-  (its map names one, or MSBuild gives several symbol sets) still runs completely when a generator it
-  sees is affected. Next: record the generated code of every framework and compare each.
+- **Every framework.** `dotnet test` runs every framework of a test project, and a generator may write
+  other code for another one (a polyfill the framework lacks). Recording reads the generated code of
+  every framework the build made (`GeneratedSource.Framework`, `CoverageMap.GeneratedFrameworks`), and
+  the selection builds and compares each. A map recorded with `-f` for one of several frameworks has no
+  list, and such a test project still runs completely when a generator it sees is affected.
 - **Built only when it decides something.** For every test project downstream of a consumer of an
   affected generator: one that runs completely anyway is not built; one without a map, or without a
   reader (map drift, evaluation drift modes), runs completely as before. Otherwise it is built (or an

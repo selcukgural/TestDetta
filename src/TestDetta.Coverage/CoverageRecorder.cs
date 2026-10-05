@@ -100,7 +100,13 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
         var assemblies = GeneratedSourceReader.RepositoryAssemblies(AssemblyOwners(request).Keys, outputDirectory);
-        var generated = ReadGenerated(request, targetPath, assemblies);
+        var generated = ReadGenerated(request, targetPath, assemblies, framework);
+        IReadOnlyList<string>? generatedFrameworks = null;
+        if (framework is not null && request.Options.Framework is null)
+        {
+            (generated, generatedFrameworks) = ReadOtherFrameworks(dotnet, request, runDirectory, framework, generated);
+        }
+
         var locations = ClassLocationReader.Read(targetPath, request.RepoRoot);
         LogAssemblies(assemblies.Count, outputDirectory);
 
@@ -191,6 +197,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             {
                 ClassLocations = Reported(map, locations),
                 Generated = generated,
+                GeneratedFrameworks = generatedFrameworks,
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
             };
@@ -600,11 +607,51 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="request">What is being recorded.</param>
     /// <param name="targetPath">Test assembly.</param>
     /// <param name="assemblies">Repository assemblies in the test output.</param>
-    private List<GeneratedSource> ReadGenerated(RecordRequest request, string targetPath, List<string> assemblies)
+    /// <param name="framework">Framework of the build, for a project that targets several; null otherwise.</param>
+    private List<GeneratedSource> ReadGenerated(RecordRequest request, string targetPath, List<string> assemblies, string? framework)
     {
-        var generated = GeneratedSourceReader.Read(request.RepoRoot, request.TestProject, targetPath, AssemblyOwners(request), assemblies);
+        var generated = GeneratedSourceReader.Read(request.RepoRoot, request.TestProject, targetPath, AssemblyOwners(request), assemblies)
+            .ConvertAll(source => source with { Framework = framework });
         LogGenerated(request.TestProject.Path, generated.Count);
         return generated;
+    }
+
+    /// <summary>
+    /// Adds the generated code of every other framework of a multi-targeted test project, which the
+    /// build without <c>-f</c> produced too: a generator may write other code for another framework,
+    /// and <c>dotnet test</c> runs them all (docs/design/generator-output-changes.md). The framework list
+    /// is null when an output is missing, so the selection knows the map holds only some of them.
+    /// </summary>
+    /// <param name="dotnet">Runs dotnet.</param>
+    /// <param name="request">What is being recorded.</param>
+    /// <param name="runDirectory">Where dotnet runs.</param>
+    /// <param name="recorded">Framework whose tests are recorded, whose generated code is read already.</param>
+    /// <param name="generated">Generated code of <paramref name="recorded"/>.</param>
+    private (List<GeneratedSource> Generated, IReadOnlyList<string>? Frameworks) ReadOtherFrameworks(
+        DotnetProcess dotnet,
+        RecordRequest request,
+        string runDirectory,
+        string recorded,
+        List<GeneratedSource> generated)
+    {
+        List<string> query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", "-getProperty:TargetFrameworks"];
+        var frameworks = dotnet.Capture(query, runDirectory).Trim().Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var all = new List<GeneratedSource>(generated);
+        foreach (var other in frameworks.Where(f => !string.Equals(f, recorded, StringComparison.OrdinalIgnoreCase)))
+        {
+            query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={other}", "-getProperty:TargetPath"];
+            var targetPath = dotnet.Capture(query, runDirectory).Trim();
+            if (targetPath.Length == 0 || !File.Exists(targetPath))
+            {
+                LogFrameworkNotBuilt(request.TestProject.Path, other);
+                return (all, null);
+            }
+
+            var assemblies = GeneratedSourceReader.RepositoryAssemblies(AssemblyOwners(request).Keys, Path.GetDirectoryName(targetPath)!);
+            all.AddRange(ReadGenerated(request, targetPath, assemblies, other));
+        }
+
+        return (all, frameworks);
     }
 
     /// <summary>
@@ -944,6 +991,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Project}: {Count} generated file(s) read from PDBs")]
     private partial void LogGenerated(string project, int count);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "{Project}: no build for {Framework}, so its generated code is not in the map; a changed source generator runs this project completely")]
+    private partial void LogFrameworkNotBuilt(string project, string framework);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Instrumenting {Count} assembly(ies) in {Directory}")]
     private partial void LogAssemblies(int count, string directory);

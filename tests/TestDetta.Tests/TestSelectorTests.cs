@@ -1009,9 +1009,10 @@ public sealed class TestSelectorTests : IDisposable
                 new Dictionary<string, double> { ["A.Tests.BTests"] = 1.5 },
                 new Dictionary<string, double> { ["A.Tests.Host`1"] = 0.25 }))
         {
-            Generated = [new GeneratedSource("tests/A.Tests/A.Tests.csproj", "obj/Gen/BTests.g.cs", "partial class BTests { void Register() => Run(); }")],
+            Generated = [new GeneratedSource("tests/A.Tests/A.Tests.csproj", "obj/Gen/BTests.g.cs", "partial class BTests { void Register() => Run(); }") { Framework = "net8.0" }],
             ExternalCallbacks = [1],
             Framework = "net8.0",
+            GeneratedFrameworks = ["net8.0", "net10.0"],
         };
         var path = Path.Combine(_repo.Root, "map.json");
 
@@ -1028,6 +1029,7 @@ public sealed class TestSelectorTests : IDisposable
         Assert.Equal([1], read.ExternalCallbacks);
         Assert.Equal(map.Generated, read.Generated);
         Assert.Equal("net8.0", read.Framework);
+        Assert.Equal(["net8.0", "net10.0"], read.GeneratedFrameworks);
     }
 
     private CoverageMap Map(string commit, List<CoveredMethod> methods, Dictionary<string, IReadOnlyList<int>> byClass) =>

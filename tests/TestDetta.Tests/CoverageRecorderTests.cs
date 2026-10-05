@@ -124,6 +124,38 @@ public sealed class CoverageRecorderTests : IDisposable
     }
 
     [Fact]
+    public void A_multi_targeted_test_project_keeps_the_generated_code_of_every_framework()
+    {
+        // The first framework is recorded; the build without -f makes the others too, and a generator
+        // may write other code for them (docs/design/generator-output-changes.md).
+        _repo.Replace("tests/Calc.Tests/Calc.Tests.csproj", "<TargetFramework>net10.0</TargetFramework>", "<TargetFrameworks>net10.0;net9.0</TargetFrameworks>");
+        _repo.Replace("src/Calc/Calc.csproj", "<TargetFramework>net10.0</TargetFramework>", "<TargetFrameworks>net10.0;net9.0</TargetFrameworks>");
+        _repo.Replace("tests/Calc.Tests/Calc.Tests.csproj", "</ItemGroup>", """
+                <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+              </ItemGroup>
+            """);
+        _repo.Write("tests/Calc.Tests/Log.cs", """
+            using Microsoft.Extensions.Logging;
+            namespace Calc.Tests;
+            public static partial class Log
+            {
+                [LoggerMessage(Level = LogLevel.Information, Message = "Added {Sum}")]
+                public static partial void Added(ILogger logger, int sum);
+            }
+            """);
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var testProject = graph.Projects.Single(p => p.IsTestProject);
+        var output = new StringWriter();
+
+        var (map, _) = new CoverageRecorder(NullLoggerFactory.Instance).Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions()), output);
+
+        Assert.True(map.Framework == "net10.0", output.ToString());
+        Assert.Equal(["net10.0", "net9.0"], map.GeneratedFrameworks);
+        var log = map.Generated.Where(static g => g.Text.Contains("partial class Log", StringComparison.Ordinal)).ToList();
+        Assert.Equal(["net10.0", "net9.0"], log.Select(static g => g.Framework).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Records_which_class_ran_which_member_and_restores_the_assemblies()
     {
         var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);

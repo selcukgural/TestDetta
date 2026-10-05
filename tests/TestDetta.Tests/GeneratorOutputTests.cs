@@ -121,8 +121,34 @@ public sealed class GeneratorOutputTests : IDisposable
         var selection = Select(reader);
 
         Assert.Equal(TestRunMode.All, selection.Mode);
-        Assert.Contains("targets several frameworks while its map holds the generated code of net8.0", selection.Reason, StringComparison.Ordinal);
+        Assert.Contains("targets several frameworks while its map holds the generated code of net8.0 only", selection.Reason, StringComparison.Ordinal);
         Assert.Empty(reader.Calls);
+    }
+
+    [Fact]
+    public void Test_project_with_several_frameworks_is_compared_framework_by_framework()
+    {
+        // Only net10.0's generated code changes; dotnet test runs that framework too.
+        var path = CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Lib.Tests/Lib.Tests.csproj"));
+        CoverageMapStore.Write(path, CoverageMapStore.Read(path)! with
+        {
+            Framework = "net8.0",
+            GeneratedFrameworks = ["net8.0", "net10.0"],
+            Generated =
+            [
+                Generated("obj/Debug/net8.0/generated/Gen/Gen.Generator/Mapper.g.cs", Mapper) with { Framework = "net8.0" },
+                Generated("obj/Debug/net10.0/generated/Gen/Gen.Generator/Mapper.g.cs", Mapper) with { Framework = "net10.0" },
+            ],
+        });
+        var reader = new FakeReader(framework => GeneratedCodeRead.Read(
+            [Generated($"obj/Debug/{framework}/generated/Gen/Gen.Generator/Mapper.g.cs", framework == "net10.0" ? Mapper.Replace("=> 1", "=> 2", StringComparison.Ordinal) : Mapper)]));
+        _repo.Replace("src/Lib/Calc.cs", "=> 2", "=> 3");
+
+        var selection = Select(reader);
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode} {selection.Reason}");
+        Assert.Equal(["Lib.Tests.CalcTests", "Lib.Tests.MapperTests"], selection.TestClasses);
+        Assert.Equal(["net10.0", "net8.0"], reader.Calls.Select(static c => c.Framework).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -144,15 +170,20 @@ public sealed class GeneratorOutputTests : IDisposable
 
     public void Dispose() => _repo.Dispose();
 
-    /// <summary>Answers every read with one result and remembers which project and framework were asked for.</summary>
-    private sealed class FakeReader(GeneratedCodeRead result) : IGeneratedCodeReader
+    /// <summary>Answers each read for its framework and remembers which project and framework were asked for.</summary>
+    private sealed class FakeReader(Func<string?, GeneratedCodeRead> result) : IGeneratedCodeReader
     {
+        public FakeReader(GeneratedCodeRead result)
+            : this(_ => result)
+        {
+        }
+
         public List<(string Project, string? Framework)> Calls { get; } = [];
 
         public GeneratedCodeRead Read(ProjectGraph graph, string repoRoot, ProjectNode testProject, string? framework)
         {
             Calls.Add((Path.GetRelativePath(repoRoot, testProject.Path).Replace('\\', '/'), framework));
-            return result;
+            return result(framework);
         }
     }
 }

@@ -1,4 +1,4 @@
-<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 3659216cb443 -->
+<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 2e6651125f24 -->
 <h1>Qué lo ejecuta todo</h1>
 <p class="lead">La mayoría de los cambios seleccionan unas pocas clases de prueba. Algunos no se pueden acotar de forma segura, así que {{name}} ejecuta un proyecto de pruebas completo o todos los proyectos bajo una carpeta. Esta página los enumera todos, para que una selección amplia nunca te sorprenda.</p>
 
@@ -11,7 +11,7 @@
     <tr><td><code>Directory.Solution.props</code>, <code>Directory.Solution.targets</code></td><td>Todos los proyectos de pruebas por debajo</td></tr>
     <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Todos los proyectos de pruebas por debajo</td></tr>
     <tr><td><code>Directory.Packages.props</code>, si solo cambiaron elementos <code>PackageVersion</code></td><td>Solo los proyectos de pruebas que hacen referencia a un paquete modificado y los que dependen de ellos</td></tr>
-    <tr><td>Un generador de código fuente modificado, para un proyecto de pruebas con varios frameworks de destino, sin mapa de cobertura o compilado sin un PDB portable</td><td>Lo que genera se compara a partir de una compilación, y aquí no hay nada con qué comparar. En los demás casos solo cuenta el código generado que cambió.</td></tr>
+    <tr><td>Un generador de código fuente modificado, para un proyecto de pruebas sin mapa de cobertura, compilado sin un PDB portable o registrado con <code>-f</code> para solo uno de varios frameworks</td><td>Lo que genera se compara a partir de una compilación, y aquí no hay nada con qué comparar. En los demás casos solo cuenta el código generado que cambió.</td></tr>
     <tr><td>Un proyecto referenciado con <code>ReferenceOutputAssembly="false"</code></td><td>Las pruebas pueden ejecutarlo como otro proceso, que la cobertura no ve.</td></tr>
   </tbody>
 </table>

@@ -85,6 +85,11 @@ public static class CoverageMapStore
             json.WriteStringValue(source.Project);
             json.WriteStringValue(source.Name);
             json.WriteBase64StringValue(Compress(source.Text));
+            if (source.Framework is { } sourceFramework)
+            {
+                json.WriteStringValue(sourceFramework);
+            }
+
             json.WriteEndArray();
         }
 
@@ -119,6 +124,17 @@ public static class CoverageMapStore
         if (map.Framework is { } framework)
         {
             json.WriteString("framework"u8, framework);
+        }
+
+        if (map.GeneratedFrameworks is { } generatedFrameworks)
+        {
+            json.WriteStartArray("generatedFrameworks"u8);
+            foreach (var generatedFramework in generatedFrameworks)
+            {
+                json.WriteStringValue(generatedFramework);
+            }
+
+            json.WriteEndArray();
         }
 
         if (map.Platform is { } platform)
@@ -224,6 +240,9 @@ public static class CoverageMapStore
                     : null,
                 Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
                 Framework = root.TryGetProperty("framework", out var framework) ? framework.GetString() : null,
+                GeneratedFrameworks = root.TryGetProperty("generatedFrameworks", out var generatedFrameworks)
+                    ? [.. generatedFrameworks.EnumerateArray().Select(static f => f.GetString()!)]
+                    : null,
                 ClassLocations = root.TryGetProperty("classLocations", out var locations) ? ReadLocations(locations) : null,
             };
         }
@@ -233,14 +252,17 @@ public static class CoverageMapStore
         }
     }
 
-    /// <summary>Reads <c>[project, name, compressed text]</c> entries.</summary>
+    /// <summary>Reads <c>[project, name, compressed text, framework?]</c> entries.</summary>
     /// <param name="element">The "generated" array.</param>
     private static List<GeneratedSource> ReadGenerated(JsonElement element)
     {
         var sources = new List<GeneratedSource>();
         foreach (var entry in element.EnumerateArray())
         {
-            sources.Add(new GeneratedSource(entry[0].GetString()!, entry[1].GetString()!, Decompress(entry[2].GetBytesFromBase64())));
+            sources.Add(new GeneratedSource(entry[0].GetString()!, entry[1].GetString()!, Decompress(entry[2].GetBytesFromBase64()))
+            {
+                Framework = entry.GetArrayLength() > 3 ? entry[3].GetString() : null,
+            });
         }
 
         return sources;

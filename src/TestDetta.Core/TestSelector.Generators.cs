@@ -20,9 +20,10 @@ public sealed partial class TestSelector
     /// depends on, whether the generator changes anything there: what the generator writes into a
     /// current build is compared with what the test project's map recorded, and only generated members
     /// that differ count as changes. A test project that runs completely anyway is not built for this.
-    /// One that has no map, no reader, several target frameworks (its map holds one framework's
-    /// generated code) or whose generated code cannot be read runs completely, as before; a build that
-    /// fails ends the analysis, since <c>dotnet test</c> would fail the same way.
+    /// A test project with several target frameworks is compared framework by framework, when its map
+    /// holds the generated code of each. One that has no map, no reader, only some frameworks' generated
+    /// code, or whose generated code cannot be read runs completely, as before; a build that fails ends
+    /// the analysis, since <c>dotnet test</c> would fail the same way.
     /// </summary>
     /// <param name="request">Selection input.</param>
     /// <param name="projectLevel">Project-level fallbacks; receives the test projects that cannot be decided.</param>
@@ -64,52 +65,69 @@ public sealed partial class TestSelector
                 }
 
                 // dotnet test runs every framework, and a generator may write other code for another one
-                // (a polyfill a framework lacks); the map holds one framework's generated code.
-                if (map.Framework is not null || test.SymbolSets.Count > 1)
+                // (a polyfill a framework lacks): each is compared, which needs each one's recorded code.
+                IReadOnlyList<string?> frameworks = map.Framework is null && test.SymbolSets.Count <= 1 ? [null] : [.. map.GeneratedFrameworks ?? []];
+                if (frameworks.Count == 0)
                 {
-                    AddFallback(projectLevel, test.Path, $"{reason}, and it targets several frameworks while its map holds the generated code of {map.Framework ?? "one"}");
-                    continue;
-                }
-
-                if (!reads.TryGetValue(test.Path, out var read))
-                {
-                    LogReadingGeneratedCode(test.Path, generators, consumer.Path, map.Framework ?? "its only framework");
-                    read = reader.Read(request.Graph, request.RepoRoot, test, map.Framework);
-                    reads[test.Path] = read;
-                }
-
-                if (read.BuildErrors is { } errors)
-                {
-                    throw new InvalidOperationException(
-                        $"Building {Path.GetFileName(test.Path)} to see what {generators} generates failed; dotnet test would fail the same way:{Environment.NewLine}{errors}");
-                }
-
-                if (read.Sources is not { } sources)
-                {
-                    AddFallback(projectLevel, test.Path, $"{reason}, and {read.Unavailable}");
+                    AddFallback(projectLevel, test.Path, $"{reason}, and it targets several frameworks while its map holds the generated code of {map.Framework ?? "one"} only (record it without -f)");
                     continue;
                 }
 
                 var project = Path.GetRelativePath(request.RepoRoot, consumer.Path).Replace('\\', '/');
-                var now = sources.Where(s => string.Equals(s.Project, project, StringComparison.Ordinal)).ToList();
-                var before = map.Generated.Where(s => string.Equals(s.Project, project, StringComparison.Ordinal)).ToList();
-                var changes = Compare(consumer, project, before, now);
-                foreach (var change in changes.Where(c => seen.Add((c.Path, c.Symbol.MemberName, c.Symbol.TypeName))))
+                string? unavailable = null;
+                foreach (var framework in frameworks)
                 {
-                    output.Changes.Add((change.Symbol, consumer));
+                    var readKey = $"{test.Path}|{framework}";
+                    if (!reads.TryGetValue(readKey, out var read))
+                    {
+                        LogReadingGeneratedCode(test.Path, generators, consumer.Path, framework ?? "its only framework");
+                        read = reader.Read(request.Graph, request.RepoRoot, test, framework);
+                        reads[readKey] = read;
+                    }
+
+                    if (read.BuildErrors is { } errors)
+                    {
+                        throw new InvalidOperationException(
+                            $"Building {Path.GetFileName(test.Path)} to see what {generators} generates failed; dotnet test would fail the same way:{Environment.NewLine}{errors}");
+                    }
+
+                    if (read.Sources is not { } sources)
+                    {
+                        unavailable = read.Unavailable;
+                        break;
+                    }
+
+                    var now = sources.Where(s => string.Equals(s.Project, project, StringComparison.Ordinal)).ToList();
+                    var before = map.Generated.Where(s => string.Equals(s.Project, project, StringComparison.Ordinal)
+                                                          && string.Equals(s.Framework, framework, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var changes = Compare(consumer, project, before, now);
+                    foreach (var change in changes.Where(c => seen.Add((c.Path, c.Symbol.MemberName, c.Symbol.TypeName))))
+                    {
+                        output.Changes.Add((change.Symbol, consumer));
+                    }
+
+                    var label = framework ?? "its only framework";
+                    if (changes.Count == 0)
+                    {
+                        LogGeneratedCodeSame(test.Path, generators, consumer.Path, label, now.Count);
+                    }
+                    else if (logger.IsEnabled(LogLevel.Information))
+                    {
+                        var members = string.Join(", ", changes.Select(static c => $"{c.Symbol.TypeName}.{c.Symbol.MemberName ?? "(type)"} ({c.Symbol.Kind})").Distinct(StringComparer.Ordinal).Take(10));
+                        LogGeneratedCodeChanged(test.Path, generators, consumer.Path, label, changes.Count, members);
+                    }
+
+                    // The index holds the generated code of the framework the map's coverage was recorded for.
+                    if (string.Equals(framework, map.Framework, StringComparison.OrdinalIgnoreCase))
+                    {
+                        output.Current.AddRange(now);
+                    }
                 }
 
-                if (changes.Count == 0)
+                if (unavailable is not null)
                 {
-                    LogGeneratedCodeSame(test.Path, generators, consumer.Path, now.Count);
+                    AddFallback(projectLevel, test.Path, $"{reason}, and {unavailable}");
                 }
-                else if (logger.IsEnabled(LogLevel.Information))
-                {
-                    var members = string.Join(", ", changes.Select(static c => $"{c.Symbol.TypeName}.{c.Symbol.MemberName ?? "(type)"} ({c.Symbol.Kind})").Distinct(StringComparer.Ordinal).Take(10));
-                    LogGeneratedCodeChanged(test.Path, generators, consumer.Path, changes.Count, members);
-                }
-
-                output.Current.AddRange(now);
             }
         }
 
@@ -156,12 +174,12 @@ public sealed partial class TestSelector
     private partial void LogReadingGeneratedCode(string testProject, string generators, string consumer, string framework);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "{TestProject}: what {Generators} generates into {Consumer} is the same as when its map was recorded ({Files} file(s)); the generator changes nothing there")]
-    private partial void LogGeneratedCodeSame(string testProject, string generators, string consumer, int files);
+        Message = "{TestProject}: what {Generators} generates into {Consumer} for {Framework} is the same as when its map was recorded ({Files} file(s)); the generator changes nothing there")]
+    private partial void LogGeneratedCodeSame(string testProject, string generators, string consumer, string framework, int files);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "{TestProject}: {Count} generated member(s) of {Consumer} differ from the map, through {Generators}: {Members}")]
-    private partial void LogGeneratedCodeChanged(string testProject, string generators, string consumer, int count, string members);
+        Message = "{TestProject}: {Count} generated member(s) of {Consumer} for {Framework} differ from the map, through {Generators}: {Members}")]
+    private partial void LogGeneratedCodeChanged(string testProject, string generators, string consumer, string framework, int count, string members);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TestProject}: not built to compare what {Generators} generates: {Reason}")]
     private partial void LogGeneratorNotCompared(string testProject, string generators, string reason);

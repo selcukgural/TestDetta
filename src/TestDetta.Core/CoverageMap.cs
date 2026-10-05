@@ -159,6 +159,14 @@ public sealed record CoverageMap(
     public string? Framework { get; init; }
 
     /// <summary>
+    /// Every target framework of a test project that targets several, when <see cref="Generated"/> holds
+    /// the generated code of each (tagged with <see cref="GeneratedSource.Framework"/>); null when it
+    /// targets one, or when only some were built (recorded with <c>-f</c>). A changed generator is then
+    /// compared framework by framework; without the list, such a project runs completely.
+    /// </summary>
+    public IReadOnlyList<string>? GeneratedFrameworks { get; init; }
+
+    /// <summary>
     /// Where each reported test class (runtime name) is written: one entry per source file with the
     /// first line of its code there, read from the test assembly's PDB. When the build names a class
     /// differently from the recording (Markdig's culture-dependent generated spec classes), the class

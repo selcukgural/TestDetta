@@ -178,8 +178,9 @@ and the details are in [docs/ci.md](docs/ci.md).
 - A change that reaches a source generator in the repository (a project used with
   `OutputItemType="Analyzer"`) is decided by what the generator writes: `td test` builds the test
   projects that use it and compares their generated code with the map, so only generated code that
-  really changed counts. A test project with several target frameworks, without a map, or without a
-  portable PDB still runs completely; a build that fails stops `td test` with the compiler's errors.
+  really changed counts, framework by framework. A test project without a map, without a portable
+  PDB, or recorded with `-f` for one of several frameworks still runs completely; a build that fails
+  stops `td test` with the compiler's errors.
   A project referenced with `ReferenceOutputAssembly="false"` (run as another process) still runs its
   consumers completely.
 - F# and Visual Basic projects are part of the project graph, but their code is not analysed: when

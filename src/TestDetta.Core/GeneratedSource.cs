@@ -13,6 +13,12 @@ namespace TestDetta.Core;
 public sealed record GeneratedSource(string Project, string Name, string Text)
 {
     /// <summary>
+    /// Target framework of the build it was read from, for a test project that targets several (a
+    /// generator may write other code for another framework); null for one that targets one.
+    /// </summary>
+    public string? Framework { get; init; }
+
+    /// <summary>
     /// What identifies the file across builds: the generator's assembly, its type and the file's hint
     /// name, the last three parts of the path the compiler gives it. The part before them is the
     /// project's intermediate directory, which differs between configurations, frameworks and machines.

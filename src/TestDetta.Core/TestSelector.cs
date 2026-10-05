@@ -32,8 +32,10 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             affectedProjects.Add(affected.Project.Path);
         }
 
-        // What the generators write now comes first: the index keeps the first file of each name.
-        var generated = generatorOutput.Current.Concat(request.CoverageMaps.Values.SelectMany(static m => m.Generated));
+        // What the generators write now comes first: the index keeps the first file of each name. Of a
+        // map with several frameworks, the one its coverage was recorded for.
+        var generated = generatorOutput.Current.Concat(request.CoverageMaps.Values.SelectMany(static m =>
+            m.Generated.Where(g => g.Framework is null || string.Equals(g.Framework, m.Framework, StringComparison.OrdinalIgnoreCase))));
         var index = new SourceIndexBuilder(logger).Build(request.Graph, request.RepoRoot, affectedProjects, generated);
         // Projects that run completely whatever coverage says have no say in what it can answer.
         var runsCompletely = RunAll(request.Graph, projectLevel).Keys.Concat(driftRunAll.Keys).ToHashSet(Paths.Comparer);
