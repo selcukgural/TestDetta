@@ -693,7 +693,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         {
             // A generator mutant the consumers do not compile with: td test stops on the build, as dotnet
             // test would fail on it, so nothing can be missed; judged like running every test project.
-            var error = stopped.Message.Split('\n')[0];
+            var lines = stopped.Message.Split('\n', StringSplitOptions.TrimEntries);
+            var error = Array.Find(lines, static l => l.Contains(": error ", StringComparison.Ordinal)) ?? lines[0];
             LogStoppedOnBuild(target.Member.TypeName, target.Member.MemberName, error);
 
             List<TestProjectSelection> all = [.. testProjects.Select(static p => new TestProjectSelection(p, TestRunMode.All, [], "td test stops: the build fails"))];
