@@ -106,6 +106,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         {
             (generated, generatedFrameworks) = ReadOtherFrameworks(dotnet, request, runDirectory, framework, generated);
         }
+        else if (framework is not null && TargetFrameworks(dotnet, request, runDirectory) is [] or [_])
+        {
+            // -f names the project's only framework: its generated code is all there is.
+            generatedFrameworks = [framework];
+        }
 
         var locations = ClassLocationReader.Read(targetPath, request.RepoRoot);
         LogAssemblies(assemblies.Count, outputDirectory);
@@ -634,12 +639,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         string recorded,
         List<GeneratedSource> generated)
     {
-        List<string> query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", "-getProperty:TargetFrameworks"];
-        var frameworks = dotnet.Capture(query, runDirectory).Trim().Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var frameworks = TargetFrameworks(dotnet, request, runDirectory);
         var all = new List<GeneratedSource>(generated);
         foreach (var other in frameworks.Where(f => !string.Equals(f, recorded, StringComparison.OrdinalIgnoreCase)))
         {
-            query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={other}", "-getProperty:TargetPath"];
+            List<string> query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={other}", "-getProperty:TargetPath"];
             var targetPath = dotnet.Capture(query, runDirectory).Trim();
             if (targetPath.Length == 0 || !File.Exists(targetPath))
             {
@@ -991,6 +995,16 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Project}: {Count} generated file(s) read from PDBs")]
     private partial void LogGenerated(string project, int count);
+
+    /// <summary>The project's <c>TargetFrameworks</c>, empty when it sets only <c>TargetFramework</c>.</summary>
+    /// <param name="dotnet">Runs dotnet.</param>
+    /// <param name="request">What is being recorded.</param>
+    /// <param name="runDirectory">Where dotnet runs.</param>
+    private static string[] TargetFrameworks(DotnetProcess dotnet, RecordRequest request, string runDirectory)
+    {
+        List<string> query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", "-getProperty:TargetFrameworks"];
+        return dotnet.Capture(query, runDirectory).Trim().Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "{Project}: no build for {Framework}, so its generated code is not in the map; a changed source generator runs this project completely")]

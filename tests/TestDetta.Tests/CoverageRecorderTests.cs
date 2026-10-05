@@ -153,6 +153,24 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.Equal(["net10.0", "net9.0"], map.GeneratedFrameworks);
         var log = map.Generated.Where(static g => g.Text.Contains("partial class Log", StringComparison.Ordinal)).ToList();
         Assert.Equal(["net10.0", "net9.0"], log.Select(static g => g.Framework).Order(StringComparer.Ordinal));
+
+        // With -f only that framework is built: the map cannot say what the generators write for the other.
+        var (one, _) = new CoverageRecorder(NullLoggerFactory.Instance).Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Framework: "net10.0")), TextWriter.Null);
+        Assert.Null(one.GeneratedFrameworks);
+    }
+
+    [Fact]
+    public void Recording_the_only_framework_by_name_keeps_its_generated_code_complete()
+    {
+        // The corpus names the framework of single-framework projects too (Fluid's TargetFrameworks has one).
+        _repo.Replace("tests/Calc.Tests/Calc.Tests.csproj", "<TargetFramework>net10.0</TargetFramework>", "<TargetFrameworks>net10.0</TargetFrameworks>");
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var testProject = graph.Projects.Single(p => p.IsTestProject);
+
+        var (map, _) = new CoverageRecorder(NullLoggerFactory.Instance).Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Framework: "net10.0")), TextWriter.Null);
+
+        Assert.Equal("net10.0", map.Framework);
+        Assert.Equal(["net10.0"], map.GeneratedFrameworks);
     }
 
     [Fact]
