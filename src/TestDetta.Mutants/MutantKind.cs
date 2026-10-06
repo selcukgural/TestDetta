@@ -1,4 +1,4 @@
-namespace TestDetta.Eval;
+namespace TestDetta.Mutants;
 
 /// <summary>How a synthetic mutant breaks its member.</summary>
 internal enum MutantKind
@@ -16,7 +16,7 @@ internal enum MutantKind
     FieldValue,
 
     /// <summary>
-    /// A data file outside every project is emptied (<see cref="DataFileSampler"/>, <c>--data-files</c>);
+    /// A data file outside every project is emptied (the evaluator's <c>DataFileSampler</c>, <c>--data-files</c>);
     /// not one of the member kinds, so <c>all</c> leaves it out.
     /// </summary>
     EmptyFile,
@@ -72,57 +72,5 @@ internal static class MutantKinds
         }
 
         return true;
-    }
-}
-
-/// <summary>Which sampled changes a quick check keeps (<c>--focus</c>).</summary>
-internal enum EvalFocus
-{
-    /// <summary>Every sampled change.</summary>
-    All,
-
-    /// <summary>Changes in a project another project uses as a source generator (docs/design/generator-mutants.md).</summary>
-    Generator,
-
-    /// <summary>Emptied data files (<c>--data-files</c>; docs/design/runtime-file-reads.md).</summary>
-    DataFiles,
-
-    /// <summary>
-    /// Changes in a project another project references without compiling against it, not as a source
-    /// generator (<c>ReferenceOutputAssembly="false"</c>; docs/design/runtime-file-reads.md).
-    /// </summary>
-    Output,
-}
-
-/// <summary>Names of <see cref="EvalFocus"/> on the command line and in logs.</summary>
-internal static class EvalFocusNames
-{
-    /// <summary>The names, for messages.</summary>
-    public const string All = "all, generator, data-files or output";
-
-    /// <summary>The name of <paramref name="focus"/>.</summary>
-    /// <param name="focus">The focus.</param>
-    public static string Name(EvalFocus focus) => focus switch
-    {
-        EvalFocus.Generator => "generator",
-        EvalFocus.DataFiles => "data-files",
-        EvalFocus.Output => "output",
-        _ => "all",
-    };
-
-    /// <summary>Parses a name.</summary>
-    /// <param name="value">The name.</param>
-    /// <param name="focus">The focus.</param>
-    public static bool TryParse(string value, out EvalFocus focus)
-    {
-        focus = value.ToLowerInvariant() switch
-        {
-            "all" => EvalFocus.All,
-            "generator" => EvalFocus.Generator,
-            "data-files" => EvalFocus.DataFiles,
-            "output" => EvalFocus.Output,
-            _ => (EvalFocus)(-1),
-        };
-        return Enum.IsDefined(focus);
     }
 }

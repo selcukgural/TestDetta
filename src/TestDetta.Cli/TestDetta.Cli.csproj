@@ -28,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TestDetta.Core\TestDetta.Core.csproj" />
     <ProjectReference Include="..\TestDetta.Coverage\TestDetta.Coverage.csproj" />
+    <ProjectReference Include="..\TestDetta.Mutants\TestDetta.Mutants.csproj" />
   </ItemGroup>
 
   <ItemGroup>

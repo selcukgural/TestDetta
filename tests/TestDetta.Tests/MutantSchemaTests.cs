@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using TestDetta.Core;
-using TestDetta.Eval;
 
 namespace TestDetta.Tests;
 

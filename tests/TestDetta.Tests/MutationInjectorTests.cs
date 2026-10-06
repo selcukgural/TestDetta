@@ -1,6 +1,5 @@
 using Mono.Cecil;
 using TestDetta.Core;
-using TestDetta.Eval;
 
 namespace TestDetta.Tests;
 

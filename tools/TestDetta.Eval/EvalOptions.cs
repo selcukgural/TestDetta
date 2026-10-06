@@ -244,7 +244,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     break;
 
                 case "--mutant-kinds":
-                    if (!Eval.MutantKinds.TryParse(value, out var kinds, out error))
+                    if (!TestDetta.Mutants.MutantKinds.TryParse(value, out var kinds, out error))
                     {
                         return false;
                     }

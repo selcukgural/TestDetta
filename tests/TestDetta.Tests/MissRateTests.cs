@@ -1,4 +1,3 @@
-using TestDetta.Eval;
 
 namespace TestDetta.Tests;
 

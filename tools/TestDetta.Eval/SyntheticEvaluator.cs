@@ -1533,43 +1533,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <summary>See <see cref="SelectedShare(AnalysisResult, Dictionary{string, CoverageMap})"/>, for any selector's decisions.</summary>
     /// <param name="tests">Decisions per test project.</param>
     /// <param name="maps">Maps by normalized test project path.</param>
-    private static double SelectedShare(IReadOnlyList<TestProjectSelection> tests, Dictionary<string, CoverageMap> maps)
-    {
-        var total = 0;
-        var selected = 0;
-        foreach (var (project, map) in maps)
-        {
-            total += map.Classes.Count;
-            var decision = tests.FirstOrDefault(t => string.Equals(t.Project.Path, project, StringComparison.Ordinal));
-            selected += decision?.Mode switch
-            {
-                TestRunMode.All => map.Classes.Count,
-                TestRunMode.Filtered => decision.TestClasses.Count(map.Classes.ContainsKey),
-                _ => 0,
-            };
-        }
-
-        return total == 0 ? 0 : (double)selected / total;
-    }
+    private static double SelectedShare(IReadOnlyList<TestProjectSelection> tests, Dictionary<string, CoverageMap> maps) => Selections.SelectedShare(tests, maps);
 
     /// <summary>Every member that ran in any test class, fixture or start-up of any map.</summary>
     /// <param name="maps">Maps of the commit.</param>
-    private static HashSet<CoveredMethod> CoveredMembers(Dictionary<string, CoverageMap> maps)
-    {
-        var covered = new HashSet<CoveredMethod>();
-        foreach (var map in maps.Values)
-        {
-            foreach (var ids in map.Classes.Values.Concat(map.Fixtures.Values).Append(map.Ambient))
-            {
-                foreach (var id in ids)
-                {
-                    covered.Add(map.Methods[id]);
-                }
-            }
-        }
-
-        return covered;
-    }
+    private static HashSet<CoveredMethod> CoveredMembers(Dictionary<string, CoverageMap> maps) => Selections.CoveredMembers(maps.Values);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Mutant {Index} {TypeName}.{MemberName}: the full run crashed or hung, everything TestDetta left out passed; caught")]

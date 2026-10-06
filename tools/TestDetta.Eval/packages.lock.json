@@ -35,7 +35,8 @@
         "type": "Project",
         "dependencies": {
           "TestDetta.Core": "[1.0.0, )",
-          "TestDetta.Coverage": "[1.0.0, )"
+          "TestDetta.Coverage": "[1.0.0, )",
+          "TestDetta.Mutants": "[1.0.0, )"
         }
       },
       "testdetta.core": {
@@ -62,6 +63,14 @@
       },
       "testdetta.coverage.startuphook": {
         "type": "Project"
+      },
+      "testdetta.mutants": {
+        "type": "Project",
+        "dependencies": {
+          "Mono.Cecil": "[0.11.6, )",
+          "TestDetta.Core": "[1.0.0, )",
+          "TestDetta.Coverage": "[1.0.0, )"
+        }
       },
       "FSharp.Compiler.Service": {
         "type": "CentralTransitive",

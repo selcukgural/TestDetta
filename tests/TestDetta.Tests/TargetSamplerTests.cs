@@ -1,7 +1,6 @@
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using TestDetta.Core;
-using TestDetta.Eval;
 
 namespace TestDetta.Tests;
 
@@ -64,6 +63,31 @@ public sealed class TargetSamplerTests : IDisposable
 
         Assert.Equal(10, before.Count);
         Assert.True(before.Intersect(after).Count() >= 9, $"before: {string.Join(", ", before)}; after: {string.Join(", ", after)}");
+    }
+
+    [Fact]
+    public void A_uniform_sample_orders_every_member_the_same_whatever_the_coverage()
+    {
+        // td audit must not favour members a map says some test ran: they are the changes most likely to be caught.
+        var members = string.Join("\n", Enumerable.Range(0, 30).Select(static i => $"    public static int M{i:00}(int x) => x + {i};"));
+        _repo.Write("src/Lib/Many.cs", $"namespace Lib;\npublic static class Many\n{{\n{members}\n}}\n");
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var request = new SampleRequest(int.MaxValue, Seed: 3) { Uniform = true };
+        var half = Enumerable.Range(0, 15).Select(static i => new CoveredMethod("Lib.Many", $"M{i:00}")).ToHashSet();
+
+        var withoutCoverage = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), request).Select(static t => t.Member).ToList();
+        var withCoverage = TargetSampler.Sample(graph, _repo.Root, half, request).ToList();
+
+        Assert.Equal(32, withoutCoverage.Count);
+        Assert.Equal(withoutCoverage, withCoverage.Select(static t => t.Member));
+        Assert.Equal(15, withCoverage.Count(static t => t.Covered));
+
+        // Covered and uncovered members are mixed in the order, not covered ones first as in the evaluator's default.
+        var firstTen = withCoverage.Take(10).Count(static t => t.Covered);
+        Assert.InRange(firstTen, 1, 9);
+        Assert.NotEqual(
+            withoutCoverage.Take(10),
+            TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), request with { Seed = 4 }).Select(static t => t.Member).Take(10));
     }
 
     [Fact]

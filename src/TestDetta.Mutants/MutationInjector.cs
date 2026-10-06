@@ -4,7 +4,7 @@ using Mono.Cecil.Rocks;
 using TestDetta.Core;
 using TestDetta.Coverage;
 
-namespace TestDetta.Eval;
+namespace TestDetta.Mutants;
 
 /// <summary>Assemblies rewritten for one mutant, and how to put them back.</summary>
 /// <param name="Backups">Rewritten file (assembly or its .pdb) to its backup copy.</param>

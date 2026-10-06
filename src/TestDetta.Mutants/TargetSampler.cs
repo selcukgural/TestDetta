@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.Text;
 using TestDetta.Core;
 using VB = Microsoft.CodeAnalysis.VisualBasic.Syntax;
 
-namespace TestDetta.Eval;
+namespace TestDetta.Mutants;
 
 /// <summary>A text insertion into a source file.</summary>
 /// <param name="Path">Normalized absolute file path.</param>
@@ -46,8 +46,16 @@ internal sealed record SampleRequest(int Count, int Seed, double CoveredShare = 
     /// </summary>
     public IReadOnlySet<MutantKind> Kinds { get; init; } = new HashSet<MutantKind> { MutantKind.Throw };
 
-    /// <summary>Data files to empty after the members; see <see cref="RunSettings.DataFiles"/>.</summary>
+    /// <summary>Data files to empty after the members (the evaluator's <c>--data-files</c>).</summary>
     public int DataFiles { get; init; }
+
+    /// <summary>
+    /// True to take the members in one order over all candidates, with <see cref="CoveredShare"/> ignored:
+    /// coverage then decides neither which member is picked nor when. <c>td audit</c> samples this way, since
+    /// favouring members a map says some test ran would favour the changes the selection is most likely to catch
+    /// (docs/design/audit.md).
+    /// </summary>
+    public bool Uniform { get; init; }
 }
 
 /// <summary>
@@ -95,6 +103,18 @@ internal static class TargetSampler
         // Each member's place and kind come from a hash of the member and the seed, not from a shared
         // random sequence: adding or dropping one candidate (a fix to TestDetta's project graph) then
         // leaves every other pick and kind as it was, and stored test outcomes stay usable.
+        if (request.Uniform)
+        {
+            return
+            [
+                .. coveredPool.Concat(otherPool)
+                    .OrderBy(t => StableKey(t.Member, request.Seed, "order"))
+                    .ThenBy(static t => t.Member.TypeName, StringComparer.Ordinal)
+                    .ThenBy(static t => t.Member.MemberName, StringComparer.Ordinal)
+                    .Take(request.Count),
+            ];
+        }
+
         coveredPool.Sort((a, b) => StableKey(a.Member, request.Seed, "order").CompareTo(StableKey(b.Member, request.Seed, "order")));
         otherPool.Sort((a, b) => StableKey(a.Member, request.Seed, "order").CompareTo(StableKey(b.Member, request.Seed, "order")));
 

@@ -15,9 +15,6 @@ namespace TestDetta.Eval;
 /// </summary>
 internal sealed partial class WorkerCopies : IDisposable
 {
-    /// <summary>Longest a copy may take; a full copy of a large clone on a disk without copy-on-write takes minutes.</summary>
-    private static readonly TimeSpan CopyTimeout = TimeSpan.FromMinutes(30);
-
     /// <summary>The copies, without the clone itself, and the temporary directories; all deleted on disposal.</summary>
     private readonly List<string> _copies;
 
@@ -131,85 +128,14 @@ internal sealed partial class WorkerCopies : IDisposable
         _copies.Clear();
     }
 
-    /// <summary>
-    /// Copies a directory tree with its symbolic links as links: copy-on-write clones where the file
-    /// system has them (APFS through <c>cp -c</c>, Btrfs and XFS through <c>--reflink=auto</c>), which
-    /// cost almost no time or space, and a plain copy otherwise.
-    /// </summary>
+    /// <summary>Copies a directory tree, copy-on-write where the file system can (<see cref="TreeCopy.Copy"/>).</summary>
     /// <param name="source">Directory to copy.</param>
     /// <param name="destination">New directory; must not exist.</param>
-    internal static void Copy(string source, string destination)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            CopyTree(new DirectoryInfo(source), destination);
-            return;
-        }
+    internal static void Copy(string source, string destination) => TreeCopy.Copy(source, destination);
 
-        List<string> arguments = OperatingSystem.IsMacOS() ? ["-cpR", source, destination] : ["-a", "--reflink=auto", source, destination];
-        var psi = new ProcessStartInfo("cp") { RedirectStandardError = true };
-        arguments.ForEach(psi.ArgumentList.Add);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("cp could not be started.");
-        var error = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(CopyTimeout))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new IOException($"Copying the clone to {destination} did not finish within {CopyTimeout.TotalMinutes:0} minutes.");
-        }
-
-        if (process.ExitCode != 0)
-        {
-            throw new IOException($"Copying the clone to {destination} failed: {error.Result.Trim()}");
-        }
-    }
-
-    /// <summary>Copies a directory tree file by file, recreating symbolic links instead of following them.</summary>
-    /// <param name="source">Directory to copy.</param>
-    /// <param name="destination">New directory.</param>
-    private static void CopyTree(DirectoryInfo source, string destination)
-    {
-        Directory.CreateDirectory(destination);
-        foreach (var entry in source.EnumerateFileSystemInfos())
-        {
-            var target = Path.Combine(destination, entry.Name);
-            if (entry.LinkTarget is { } link)
-            {
-                if (entry is DirectoryInfo)
-                {
-                    Directory.CreateSymbolicLink(target, link);
-                }
-                else
-                {
-                    File.CreateSymbolicLink(target, link);
-                }
-            }
-            else if (entry is DirectoryInfo directory)
-            {
-                CopyTree(directory, target);
-            }
-            else
-            {
-                File.Copy(entry.FullName, target);
-            }
-        }
-    }
-
-    /// <summary>Deletes a copy, read-only files included (git objects are read-only).</summary>
+    /// <summary>Deletes a copy, read-only files included (<see cref="TreeCopy.Remove"/>).</summary>
     /// <param name="copy">The copy.</param>
-    internal static void Remove(string copy)
-    {
-        if (!Directory.Exists(copy))
-        {
-            return;
-        }
-
-        foreach (var file in Directory.EnumerateFiles(copy, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }))
-        {
-            File.SetAttributes(file, FileAttributes.Normal);
-        }
-
-        Directory.Delete(copy, recursive: true);
-    }
+    internal static void Remove(string copy) => TreeCopy.Remove(copy);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Worker copy {Copy} made in {Seconds:0.0}s")]
     private static partial void LogCopied(ILogger logger, string copy, double seconds);

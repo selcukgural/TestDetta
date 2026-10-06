@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The corpus evaluation's mutants (docs/design/audit.md): the kinds, the IL injector, the target sample and the
+    math, shared by the evaluator (tools/TestDetta.Eval) and td audit, which runs the same method on a team's code.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TestDetta.Core\TestDetta.Core.csproj" />
+    <ProjectReference Include="..\TestDetta.Coverage\TestDetta.Coverage.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TestDetta.Tests" />
+    <InternalsVisibleTo Include="TestDetta.Eval" />
+    <InternalsVisibleTo Include="TestDetta.Cli" />
+  </ItemGroup>
+
+</Project>
