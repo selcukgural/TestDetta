@@ -720,7 +720,6 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var initialization = new SortedSet<int>();
         var linked = new SortedSet<int>();
         var unlinked = new SortedSet<int>();
-        var sharedInProcess = new SortedSet<int>();
         var builtClasses = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var builtFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var builtAmbient = new SortedSet<int>();
@@ -736,7 +735,6 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var fieldReads = new FieldReads(root.TryGetProperty("methodCount", out var count) ? count.GetInt32() : methods.Count, Builders(root));
             MergeBuckets(root.GetProperty("classes"), merged, builtClasses, fieldReads);
             MergeBuckets(root.GetProperty("fixtures"), mergedFixtures, builtFixtures, fieldReads);
-            AddShared(root, sharedInProcess, fieldReads.MethodCount);
             if (root.TryGetProperty("initialization", out var initializing))
             {
                 foreach (var id in initializing.EnumerateArray())
@@ -795,7 +793,6 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             Initialization = [.. initialization],
             // Linked in some process and unlinked in none: one path the probes do not see is enough to stay run-once.
             LinkedInitialization = [.. initialization.Where(id => linked.Contains(id) && !unlinked.Contains(id))],
-            SharedInProcess = [.. sharedInProcess],
             BuiltValues = new CoverageHits(Freeze(builtClasses), Freeze(builtFixtures), [.. builtAmbient]),
             FileReads = reads.Seen ? reads.Resolve(new FileReadPaths(request.RepoRoot, git.TrackedFiles(request.RepoRoot))) : null,
         };
@@ -917,32 +914,6 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
 
         return builders;
-    }
-
-    /// <summary>
-    /// Adds the methods that one process's results show in two or more test classes or fixtures.
-    /// Counting per process matters: code that runs once and is cached shows up in one bucket of
-    /// every process, which across several processes looks like shared code.
-    /// </summary>
-    /// <param name="root">One process's results.</param>
-    /// <param name="shared">Methods shared by buckets of one process; updated in place.</param>
-    /// <param name="methodCount">Ids from here on are fields, which are not code that ran.</param>
-    private static void AddShared(JsonElement root, SortedSet<int> shared, int methodCount)
-    {
-        var seen = new HashSet<int>();
-        foreach (var name in (ReadOnlySpan<string>)["classes", "fixtures"])
-        {
-            foreach (var bucket in root.GetProperty(name).EnumerateObject())
-            {
-                foreach (var id in bucket.Value.EnumerateArray())
-                {
-                    if (id.GetInt32() < methodCount && !seen.Add(id.GetInt32()))
-                    {
-                        shared.Add(id.GetInt32());
-                    }
-                }
-            }
-        }
     }
 
     /// <summary>

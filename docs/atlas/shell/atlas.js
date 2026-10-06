@@ -22,9 +22,9 @@ const CALLS = {
   ],
   harita: [
     ["new CoverageIndex(map, …)", 0, 0], ["ClassesUsing (fixtures)", 1, 1], ["_ambient", 1, 2], ["AddUsers (builtValues)", 1, 3],
-    ["initialization − linked", 1, 4], ["_bucketCount · sharedInProcess", 1, 5], ["externalCallbacks", 1, 6],
+    ["initialization − linked", 1, 4], ["tek kova kuralı (kaldırıldı)", 1, 5], ["externalCallbacks", 1, 6],
     ["TryResolve · S1 gövde", 0, 7], ["TryResolve · S2 eklendi", 0, 8], ["TryResolve · S3 .cctor", 0, 9], ["TryResolve · S4 .ctor", 0, 10],
-    ["TryResolve · S5 ambient", 0, 11], ["TryResolve · S6 önbellek", 0, 12], ["TryResolve · S7 tek kova", 0, 13],
+    ["TryResolve · S5 ambient", 0, 11], ["TryResolve · S6 önbellek", 0, 12], ["TryResolve · S7 singleton", 0, 13],
     ["TryResolve · S8 metaveri", 0, 14], ["TryResolve · S9 harita yok", 0, 15], ["TryResolve(reached) · S10", 0, 16],
   ],
   eval: [

@@ -97,11 +97,10 @@ The implementation differs from the design above where measuring and reviewing i
   65,536 method ids. A store probe after `stsfld`/`stfld` takes the ids back to the storing method's
   latest entry (or its previous store, whichever is later). No `try`/`finally` is injected.
 - **Separate map section**: what built a value a bucket read goes to `builtValues` in the map, not
-  into the bucket's hits. Selection credits those methods to the readers, but the counts that
-  detect run-once code (`BucketsRunning`, shared-in-process) keep seeing only where code ran, so
-  the name-tracing fallback still covers readers the probes do not see (a value handed over through
-  a collection or another object). A builder read outside every test makes its methods unanswerable,
-  as ambient code is.
+  into the bucket's hits. Selection credits those methods to the readers. (The counts that once
+  detected run-once code from where code ran, `BucketsRunning` and shared-in-process, went with the
+  single-bucket rule on 2026-10-06.) A builder read outside every test makes its methods
+  unanswerable, as ambient code is.
 - **Object pools are not covered**: a pool keeps what it creates in a collection, not a field, so
   there is no store to probe. The interim pool rule stays.
 - Values built on one thread and stored on another, and builders longer than the ring, are seen in

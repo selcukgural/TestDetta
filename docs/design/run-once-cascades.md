@@ -287,7 +287,7 @@ deletes what test runs leave in its clone before it analyses (`EvalGit.RemoveUnt
   initialization members is unlinked.
 - Unchanged:
   - the single-bucket constructor and static rule (the third row of the counts; a second step
-    once this one is measured);
+    once this one is measured; removed 2026-10-06, see precision-round-2026-10-05.md);
   - static constructor changes;
   - third-party callbacks (the library keeps the value, not a field);
   - ambient code.

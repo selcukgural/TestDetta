@@ -15,32 +15,20 @@ internal sealed class CoverageIndex
     /// <summary>Members that ran before the first test (discovery, theory data): their callers are unknown.</summary>
     private readonly HashSet<CoveredMethod> _ambient = [];
 
-    /// <summary>Number of buckets (test classes and fixtures, before fixtures are expanded) that ran each member.</summary>
-    private readonly Dictionary<CoveredMethod, int> _bucketCount = [];
-
     /// <summary>Members with an overload that ran inside a static constructor or a cache fill.</summary>
     private readonly HashSet<CoveredMethod> _initialization = [];
 
     /// <summary>Types (and the types they are nested in) with a member in <see cref="_initialization"/>.</summary>
     private readonly HashSet<string> _initializationTypes = new(StringComparer.Ordinal);
 
-    /// <summary>Members that some process ran in two or more buckets; null when the map does not say.</summary>
-    private readonly HashSet<CoveredMethod>? _sharedInProcess;
-
     /// <summary>Types (and the types they are nested in) with a member in <see cref="_ambient"/>.</summary>
     private readonly HashSet<string> _ambientTypes = new(StringComparer.Ordinal);
-
-    /// <summary>Buckets (test classes and fixtures) that ran a member of each type or its nested types.</summary>
-    private readonly Dictionary<string, HashSet<string>> _bucketsByType = new(StringComparer.Ordinal);
 
     /// <summary>Members a third-party library calls back (<see cref="CoverageMap.ExternalCallbacks"/>).</summary>
     private readonly HashSet<CoveredMethod> _externalCallbacks = [];
 
     /// <summary>Types (and the types they are nested in) with a member in <see cref="_externalCallbacks"/>.</summary>
     private readonly HashSet<string> _externalCallbackTypes = new(StringComparer.Ordinal);
-
-    /// <summary>Types (and the types they are nested in) with a member in <see cref="_sharedInProcess"/>.</summary>
-    private readonly HashSet<string> _sharedTypes = new(StringComparer.Ordinal);
 
     /// <summary>Builds the lookups; members that no test ran are still known, with no classes.</summary>
     /// <param name="map">Recorded map.</param>
@@ -65,12 +53,10 @@ internal sealed class CoverageIndex
             foreach (var id in ids)
             {
                 var method = map.Methods[id];
-                _bucketCount[method] = _bucketCount.GetValueOrDefault(method) + 1;
                 _classesByMember[method].Add(testClass);
                 foreach (var type in EnclosingTypes(method.TypeName))
                 {
                     _classesByType[type].Add(testClass);
-                    AddBucket(type, testClass);
                 }
             }
         }
@@ -81,12 +67,6 @@ internal sealed class CoverageIndex
             foreach (var id in ids)
             {
                 var method = map.Methods[id];
-                _bucketCount[method] = _bucketCount.GetValueOrDefault(method) + 1;
-                foreach (var type in EnclosingTypes(method.TypeName))
-                {
-                    AddBucket(type, fixture);
-                }
-
                 if (users.Count == 0)
                 {
                     _ambient.Add(method);
@@ -147,15 +127,6 @@ internal sealed class CoverageIndex
             }
         }
 
-        if (map.SharedInProcess is { } shared)
-        {
-            _sharedInProcess = [.. shared.Select(id => map.Methods[id])];
-            foreach (var method in _sharedInProcess)
-            {
-                _sharedTypes.UnionWith(EnclosingTypes(method.TypeName));
-            }
-        }
-
         foreach (var method in _ambient)
         {
             _ambientTypes.UnionWith(EnclosingTypes(method.TypeName));
@@ -179,32 +150,6 @@ internal sealed class CoverageIndex
     /// <summary>True when a member of <paramref name="typeName"/> or a type nested in it is called back by a third-party library.</summary>
     /// <param name="typeName">Qualified type name.</param>
     public bool TypeHasExternalCallback(string typeName) => _externalCallbackTypes.Contains(typeName);
-
-    /// <summary>Records that <paramref name="bucket"/> ran a member of <paramref name="type"/>.</summary>
-    /// <param name="type">Qualified type name.</param>
-    /// <param name="bucket">Test class or fixture name.</param>
-    private void AddBucket(string type, string bucket)
-    {
-        if (!_bucketsByType.TryGetValue(type, out var buckets))
-        {
-            buckets = new HashSet<string>(StringComparer.Ordinal);
-            _bucketsByType[type] = buckets;
-        }
-
-        buckets.Add(bucket);
-    }
-
-    /// <summary>How many buckets (test classes and fixtures) ran a member of <paramref name="typeName"/> or its nested types.</summary>
-    /// <param name="typeName">Qualified type name.</param>
-    public int BucketsRunningType(string typeName) => _bucketsByType.GetValueOrDefault(typeName)?.Count ?? 0;
-
-    /// <summary>
-    /// <see cref="RanInOneBucketPerProcess"/> for a whole type: some bucket ran a member of it, but no
-    /// recording process ran any of its members in two buckets. False when the map does not record this.
-    /// </summary>
-    /// <param name="typeName">Qualified type name.</param>
-    public bool TypeRanInOneBucketPerProcess(string typeName) =>
-        _sharedInProcess is not null && BucketsRunningType(typeName) > 0 && !_sharedTypes.Contains(typeName);
 
     /// <summary>Credits methods to test classes without counting buckets.</summary>
     /// <param name="map">Recorded map.</param>
@@ -233,19 +178,6 @@ internal sealed class CoverageIndex
     public bool RanDuringInitialization(string typeName, string member) =>
         _initialization.Contains(new CoveredMethod(typeName, member));
 
-    /// <summary>
-    /// True when some bucket ran the member but no recording process ran it in two buckets: with
-    /// one process that is a single test class; with several, one per process, the pattern of code
-    /// that runs once and is cached. False when the map does not record this.
-    /// </summary>
-    /// <param name="typeName">Qualified type name.</param>
-    /// <param name="member">Simple member name, <c>.ctor</c> for constructors.</param>
-    public bool RanInOneBucketPerProcess(string typeName, string member)
-    {
-        var method = new CoveredMethod(typeName, member);
-        return _sharedInProcess is not null && _bucketCount.GetValueOrDefault(method) > 0 && !_sharedInProcess.Contains(method);
-    }
-
     /// <summary>True when the map lists <paramref name="member"/> of <paramref name="typeName"/> (run or not).</summary>
     /// <param name="typeName">Qualified type name.</param>
     /// <param name="member">Simple member name.</param>
@@ -270,16 +202,6 @@ internal sealed class CoverageIndex
 
         return _classesByMember.GetValueOrDefault(key);
     }
-
-    /// <summary>
-    /// How many test classes and fixtures ran the member, counting a fixture once however many classes
-    /// use it. Code that caches its result runs once per test process, for whichever bucket comes first,
-    /// so a count of one is weak evidence for such code.
-    /// </summary>
-    /// <param name="typeName">Qualified type name.</param>
-    /// <param name="member">Simple member name.</param>
-    public int BucketsRunning(string typeName, string member) =>
-        _bucketCount.GetValueOrDefault(new CoveredMethod(typeName, member));
 
     /// <summary>
     /// Test classes that ran any member of <paramref name="typeName"/> or its nested types; null when

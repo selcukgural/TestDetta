@@ -1,5 +1,69 @@
 # Evaluation on real repositories
 
+## Corpus round 3 (2026-10-06)
+
+The whole corpus at the pinned commits, built from `592c15b` plus the generator-copy fix, run twice:
+once with the single-bucket rule off and once with it on, nothing else different (outcomes cached, so
+the second run only re-selects). The rule was removed after this round (see
+`docs/design/precision-round-2026-10-05.md`, item 2); the "rule off" column is what TestDetta does now.
+
+**Headline: 0 missed of 2422 failing mutants on 40 informative repositories (95% upper bound 0.12%).
+Median share per repository 30% (rule on: 35%), mean 40% (rule on: 44%); whole affected test projects
+(as dotnet-affected selects) 90%.**
+
+- Mapperly's row comes from a run of its own (`runs-nosingle-mapperly`): in the round the memory guard
+  killed its schema check while another Mapperly run shared the machine, and the eval then hit a file
+  lock writing the assembly (fixed in `a34eb37`; a memory kill still counts as "schema differs", open).
+- **Not informative:** Argu (F#), and AspNetCoreOData: 0 failing mutants in rounds 2 and 3 (79 in round
+  1), so its suite does not fail under the eval any more; to be looked into.
+- Precision is the median number of classes run per class that failed (1.0 is exact).
+
+| Repository | Failing mutants | Missed | Selected | Rule on | Project level | Precision |
+|---|---|---|---|---|---|---|
+| polly | 64 | 0 | 2.9% | 3.1% | 64.8% | 1.0 |
+| spectre | 61 | 0 | 5.9% | 6.3% | 76.0% | 2.0 |
+| opentelemetry-dotnet | 56 | 0 | 8.1% | 13.5% | 50.5% | 1.9 |
+| unitsnet | 49 | 0 | 9.7% | 34.8% | 83.5% | 2.0 |
+| swashbuckle | 66 | 0 | 10.1% | 10.6% | 61.9% | 1.0 |
+| nsec | 63 | 0 | 12.2% | 12.3% | 100.0% | 1.0 |
+| guardclauses | 23 | 0 | 13.5% | 13.5% | 100.0% | 1.0 |
+| mimekit | 58 | 0 | 13.7% | 14.8% | 100.0% | 6.0 |
+| fluid | 60 | 0 | 14.4% | 22.3% | 100.0% | 1.0 |
+| nodatime | 60 | 0 | 14.7% | 22.9% | 93.4% | 1.0 |
+| communitytoolkit | 64 | 0 | 15.6% | 17.1% | 40.3% | 1.0 |
+| roslynator | 69 | 0 | 16.9% | 34.9% | 72.0% | 1.0 |
+| awesomeassertions | 63 | 0 | 19.6% | 24.4% | 99.9% | 3.0 |
+| autofixture | 71 | 0 | 20.3% | 23.8% | 67.5% | 1.5 |
+| fluentvalidation | 64 | 0 | 20.4% | 23.5% | 100.0% | 1.0 |
+| fastendpoints | 66 | 0 | 20.6% | 25.9% | 75.3% | 4.0 |
+| serilog | 61 | 0 | 20.8% | 25.7% | 99.9% | 2.0 |
+| carter | 64 | 0 | 22.1% | 23.5% | 67.4% | 1.0 |
+| open-xml-sdk | 62 | 0 | 29.7% | 32.5% | 94.5% | 1.0 |
+| castle-core | 56 | 0 | 29.9% | 31.7% | 100.0% | 2.9 |
+| vogen | 57 | 0 | 30.3% | 34.2% | 95.7% | 1.1 |
+| markdig | 61 | 0 | 39.2% | 39.3% | 100.0% | 1.0 |
+| yamldotnet | 64 | 0 | 41.8% | 42.2% | 100.0% | 1.7 |
+| lamar | 64 | 0 | 42.0% | 43.6% | 98.4% | 2.4 |
+| refit | 68 | 0 | 43.2% | 45.2% | 100.0% | 1.5 |
+| scriban | 59 | 0 | 44.7% | 58.9% | 100.0% | 1.0 |
+| meziantou-analyzer | 74 | 0 | 45.1% | 65.1% | 100.0% | 3.0 |
+| newtonsoft-json | 68 | 0 | 47.1% | 48.5% | 100.0% | 6.0 |
+| scrutor | 62 | 0 | 54.8% | 55.2% | 100.0% | 1.0 |
+| autofac | 69 | 0 | 57.0% | 61.8% | 100.0% | 8.2 |
+| graphql-dotnet | 53 | 0 | 58.7% | 61.3% | 98.9% | 13.0 |
+| immediate-handlers | 39 | 0 | 62.6% | 70.0% | 94.7% | 3.3 |
+| nsubstitute | 63 | 0 | 76.9% | 78.5% | 100.0% | 4.0 |
+| cliwrap | 43 | 0 | 78.5% | 80.8% | 100.0% | 4.2 |
+| mediator | 55 | 0 | 84.0% | 86.4% | 100.0% | 7.0 |
+| protobuf-net | 63 | 0 | 84.2% | 84.4% | 97.8% | 46.3 |
+| automapper | 70 | 0 | 84.6% | 84.7% | 100.0% | 14.4 |
+| nlog | 56 | 0 | 96.3% | 96.4% | 97.8% | 133.0 |
+| mapperly | 69 | 0 | 96.8% | 96.8% | 96.8% | 24.4 |
+| libgit2sharp | 65 | 0 | 100.0% | 100.0% | 100.0% | 16.0 |
+| argu | 0 | 0 | – | – | – | – |
+| aspnetcore-odata | 0 | 0 | – | – | – | – |
+
+
 ## Corpus round 2 (2026-10-03 → 2026-10-04)
 
 The same method as round 1 on 42 repositories (Refit added), with every fix up to `e55241c`: MSBuild

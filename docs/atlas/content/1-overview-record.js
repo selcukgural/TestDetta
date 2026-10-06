@@ -332,12 +332,11 @@ public static void Hit(int id)
       who: "<code>CoverageRecorder.BuildMap(request, methods, resultsFiles)</code>",
       file: "src/TestDetta.Coverage/CoverageRecorder.cs:712",
       input: "<code>InstrumentationResult.Methods</code> ve parça başına sonuç dosyaları",
-      output: "<code>CoverageMap(Header, Methods, Hits, Timings) { Initialization, LinkedInitialization, BuiltValues, SharedInProcess, FileReads, … }</code>",
+      output: "<code>CoverageMap(Header, Methods, Hits, Timings) { Initialization, LinkedInitialization, BuiltValues, FileReads, … }</code>",
       purpose: "Parçaları tek haritada toplamak ve ham bitleri anlamlı bölümlere ayırmak.",
       body: ul([
         "Kovalar sınıf adına göre birleşir (<code>MergeBuckets</code>). <code>methodCount</code> üstündeki id'ler alan okumasıdır: o alanın değerini kuran metotlar (<code>fieldBuilders</code>, zincirleme) <code>BuiltValues</code>'a gider.",
         "<code>LinkedInitialization</code>: bir süreçte bağlanmış, hiçbir süreçte bağlanmamış (unlinked) olmayan başlatma kodu.",
-        "<code>SharedInProcess</code>: aynı süreçte iki ya da daha çok kovada görünen metotlar.",
         "Dosya okumaları <code>FileReadPaths</code> ile depo yollarına çevrilir: depo dışı atılır, <code>bin/obj</code> kopyası aynı adlı ve içerikli izlenen dosyaya eşlenir.",
         "Başlık: <code>(tests/Calc.Tests/Calc.Tests.csproj, git HEAD, UtcNow)</code>.",
       ]),

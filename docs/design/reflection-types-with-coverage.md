@@ -54,9 +54,9 @@ default values. Coverage records only code that runs. That means:
      coverage already answered through its code is spread after all when its metadata is reached
      later.
 3. **Reached members of reflection-found types** are answerable (`CoverageSelection.IsAnswerable`
-   with `reached`). For a reflection-found type, any member that ran in a single bucket per process
-   counts as run-once code, not only constructors and static members. A framework that discovers
-   a type may call it once and cache the result for every later class.
+   with `reached`). (Until 2026-10-06, any member of such a type that ran in a single bucket per
+   process counted as run-once code; the single-bucket rule was removed after the corpus showed no
+   miss without it, see precision-round-2026-10-05.md.)
 4. **Reached reflection-found types** (`CoverageSelection.TryResolveType`). This applies only when
    members reached through their code spread the type name. If a change or metadata spread it,
    it does not apply. In every affected test project with a map downstream of the type, the

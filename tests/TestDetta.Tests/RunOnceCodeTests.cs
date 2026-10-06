@@ -144,7 +144,6 @@ public sealed class RunOnceCodeTests : IDisposable
 
         Assert.True(passed);
         Assert.Contains(new CoveredMethod("Cache.Catalog", "Build"), map.Initialization.Select(id => map.Methods[id]));
-        Assert.DoesNotContain(new CoveredMethod("Cache.LazyCatalog", "Load"), map.SharedInProcess!.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Maker", "Make"), map.Initialization.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Computer", "Compute"), map.Initialization.Select(id => map.Methods[id]));
         Assert.Contains(new CoveredMethod("Cache.Sizer", "Measure"), map.Initialization.Select(id => map.Methods[id]));

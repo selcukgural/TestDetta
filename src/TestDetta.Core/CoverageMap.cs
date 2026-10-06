@@ -122,17 +122,10 @@ public sealed record CoverageMap(
     /// Methods each bucket depends on through a value it read rather than code it ran: the code that
     /// built a value stored into a field (a static initializer, <c>_x ??= new X()</c>), credited to
     /// every bucket that read the field, wherever the building ran. Kept apart from
-    /// <see cref="Hits"/>, so the counts that spot run-once code still see where code really ran.
+    /// <see cref="Hits"/>, which keep where code really ran.
     /// Null for maps recorded before field reads were tracked.
     /// </summary>
     public CoverageHits? BuiltValues { get; init; }
-
-    /// <summary>
-    /// Methods that some recording process ran in two or more test classes or fixtures. A method
-    /// that ran in a single bucket of every process may be run-once code (a lazy cache): with
-    /// several processes it shows up once per process. Null for maps recorded before this was kept.
-    /// </summary>
-    public IReadOnlyList<int>? SharedInProcess { get; init; }
 
     /// <summary>
     /// Methods (indexes into <see cref="Methods"/>) that implement an interface or override a method of

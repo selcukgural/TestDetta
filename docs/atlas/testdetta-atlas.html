@@ -232,7 +232,7 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line2);
     </section>
     <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
   </div>
-  <footer class="status"><span id="status-left"></span><span>kaynak: TestDetta main · 2026-10-05</span><span class="right">← → adım · Boşluk oynat · 1–4 görünüm · ⌘K ara</span></footer>
+  <footer class="status"><span id="status-left"></span><span>kaynak: TestDetta main · 2026-10-06</span><span class="right">← → adım · Boşluk oynat · 1–4 görünüm · ⌘K ara</span></footer>
 </div>
 <div class="palette" id="palette" hidden>
   <div class="box" role="dialog" aria-label="Ara">
@@ -578,12 +578,11 @@ public static void Hit(int id)
       who: "<code>CoverageRecorder.BuildMap(request, methods, resultsFiles)</code>",
       file: "src/TestDetta.Coverage/CoverageRecorder.cs:712",
       input: "<code>InstrumentationResult.Methods</code> ve parça başına sonuç dosyaları",
-      output: "<code>CoverageMap(Header, Methods, Hits, Timings) { Initialization, LinkedInitialization, BuiltValues, SharedInProcess, FileReads, … }</code>",
+      output: "<code>CoverageMap(Header, Methods, Hits, Timings) { Initialization, LinkedInitialization, BuiltValues, FileReads, … }</code>",
       purpose: "Parçaları tek haritada toplamak ve ham bitleri anlamlı bölümlere ayırmak.",
       body: ul([
         "Kovalar sınıf adına göre birleşir (<code>MergeBuckets</code>). <code>methodCount</code> üstündeki id'ler alan okumasıdır: o alanın değerini kuran metotlar (<code>fieldBuilders</code>, zincirleme) <code>BuiltValues</code>'a gider.",
         "<code>LinkedInitialization</code>: bir süreçte bağlanmış, hiçbir süreçte bağlanmamış (unlinked) olmayan başlatma kodu.",
-        "<code>SharedInProcess</code>: aynı süreçte iki ya da daha çok kovada görünen metotlar.",
         "Dosya okumaları <code>FileReadPaths</code> ile depo yollarına çevrilir: depo dışı atılır, <code>bin/obj</code> kopyası aynı adlı ve içerikli izlenen dosyaya eşlenir.",
         "Başlık: <code>(tests/Calc.Tests/Calc.Tests.csproj, git HEAD, UtcNow)</code>.",
       ]),
@@ -1041,14 +1040,12 @@ const CH_MAP = {
     { id: "m_amb", kind: "data", x: 25, y: 200, w: 200, h: 56, label: "ambient", sub: "test dışı → [id]" },
     { id: "m_built", kind: "data", x: 25, y: 280, w: 200, h: 56, label: "builtValues", sub: "değeri kuranlar" },
     { id: "m_init", kind: "data", x: 25, y: 360, w: 200, h: 56, label: "initialization", sub: "− linkedInitialization" },
-    { id: "m_shared", kind: "data", x: 25, y: 440, w: 200, h: 56, label: "sharedInProcess", sub: "süreçte ≥2 kova" },
-    { id: "m_ext", kind: "data", x: 25, y: 520, w: 200, h: 56, label: "externalCallbacks", sub: "3. taraf çağırır" },
+    { id: "m_ext", kind: "data", x: 25, y: 440, w: 200, h: 56, label: "externalCallbacks", sub: "3. taraf çağırır" },
     { id: "i_run", kind: "core", x: 265, y: 40, w: 220, h: 56, label: "ClassesRunning", sub: "üye → sınıflar" },
     { id: "i_use", kind: "core", x: 265, y: 120, w: 220, h: 56, label: "ClassesUsing", sub: "fixture → kullananlar" },
     { id: "i_null", kind: "core", x: 265, y: 200, w: 220, h: 56, label: "_ambient", sub: "→ null (bilinmiyor)" },
     { id: "i_init", kind: "core", x: 265, y: 360, w: 220, h: 56, label: "RanDuringInitialization", sub: "bir kez çalışan" },
-    { id: "i_bucket", kind: "core", x: 265, y: 440, w: 220, h: 56, label: "BucketsRunning", sub: "OneBucketPerProcess" },
-    { id: "i_ext", kind: "core", x: 265, y: 520, w: 220, h: 56, label: "IsExternalCallback", sub: "geri çağırma" },
+    { id: "i_ext", kind: "core", x: 265, y: 440, w: 220, h: 56, label: "IsExternalCallback", sub: "geri çağırma" },
     { id: "start", kind: "cmd", x: 625, y: 30, w: 260, h: 48, label: "SymbolChange", sub: "tür · üye · tür (Added/Modified)" },
     { id: "q1", kind: "q", x: 625, y: 100, w: 260, h: 46, label: "Static constructor mı?", sub: "" },
     { id: "q2", kind: "q", x: 625, y: 170, w: 260, h: 46, label: "Constructor mı?", sub: "" },
@@ -1067,12 +1064,10 @@ const CH_MAP = {
     { id: "x_amb", from: "m_amb", to: "i_null", label: "" },
     { id: "x_built", from: "m_built", to: "i_run", label: "" },
     { id: "x_init", from: "m_init", to: "i_init", label: "" },
-    { id: "x_shared", from: "m_shared", to: "i_bucket", label: "" },
     { id: "x_ext", from: "m_ext", to: "i_ext", label: "" },
     { id: "a_run", from: "i_run", to: "q4", label: "sınıflar" },
     { id: "a_null", from: "i_null", to: "q4", label: "null" },
     { id: "a_init", from: "i_init", to: "q5", label: "" },
-    { id: "a_bucket", from: "i_bucket", to: "q5", label: "" },
     { id: "a_ext", from: "i_ext", to: "q5", label: "" },
     { id: "t0", from: "start", to: "q1", label: "" },
     { id: "t1", from: "q1", to: "q2", label: "hayır", lx: 26, ly: 9 },
@@ -1095,7 +1090,7 @@ const CH_MAP = {
       who: "<code>new CoverageIndex(map, fixture =&gt; ClassesUsing(index, project, fixture))</code>, <code>CoverageSelection</code> kurucusunda",
       file: "src/TestDetta.Core/CoverageIndex.cs, CoverageSelection.cs:48",
       input: "<code>map.Methods</code> (id → <code>CoveredMethod(TypeName, MemberName)</code>) ve <code>map.Classes</code> (sınıf → id'ler)",
-      output: "<code>_classesByMember[(Calc.Calculator, Tax)] = {Calc.Tests.TaxTests}</code>; tür ve iç içe türler için <code>_classesByType</code>; üye başına kova sayısı <code>_bucketCount</code>",
+      output: "<code>_classesByMember[(Calc.Calculator, Tax)] = {Calc.Tests.TaxTests}</code>; tür ve iç içe türler için <code>_classesByType</code>",
       purpose: "Soruyu sözlük aramasına indirmek. Haritada listelenip hiç çalışmamış üye de \"biliniyor\" sayılır: boş küme, yani hiçbir test çalıştırmadı.",
       body: ul([
         "Yalnız etkilenen test projelerinin haritaları yüklenir.",
@@ -1113,7 +1108,6 @@ const CH_MAP = {
       body: ul([
         "<code>[setup-scope]Ns</code> (NUnit <code>[SetUpFixture]</code>, MSTest <code>[AssemblyInitialize]</code>): o isim alanındaki ve altındaki her test sınıfı.",
         "<b>Kullananı bulunamayan fixture'ın kodu <code>_ambient</code>'e gider:</b> \"testlerin dışında çalıştı\" sayılır, yani cevaplanamaz.",
-        "Fixture bir kova sayılır (<code>_bucketCount</code>), kaç sınıf kullanırsa kullansın.",
       ]),
     },
     {
@@ -1129,9 +1123,9 @@ const CH_MAP = {
       who: "<code>AddUsers(map, ids, classes)</code>; kayıtta <code>TestDettaTracker.Read/Stored</code> ve <code>BuildMap</code> içindeki <code>FieldReads</code>",
       file: "src/TestDetta.Core/CoverageIndex.cs, src/TestDetta.Coverage/CoverageRecorder.cs",
       input: "<code>builtValues.classes</code>: bir sınıfın okuduğu izlenen alanlara değer yazan metotlar (zincirleme)",
-      output: "Bu metotlar okuyan sınıfın kümesine eklenir, <b>kova sayılmadan</b>",
+      output: "Bu metotlar okuyan sınıfın kümesine eklenir; <code>Hits</code> ise kodun gerçekten nerede çalıştığını tutmaya devam eder",
       purpose: "Örnek: bir önbellek ilk testte doldurulur, sonraki testler yalnız okur. Okuyan sınıf, değeri kuran koda bağımlıdır; kayıt bunu alan okuma/yazma probe'larıyla bağlar.",
-      body: "<p>Kova sayılmamasının sebebi: \"bir kez çalışan kod\" kuralları kodun <i>nerede çalıştığına</i> bakar, değerin nerede kullanıldığına değil.</p>",
+      body: "<p>Tembel katalog ve singleton (<code>_x ??= new X()</code>, static başlatıcı) bu yolla cevaplanır: değeri kuran kod, alanı okuyan her sınıfa yazılır. 2026-10-06'da kaldırılan \"tek kova\" kuralının yerini bu tutar.</p>",
     },
     {
       title: "Başlatma kapsamında çalışan kod işaretlenir", nodes: ["m_init", "i_init"], edges: ["x_init"],
@@ -1143,13 +1137,13 @@ const CH_MAP = {
       body: "<p><b>Bağlanmış</b> (linked) başlatma, yani sonucu izlenen bir alana yazılan, bu listeye girmez: o kod <code>builtValues</code> üzerinden okuyan sınıflara zaten yazılmıştır. <code>docs/design/run-once-cascades.md</code>.</p>",
     },
     {
-      title: "Bir süreçte tek kovada çalışmak şüphelidir", nodes: ["m_shared", "i_bucket"], edges: ["x_shared"],
-      who: "<code>BucketsRunning(type, member)</code>, <code>RanInOneBucketPerProcess</code>, <code>TypeRanInOneBucketPerProcess</code>",
-      file: "src/TestDetta.Core/CoverageIndex.cs",
-      input: "<code>_bucketCount</code> ve <code>sharedInProcess</code> (bir süreçte iki ya da daha çok kovada görülen id'ler)",
-      output: "Üyeyi tek kova çalıştırdıysa ya da her süreçte yalnız bir kova çalıştırdıysa: \"önbelleğe alınan kod\" deseni",
-      purpose: "Tembel katalog ve singleton gibi kod ilk sınıfta çalışır, sonra önbellekten gelir. Tek kova bunun zayıf ama sık görülen izidir.",
-      body: "<p><b>Bu geceki corpus koşusu tam olarak bu kuralı ölçüyor</b> (\"tek kova kuralı\" kapalı). Kural kaldırılırsa seçim daralır. Kaçırma çıkarsa kural kalır ya da daraltılır.</p>",
+      title: "Tek kova kuralı kaldırıldı (2026-10-06)", nodes: ["m_built", "i_run", "m_init", "i_init"], edges: ["x_built", "x_init"],
+      who: "Eskiden <code>BucketsRunning == 1</code> ya da <code>RanInOneBucketPerProcess</code> (harita bölümü <code>sharedInProcess</code>); bugün yok",
+      file: "docs/design/precision-round-2026-10-05.md (madde 2)",
+      input: "Bir kurucu ya da static üye, haritada yalnız tek bir test sınıfında çalışmış görünür",
+      output: "Artık \"bir kez çalışan kod\" sayılmaz: onu çalıştıran sınıflar ve değerini okuyanlar (<code>builtValues</code>) cevaptır, isim izleme durur",
+      purpose: "Kural, önbelleğe alınan kodu tek kovadan tahmin ediyordu. Bu kodu artık doğrudan sinyaller yakalıyor: alan okuma probe'ları (<code>builtValues</code>), başlatma kapsamı (<code>initialization</code>), testlerden önce çalışan kod (<code>ambient</code>) ve üçüncü taraf geri çağırmaları.",
+      body: "<p><b>Ölçüm:</b> aynı derleme, yalnız kural açık/kapalı, bütün corpus: iki durumda da 2422 bozan değişiklikte <b>0 kaçırma</b>. Medyan pay %34,9 → %30,1 (UnitsNet %34,8 → %9,7, Roslynator %34,9 → %16,9). Açık kalan risk: bir değerin bir koleksiyon ya da başka bir nesne üzerinden el değiştirmesi, ki hiçbir probe onu görmez; corpus'ta bu şekle denk gelen mutant çıkmadı.</p>",
     },
     {
       title: "Üçüncü taraf kütüphanelerin geri çağırdığı kod", nodes: ["m_ext", "i_ext"], edges: ["x_ext"],
@@ -1170,7 +1164,7 @@ const CH_MAP = {
     {
       title: "Senaryo 2 · Yeni bir metot eklendi", nodes: ["start", "q1", "q2", "q3", "no"], edges: ["t0", "t1", "t2", "n3"],
       who: "<code>IsAnswerable</code>: <code>change.Kind == Added</code> → <code>Unanswered(change, \"added\")</code>",
-      file: "src/TestDetta.Core/CoverageSelection.cs:537",
+      file: "src/TestDetta.Core/CoverageSelection.cs:535",
       input: "<code>SymbolChange(\"Calc.Calculator\", \"Round\", Added)</code>",
       output: "<code>false</code>: değişiklik isimle izlenir; <code>Round</code>'u anan kodu çalıştıran sınıflar seçilir",
       purpose: "Harita geçmişi kaydeder. Yeni üyeyi henüz kimse çalıştırmadı ama yeni çağıranlar onu çağırıyor olabilir; bunu yalnız isimler gösterir.",
@@ -1195,7 +1189,7 @@ const CH_MAP = {
     {
       title: "Senaryo 5 · Üye keşif sırasında da çalıştı", nodes: ["start", "q1", "q2", "q3", "q4", "no", "i_null"], edges: ["t0", "t1", "t2", "t3", "a_null", "n4"],
       who: "<code>Answers</code> → <code>Lookup</code> → <code>ClassesRunning</code> <code>null</code> → <code>RanOutsideTests</code>",
-      file: "src/TestDetta.Core/CoverageSelection.cs:437, :611",
+      file: "src/TestDetta.Core/CoverageSelection.cs:435, :598",
       input: "Harita: <code>\"ambient\": [7]</code>, <code>methods[7] = [\"App.Rates\", \"All\"]</code> (bir <code>[MemberData]</code> kaynağı onu çağırıyor)",
       output: "<code>false</code>, gerekçe <code>\"it ran outside any test\"</code>",
       purpose: "Teori verisi keşifte bir kez üretilir; hangi testin hangi satırı kullandığı görünmez. Haritanın bilmediği üye de buraya düşer: alan, sabit (derlemede gömülür), soyut üye ya da başka assembly. Gerekçe: <code>\"a map does not know it\"</code>.",
@@ -1203,18 +1197,18 @@ const CH_MAP = {
     {
       title: "Senaryo 6 · Önbellek doldururken çalışan kod", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "no", "i_run", "i_init"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "a_init", "n5"],
       who: "<code>RunOnceReason(map, change)</code> → <code>RanDuringInitialization</code>",
-      file: "src/TestDetta.Core/CoverageSelection.cs:562",
+      file: "src/TestDetta.Core/CoverageSelection.cs:560",
       input: "<code>cache.GetOrAdd(key, k =&gt; Parse(k))</code> içinde çalışan <code>Parse</code>; harita yalnız ilk sınıfı adlandırıyor",
       output: "O sınıf seçili kalır; gerekçe <code>\"it ran in a static constructor or cache fill\"</code>; isim izleme devam eder",
       purpose: "Önbellekten okuyan sonraki sınıflar <code>Parse</code>'a bağımlıdır ama haritada görünmez. Sonuç bir alana bağlandıysa (linked) bu kural devreye girmez; okuyanlar <code>builtValues</code> ile zaten bilinir.",
     },
     {
-      title: "Senaryo 7 · Tek sınıfta çalışan singleton kurucusu", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "no", "i_bucket"], edges: ["t0", "t1", "t2", "t3", "t4", "a_bucket", "n5"],
-      who: "<code>RunOnceReason</code>: kurucu, static üye ya da yansımayla bulunabilir tür ve <code>BucketsRunning == 1 || RanInOneBucketPerProcess</code>",
-      file: "src/TestDetta.Core/CoverageSelection.cs:590",
-      input: "<code>Catalog..ctor</code> yalnız <code>Calc.Tests.FirstTests</code> sırasında çalıştı",
-      output: "<code>FirstTests</code> seçili; gerekçe <code>\"a constructor or static member that ran in one bucket per process\"</code>; isim izleme",
-      purpose: "Tek kova, \"bir kez kurulup önbelleğe alındı\" deseninin izi olabilir. Corpus ölçümleri bu kuralın asıl yükünü Newtonsoft.Json, AutoMapper ve GraphQL'de taşıdığını gösteriyor; bu gecenin deneyi kuralı kapatıp kaçırma olup olmadığına bakıyor.",
+      title: "Senaryo 7 · Tek sınıfta çalışan singleton kurucusu", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok", "i_run", "m_built"], edges: ["t0", "t1", "t2", "t3", "a_run", "x_built", "t4", "t5", "t6", "t7"],
+      who: "<code>Lookup</code> → <code>ClassesRunning</code> (<code>builtValues</code> dahil); <code>RunOnceReason</code> <code>null</code> döner",
+      file: "src/TestDetta.Core/CoverageSelection.cs:560",
+      input: "<code>Catalog..ctor</code> yalnız <code>Calc.Tests.FirstTests</code> sırasında çalıştı; nesne <code>static readonly Catalog Shared</code> alanında tutuluyor",
+      output: "<code>FirstTests</code> ve <code>Shared</code> alanını okuyan her sınıf seçili; cevaplandı, isim izleme durur",
+      purpose: "Eskiden tek kova burada \"bir kez kurulup önbelleğe alındı\" sayılır ve isim izlemesi başlardı. Artık alan okuma probe'u kurucuyu okuyan sınıflara bağlıyor; tek kova kuralı 2026-10-06'da, kapalıyken de 0 kaçırma ölçülünce kaldırıldı.",
     },
     {
       title: "Senaryo 8 · Öznitelik ya da varsayılan değer değişti", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "no"], edges: ["t0", "t1", "t2", "t3", "t4", "t5", "n6"],
@@ -1267,9 +1261,9 @@ const CALLS = {
   ],
   harita: [
     ["new CoverageIndex(map, …)", 0, 0], ["ClassesUsing (fixtures)", 1, 1], ["_ambient", 1, 2], ["AddUsers (builtValues)", 1, 3],
-    ["initialization − linked", 1, 4], ["_bucketCount · sharedInProcess", 1, 5], ["externalCallbacks", 1, 6],
+    ["initialization − linked", 1, 4], ["tek kova kuralı (kaldırıldı)", 1, 5], ["externalCallbacks", 1, 6],
     ["TryResolve · S1 gövde", 0, 7], ["TryResolve · S2 eklendi", 0, 8], ["TryResolve · S3 .cctor", 0, 9], ["TryResolve · S4 .ctor", 0, 10],
-    ["TryResolve · S5 ambient", 0, 11], ["TryResolve · S6 önbellek", 0, 12], ["TryResolve · S7 tek kova", 0, 13],
+    ["TryResolve · S5 ambient", 0, 11], ["TryResolve · S6 önbellek", 0, 12], ["TryResolve · S7 singleton", 0, 13],
     ["TryResolve · S8 metaveri", 0, 14], ["TryResolve · S9 harita yok", 0, 15], ["TryResolve(reached) · S10", 0, 16],
   ],
   eval: [

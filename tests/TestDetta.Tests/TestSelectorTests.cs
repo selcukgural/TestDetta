@@ -592,28 +592,6 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
-    public void Static_member_run_by_a_single_class_is_also_traced_through_its_callers()
-    {
-        // Make may cache its result per process: the map saw only SlugTests run it, although
-        // ReportTests depends on it through Title.
-        _repo.Write("src/Shop/Report.cs", """
-            namespace Shop;
-            public class Report { public string Title() => Slug.Make("Report"); }
-            """);
-        _repo.Write("tests/Shop.Tests/ReportTests.cs", """
-            namespace Shop.Tests;
-            public class ReportTests { [Fact] public void Titles() => Assert.Equal("report", new Report().Title()); }
-            """);
-        _repo.Commit("add report");
-
-        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
-                 ("Shop.Tests.ReportTests", [("Shop.Report", "Title")]));
-        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
-
-        Assert.Equal(["Shop.Tests.ReportTests", "Shop.Tests.SlugTests"], Select().TestClasses);
-    }
-
-    [Fact]
     public void Estimate_adds_up_the_selected_classes_and_their_fixtures()
     {
         _timings = new CoverageTimings(
@@ -679,7 +657,9 @@ public sealed class TestSelectorTests : IDisposable
     {
         // Only code PingHandler calls changed: its declaration, which reflection reads, is the same,
         // so the change matters only where Handle runs (protobuf-net's generated FeatureSetDefaults).
+        // Make also ran outside any test, so its change is traced by name and reaches PingHandler.
         WriteHandlerTests();
+        _ambient.Add(("Shop.Slug", "Make"));
         WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
                  ("Shop.Tests.PingTests", [("Shop.PingHandler", "Handle")]),
                  ("Shop.Tests.HostTests", [("Shop.PingHandler", "Handle")]));
@@ -736,21 +716,6 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
-    public void Reflection_discovered_type_reached_by_name_stays_conservative_when_one_class_ran_it()
-    {
-        // A framework may call a discovered type once and cache the result for every later class.
-        WriteHandlerTests();
-        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
-                 ("Shop.Tests.PingTests", [("Shop.PingHandler", "Handle")]));
-        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
-
-        var selection = Select();
-
-        Assert.Equal(TestRunMode.All, selection.Mode);
-        Assert.Contains("(Shop.PingHandler.Handle() names Make ← changed Shop.Slug.Make(string))", selection.Reason, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Member_reached_through_its_attributes_is_traced_through_its_type_even_with_a_map()
     {
         // Reflection reads Tax's attribute without running Tax, so the classes that ran Tax are not
@@ -799,7 +764,9 @@ public sealed class TestSelectorTests : IDisposable
     [Fact]
     public void Reflection_discovered_type_reached_through_code_no_map_can_answer_selects_the_classes_that_ran_it()
     {
+        // Make also ran outside any test, so its change is traced by name and reaches PingHandler.
         WriteHandlerField();
+        _ambient.Add(("Shop.Slug", "Make"));
         WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make"), ("Shop.PingHandler", "Handle")]),
                  ("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
         _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
@@ -814,19 +781,9 @@ public sealed class TestSelectorTests : IDisposable
     public void Reflection_discovered_type_reached_through_code_stays_conservative_when_the_map_cannot_say_who_ran_it()
     {
         WriteHandlerField();
+        _ambient.Add(("Shop.Slug", "Make"));
         _ambient.Add(("Shop.PingHandler", "Handle"));
         WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make"), ("Shop.PingHandler", "Handle")]),
-                 ("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
-        _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
-
-        Assert.Equal(TestRunMode.All, Select().Mode);
-    }
-
-    [Fact]
-    public void Reflection_discovered_type_reached_through_code_stays_conservative_when_one_class_ran_it()
-    {
-        WriteHandlerField();
-        WriteMap(("Shop.Tests.SlugTests", [("Shop.Slug", "Make")]),
                  ("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
         _repo.Replace("src/Shop/Slug.cs", "title.ToLowerInvariant()", "title.Trim().ToLowerInvariant()");
 

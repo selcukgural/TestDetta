@@ -382,9 +382,8 @@ internal sealed partial class CoverageSelection
     /// classes that ran any of its members in every affected test project with a map downstream of
     /// <paramref name="owners"/>; a type no test ran took part in no test. Returns false, leaving the
     /// project-level fallback, when a map cannot say who ran it (not instrumented, run before the
-    /// first test) or it may be run-once code: run inside a static constructor or cache fill, or by a
-    /// single bucket per process, as a framework that builds it once and caches the result would
-    /// (docs/design/reflection-types-with-coverage.md).
+    /// first test) or it may be run-once code: run inside a static constructor or cache fill, or called
+    /// back by a third-party library (docs/design/reflection-types-with-coverage.md).
     /// </summary>
     /// <param name="typeName">Qualified type name.</param>
     /// <param name="owners">Projects that compile the type.</param>
@@ -408,8 +407,7 @@ internal sealed partial class CoverageSelection
             if (map.ClassesRunningType(typeName) is not { } classes
                 || map.TypeRanOutsideTests(typeName)
                 || map.TypeRanDuringInitialization(typeName)
-                || map.TypeHasExternalCallback(typeName)
-                || (classes.Count > 0 && (map.BucketsRunningType(typeName) == 1 || map.TypeRanInOneBucketPerProcess(typeName))))
+                || map.TypeHasExternalCallback(typeName))
             {
                 return false;
             }
@@ -554,12 +552,12 @@ internal sealed partial class CoverageSelection
     /// Why the change may be code that runs once per test process and caches its result, which the map
     /// credits only to the first class that triggered it (the change is then traced by name as well);
     /// null when it is not. That is any member that ran inside a static constructor or a cache fill or
-    /// is called back by a third-party library, and a constructor or static member that ran in only one
-    /// test class or fixture per recording process (a lazy catalogue, a singleton).
+    /// is called back by a third-party library. A lazy catalogue or singleton stored into a field is
+    /// answered through the values it built, credited to every class that read the field.
     /// </summary>
     /// <param name="map">Coverage of one test project.</param>
     /// <param name="change">A changed member.</param>
-    private string? RunOnceReason(CoverageIndex map, SymbolChange change)
+    private static string? RunOnceReason(CoverageIndex map, SymbolChange change)
     {
         // A whole type answered from coverage is only as good as its members: one built by a static
         // initializer was credited to whichever class came first.
@@ -570,10 +568,6 @@ internal sealed partial class CoverageSelection
                 : null;
         }
 
-        var isConstructor = change.MemberName.StartsWith(".ctor", StringComparison.Ordinal);
-        // A framework that discovers a type may call it once and cache the result for every later class,
-        // so any member of such a type counts, not only constructors and static members.
-        var isStatic = _index.FindMember(change.TypeName, change.MemberName) is { IsStatic: true };
         foreach (var name in DeclarationWalker.CompiledNames(change.MemberName))
         {
             if (map.RanDuringInitialization(change.TypeName, name))
@@ -586,13 +580,6 @@ internal sealed partial class CoverageSelection
             if (map.IsExternalCallback(change.TypeName, name))
             {
                 return "a third-party library calls it back";
-            }
-
-            // Nothing ran it at all means no test runs it; run-once code is still recorded for its first user.
-            if ((isConstructor || isStatic || MayBeFoundByReflection(change.TypeName))
-                && (map.BucketsRunning(change.TypeName, name) == 1 || map.RanInOneBucketPerProcess(change.TypeName, name)))
-            {
-                return "a constructor or static member that ran in one bucket per process";
             }
         }
 

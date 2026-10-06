@@ -48,6 +48,15 @@ analysis, measured on the first three repositories.)
    test framework calls back (AutoFixture's NUnit attributes). Narrowing it to those shapes, now that
    value probes link most run-once code, is the backlog item "narrow the run-once rules"; it needs the
    corpus with fresh recordings, which the warm cache now makes cheap.
+   **Removed 2026-10-06.** The whole corpus ran with the rule off (build `592c15b`, only the rule
+   switched by an environment variable; `runs-nosingle-all` plus Mapperly alone): 0 missed of 2422
+   failing mutants, the same as with the rule on. Median share per repository 30.1% off against
+   34.9% on (mean 39.7% against 43.8%); UnitsNet 34.8% → 9.7%, Roslynator 34.9% → 16.9%,
+   Meziantou 65.1% → 45.1%, Scriban 58.9% → 44.7%, NodaTime 22.9% → 14.7%. The cases it was once
+   needed for are covered now: NSec's discovery-time data by the ambient rule, AutoFixture's
+   attributes by the third-party callback rule, values kept in fields by the field-read probes.
+   What remains uncovered is a value handed over through a collection or another object that no
+   probe sees; no mutant in the corpus hit that shape. The map no longer records `sharedInProcess`.
 3. **"No affected test project with a map depends on it"** (AutoMapper, Lamar). The member's project
    has no test project with a map below it (benchmarks, samples, widget projects loaded by scanning).
    The name trace from there can only reach that project and its dependents; to be checked whether it

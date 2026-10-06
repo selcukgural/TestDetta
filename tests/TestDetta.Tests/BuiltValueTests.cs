@@ -76,8 +76,6 @@ public sealed class BuiltValueTests : IDisposable
             var classes = index.ClassesRunning(type, member);
             Assert.NotNull(classes);
             Assert.All(Users, n => Assert.Contains($"Shop.Tests.{prefix}{n}Tests", classes));
-            // Where the builder really ran is unchanged: one class, so the run-once rules still apply.
-            Assert.Equal(1, index.BucketsRunning(type, member));
         }
     }
 
