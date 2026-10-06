@@ -34,6 +34,7 @@ internal static class DataFileSampler
         var candidates = new GitClient(NullLogger<GitClient>.Instance).TrackedFiles(repoRoot)
             .Where(f => !f.StartsWith(".git", StringComparison.Ordinal) && !f.StartsWith(".testdetta/", StringComparison.Ordinal)
                         && !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                        && IsData(repoRoot, f)
                         && graph.ResolveFile(Paths.Normalize(Path.Combine(repoRoot, f))).Count == 0
                         && IsSmallText(Path.Combine(repoRoot, f)))
             .Order(StringComparer.Ordinal)
@@ -61,6 +62,20 @@ internal static class DataFileSampler
             Kind = MutantKind.EmptyFile,
         };
     }
+
+    /// <summary>Extensions of files a project may compile or import: a change to one is decided as a build input, not a read.</summary>
+    private static readonly string[] BuildExtensions = [".cs", ".fs", ".vb", ".props", ".targets", ".projitems", ".csproj", ".fsproj", ".vbproj"];
+
+    /// <summary>
+    /// True for a file whose change the analysis leaves to file reads: not a directory-wide build file
+    /// (<c>global.json</c>, <c>Directory.Build.props</c>, <c>.editorconfig</c>, which run every project
+    /// below them) and not a source or build file.
+    /// </summary>
+    /// <param name="repoRoot">Repository root.</param>
+    /// <param name="file">Repository-relative path.</param>
+    private static bool IsData(string repoRoot, string file) =>
+        !BuildFiles.IsDirectoryWide(Paths.Normalize(Path.Combine(repoRoot, file)))
+        && !Array.Exists(BuildExtensions, e => file.EndsWith(e, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>True for a non-empty file of at most <see cref="MaxBytes"/> with no NUL byte in its start.</summary>
     /// <param name="path">Full path.</param>
