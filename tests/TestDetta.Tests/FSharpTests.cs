@@ -197,6 +197,35 @@ public sealed class FSharpTests : IDisposable
         Assert.Equal(["Shop.FsTests.TaxTests"], selection.TestClasses);
     }
 
+    [Fact]
+    public void An_active_pattern_is_found_by_its_cases()
+    {
+        WriteLibraryAndTests();
+
+        // AutoOpen: the test names neither the pattern's function nor its module, only its cases.
+        _repo.Replace("src/Calc/Calculator.fs", "module Helpers =", "[<AutoOpen>]\nmodule Helpers =");
+        _repo.Replace("src/Calc/Calculator.fs", "    let limit = 100\n", "    let limit = 100\n\n    let (|Even|Odd|) x = if x % 2 = 0 then Even else Odd\n");
+        _repo.Write("tests/Shop.FsTests/OtherTests.fs", """
+            module Shop.FsTests.OtherTests
+
+            open Xunit
+            open Shop.Calc
+
+            [<Fact>]
+            let ``parity`` () = Assert.True(match 2 with Even -> true | Odd -> false)
+
+            [<Fact>]
+            let ``nothing here`` () = Assert.True(true)
+            """);
+        _repo.Commit("patterns");
+        _repo.Replace("src/Calc/Calculator.fs", "if x % 2 = 0 then Even else Odd", "if x % 2 <> 0 then Odd else Even");
+
+        var selection = Select("Shop.FsTests.fsproj");
+
+        Assert.Equal(TestRunMode.Filtered, selection.Mode);
+        Assert.Equal(["Shop.FsTests.OtherTests"], selection.TestClasses);
+    }
+
     private void WriteLibraryAndTests()
     {
         _repo.Write("src/Calc/Calc.fsproj", """

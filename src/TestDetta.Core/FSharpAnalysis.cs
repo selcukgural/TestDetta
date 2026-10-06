@@ -241,7 +241,7 @@ internal static class FSharpIndexer
                     owner.IsTestProject,
                     declaration.TypeName,
                     declaration.MemberName,
-                    declaration.MemberName is null ? [] : DeclarationWalker.ReferenceNames(declaration.MemberName),
+                    declaration.MemberName is null ? [] : DeclaredNames(declaration.MemberName),
                     declaration.MemberName is null || declaration.MayBeCalledImplicitly || Implicit(declaration.MemberName),
                     declaration.MemberName is not null && declaration.IsPrivate,
                     declaration.MemberName is not null && declaration.IsStatic,
@@ -253,10 +253,24 @@ internal static class FSharpIndexer
         }
     }
 
-    /// <summary>True for a member name the runtime or frameworks call by convention.</summary>
+    /// <summary>
+    /// The names code uses for a member: an active pattern's cases (<c>(|Even|Odd|)</c> is used as
+    /// <c>Even</c> and <c>Odd</c>), otherwise as for C#.
+    /// </summary>
+    /// <param name="memberName">Member identity.</param>
+    private static IReadOnlyList<string> DeclaredNames(string memberName) =>
+        memberName.StartsWith('|')
+            ? [.. memberName.Split('|', StringSplitOptions.RemoveEmptyEntries).Where(static n => n != "_")]
+            : DeclarationWalker.ReferenceNames(memberName);
+
+    /// <summary>
+    /// True for a member code may run without its name: one the runtime or frameworks call by
+    /// convention, or an operator (<c>op_PlusDot</c>, used as <c>+.</c>).
+    /// </summary>
     /// <param name="memberName">Member identity.</param>
     private static bool Implicit(string memberName) =>
-        DeclarationWalker.ReferenceNames(memberName) is var names && (names.Count == 0 || names.Any(SourceIndexBuilder.ImplicitlyCalledNames.Contains));
+        DeclaredNames(memberName) is var names
+        && (names.Count == 0 || names.Any(static n => n.StartsWith("op_", StringComparison.Ordinal)) || names.Any(SourceIndexBuilder.ImplicitlyCalledNames.Contains));
 
     /// <summary>The identifiers among <paramref name="tokens"/> (an attribute's also with <c>Attribute</c> after it), plus <paramref name="extra"/>.</summary>
     /// <param name="tokens">Tokens of a declaration.</param>
