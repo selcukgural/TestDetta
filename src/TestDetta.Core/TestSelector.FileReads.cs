@@ -225,44 +225,98 @@ public sealed partial class TestSelector
                     continue;
                 }
 
-                var commit = map.Commit[..Math.Min(12, map.Commit.Length)];
-                string? whole = null;
-                foreach (var (place, used) in (ReadOnlySpan<(string, IReadOnlyList<string>)>)[
-                    ("outside its tests", recorded.Ambient),
-                    ("while initializing what its tests share", recorded.Initialization),
-                    .. recorded.Fixtures.Select(static f => ($"in the setup of {f.Key}", f.Value))])
-                {
-                    if (Uses(used, names))
-                    {
-                        whole = $"it started or loaded the output of {output} {place} (map {commit})";
-                        break;
-                    }
-                }
-
-                var classes = new SortedDictionary<string, string>(StringComparer.Ordinal);
-                foreach (var (testClass, used) in recorded.Classes)
-                {
-                    if (Uses(used, names))
-                    {
-                        classes[testClass] = $"started or loaded the output of {output}, which is affected (map {commit})";
-                    }
-                }
-
-                LogOutputUsers(path, output, classes.Count, whole ?? "-");
-                if (whole is null && classes.Count == 0)
-                {
-                    continue;
-                }
-
-                readers[path] = readers.TryGetValue(path, out var existing)
-                    ? existing with
-                    {
-                        WholeProject = existing.WholeProject ?? whole,
-                        Classes = new SortedDictionary<string, string>(existing.Classes.Concat(classes.Where(c => !existing.Classes.ContainsKey(c.Key))).ToDictionary(), StringComparer.Ordinal),
-                    }
-                    : new FileReaders(project, whole, classes);
+                AddUsersOf(path, project, map, recorded, output, names, "started or loaded the output of", readers);
             }
         }
+    }
+
+    /// <summary>
+    /// The tests that load the output of a changed project from its path (<c>Assembly.LoadFrom</c>, a
+    /// process start, a read of the file in a build output), which they may inspect anywhere through
+    /// reflection: a public API baseline test reads every public declaration and static field value
+    /// without running the code (AspNetCoreOData's PublicApiTest). The project's own coverage cannot say
+    /// which of its changes such a test sees, so every class whose map records the use is selected, or
+    /// the whole project when the use came outside the tests, while initializing or in a fixture's setup.
+    /// Projects referenced without compiling against them are <see cref="AddOutputUsers"/>' part.
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="projectLevel">Projects that run completely; left out.</param>
+    /// <param name="readers">Readers per test project; updated in place.</param>
+    private void AddLoadedOutputUsers(TestSelectionRequest request, Dictionary<string, string> projectLevel, Dictionary<string, FileReaders> readers)
+    {
+        var changed = request.Impact.Affected.Where(static a => a.Reason == ImpactReason.DirectChange).Select(static a => a.Project).ToList();
+        if (changed.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (testProject, _) in request.Impact.Tests)
+        {
+            var path = testProject.Path;
+            if (projectLevel.ContainsKey(path) || !request.CoverageMaps.TryGetValue(path, out var map) || map.OutputUses is not { } recorded)
+            {
+                continue;
+            }
+
+            foreach (var project in changed)
+            {
+                string[] names = [project.AssemblyName, Path.GetFileNameWithoutExtension(project.Path)];
+                AddUsersOf(path, testProject, map, recorded, Path.GetFileName(project.Path), names, "loaded the output of", readers);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds to <paramref name="readers"/> the classes of <paramref name="testProject"/> whose map recorded a use
+    /// of a file named <paramref name="names"/>, or the whole project for a use outside its tests, while
+    /// initializing or in a fixture's setup.
+    /// </summary>
+    /// <param name="path">Normalized test project path.</param>
+    /// <param name="testProject">The test project.</param>
+    /// <param name="map">Its coverage map.</param>
+    /// <param name="recorded">The map's uses.</param>
+    /// <param name="output">The affected project's file name, for the evidence.</param>
+    /// <param name="names">Names a use of its output carries.</param>
+    /// <param name="verb">How the evidence describes the use.</param>
+    /// <param name="readers">Readers per test project; updated in place.</param>
+    private void AddUsersOf(string path, ProjectNode testProject, CoverageMap map, FileReads recorded, string output, string[] names, string verb, Dictionary<string, FileReaders> readers)
+    {
+        var commit = map.Commit[..Math.Min(12, map.Commit.Length)];
+        string? whole = null;
+        foreach (var (place, used) in (ReadOnlySpan<(string, IReadOnlyList<string>)>)[
+            ("outside its tests", recorded.Ambient),
+            ("while initializing what its tests share", recorded.Initialization),
+            .. recorded.Fixtures.Select(static f => ($"in the setup of {f.Key}", f.Value))])
+        {
+            if (Uses(used, names))
+            {
+                whole = $"it {verb} {output} {place} (map {commit})";
+                break;
+            }
+        }
+
+        var classes = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (testClass, used) in recorded.Classes)
+        {
+            if (Uses(used, names))
+            {
+                classes[testClass] = $"{verb} {output}, which is affected (map {commit})";
+            }
+        }
+
+        LogOutputUsers(path, output, classes.Count, whole ?? "-");
+        if (whole is null && classes.Count == 0)
+        {
+            return;
+        }
+
+        readers[path] = readers.TryGetValue(path, out var existing)
+            ? existing with
+            {
+                WholeProject = existing.WholeProject ?? whole,
+                Classes = new SortedDictionary<string, string>(existing.Classes.Concat(classes.Where(c => !existing.Classes.ContainsKey(c.Key))).ToDictionary(), StringComparer.Ordinal),
+            }
+            : new FileReaders(testProject, whole, classes);
 
         static bool Uses(IReadOnlyList<string> used, string[] names) =>
             used.Any(u => names.Any(n => string.Equals(u, n, StringComparison.OrdinalIgnoreCase)));

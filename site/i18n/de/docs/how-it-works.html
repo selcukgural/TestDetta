@@ -1,4 +1,4 @@
-<!-- title: Wie es entscheidet; layout: docs; description: Wie {{name}} aus einem Git-Diff die auszuführenden Testprojekte und Testklassen ermittelt.; source: 9d9623b95770 -->
+<!-- title: Wie es entscheidet; layout: docs; description: Wie {{name}} aus einem Git-Diff die auszuführenden Testprojekte und Testklassen ermittelt.; source: d28e5a3cd793 -->
 <h1>Wie es entscheidet</h1>
 <p class="lead">{{name}} grenzt die Auswahl Schritt für Schritt ein, und nur dort, wo es Belege dafür hat. Alles, was sich nicht nachverfolgen lässt, führt dazu, dass mehr ausgeführt wird.</p>
 
@@ -14,7 +14,7 @@
 <p>Bei C#-Dateien werden der alte und der neue Syntaxbaum verglichen. Änderungen an Kommentaren und Leerraum wählen nichts aus; andernfalls weiß {{name}}, welche Typen und Member sich geändert haben.</p>
 
 <h3>3. Coverage</h3>
-<p>Nach <code>td record</code> liefert eine am Basis-Commit aufgezeichnete Map, welche Testklasse welche Methode ausgeführt hat, direkt die Testklassen für geänderte Methoden, Eigenschaften und Konstruktoren.</p>
+<p>Nach <code>td record</code> liefert eine am Basis-Commit aufgezeichnete Map, welche Testklasse welche Methode ausgeführt hat, direkt die Testklassen für geänderte Methoden, Eigenschaften und Konstruktoren. Ein geänderter Feld- oder Eigenschaftsinitialisierer zählt als Änderung des Konstruktors, in den er kompiliert wird. Eine Testklasse, die die Assembly eines Projekts über ihren Pfad lädt, etwa ein Public-API-Baseline-Test, der jede Deklaration per Reflection liest, läuft bei jeder Änderung dieses Projekts.</p>
 
 <h3>4. Namen</h3>
 <p>Was die Coverage nicht sieht, etwa neuer Code, Felder und Konstanten, wird anhand des Namens durch den Quellcode verfolgt, bis es Testklassen oder Code erreicht, den die Coverage-Map kennt.</p>

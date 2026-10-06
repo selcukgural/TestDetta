@@ -29,6 +29,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         var outputUses = new List<OutputUse>();
         var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, generatorUses, outputUses);
         AddOutputUsers(request, outputUses, projectLevel, readers);
+        AddLoadedOutputUsers(request, projectLevel, readers);
         var generatorOutput = CompareGeneratorOutput(request, projectLevel, generatorUses);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)

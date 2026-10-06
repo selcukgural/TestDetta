@@ -284,6 +284,26 @@ internal sealed class VisualBasicLanguage : SourceLanguage
         },
     };
 
+    /// <inheritdoc/>
+    public override (string Constructor, IReadOnlyList<SyntaxNode> Initializers)? Initializer(SyntaxNode member)
+    {
+        List<SyntaxNode> initializers = Header(member) switch
+        {
+            FieldDeclarationSyntax field when !field.Modifiers.Any(SyntaxKind.ConstKeyword) =>
+                [.. field.Declarators.SelectMany(static d => (SyntaxNode?[])[d.Initializer, d.AsClause as AsNewClauseSyntax]).OfType<SyntaxNode>()],
+            PropertyStatementSyntax property => [.. ((SyntaxNode?[])[property.Initializer, property.AsClause as AsNewClauseSyntax]).OfType<SyntaxNode>()],
+            _ => [],
+        };
+        if (initializers.Count == 0)
+        {
+            return null;
+        }
+
+        // Members of a Module are shared without saying so.
+        var shared = Shared(Modifiers(member)) || Header(member) is PropertyStatementSyntax { Modifiers: var m } && Shared(m) || member.Parent is ModuleBlockSyntax;
+        return (shared ? ".cctor" : ".ctor", initializers);
+    }
+
     /// <summary>True when <c>Shared</c> is among <paramref name="modifiers"/>.</summary>
     /// <param name="modifiers">Modifiers.</param>
     internal static bool Shared(SyntaxTokenList modifiers) => modifiers.Any(SyntaxKind.SharedKeyword);

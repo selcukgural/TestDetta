@@ -102,6 +102,7 @@ git ls-files --others --exclude-standard                # yeni, izlenmeyen dosya
         "Öznitelik ya da varsayılan parametre değeri değiştiyse <code>MetadataChanged = true</code> (kapsam haritası bunu cevaplayamaz).",
         "<code>global using</code> ya da assembly özniteliği değiştiyse <code>AffectsWholeProject = true</code>.",
         "<code>#if</code> içeren dosya her ilgili sembol kümesiyle ayrı ayrı ayrıştırılır, sonuçlar birleşir.",
+        "Alan ya da property başlatıcısı eklenince, silinince ya da değişince türün <code>.cctor</code>'u (static) ya da <code>.ctor</code>'u (instance) da değişmiş sayılır (<code>SourceLanguage.Initializer</code>); yalnız öznitelik değişirse sayılmaz. Sabitlerin başlatıcısı yoktur.",
       ]),
     },
     {
@@ -151,6 +152,7 @@ git ls-files --others --exclude-standard                # yeni, izlenmeyen dosya
         "Projeye ait <code>.cs</code> olmayan bir dosya değişti (json, resx, csproj…) ya da bir derleme girdisi değişti.",
         "Bir <code>.cs</code> dosyası karşılaştırılamadı ya da <code>AffectsWholeProject</code>.",
         "Proje C# değil, ya da etkilenen bir projeyi derlemeden referanslıyor (opak). Opak referans bir jeneratörse bir sonraki adıma gider.",
+        "Değişen bir projenin çıktısını kendi yolundan yükleyen (<code>Assembly.LoadFrom</code>, süreç başlatma) test sınıfları o projenin her değişikliğinde seçilir (<code>AddLoadedOutputUsers</code>): haritanın <code>OutputUses</code>'ında projenin adı geçen sınıflar; testler dışında, başlatmada ya da fixture kurulumunda kullanım projeyi tamamen koşturur. Örnek: AspNetCoreOData'nın <code>PublicApiTest</code>'i bütün public API'yi yansımayla döker.",
         "<code>ReferenceOutputAssembly=\"false\"</code> referansı (jeneratör değil) <code>OutputUse</code> olur: <code>BuildOutputUse.Find</code> tüketicinin proje dosyasını ve içe aktardıklarını okur (<code>OutputItemType</code>, referans verilen projeyi anan ya da <code>@(ProjectReference)</code> gezen target, onun çıktısından derleme girdisi). <code>AddOutputUsers</code> altındaki her test projesinde haritanın <code>OutputUses</code>'ında o adı taşıyan sınıfları seçer. Derleme çıktıyı kullanıyorsa önce test projesi derlenir ve <code>BuildInputsDiffer</code> tüketicinin <code>BuildInputs</code>'ını haritayla karşılaştırır; fark, harita yokluğu, testler dışında kullanım ya da çok framework'lü proje: tamamen koşar.",
         "Drift'te aynı türden değişiklik varsa o haritalar düşer; <code>--drift-fallback all</code> ile proje tamamen koşar.",
       ]) + "<p>Örnekte yalnız <code>Calculator.cs</code> değişti: tamamen koşan proje yok.</p>",

@@ -15,7 +15,7 @@ const CALLS = {
     ["CliApp.Run", 0, 0], ["AnalysisPipeline.Run", 1, 1], ["GitClient.ChangedFiles · MergeBase", 2, 1],
     ["ProjectGraphLoader.Load", 2, 2], ["MsBuildProjectEvaluator.Evaluate", 3, 2], ["CodeChangeReader.Read", 2, 3],
     ["CodeChangeDetector.Detect", 3, 3], ["ImpactAnalyzer.Analyze", 2, 4], ["LoadCoverageMaps · MapDrift", 2, 5],
-    ["TestSelector.Select", 2, 6], ["FindFileReaders", 3, 6], ["WithoutDriftedMaps · FindProjectLevelChanges", 3, 7], ["BuildOutputUse.Find · AddOutputUsers", 4, 7],
+    ["TestSelector.Select", 2, 6], ["FindFileReaders", 3, 6], ["WithoutDriftedMaps · FindProjectLevelChanges", 3, 7], ["BuildOutputUse.Find · AddOutputUsers · AddLoadedOutputUsers", 4, 7],
     ["CompareGeneratorOutput", 3, 8], ["SourceIndexBuilder.Build", 3, 9], ["CoverageSelection.TryResolve", 3, 10],
     ["Trace (ImpactPropagation) · Bridge", 3, 11], ["Decide · WithFileReaders", 3, 12], ["Estimate · Plan", 2, 13],
     ["CliApp.RunTests", 1, 14], ["TestInvocationBuilder.Build", 2, 14], ["TestRunner.RunAll", 2, 14], ["MarkdownSummary.Write", 2, 14],

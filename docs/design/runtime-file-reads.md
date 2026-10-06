@@ -212,3 +212,35 @@ projects.
 - **Tests**: `OutputUseRecordingTests` (repository call, reflection standing in for a third-party
   starter, assembly load), `OutputUseSelectionTests` (12 cases of the rule), `OutputUseBuildTests` (a
   build that copies the output selects the starter; one that generates code from it runs everything).
+
+## Outputs loaded by their path, any project (owner, 2026-10-06)
+
+Found on AspNetCoreOData after the duplicate-switch eval fix (5ce6ba8) made it informative again: a
+mutant of `SerializableErrorKeys.ModelStateKey` (`public static readonly string ModelStateKey =
+"ModelState"`) failed `PublicApiTest.TestPublicApi`, which TestDetta had not selected (confirmed alone
+with and without the mutant). The test loads `Microsoft.AspNetCore.OData.dll` with `Assembly.LoadFrom`,
+dumps every public declaration and static field value through reflection, and compares the dump with
+a baseline. It runs no member of the changed type, and nothing names the field, so neither coverage nor
+the name spread could reach it. The map already recorded the signal: `outputUses` lists
+`Microsoft.AspNetCore.OData` for `PublicApiTest`; it was only read for references that do not compile
+against the output.
+
+Two changes, both approved by the owner:
+
+- **A test class that loads a changed project's output by its path is selected for any change to that
+  project** (`TestSelector.AddLoadedOutputUsers`): every affected test project with a map that records
+  uses, every project with a direct change, the classes whose `outputUses` carry its assembly or project
+  name. A use outside the tests, while initializing or in a fixture's setup runs the whole project, as for
+  the outputs above. A map without `outputUses` changes nothing (maps from before 2026-10-06 never
+  answered this). Such a test may inspect anything in the assembly, and the project's own coverage cannot
+  say which of its changes it sees; the rule stays narrow because only code in the repository that loads
+  by path is recorded (a test framework loading the test assembly is not instrumented).
+- **A field or property initializer is part of the constructor it compiles into**
+  (`SourceLanguage.Initializer`, `CodeChangeDetector.Compare`): adding, removing or changing a static
+  initializer adds a `.cctor` change of its type, an instance one a `.ctor` change; an attribute change
+  alone does not. A constant has no initializer (its value is compiled into its users, who name it). The
+  existing constructor rules then select every class that ran the type, which includes a class that read
+  the field through reflection when its static constructor ran in that class. C# and Visual Basic
+  (`Shared`, `Module` members, `As New`); F# `let` values are not covered yet.
+
+Tests: `LoadedOutputTests` (14 cases).

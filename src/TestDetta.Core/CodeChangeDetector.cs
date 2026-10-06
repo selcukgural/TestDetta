@@ -158,6 +158,27 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
             }
         }
 
+        var initializers = new HashSet<(string TypeName, string Constructor)>();
+        void Initializer(Declaration declaration)
+        {
+            if (declaration.MemberName is not null && language.Initializer(declaration.Node) is var (constructor, _))
+            {
+                initializers.Add((declaration.TypeName, constructor));
+            }
+        }
+
+        // A modified member changes its constructor when its initializers did, not for an attribute.
+        void InitializerChange(Declaration oldDeclaration, Declaration newDeclaration)
+        {
+            var before = language.Initializer(oldDeclaration.Node);
+            var after = language.Initializer(newDeclaration.Node);
+            if (before?.Constructor != after?.Constructor || before is { } b && after is { } a && !SignificantEquals(language, b.Initializers, a.Initializers))
+            {
+                Initializer(oldDeclaration);
+                Initializer(newDeclaration);
+            }
+        }
+
         foreach (var (key, oldDeclaration) in oldDeclarations)
         {
             if (wholeTypeChanges.Contains(oldDeclaration.TypeName))
@@ -168,11 +189,13 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
             if (!newDeclarations.TryGetValue(key, out var newDeclaration))
             {
                 symbols.Add(new SymbolChange(oldDeclaration.TypeName, oldDeclaration.MemberName, SymbolChangeKind.Removed));
+                Initializer(oldDeclaration);
                 continue;
             }
 
             if (!SignificantEquals(language, oldDeclaration.Node, newDeclaration.Node, oldDeclaration.Descend))
             {
+                InitializerChange(oldDeclaration, newDeclaration);
                 symbols.Add(new SymbolChange(oldDeclaration.TypeName, oldDeclaration.MemberName, SymbolChangeKind.Modified)
                 {
                     MetadataChanged = !SignificantEquals(
@@ -188,6 +211,18 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
             if (!wholeTypeChanges.Contains(newDeclaration.TypeName) && !oldDeclarations.ContainsKey(key))
             {
                 symbols.Add(new SymbolChange(newDeclaration.TypeName, newDeclaration.MemberName, SymbolChangeKind.Added));
+                Initializer(newDeclaration);
+            }
+        }
+
+        // A field or property initializer compiles into the static constructor or every instance
+        // constructor, so changing, adding or removing one changes that constructor: a map credits the
+        // classes that ran the type (a static field read through reflection runs no member of its own).
+        foreach (var (typeName, constructor) in initializers)
+        {
+            if (!symbols.Any(c => c.TypeName == typeName && c.MemberName == constructor))
+            {
+                symbols.Add(new SymbolChange(typeName, constructor, SymbolChangeKind.Modified));
             }
         }
 

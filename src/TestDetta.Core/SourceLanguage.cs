@@ -63,6 +63,14 @@ internal abstract class SourceLanguage
     public abstract bool HasTopLevelStatements(SyntaxNode root);
 
     /// <summary>
+    /// The constructor the field or property initializers of <paramref name="member"/> compile into
+    /// (<c>.cctor</c> for static ones, <c>.ctor</c> for instance ones) and the initializer nodes; null when
+    /// the member has none (a constant has none: its value is compiled into its users).
+    /// </summary>
+    /// <param name="member">Member declaration node.</param>
+    public virtual (string Constructor, IReadOnlyList<SyntaxNode> Initializers)? Initializer(SyntaxNode member) => null;
+
+    /// <summary>
     /// The file parsed with no symbols, with all the symbols its conditions name, and with each symbol set
     /// the compiler uses reduced to those (see <see cref="DeclarationWalker.ParseVariants(SourceText?, IReadOnlyCollection{IReadOnlyList{string}})"/>).
     /// </summary>
@@ -148,4 +156,13 @@ internal sealed class CSharpLanguage : SourceLanguage
     /// <inheritdoc/>
     public override bool HasTopLevelStatements(SyntaxNode root) =>
         ((CompilationUnitSyntax)root).Members.Any(static m => m is GlobalStatementSyntax);
+
+    /// <inheritdoc/>
+    public override (string Constructor, IReadOnlyList<SyntaxNode> Initializers)? Initializer(SyntaxNode member) => member switch
+    {
+        BaseFieldDeclarationSyntax field when !field.Modifiers.Any(SyntaxKind.ConstKeyword) && field.Declaration.Variables.Any(static v => v.Initializer is not null) =>
+            (field.Modifiers.Any(SyntaxKind.StaticKeyword) ? ".cctor" : ".ctor", [.. field.Declaration.Variables.Select(static v => v.Initializer).OfType<SyntaxNode>()]),
+        PropertyDeclarationSyntax { Initializer: { } initializer } property => (property.Modifiers.Any(SyntaxKind.StaticKeyword) ? ".cctor" : ".ctor", [initializer]),
+        _ => null,
+    };
 }

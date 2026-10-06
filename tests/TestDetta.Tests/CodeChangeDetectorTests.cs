@@ -67,6 +67,8 @@ public sealed class CodeChangeDetectorTests
                 new SymbolChange("App.Orders.OrderService", "Place(string)", SymbolChangeKind.Removed),
                 new SymbolChange("App.Orders.OrderService", "_limit", SymbolChangeKind.Removed),
                 new SymbolChange("App.Orders.OrderService", "Cancel(Guid)", SymbolChangeKind.Added),
+                // _limit's initializer ran in every constructor.
+                new SymbolChange("App.Orders.OrderService", ".ctor", SymbolChangeKind.Modified),
             ],
             change.Symbols.OrderByDescending(s => s.Kind == SymbolChangeKind.Removed).ThenByDescending(s => s.MemberName));
     }

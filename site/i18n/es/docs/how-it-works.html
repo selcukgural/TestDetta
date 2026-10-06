@@ -1,4 +1,4 @@
-<!-- title: Cómo decide; layout: docs; description: Cómo convierte {{name}} un git diff en los proyectos de pruebas y las clases de prueba que hay que ejecutar.; source: 9d9623b95770 -->
+<!-- title: Cómo decide; layout: docs; description: Cómo convierte {{name}} un git diff en los proyectos de pruebas y las clases de prueba que hay que ejecutar.; source: d28e5a3cd793 -->
 <h1>Cómo decide</h1>
 <p class="lead">{{name}} reduce la selección paso a paso, y solo donde tiene pruebas de ello. Todo lo que no puede rastrear recurre a ejecutar más.</p>
 
@@ -14,7 +14,7 @@
 <p>En los archivos de C#, se comparan los árboles de sintaxis antiguo y nuevo. Los cambios en comentarios y espacios en blanco no seleccionan nada; en los demás casos, {{name}} sabe qué tipos y miembros cambiaron.</p>
 
 <h3>3. Cobertura</h3>
-<p>Tras <code>td record</code>, un mapa de qué clase de prueba ejecutó qué método, registrado en el commit base, da directamente las clases de prueba de los métodos, propiedades y constructores modificados.</p>
+<p>Tras <code>td record</code>, un mapa de qué clase de prueba ejecutó qué método, registrado en el commit base, da directamente las clases de prueba de los métodos, propiedades y constructores modificados. Un cambio en el inicializador de un campo o una propiedad cuenta como un cambio en el constructor en el que se compila. Una clase de prueba que carga el ensamblado de un proyecto desde su ruta, como una prueba de línea base de la API pública que lee cada declaración por reflexión, se ejecuta cada vez que ese proyecto cambia.</p>
 
 <h3>4. Nombres</h3>
 <p>Lo que la cobertura no puede ver, como el código nuevo, los campos y las constantes, se rastrea por nombre a través del código fuente hasta llegar a clases de prueba o a código que el mapa de cobertura conoce.</p>

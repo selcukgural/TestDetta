@@ -24,6 +24,12 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- ~~**A test that loads a project's assembly by its path missed changes it sees through reflection**~~
+  (done 2026-10-06, AspNetCoreOData `PublicApiTest`, a static field value changed): such classes are now
+  selected for any change to that project, and an initializer change counts as a change of its
+  constructor (docs/design/runtime-file-reads.md, last section). Open: F# `let` values; the site's
+  limitations page still describes the removed single-bucket rule ("constructors and static members that
+  only one test class per recording process ran").
 - ~~**The user's own `--filter` broke every narrowed run**~~ (done 2026-10-06): `td test -- --filter
   "Category!=Integration"` added a second `--filter` next to TestDetta's class filter, and `dotnet test`
   stops with "Option '--filter' expects a single argument but 2 were provided" (exit 1): a CI that keeps
