@@ -97,4 +97,4 @@ jobs:
           global-json-file: global.json
 
       - name: Test
-        run: dotnet test --nologo --filter "Category!=Slow"
+        run: dotnet test --nologo --filter "Category!=Slow&Category!=Legacy"

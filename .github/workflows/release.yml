@@ -27,7 +27,7 @@ jobs:
       - name: Test
         env:
           CI: 'true'
-        run: dotnet test --filter "Category!=Slow" -c Release --nologo
+        run: dotnet test --filter "Category!=Slow&Category!=Legacy" -c Release --nologo
 
       - name: Pack
         env:

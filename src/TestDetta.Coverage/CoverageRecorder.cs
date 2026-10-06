@@ -290,7 +290,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // Only VSTest needs settings then, for the collector.
             if (run.Mode == DotnetTestMode.VSTest)
             {
-                arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: true, sequential: false)]);
+                arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: true, sequential: false, RuntimeDeployment.TrackerFor(run.TargetPath))]);
             }
         }
         else if (File.Exists(Path.Combine(binaries, "TUnit.Engine.dll")))
@@ -303,7 +303,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
         else
         {
-            arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: run.Mode == DotnetTestMode.VSTest, sequential: true)]);
+            arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: run.Mode == DotnetTestMode.VSTest, sequential: true, RuntimeDeployment.TrackerFor(run.TargetPath))]);
         }
 
         if (run.Framework is not null)
@@ -693,18 +693,22 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// loads it once. Microsoft.Testing.Platform has no collectors.
     /// </param>
     /// <param name="sequential">True to make the tests run one at a time.</param>
-    private static string WriteRunSettings(string directory, bool withCollector, bool sequential)
+    /// <param name="tracker">The build of the tracker assembly the test host loads (<see cref="RuntimeDeployment.TrackerFor"/>).</param>
+    private static string WriteRunSettings(string directory, bool withCollector, bool sequential, string tracker)
     {
         // Tests run one at a time while recording: code outside every test flow is credited to the
         // test class entered last, which is only right when one class runs at a time.
-        var root = new XElement("RunSettings");
+        // On .NET Framework, xUnit v1/v2 and MSTest run tests in an AppDomain of their own, whose tracker
+        // statics the collector in the default domain never sees: recording runs them without one, as on
+        // .NET (docs/design/framework-support.md). The settings mean nothing to .NET test hosts.
+        var configuration = new XElement("RunConfiguration", new XElement("DisableAppDomain", "true"));
+        var xunit = new XElement("xUnit", new XElement("AppDomain", "denied"), new XElement("ShadowCopy", "false"));
+        var root = new XElement("RunSettings", configuration, xunit);
         if (sequential)
         {
+            configuration.Add(new XElement("DisableParallelization", "true"));
+            xunit.Add(new XElement("ParallelizeTestCollections", "false"), new XElement("MaxParallelThreads", "1"));
             root.Add(
-                new XElement("RunConfiguration", new XElement("DisableParallelization", "true")),
-                new XElement("xUnit",
-                    new XElement("ParallelizeTestCollections", "false"),
-                    new XElement("MaxParallelThreads", "1")),
                 new XElement("NUnit", new XElement("NumberOfTestWorkers", "0")),
                 new XElement("MSTest", new XElement("Parallelize", new XElement("Workers", "1"))));
         }
@@ -721,7 +725,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                         new XAttribute("friendlyName", "TestDetta"),
                         new XAttribute("uri", "InProcDataCollector://TestDetta/Coverage/1.0"),
                         new XAttribute("assemblyQualifiedName", collectorName),
-                        new XAttribute("codebase", runtime.Location)))));
+                        new XAttribute("codebase", tracker)))));
         }
 
         var path = Path.Combine(directory, "testdetta.runsettings");

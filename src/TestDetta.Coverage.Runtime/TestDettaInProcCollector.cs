@@ -1,4 +1,3 @@
-using System.Runtime.Loader;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.DataCollection;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.DataCollector.InProcDataCollector;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.InProcDataCollector;
@@ -23,8 +22,10 @@ public sealed class TestDettaInProcCollector : InProcDataCollection
     {
         var self = typeof(TestDettaInProcCollector).Assembly;
         var name = self.GetName().Name;
-        AssemblyLoadContext.Default.Resolving += (_, requested) =>
-            string.Equals(requested.Name, name, StringComparison.Ordinal) ? self : null;
+        // AppDomain.AssemblyResolve exists on .NET Framework and .NET Core alike; on .NET Core it is
+        // asked after the default load context, as AssemblyLoadContext.Resolving would be.
+        AppDomain.CurrentDomain.AssemblyResolve += (_, requested) =>
+            string.Equals(new System.Reflection.AssemblyName(requested.Name).Name, name, StringComparison.Ordinal) ? self : null;
     }
 
     /// <summary>Nothing to set up; the sink is not used because results go to a file.</summary>

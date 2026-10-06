@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 
 namespace TestDetta.Coverage.Runtime;
 
@@ -96,7 +95,7 @@ public static class TestDettaTracker
         /// the ring. A scope longer than the ring (NodaTime parses all of TZDB in one static constructor)
         /// keeps its full contents this way instead of losing its start.
         /// </summary>
-        public ulong[]? Spilled;
+        public long[]? Spilled;
 
         /// <summary>Ring position up to which the scope's hits are in <see cref="Spilled"/>.</summary>
         public long SpilledTo;
@@ -139,6 +138,9 @@ public static class TestDettaTracker
     /// <summary>Number of instrumented methods; field bits follow the method bits. Declared first: <see cref="Words"/> needs it.</summary>
     private static readonly int MethodCount = ReadCount(MethodCountVariable);
 
+    /// <summary>This process's id, read once (<c>Environment.ProcessId</c> does not exist on .NET Framework).</summary>
+    private static readonly int CurrentProcessId = Process.GetCurrentProcess().Id;
+
     /// <summary>True when tests run in parallel; see <see cref="ParallelFlowsVariable"/>.</summary>
     private static readonly bool ParallelFlows = Environment.GetEnvironmentVariable(ParallelFlowsVariable) == "1";
 
@@ -155,7 +157,7 @@ public static class TestDettaTracker
     private static readonly AsyncLocal<Bucket?> Current = new();
 
     /// <summary>Hits before any test class or fixture was entered: discovery, theory data, module initializers.</summary>
-    private static readonly Bucket Startup = new("startup", new ulong[Words], isFixture: false);
+    private static readonly Bucket Startup = new("startup", new long[Words], isFixture: false);
 
     /// <summary>
     /// Methods that ran while a value was being initialized for later reuse: inside a static
@@ -163,13 +165,13 @@ public static class TestDettaTracker
     /// <c>Lazy&lt;T&gt;.Value</c>, ...). Such code usually runs once per process, so the map credits
     /// it to whichever test class came first although every user of the value depends on it.
     /// </summary>
-    private static readonly ulong[] InitializationBits = new ulong[Words];
+    private static readonly long[] InitializationBits = new long[Words];
 
     /// <summary>
     /// Methods that ran inside an initialization scope whose result was stored into a tracked field
     /// (linked). Declared after <see cref="Words"/>, which static initialization order needs.
     /// </summary>
-    private static readonly ulong[] LinkedBits = new ulong[Words];
+    private static readonly long[] LinkedBits = new long[Words];
 
     /// <summary>
     /// Files read and directories listed (ending in <c>/</c>) inside an initialization scope: the data
@@ -190,14 +192,14 @@ public static class TestDettaTracker
     private static readonly bool HookInstalled = InstallStartupHook();
 
     /// <summary>Methods that ran inside an initialization scope whose result left through a path no probe sees (unlinked).</summary>
-    private static readonly ulong[] UnlinkedBits = new ulong[Words];
+    private static readonly long[] UnlinkedBits = new long[Words];
 
     /// <summary>
     /// Methods that ran between tests since the last class was entered: no test code was running, so
     /// the framework ran them, mostly to build what the next test class gets injected. Added to the
     /// next class entered (docs/design/between-tests-code.md).
     /// </summary>
-    private static readonly ulong[] BetweenBits = new ulong[Words];
+    private static readonly long[] BetweenBits = new long[Words];
 
     /// <summary>True when <see cref="BetweenBits"/> may have bits set; spares every test entry a scan of the set.</summary>
     private static bool _hasBetween;
@@ -245,14 +247,32 @@ public static class TestDettaTracker
     /// Writes the results when the process ends. Under Microsoft.Testing.Platform the tests run in
     /// their own executable, where no VSTest collector exists to say the session is over.
     /// </summary>
-    static TestDettaTracker() => AppDomain.CurrentDomain.ProcessExit += static (_, _) => WriteResults();
+    /// <summary>
+    /// Writes the results when the process ends. In an AppDomain other than the default one (.NET
+    /// Framework runners that keep their own, such as NUnit 2's adapter; recording turns them off where the
+    /// runner allows it), whose statics the collector in the default domain never sees, they are also
+    /// written when the domain unloads and every half second while it lives: such a domain may not be
+    /// unloaded before the process exits, and gets no ProcessExit (docs/design/framework-support.md).
+    /// </summary>
+    static TestDettaTracker()
+    {
+        AppDomain.CurrentDomain.ProcessExit += static (_, _) => WriteResults();
+        if (!AppDomain.CurrentDomain.IsDefaultAppDomain() && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(OutputVariable)))
+        {
+            AppDomain.CurrentDomain.DomainUnload += static (_, _) => WriteResults();
+            DomainFlush = new Timer(static _ => WriteResults(), null, 500, 500);
+        }
+    }
+
+    /// <summary>Writes the results of a non-default AppDomain every half second; null in the default domain.</summary>
+    private static readonly Timer? DomainFlush;
 
     /// <summary>Records that method <paramref name="id"/> ran. Called by instrumented code; must stay cheap.</summary>
     /// <param name="id">Method id assigned by the instrumenter.</param>
     public static void Hit(int id)
     {
         var word = id >> 6;
-        var bit = 1UL << (id & 63);
+        var bit = 1L << (id & 63);
         if (_typeInitializerDepth != 0 || _cacheDepth != 0)
         {
             Mark(InitializationBits, word, bit);
@@ -330,9 +350,13 @@ public static class TestDettaTracker
                 AddNames(names, info.FileName);
                 AddNames(names, info.Arguments);
                 AddNames(names, info.WorkingDirectory);
-                foreach (var item in info.ArgumentList)
+                // ArgumentList exists from .NET Core 2.1 on; the tracker also runs on .NET Framework.
+                if (info.GetType().GetProperty("ArgumentList")?.GetValue(info) is IEnumerable<string> list)
                 {
-                    AddNames(names, item);
+                    foreach (var item in list)
+                    {
+                        AddNames(names, item);
+                    }
                 }
 
                 break;
@@ -361,7 +385,8 @@ public static class TestDettaTracker
     /// <param name="text">A path, an assembly name or a command line.</param>
     internal static void AddNames(HashSet<string> names, string? text)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        // netstandard2.0's IsNullOrWhiteSpace does not tell the compiler text is not null.
+        if (text is null || string.IsNullOrWhiteSpace(text))
         {
             return;
         }
@@ -375,17 +400,17 @@ public static class TestDettaTracker
         static void AddName(HashSet<string> names, string value)
         {
             var name = value.Trim().TrimEnd('/', '\\');
-            name = name[(name.LastIndexOfAny(['/', '\\']) + 1)..];
-            if (name.IndexOf(',', StringComparison.Ordinal) is var comma and >= 0)
+            name = name.Substring(name.LastIndexOfAny(['/', '\\']) + 1);
+            if (name.IndexOf(',') is var comma and >= 0)
             {
-                name = name[..comma];
+                name = name.Substring(0, comma);
             }
 
             foreach (var extension in OutputExtensions)
             {
                 if (name.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
                 {
-                    name = name[..^extension.Length];
+                    name = name.Substring(0, name.Length - extension.Length);
                     break;
                 }
             }
@@ -479,10 +504,10 @@ public static class TestDettaTracker
     {
         var id = MethodCount + field;
         var bucket = BucketForHit();
-        Mark(bucket.Bits, id >> 6, 1UL << (id & 63));
+        Mark(bucket.Bits, id >> 6, 1L << (id & 63));
         if (IsBetweenTests(bucket))
         {
-            MarkBetween(id >> 6, 1UL << (id & 63));
+            MarkBetween(id >> 6, 1L << (id & 63));
         }
 
         // Into the ring as well: a value stored later on this thread was built from this one, so it
@@ -525,13 +550,13 @@ public static class TestDettaTracker
                 continue;
             }
 
-            var spilled = scope.Spilled ??= new ulong[Words];
+            var spilled = scope.Spilled ??= new long[Words];
             for (var i = from; i < end; i++)
             {
                 var id = recent[(int)(i & (RecentSize - 1))];
                 if ((uint)(id >> 6) < (uint)spilled.Length)
                 {
-                    spilled[id >> 6] |= 1UL << (id & 63);
+                    spilled[id >> 6] |= 1L << (id & 63);
                 }
             }
 
@@ -552,7 +577,7 @@ public static class TestDettaTracker
     /// <summary>Records a hit between tests for the next class entered.</summary>
     /// <param name="word">Index of the 64-bit word.</param>
     /// <param name="bit">Mask of the bit in the word.</param>
-    private static void MarkBetween(int word, ulong bit)
+    private static void MarkBetween(int word, long bit)
     {
         Mark(BetweenBits, word, bit);
         if (!Volatile.Read(ref _hasBetween))
@@ -582,6 +607,13 @@ public static class TestDettaTracker
         }
 
         Volatile.Write(ref _instancePending, false);
+
+        // In an AppDomain the process may end without unloading (NUnit 2's adapter), each finished test
+        // writes what the domain recorded so far; the default domain writes at the end as usual.
+        if (DomainFlush is not null)
+        {
+            WriteResults();
+        }
     }
 
     /// <summary>
@@ -695,7 +727,7 @@ public static class TestDettaTracker
     /// <param name="site">Construction site id assigned by the instrumenter.</param>
     public static void EnterConstruction(int site)
     {
-        var start = _argumentStarts is { } starts && starts.Remove(site, out var marked) ? marked : _recentCount;
+        var start = _argumentStarts is { } starts && starts.TryGetValue(site, out var marked) && starts.Remove(site) ? marked : _recentCount;
         var constructions = _constructions ??= new Scope[4];
         if (_constructionCount == constructions.Length)
         {
@@ -723,7 +755,7 @@ public static class TestDettaTracker
     /// <param name="bits">Bit set.</param>
     /// <param name="word">Index of the 64-bit word.</param>
     /// <param name="bit">Mask of the bit in the word.</param>
-    private static void Mark(ulong[] bits, int word, ulong bit)
+    private static void Mark(long[] bits, int word, long bit)
     {
         if ((uint)word >= (uint)bits.Length)
         {
@@ -736,7 +768,43 @@ public static class TestDettaTracker
             return;
         }
 
-        Interlocked.Or(ref bits[word], bit);
+        Or(ref bits[word], bit);
+    }
+
+    /// <summary>
+    /// Sets <paramref name="bits"/> in <paramref name="location"/> atomically: <c>Interlocked.Or</c>,
+    /// which .NET Framework and netstandard2.0 lack, as a compare-exchange loop.
+    /// </summary>
+    /// <param name="location">The word.</param>
+    /// <param name="bits">Bits to set.</param>
+    private static void Or(ref long location, long bits)
+    {
+        var current = Volatile.Read(ref location);
+        while ((current & bits) != bits)
+        {
+            var seen = Interlocked.CompareExchange(ref location, current | bits, current);
+            if (seen == current)
+            {
+                return;
+            }
+
+            current = seen;
+        }
+    }
+
+    /// <summary>Index of the lowest set bit of a non-zero word (<c>BitOperations.TrailingZeroCount</c>, which netstandard2.0 lacks).</summary>
+    /// <param name="value">A non-zero word.</param>
+    private static int LowestBit(long value)
+    {
+        var bit = 0;
+        var rest = (ulong)value;
+        if ((rest & 0xFFFFFFFF) == 0) { bit += 32; rest >>= 32; }
+        if ((rest & 0xFFFF) == 0) { bit += 16; rest >>= 16; }
+        if ((rest & 0xFF) == 0) { bit += 8; rest >>= 8; }
+        if ((rest & 0xF) == 0) { bit += 4; rest >>= 4; }
+        if ((rest & 0x3) == 0) { bit += 2; rest >>= 2; }
+        if ((rest & 0x1) == 0) { bit += 1; }
+        return bit;
     }
 
     /// <summary>
@@ -904,7 +972,7 @@ public static class TestDettaTracker
         for (var i = Math.Max(scope.Start, scope.SpilledTo); i < _recentCount; i++)
         {
             var id = recent[(int)(i & (RecentSize - 1))];
-            Mark(bits, id >> 6, 1UL << (id & 63));
+            Mark(bits, id >> 6, 1L << (id & 63));
         }
     }
 
@@ -919,7 +987,7 @@ public static class TestDettaTracker
             {
                 for (var bits = spilled[word]; bits != 0; bits &= bits - 1)
                 {
-                    builders.TryAdd((word << 6) + System.Numerics.BitOperations.TrailingZeroCount(bits), 0);
+                    builders.TryAdd((word << 6) + LowestBit(bits), 0);
                 }
             }
         }
@@ -1204,14 +1272,18 @@ public static class TestDettaTracker
             return;
         }
 
-        WriteResults(ProcessResultsPath(path, Environment.ProcessId));
+        // A test AppDomain of the same process writes a file of its own (its id after the process id).
+        WriteResults(ProcessResultsPath(path, CurrentProcessId, AppDomain.CurrentDomain.IsDefaultAppDomain() ? null : AppDomain.CurrentDomain.Id));
     }
 
     /// <summary>The results file of one process: the process id goes before the extension.</summary>
     /// <param name="path">Value of <see cref="OutputVariable"/>.</param>
     /// <param name="processId">Process id.</param>
-    public static string ProcessResultsPath(string path, int processId) =>
-        Path.Combine(Path.GetDirectoryName(path) ?? string.Empty, $"{Path.GetFileNameWithoutExtension(path)}.{processId}{Path.GetExtension(path)}");
+    /// <param name="domain">Id of a test AppDomain other than the default one, or null.</param>
+    public static string ProcessResultsPath(string path, int processId, int? domain = null) =>
+        Path.Combine(
+            Path.GetDirectoryName(path) ?? string.Empty,
+            $"{Path.GetFileNameWithoutExtension(path)}.{processId}{(domain is { } id ? $"-{id}" : string.Empty)}{Path.GetExtension(path)}");
 
     /// <summary>Writes the collected data to <paramref name="path"/>, replacing it in one step.</summary>
     /// <param name="path">Results file.</param>
@@ -1231,9 +1303,9 @@ public static class TestDettaTracker
             // Written next to the target and moved over it: under VSTest the results are written at
             // session end and again at process exit, and the test host may be killed during the
             // second write. A rename never leaves a half-written file; the earlier one stays.
-            var temporary = $"{path}.{Environment.ProcessId}.tmp";
+            var temporary = $"{path}.{CurrentProcessId}.tmp";
             using (var stream = File.Create(temporary))
-            using (var json = new Utf8JsonWriter(stream))
+            using (var json = new ResultsJsonWriter(stream))
             {
                 json.WriteStartObject();
                 WriteBuckets(json, "classes", Classes);
@@ -1244,8 +1316,9 @@ public static class TestDettaTracker
                 WriteIds(json, "unlinked", UnlinkedBits);
                 json.WriteNumber("methodCount", MethodCount);
                 json.WriteStartObject("fieldBuilders");
-                foreach (var (field, builders) in Builders)
+                foreach (var entry in Builders)
                 {
+                    var (field, builders) = (entry.Key, entry.Value);
                     json.WriteStartArray(field.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     foreach (var id in builders.Keys)
                     {
@@ -1264,7 +1337,15 @@ public static class TestDettaTracker
                 json.WriteEndObject();
             }
 
-            File.Move(temporary, path, overwrite: true);
+            // Replace swaps the files in one step where the target exists (File.Move has no overwrite on .NET Framework).
+            if (File.Exists(path))
+            {
+                File.Replace(temporary, path, destinationBackupFileName: null);
+            }
+            else
+            {
+                File.Move(temporary, path);
+            }
         }
     }
 
@@ -1272,13 +1353,13 @@ public static class TestDettaTracker
     /// <param name="name">Test class or fixture name.</param>
     /// <param name="bits">Hit methods.</param>
     /// <param name="isFixture">True for a fixture bucket.</param>
-    private sealed class Bucket(string name, ulong[] bits, bool isFixture)
+    private sealed class Bucket(string name, long[] bits, bool isFixture)
     {
         /// <summary>Test class or fixture name.</summary>
         public string Name { get; } = name;
 
         /// <summary>Hit methods.</summary>
-        public ulong[] Bits { get; } = bits;
+        public long[] Bits { get; } = bits;
 
         /// <summary>True for a fixture bucket.</summary>
         public bool IsFixture { get; } = isFixture;
@@ -1325,7 +1406,7 @@ public static class TestDettaTracker
         {
             if (!buckets.TryGetValue(name, out bucket!))
             {
-                bucket = new Bucket(name, new ulong[Words], isFixture);
+                bucket = new Bucket(name, new long[Words], isFixture);
                 buckets[name] = bucket;
             }
 
@@ -1375,7 +1456,7 @@ public static class TestDettaTracker
                 var pending = Interlocked.Exchange(ref BetweenBits[word], 0);
                 if (pending != 0)
                 {
-                    Interlocked.Or(ref bucket.Bits[word], pending);
+                    Or(ref bucket.Bits[word], pending);
                 }
             }
         }
@@ -1409,7 +1490,7 @@ public static class TestDettaTracker
     /// <param name="json">Writer positioned inside an object.</param>
     /// <param name="name">Property name of the object that holds the buckets.</param>
     /// <param name="buckets">Buckets to write.</param>
-    private static void WriteBuckets(Utf8JsonWriter json, string name, Dictionary<string, Bucket> buckets)
+    private static void WriteBuckets(ResultsJsonWriter json, string name, Dictionary<string, Bucket> buckets)
     {
         json.WriteStartObject(name);
         foreach (var bucket in buckets.Values)
@@ -1425,7 +1506,7 @@ public static class TestDettaTracker
     /// outside every test (ambient) and those read inside an initialization scope.
     /// </summary>
     /// <param name="json">Writer positioned inside the results object.</param>
-    private static void WriteFileReads(Utf8JsonWriter json)
+    private static void WriteFileReads(ResultsJsonWriter json)
     {
         json.WriteStartObject("fileReads");
         foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, Bucket>)>)[("classes", Classes), ("fixtures", Fixtures)])
@@ -1443,10 +1524,10 @@ public static class TestDettaTracker
         WritePaths(json, "initialization", InitializationFiles);
         json.WriteEndObject();
 
-        static void WritePaths(Utf8JsonWriter json, string name, HashSet<string> paths)
+        static void WritePaths(ResultsJsonWriter json, string name, HashSet<string> paths)
         {
             json.WriteStartArray(name);
-            foreach (var path in paths.Order(StringComparer.Ordinal))
+            foreach (var path in paths.OrderBy(static v => v, StringComparer.Ordinal))
             {
                 json.WriteStringValue(path);
             }
@@ -1460,7 +1541,7 @@ public static class TestDettaTracker
     /// fixture started and the assemblies it loaded (see <see cref="OutputUsed"/>).
     /// </summary>
     /// <param name="json">Writer positioned inside the results object.</param>
-    private static void WriteOutputUses(Utf8JsonWriter json)
+    private static void WriteOutputUses(ResultsJsonWriter json)
     {
         json.WriteStartObject("outputUses");
         foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, Bucket>)>)[("classes", Classes), ("fixtures", Fixtures)])
@@ -1478,10 +1559,10 @@ public static class TestDettaTracker
         WriteNames(json, "initialization", InitializationOutputs);
         json.WriteEndObject();
 
-        static void WriteNames(Utf8JsonWriter json, string name, HashSet<string> names)
+        static void WriteNames(ResultsJsonWriter json, string name, HashSet<string> names)
         {
             json.WriteStartArray(name);
-            foreach (var value in names.Order(StringComparer.Ordinal))
+            foreach (var value in names.OrderBy(static v => v, StringComparer.Ordinal))
             {
                 json.WriteStringValue(value);
             }
@@ -1508,7 +1589,7 @@ public static class TestDettaTracker
     /// <param name="json">Writer positioned inside an object.</param>
     /// <param name="name">Property name.</param>
     /// <param name="buckets">Buckets to write.</param>
-    private static void WriteSeconds(Utf8JsonWriter json, string name, Dictionary<string, Bucket> buckets)
+    private static void WriteSeconds(ResultsJsonWriter json, string name, Dictionary<string, Bucket> buckets)
     {
         json.WriteStartObject(name);
         foreach (var bucket in buckets.Values)
@@ -1524,7 +1605,7 @@ public static class TestDettaTracker
     /// <param name="json">Writer positioned inside an object.</param>
     /// <param name="name">Property name.</param>
     /// <param name="bits">Bit set to write.</param>
-    private static void WriteIds(Utf8JsonWriter json, string name, ulong[] bits)
+    private static void WriteIds(ResultsJsonWriter json, string name, long[] bits)
     {
         json.WriteStartArray(name);
         for (var word = 0; word < bits.Length; word++)
@@ -1532,7 +1613,7 @@ public static class TestDettaTracker
             var value = Volatile.Read(ref bits[word]);
             while (value != 0)
             {
-                var bit = System.Numerics.BitOperations.TrailingZeroCount(value);
+                var bit = LowestBit(value);
                 json.WriteNumberValue((word << 6) + bit);
                 value &= value - 1;
             }

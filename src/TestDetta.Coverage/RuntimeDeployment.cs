@@ -8,8 +8,9 @@ namespace TestDetta.Coverage;
 /// <summary>
 /// Makes <see cref="TestDettaTracker"/> loadable in a test executable (Microsoft.Testing.Platform), where
 /// no VSTest collector resolves it: copies the runtime assembly into the test output and lists it
-/// in the test project's <c>deps.json</c>, so the host puts it on the assembly path. Disposing puts
-/// the output back as it was.
+/// in the test project's <c>deps.json</c>, so the host puts it on the assembly path. A .NET Framework
+/// output has no <c>deps.json</c>: the runtime probes the application's folder, so the copy is enough.
+/// Disposing puts the output back as it was.
 /// </summary>
 internal sealed class RuntimeDeployment : IDisposable
 {
@@ -17,8 +18,8 @@ internal sealed class RuntimeDeployment : IDisposable
     private static readonly string RuntimeFileName = Path.GetFileName(typeof(TestDettaTracker).Assembly.Location);
 
     private readonly string _copiedRuntime;
-    private readonly string _depsFile;
-    private readonly string _originalDeps;
+    private readonly string? _depsFile;
+    private readonly string? _originalDeps;
     private readonly bool _runtimeExisted;
 
     /// <summary>Deploys the runtime next to <paramref name="testAssembly"/>.</summary>
@@ -27,24 +28,73 @@ internal sealed class RuntimeDeployment : IDisposable
     public RuntimeDeployment(string testAssembly)
     {
         var directory = Path.GetDirectoryName(testAssembly)!;
-        _depsFile = Path.ChangeExtension(testAssembly, ".deps.json");
-        if (!File.Exists(_depsFile))
+        var depsFile = Path.ChangeExtension(testAssembly, ".deps.json");
+        if (File.Exists(depsFile))
         {
-            throw new InvalidOperationException($"{_depsFile} does not exist; TestDetta needs it to load its runtime into the tests.");
+            _depsFile = depsFile;
+            _originalDeps = File.ReadAllText(depsFile);
+        }
+        else if (!IsNetFramework(testAssembly))
+        {
+            throw new InvalidOperationException($"{depsFile} does not exist; TestDetta needs it to load its runtime into the tests.");
         }
 
-        _originalDeps = File.ReadAllText(_depsFile);
         _copiedRuntime = Path.Combine(directory, RuntimeFileName);
         _runtimeExisted = File.Exists(_copiedRuntime);
 
-        File.Copy(typeof(TestDettaTracker).Assembly.Location, _copiedRuntime, overwrite: true);
-        File.WriteAllText(_depsFile, AddRuntime(_originalDeps));
+        File.Copy(TrackerFor(testAssembly), _copiedRuntime, overwrite: true);
+        if (_depsFile is not null)
+        {
+            File.WriteAllText(_depsFile, AddRuntime(_originalDeps!));
+        }
+    }
+
+    /// <summary>
+    /// The build of the tracker assembly a test host of <paramref name="testAssembly"/> loads: the net462
+    /// build, shipped under <c>runtime/net462</c>, for a .NET Framework test assembly, and the netstandard2.0
+    /// build TestDetta itself references for any other (docs/design/framework-support.md).
+    /// </summary>
+    /// <param name="testAssembly">The compiled test assembly.</param>
+    internal static string TrackerFor(string testAssembly)
+    {
+        var standard = typeof(TestDettaTracker).Assembly.Location;
+        if (!IsNetFramework(testAssembly))
+        {
+            return standard;
+        }
+
+        var framework = Path.Combine(Path.GetDirectoryName(typeof(RuntimeDeployment).Assembly.Location)!, "runtime", "net462", RuntimeFileName);
+        return File.Exists(framework)
+            ? framework
+            : throw new InvalidOperationException($"{framework} is missing; TestDetta needs it to record .NET Framework tests.");
+    }
+
+    /// <summary>True when <paramref name="assembly"/> targets .NET Framework (its <c>TargetFrameworkAttribute</c>, or none at all).</summary>
+    /// <param name="assembly">A compiled test assembly.</param>
+    internal static bool IsNetFramework(string assembly)
+    {
+        try
+        {
+            using var module = Mono.Cecil.ModuleDefinition.ReadModule(assembly);
+            return module.Assembly?.CustomAttributes
+                    .FirstOrDefault(static a => a.AttributeType.FullName == "System.Runtime.Versioning.TargetFrameworkAttribute")?
+                    .ConstructorArguments.FirstOrDefault().Value is not string framework
+                || framework.StartsWith(".NETFramework", StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or IOException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Restores the original <c>deps.json</c> and removes the copied runtime.</summary>
     public void Dispose()
     {
-        File.WriteAllText(_depsFile, _originalDeps);
+        if (_depsFile is not null)
+        {
+            File.WriteAllText(_depsFile, _originalDeps!);
+        }
+
         if (!_runtimeExisted)
         {
             File.Delete(_copiedRuntime);

@@ -10,7 +10,19 @@
     <ProjectReference Include="..\TestDetta.Core\TestDetta.Core.csproj" />
     <ProjectReference Include="..\TestDetta.Coverage.Runtime\TestDetta.Coverage.Runtime.csproj" />
     <ProjectReference Include="..\TestDetta.Coverage.StartupHook\TestDetta.Coverage.StartupHook.csproj" />
+    <!-- The tracker's .NET Framework build, which .NET Framework test hosts load (RuntimeDeployment.TrackerFor). -->
+    <ProjectReference Include="..\TestDetta.Coverage.Runtime\TestDetta.Coverage.Runtime.csproj"
+                      SetTargetFramework="TargetFramework=net462" ReferenceOutputAssembly="false"
+                      OutputItemType="TrackerForNetFramework" Private="false" />
   </ItemGroup>
+
+  <!-- Copied under runtime/net462, into this project's output and every project's that references it. -->
+  <Target Name="AddTrackerForNetFramework" AfterTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <None Include="@(TrackerForNetFramework)" Link="runtime/net462/%(Filename)%(Extension)"
+            CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="TestDetta.Tests" />

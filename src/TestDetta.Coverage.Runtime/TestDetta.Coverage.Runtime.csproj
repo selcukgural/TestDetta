@@ -1,11 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Loaded into the test host next to the instrumented assemblies, so it targets the oldest runtime
-    we support and depends on nothing that is not already there.
+    Loaded into the test host next to the instrumented assemblies, and depends on nothing that is not
+    already there (docs/design/framework-support.md): net462 for .NET Framework hosts, which load it
+    without the netstandard facades a build would have copied (4.6.2 to 4.7.0 lack them), and
+    netstandard2.0 for .NET Core 2.0+ and .NET hosts. Same identity in both, so instrumented code binds
+    to either.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Directory.Build.props sets one TargetFramework for every project; this one has two. -->
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>netstandard2.0;net462</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
