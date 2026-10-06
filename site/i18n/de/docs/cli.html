@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 7cf305d08b92 -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: d7c1d452e7f2 -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -82,7 +82,7 @@ td test -- --no-restore</code></pre>
 <p>Build-Konfiguration. Standard: <code>Debug</code>.</p>
 
 <h3 id="framework"><code>-f</code>, <code>--framework &lt;tfm&gt;</code></h3>
-<p>Das Ziel-Framework, das in einem Testprojekt mit mehreren Ziel-Frameworks aufgezeichnet wird. Standard: das erste Ziel-Framework des Projekts.</p>
+<p>Das Ziel-Framework, das in einem Testprojekt mit mehreren Ziel-Frameworks aufgezeichnet wird. Standard: das erste Ziel-Framework des Projekts, das auf diesem Rechner läuft (.NET Framework nur unter Windows).</p>
 <pre><code>td record -f net10.0</code></pre>
 
 <h3 id="project"><code>--project &lt;path&gt;</code></h3>

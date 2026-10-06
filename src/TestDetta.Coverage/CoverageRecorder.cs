@@ -591,11 +591,28 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             return (targetPath, null);
         }
 
-        var framework = values.GetProperty("TargetFrameworks").GetString()?.Split(';', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault() ?? throw new InvalidOperationException($"Could not find the output of {request.TestProject.Path}.");
+        var framework = RecordingFramework(values.GetProperty("TargetFrameworks").GetString()?.Split(';', StringSplitOptions.RemoveEmptyEntries) ?? [], OperatingSystem.IsWindows())
+            ?? throw new InvalidOperationException($"Could not find the output of {request.TestProject.Path}.");
 
         query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={framework}", "-getProperty:TargetPath"];
         return (dotnet.Capture(query, runDirectory).Trim(), framework);
+    }
+
+    /// <summary>
+    /// The framework a multi-targeted test project is recorded for without <c>-f</c>: the first one its
+    /// tests can run for here. .NET Framework (<c>net48</c>, <c>net472</c>, ...) runs on Windows only, so
+    /// elsewhere the first other framework is taken (NodaTime.Test lists <c>net48</c> first); null for none.
+    /// </summary>
+    /// <param name="frameworks">The project's <c>TargetFrameworks</c>, in order.</param>
+    /// <param name="windows">True on Windows.</param>
+    internal static string? RecordingFramework(IReadOnlyList<string> frameworks, bool windows)
+    {
+        var listed = frameworks.Select(static f => f.Trim()).Where(static f => f.Length > 0).ToList();
+        return (windows ? null : listed.FirstOrDefault(static f => !IsNetFramework(f))) ?? listed.FirstOrDefault();
+
+        // net35 to net481: no dot after "net"; net5.0 and later have one, and so do netcoreapp and netstandard.
+        static bool IsNetFramework(string framework) =>
+            framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) && framework.Length > 3 && framework[3..].All(char.IsAsciiDigit);
     }
 
     /// <summary>The project behind each assembly file name of the request's repository, cached per graph.</summary>

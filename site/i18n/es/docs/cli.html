@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 7cf305d08b92 -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: d7c1d452e7f2 -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -82,7 +82,7 @@ td test -- --no-restore</code></pre>
 <p>Configuración de compilación. Predeterminado: <code>Debug</code>.</p>
 
 <h3 id="framework"><code>-f</code>, <code>--framework &lt;tfm&gt;</code></h3>
-<p>Framework de destino que se registra en un proyecto de pruebas con varios destinos. Predeterminado: el primer framework de destino del proyecto.</p>
+<p>Framework de destino que se registra en un proyecto de pruebas con varios destinos. Predeterminado: el primer framework de destino del proyecto que se ejecuta en esta máquina (.NET Framework solo en Windows).</p>
 <pre><code>td record -f net10.0</code></pre>
 
 <h3 id="project"><code>--project &lt;path&gt;</code></h3>
