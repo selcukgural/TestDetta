@@ -35,10 +35,13 @@ requests, and permission to quote numbers.
 
 1. **Shadow mode first.** The partner adds the Action with `mode: shadow`: TestDetta selects, the full
    suite still runs, and the job summary shows what the selection would have run, the minutes saved, and
-   any test that failed outside the selection (a miss). No risk to the partner, and real proof for us.
-   Needs: shadow mode in the Action and the CLI (small: select, run everything, compare). [to build]
+   any test that failed outside the selection (a miss). No risk to the partner, no license needed, and real
+   proof for us. Built (2026-10-07): the Action's `mode: shadow` and `td test --shadow`, which run the
+   partner's own `dotnet test` command (docs/design/shadow-mode.md).
 2. **Weekly report** per partner: pull requests, minutes saved, misses (expected 0), slowest projects.
-3. **Switch on** selection after two clean weeks; the full suite keeps running nightly.
+3. **Switch on** selection once the graduation criteria hold (within 30 days, 40 pull requests with a
+   shadow result and no unexplained miss, plus one `td audit` run on their code with at least 100 breaking
+   changes and 0 missed; docs/design/shadow-mode.md); the full suite keeps running nightly.
 4. In return: free licenses for a year, a 30-minute call every two weeks, a quote or case study.
 
 Where to find them:

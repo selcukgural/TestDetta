@@ -1,4 +1,4 @@
-<!-- title: Sicherheit und Daten; layout: docs; description: Was {{name}} speichert, wo es die Daten ablegt und welchen einen Netzwerkaufruf es macht.; source: c45bba69f56d -->
+<!-- title: Sicherheit und Daten; layout: docs; description: Was {{name}} speichert, wo es die Daten ablegt und welchen einen Netzwerkaufruf es macht.; source: 8f6001ba2123 -->
 <h1>Sicherheit und Daten</h1>
 <p class="lead">{{name}} läuft in Ihrer CI und auf Ihren Rechnern. Ihr Quellcode, Ihre Coverage-Maps und Testergebnisse verlassen diese nie. Diese Seite listet alles auf, was es speichert, und jeden Netzwerkaufruf, den es macht.</p>
 
@@ -32,7 +32,7 @@
   <li><code>HTTPS_PROXY</code> wird berücksichtigt.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> schaltet ihn ab. Offline- und Enterprise-Lizenzen nehmen nie Kontakt auf.</li>
 </ul>
-<p>Öffentliche Repositorys benötigen keine Lizenz und machen keinen Aufruf.</p>
+<p>Öffentliche Repositorys benötigen keine Lizenz und machen keinen Aufruf. Ebenso wenig der Shadow-Modus (<code>td test --shadow</code>), der überhaupt keine Lizenz liest.</p>
 
 <h2 id="license-check">Wie die Lizenz geprüft wird</h2>
 <p>Eine Lizenz ist ein signierter String, der auf Ihrem Rechner mit einem in {{name}} eingebauten öffentlichen Schlüssel geprüft wird. Sie benennt die Repositorys, die sie abdeckt, und wird mit dem Remote <code>origin</code> abgeglichen, aus dem zuvor alle Anmeldedaten entfernt werden. Ein Lizenzproblem lässt nie einen Build fehlschlagen: Stattdessen laufen alle Tests, wie vor {{name}}. <a href="/docs/license/">Mehr zu Lizenzen</a>.</p>

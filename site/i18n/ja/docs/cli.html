@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 5061bb679bfc -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 00b7ae1baea4 -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -71,8 +71,9 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
 
 <h3 id="shadow"><code>--shadow</code></h3>
-<p>何もスキップせずに {{name}} を試すためのシャドウモードです。すべてのテストプロジェクトが、{{name}} を使わない場合と同じように、あなた自身の <code>--</code> 引数で完全に実行され、終了コードはその実行のものになります。{{name}} のエラーでジョブが失敗することはありません。その場合、レポートにシャドウ結果がない理由が記載されます。その後 {{name}} は、実行結果を自分が選択したはずのテストと比較し、除外したはずの失敗クラスをそれぞれ再実行します。まず変更ありで単独実行し（成功すれば不安定または順序依存）、次に別のチェックアウトでベースコミット上で単独実行します（そこでも失敗すれば変更が原因ではなく、成功すれば<strong>見逃し</strong>です）。再実行できなかったクラスは、確認されるまで見逃しとして扱われます。レポートには、まず判定、次に各クラスの判断と結果、完全実行の実測時間と選択が実行したはずの部分の時間の比較、そして選択を再現するために必要な情報（{{name}} のバージョンと SHA-256、コミット、カバレッジマップとそのハッシュ、<code>td affected</code> コマンド）が含まれます。</p>
-<pre><code>td test --shadow --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+<p>何もスキップせずに {{name}} を試すためのシャドウモードです。ライセンスは不要で、ネットワーク呼び出しも一切行いません。すべてのテストがあなた自身の <code>--</code> 引数で実行され、終了コードはその実行のものになります。引数がソリューション（<code>.sln</code>、<code>.slnx</code>、<code>.slnf</code>）、1 つのプロジェクト、ディレクトリを指定している場合、または何も指定していない場合（作業ディレクトリにある唯一のソリューションまたはプロジェクト）、{{name}} はその 1 つの <code>dotnet test</code> コマンドをそのまま実行し、プロジェクトごとのテストレポートの指定だけを追加します。それ以外の場合、たとえば実行すべきソリューションが 1 つに定まらない場合やテストプロジェクトごとに必要なレポートオプションが異なる場合は、各テストプロジェクトを 1 つずつ順に実行し、その理由をレポートに記載します。{{name}} のエラーでジョブが失敗することはありません。その場合、レポートにシャドウ結果がない理由が記載されます。その後 {{name}} は、実行結果を自分が選択したはずのテストと比較し、除外したはずの失敗クラスをそれぞれ再実行します。まず変更ありで単独実行し（成功すれば不安定または順序依存）、次に別のチェックアウトでベースコミット上で単独実行します（そこでも失敗すれば変更が原因ではなく、成功すれば<strong>見逃し</strong>です）。再実行できなかったクラスは、確認されるまで見逃しとして扱われます。再実行によりジョブが長くなることがありますが、最大でも分類の予算の分だけです。</p>
+<p>完全実行が終わるまで、選択に関する情報は何も表示されません。また、判断が表示されるのはこのジョブで実行されたクラスだけです。フィルターで除外されたクラスは判断なしで「実行されなかった」と記載され、合計には実行されたものだけが数えられます。レポートには、まず実行全体の実測時間を含む判定、次に実行の方法、各クラスの判断と結果、プロジェクトごとの実測時間と選択が実行したはずの部分の比較、そしてライセンスなしで結果を再現するために必要な情報（{{name}} のバージョンと SHA-256、コミット、カバレッジマップとそのハッシュ、同じ <code>td test --shadow</code> コマンド）が含まれます。</p>
+<pre><code>td test --shadow --summary-file "$GITHUB_STEP_SUMMARY" -- MySolution.sln -c Release</code></pre>
 
 <h3 id="shadow-no-classify"><code>--shadow-no-classify</code></h3>
 <p>選択が除外した失敗クラスを再実行しません。その場合、それらは未分類として報告されます。</p>
@@ -92,7 +93,7 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <pre><code>td test --shadow --shadow-classify-budget 20m --shadow-base-timeout none</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
-<p><code>--</code> の後に指定したものはすべて、各 <code>dotnet test</code> の呼び出しに渡されます。独自の <code>--filter</code> はそのまま生かされます。{{name}} はそれを自身のクラスフィルターと結合するため、選択されたテストのうちフィルターに合うものだけが実行されます。xUnit v3 の trait、method、namespace フィルターも同じように選択を絞り込みます。ランナーがクラスフィルターと結合できないフィルター（xUnit v3 の class フィルターや query フィルター、TUnit の tree-node フィルター）を指定した場合、そのプロジェクトはあなたのフィルターの下ですべて実行されます。</p>
+<p><code>--</code> の後に指定したものはすべて、各 <code>dotnet test</code> の呼び出しに渡されます。独自の <code>--filter</code> はそのまま生かされます。{{name}} はそれを自身のクラスフィルターと結合するため、選択されたテストのうちフィルターに合うものだけが実行されます。xUnit v3 の trait、method、namespace フィルターも同じように選択を絞り込みます。ランナーがクラスフィルターと結合できないフィルター（xUnit v3 の class フィルターや query フィルター、TUnit の tree-node フィルター）を指定した場合、そのプロジェクトはあなたのフィルターの下ですべて実行されます。シャドウモードでは、これがあなた自身のテストコマンドになります。<a href="#shadow"><code>--shadow</code></a> を参照してください。</p>
 <pre><code>td test -- -c Release --logger trx
 td test -- --no-restore
 td test -- --filter "Category!=Integration"</code></pre>

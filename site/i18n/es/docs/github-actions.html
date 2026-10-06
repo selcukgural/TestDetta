@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: e497d189cf09 -->
+<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 589b8cc513f4 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Registra un mapa por cada commit de la rama predeterminada y deja que las pull requests ejecuten solo las pruebas que sus cambios afectan. La acción compila {{name}} por sí misma y guarda los mapas en la caché de Actions.</p>
 
@@ -66,21 +66,29 @@ jobs:
 <table>
   <thead><tr><th>Entrada</th><th>Predeterminado</th><th>Descripción</th></tr></thead>
   <tbody>
-    <tr><td><code>mode</code></td><td></td><td><code>test</code> en las pull requests (ejecutar las pruebas afectadas), <code>record</code> en la rama predeterminada (registrar mapas de cobertura). Obligatoria.</td></tr>
+    <tr><td><code>mode</code></td><td></td><td><code>test</code> en las pull requests (ejecutar las pruebas afectadas), <code>shadow</code> en las pull requests mientras evalúa {{name}} (ejecutar todas las pruebas e informar de lo que la selección habría dejado fuera; sin licencia), <code>record</code> en la rama predeterminada (registrar mapas de cobertura). Obligatoria.</td></tr>
     <tr><td><code>base</code></td><td>la rama base de la PR</td><td>Rama con la que comparar en el modo test. Fuera de las pull requests, defínela.</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Configuración de compilación para compilar y ejecutar las pruebas.</td></tr>
     <tr><td><code>projects</code></td><td>todos los proyectos de pruebas</td><td>Modo record: rutas de <code>.csproj</code>, una por línea.</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>Modo record: procesos host de prueba por proyecto de pruebas; cada uno sigue ejecutando sus pruebas de una en una. El conjunto de pruebas debe tolerar varios procesos de prueba a la vez.</td></tr>
     <tr><td><code>no-build</code></td><td><code>false</code></td><td>Modo record: <code>true</code> para registrar la compilación que hizo un paso anterior con la misma <code>configuration</code>.</td></tr>
-    <tr><td><code>dotnet-test-args</code></td><td></td><td>Modo test: argumentos adicionales de <code>dotnet test</code>, separados por espacios.</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>Modos test y shadow: argumentos adicionales de <code>dotnet test</code>, separados por espacios. En modo sombra, nombre aquí su solución para ejecutarla como un solo comando.</td></tr>
     <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Modo test: cuántos commits puede estar un mapa por detrás de la merge base; los cambios intermedios se salvan con el drift bridge. <code>0</code> usa solo un mapa exacto.</td></tr>
     <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Modo test: cuando los cambios desde un mapa más antiguo incluyen un archivo de compilación, configuración o un global using, <code>all</code> ejecuta completos los proyectos de pruebas afectados; <code>name</code> decide por nombre (más rápido, pero ciego a las llamadas hechas mediante configuración o reflexión).</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Modo test: lista las cachés de Actions para encontrar el mapa más reciente (necesita <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello. El modo sombra nunca la lee.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Cualquier directorio dentro del repositorio que se vaya a analizar.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Instala el SDK de .NET 10 sobre el que se ejecuta {{name}}. Ponlo en <code>false</code> si el job ya lo tiene.</td></tr>
   </tbody>
 </table>
+
+<h2 id="shadow">Modo sombra</h2>
+<p>Para probar {{name}} sin omitir nada, use <code>mode: shadow</code> en las pull requests. Todas las pruebas se ejecutan y el resultado del job es el de esa ejecución; el job summary y el artefacto <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;</code> muestran lo que habría ejecutado la selección, los minutos medidos y cada clase fallida que habría dejado fuera. No necesita licencia y no hace ninguna llamada de red. Nombre su solución en <code>dotnet-test-args</code> para ejecutarla como un solo comando, como hace su propio job; vea <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
+<pre><code>      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: shadow
+          dotnet-test-args: Shop.slnx</code></pre>
 
 <h2>Job summary</h2>
 <p>En el modo test, {{name}} escribe su selección en el job summary: los archivos modificados y la base con la que comparó, cada proyecto de pruebas indicando si se ejecutó filtrado, completo o no se ejecutó y por qué, los resultados de las pruebas y el estado de la licencia cuando importa. Las rutas, los nombres de clase y los motivos procedentes del repositorio se escriben como código, para que los nombres de archivo de una pull request no puedan inyectar enlaces ni menciones en la página.</p>

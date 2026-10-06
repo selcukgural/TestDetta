@@ -55,7 +55,7 @@ const CH_OVERVIEW = {
     {
       title: "td record her test projesini kaydeder", nodes: ["cimain", "rec"], edges: ["run"],
       who: "<code>CliApp.RecordCoverage</code> → her test projesi için <code>CoverageRecorder.Record</code>",
-      file: "src/TestDetta.Cli/CliApp.cs:230",
+      file: "src/TestDetta.Cli/CliApp.cs:290",
       input: "<code>dotnet TestDetta.Cli.dll record -c &lt;cfg&gt; --parallel n [--no-build] [--project …]</code>",
       output: "Proje başına <code>(CoverageMap Map, bool TestsPassed)</code>; çıkış kodu 0, 1 (hiç harita yazılmadı) ya da 3 (bir test başarısız)",
       purpose: "Her test sınıfının hangi metotları çalıştırdığını ölçmek. Ayrıntılar Bölüm 2'de.",
@@ -114,8 +114,8 @@ foreach (var project in SelectTestProjects(graph, root, projects))
     },
     {
       title: "td test başlar ve lisans arka planda kontrol edilir", nodes: ["cipr", "td", "lic"], edges: ["start", "license"],
-      who: "<code>CliApp.Run(args, stdout, stderr)</code> → <code>LicenseGate.Refresh</code> (arka plan Task), sonra <code>LicenseGate.Check</code> ve <code>Apply</code>",
-      file: "src/TestDetta.Cli/CliApp.cs:25, src/TestDetta.Cli/LicenseGate.cs",
+      who: "<code>CliApp.Run(args, stdout, stderr, CliHost)</code> → <code>LicenseGate.Refresh</code> (arka plan Task), sonra <code>LicenseGate.Check</code> ve <code>Apply</code>",
+      file: "src/TestDetta.Cli/CliApp.cs:32, src/TestDetta.Cli/LicenseGate.cs",
       input: "<code>td test --base origin/main --max-map-age 50 --drift-fallback all --summary-file $GITHUB_STEP_SUMMARY -- -c Debug</code>, ortamda <code>TESTDETTA_LICENSE</code>",
       output: "<code>LicenseStatus</code> (Valid, Warning, PublicRepository, Missing, Invalid, Expired, OverSeats…)",
       purpose: "Geçerli lisans yoksa seçim yapılmaz, bütün testler koşar; iş hiçbir zaman lisans yüzünden başarısız olmaz.",
@@ -123,12 +123,13 @@ foreach (var project in SelectTestProjects(graph, root, projects))
         "Lisans metni <code>testdetta1.&lt;base64url claims&gt;.&lt;imza&gt;</code>; ECDSA P-256 imzası ağ olmadan doğrulanır (<code>License.Verify</code>).",
         "Koltuk hesabı: son 30 günün bot olmayan commit yazarları; izin = koltuk + max(1, ⌈koltuk × 0,2⌉).",
         "<b>Bugün:</b> <code>LicenseKeys.Enforced = false</code>, yani kontrol raporlanır ama seçimi kapatmaz.",
+        "<b>Shadow mode</b> (<code>td test --shadow</code>) bu adıma hiç gelmez: <code>CliApp.Run</code> onu yenileme başlamadan <code>CliApp.Shadow</code>'a gönderir; lisans okunmaz, yenilenmez, ağ çağrısı yoktur.",
       ]),
     },
     {
       title: "Analiz: değişiklikten test sınıflarına", nodes: ["td", "pipe"], edges: ["analyze"],
       who: "<code>AnalysisPipeline.Run(repoPath, baseRef, AnalysisOptions)</code>",
-      file: "src/TestDetta.Core/AnalysisPipeline.cs:61",
+      file: "src/TestDetta.Core/AnalysisPipeline.cs:62",
       input: "Depo yolu, <code>origin/main</code>, <code>AnalysisOptions { MaxMapAge, DriftFallback, GeneratedCode }</code>",
       output: "<code>AnalysisResult(RepoRoot, ChangedFiles, Graph, Impact, Plan)</code>; <code>Plan.Projects</code> proje başına <code>TestProjectSelection</code>",
       purpose: "Hangi test projesinin tamamen, hangisinin kısmen (hangi sınıflarla) koşacağına ve hangisinin hiç koşmayacağına karar vermek. Ayrıntılar Bölüm 3 ve 4'te.",
@@ -213,7 +214,7 @@ const CH_RECORD = {
     {
       title: "Komut, projeleri ve seçenekleri toplar", nodes: ["cli", "graph"], edges: ["load"],
       who: "<code>CliApp.RecordCoverage</code>",
-      file: "src/TestDetta.Cli/CliApp.cs:230",
+      file: "src/TestDetta.Cli/CliApp.cs:290",
       input: "<code>RecordSettings(Configuration, Projects, Parallelism, Framework) { NoBuild }</code>",
       output: "<code>ProjectGraph</code> ve kaydedilecek test projelerinin listesi",
       purpose: "Hangi projelerin test projesi olduğunu (MSBuild değerlendirmesi ya da <code>*.Tests</code> adı) bulmak.",

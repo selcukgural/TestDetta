@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: e497d189cf09 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: 589b8cc513f4 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Varsayılan branch'teki her commit için bir harita kaydedin ve pull request'lerin yalnızca değişikliklerinin etkilediği testleri çalıştırmasını sağlayın. Action {{name}}'yı kendisi derler ve haritaları Actions önbelleğinde tutar.</p>
 
@@ -66,21 +66,29 @@ jobs:
 <table>
   <thead><tr><th>Girdi</th><th>Varsayılan</th><th>Açıklama</th></tr></thead>
   <tbody>
-    <tr><td><code>mode</code></td><td></td><td>Pull request'lerde <code>test</code> (etkilenen testleri çalıştırır), varsayılan branch'te <code>record</code> (kapsam haritalarını kaydeder). Zorunlu.</td></tr>
+    <tr><td><code>mode</code></td><td></td><td>Pull request'lerde <code>test</code> (etkilenen testleri çalıştırır), {{name}}'yı değerlendirirken pull request'lerde <code>shadow</code> (her testi çalıştırır ve seçimin neyi dışarıda bırakacağını raporlar; lisans gerekmez), varsayılan branch'te <code>record</code> (kapsam haritalarını kaydeder). Zorunlu.</td></tr>
     <tr><td><code>base</code></td><td>PR'ın base branch'i</td><td>Test modunda karşılaştırılacak branch. Pull request'ler dışında bunu ayarlayın.</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Testleri derlemek ve çalıştırmak için derleme yapılandırması.</td></tr>
     <tr><td><code>projects</code></td><td>tüm test projeleri</td><td>Record modu: her satıra bir tane olmak üzere <code>.csproj</code> yolları.</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>Record modu: test projesi başına test host süreci sayısı; her süreç testlerini yine birer birer çalıştırır. Test paketinin aynı anda birden fazla test sürecini kaldırabilmesi gerekir.</td></tr>
     <tr><td><code>no-build</code></td><td><code>false</code></td><td>Record modu: önceki bir adımın aynı <code>configuration</code> ile yaptığı derlemeyi kaydetmek için <code>true</code>.</td></tr>
-    <tr><td><code>dotnet-test-args</code></td><td></td><td>Test modu: boşlukla ayrılmış ek <code>dotnet test</code> argümanları.</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>Test ve shadow modları: boşlukla ayrılmış ek <code>dotnet test</code> argümanları. Shadow mode'da solution'ınızı burada belirtirseniz tek bir komut olarak çalışır.</td></tr>
     <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Test modu: bir haritanın merge base'in kaç commit gerisinde olabileceği; aradaki değişiklikler köprülenir. <code>0</code> yalnızca tam eşleşen haritayı kullanır.</td></tr>
     <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Test modu: daha eski bir haritadan bu yana yapılan değişiklikler bir derleme dosyası, yapılandırma ya da global using içerdiğinde, <code>all</code> etkilenen test projelerini tamamen çalıştırır; <code>name</code> isimlere göre karar verir (daha hızlıdır, ancak yapılandırma ya da reflection üzerinden yapılan çağrıları göremez).</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test modu: en yeni haritayı bulmak için Actions önbelleklerini listeler (<code>actions: read</code> gerektirir).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test modu: <code>TESTDETTA_LICENSE</code> gibi bir depo ya da organizasyon secret'ından gelen lisans dizesi. Açık depolar lisansa ihtiyaç duymaz. Geçerli bir lisans olmadan tüm testler çalışır; job bu yüzden asla başarısız olmaz.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test modu: <code>TESTDETTA_LICENSE</code> gibi bir depo ya da organizasyon secret'ından gelen lisans dizesi. Açık depolar lisansa ihtiyaç duymaz. Geçerli bir lisans olmadan tüm testler çalışır; job bu yüzden asla başarısız olmaz. Shadow mode onu hiç okumaz.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Analiz edilecek, depo içindeki herhangi bir dizin.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>{{name}}'nın üzerinde çalıştığı .NET 10 SDK'yı kurar. Job'da zaten varsa <code>false</code> yapın.</td></tr>
   </tbody>
 </table>
+
+<h2 id="shadow">Shadow mode</h2>
+<p>{{name}}'yı hiçbir testi atlamadan denemek için pull request'lerde <code>mode: shadow</code> kullanın. Her test çalışır ve job'un sonucu bu çalıştırmanınkidir; job özeti ve <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;</code> artifact'i seçimin neyi çalıştıracağını, ölçülen dakikaları ve dışarıda bırakacağı her başarısız sınıfı gösterir. Lisans gerektirmez ve hiçbir ağ çağrısı yapmaz. Kendi job'unuzun yaptığı gibi tek bir komut olarak çalışması için solution'ınızı <code>dotnet-test-args</code> içinde belirtin; bkz. <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
+<pre><code>      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: shadow
+          dotnet-test-args: Shop.slnx</code></pre>
 
 <h2>Job summary</h2>
 <p>Test modunda {{name}} seçimini job summary'ye yazar: değişen dosyalar ve karşılaştırdığı base, her test projesinin filtreli mi, tamamen mi yoksa hiç mi çalıştığı ve nedeni, test sonuçları ve önemli olduğunda lisans durumu. Depodan gelen yollar, sınıf adları ve gerekçeler kod olarak yazılır; böylece bir pull request'teki dosya adları sayfaya link ya da mention enjekte edemez.</p>

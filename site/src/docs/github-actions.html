@@ -66,21 +66,29 @@ jobs:
 <table>
   <thead><tr><th>Input</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>mode</code></td><td></td><td><code>test</code> on pull requests (run affected tests), <code>record</code> on the default branch (record coverage maps). Required.</td></tr>
+    <tr><td><code>mode</code></td><td></td><td><code>test</code> on pull requests (run affected tests), <code>shadow</code> on pull requests while you evaluate {{name}} (run every test and report what the selection would have left out; no license needed), <code>record</code> on the default branch (record coverage maps). Required.</td></tr>
     <tr><td><code>base</code></td><td>the PR's base branch</td><td>Branch to compare with in test mode. Outside pull requests, set it.</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Build configuration for building and running the tests.</td></tr>
     <tr><td><code>projects</code></td><td>all test projects</td><td>Record mode: <code>.csproj</code> paths, one per line.</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>Record mode: test host processes per test project; each still runs its tests one at a time. The suite must tolerate several test processes at once.</td></tr>
     <tr><td><code>no-build</code></td><td><code>false</code></td><td>Record mode: <code>true</code> to record the build an earlier step made with the same <code>configuration</code>.</td></tr>
-    <tr><td><code>dotnet-test-args</code></td><td></td><td>Test mode: extra <code>dotnet test</code> arguments, separated by spaces.</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>Test and shadow modes: extra <code>dotnet test</code> arguments, separated by spaces. In shadow mode, name your solution here to run it as one command.</td></tr>
     <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Test mode: commits a map may be behind the merge base; the changes in between are bridged. <code>0</code> uses only an exact map.</td></tr>
     <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Test mode: when the changes since an older map include a build file, configuration or a global using, <code>all</code> runs the affected test projects completely; <code>name</code> decides them by name (faster, blind to calls made through configuration or reflection).</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test mode: lists the Actions caches to find the newest map (needs <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>TESTDETTA_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>TESTDETTA_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it. Shadow mode never reads it.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Any directory inside the repository to analyze.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Install the .NET 10 SDK {{name}} runs on. Set to <code>false</code> if the job already has it.</td></tr>
   </tbody>
 </table>
+
+<h2 id="shadow">Shadow mode</h2>
+<p>To try {{name}} without skipping anything, use <code>mode: shadow</code> on pull requests. Every test runs and the job's result is that run's; the job summary and the artifact <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;</code> show what the selection would have run, the measured minutes, and any failing class it would have left out. It needs no license and makes no network call. Name your solution in <code>dotnet-test-args</code> to run it as one command, as your own job does; see <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
+<pre><code>      - if: github.event_name == 'pull_request'
+        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: shadow
+          dotnet-test-args: Shop.slnx</code></pre>
 
 <h2>Job summary</h2>
 <p>In test mode, {{name}} writes its selection to the job summary: the changed files and the base it compared with, each test project with whether it ran filtered, completely or not at all and why, the test results, and the license state when it matters. Paths, class names and reasons from the repository are written as code, so file names in a pull request cannot inject links or mentions into the page.</p>

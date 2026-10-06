@@ -32,7 +32,7 @@
   <li><code>HTTPS_PROXY</code> is honoured.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> turns it off. Offline and enterprise licenses never call home.</li>
 </ul>
-<p>Public repositories need no license and make no call.</p>
+<p>Public repositories need no license and make no call. Neither does shadow mode (<code>td test --shadow</code>), which reads no license at all.</p>
 
 <h2 id="license-check">How the license is checked</h2>
 <p>A license is a signed string, verified on your machine with a public key built into {{name}}. It names the repositories it covers, matched against the <code>origin</code> remote with any credentials removed first. A license problem never fails a build: every test runs instead, as before {{name}}. <a href="/docs/license/">More about licenses</a>.</p>

@@ -205,7 +205,9 @@ A small web service, the only holder of the signing key.
   analysis and in the JSON output (`license`). When enforced and not covering, every test project of
   the repository runs completely, and the text, plan and Markdown summary say why. The analysis
   itself (`AnalysisPipeline`) knows nothing of licenses, so `testdetta-eval` and the corpus measurements
-  are unaffected.
+  are unaffected. `td test --shadow` needs no license (owner, 2026-10-07): it starts no refresh, reads no
+  license variable or file and makes no network call; in return it shows decisions only for the tests the
+  job ran (docs/design/shadow-mode.md, "Free, but no free selection").
 - `td license status`, `td license install`, and the action's `license` input.
 - **Not enforced yet:** `LicenseKeys.Trusted` is empty until the license service makes the first
   production key, and `LicenseKeys.Enforced` is false. Until then the status is checked and appears
