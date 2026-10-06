@@ -2,7 +2,9 @@
 
 Status: first sketch 2026-10-05; widened 2026-10-07 at the owner's request: shadow mode is the way into
 cautious organisations, and it must put the evidence in front of them in full detail, with no room
-for misreading. Decisions marked **[owner]** are open.
+for misreading. Owner decisions (2026-10-07, all as proposed): classification on by default; history in
+CI artifacts for v1; graduation at 200 pull requests, 20 of them with failing tests, no unexplained miss;
+`td audit` right after v1.
 
 ## Problem
 
@@ -40,7 +42,7 @@ reported.
      - fails alone with the change and passes alone without it: **miss**.
 
      The classification reruns only the candidate classes, so it costs seconds unless there are
-     candidates; it can be switched off **[owner: on by default?]**.
+     candidates; it is on by default and can be switched off.
 4. **Report** in the job summary and `testdetta-shadow.json`:
    - the verdict line first: "Would have run 14 of 212 classes (6.6%), 1 min 10 s of 18 min 30 s of test
      time; every failing test was selected", or the misses, plainly;
@@ -62,11 +64,9 @@ Single pull requests convince nobody; a month of them does.
   failures caught, misses, flaky classes seen, minutes the selection would have saved (total, median,
   per pull request), selection share distribution, and the statistical bound: with 0 misses in n
   pull requests that had failures, the miss rate is below 3/n at 95% confidence, stated with n.
-  **[owner: where the history lives: artifacts only (no setup), a branch in the repository, or later
-  the hosted tier]**
+  History lives in CI artifacts for v1 (no setup); a branch or the hosted tier may come later.
 - **Graduation criteria**, written in the documentation before the team starts, so the exit is not a
-  sales argument: for example at least 200 pull requests and 20 with failing tests, no unexplained miss.
-  **[owner: the numbers]**
+  sales argument: at least 200 pull requests, 20 of them with failing tests, and no unexplained miss.
 
 ## Optional: TestDetta's own audit on the team's code
 
@@ -75,7 +75,7 @@ of the team's own code one at a time (the evaluator's IL mutants, no source chan
 tests the full way, and checks that TestDetta's selection contains every class that failed. Result:
 "On your code: 100 changes, 63 broke tests, 0 missed (95% upper bound 4.6%)". This is the strongest
 evidence we can give, because it does not wait for real failures to happen. It runs on the team's
-runners, so it costs their CI minutes: off by default, with a cap. **[owner: in v1 or right after]**
+runners, so it costs their CI minutes: off by default, with a cap. Built right after v1.
 
 ## Next step after shadow: run first, then the rest
 
