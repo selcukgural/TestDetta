@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 8031b5cc3ea9 -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 5061bb679bfc -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -79,6 +79,17 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 
 <h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
 <p>Dónde se escribe el informe JSON. Valor predeterminado: <code>.testdetta/testdetta-shadow.json</code> en el repositorio.</p>
+
+<h3 id="shadow-rerun-timeout"><code>--shadow-rerun-timeout &lt;time&gt;</code>, <code>--shadow-rerun-idle-timeout &lt;time&gt;</code></h3>
+<p>Cuánto puede durar una nueva ejecución con el cambio, y cuánto tiempo pueden sus procesos usar casi nada de CPU antes de detenerla por bloqueada. Valores predeterminados: <code>15m</code> y <code>5m</code>. Las clases de una nueva ejecución detenida se informan como no clasificadas.</p>
+
+<h3 id="shadow-base-timeout"><code>--shadow-base-timeout &lt;time&gt;</code>, <code>--shadow-base-idle-timeout &lt;time&gt;</code></h3>
+<p>Lo mismo para la nueva ejecución sobre el commit base, que primero restaura y compila en su copia. Valores predeterminados: <code>30m</code> y <code>10m</code>; el límite de inactividad es mayor porque una restauración espera a la red mientras la CPU está casi parada.</p>
+
+<h3 id="shadow-classify-budget"><code>--shadow-classify-budget &lt;time&gt;</code></h3>
+<p>Cuánto puede durar toda la clasificación: todas las nuevas ejecuciones y la copia del commit base juntas. Valor predeterminado: <code>45m</code>. Una nueva ejecución en curso se detiene donde termina el presupuesto, y los fallos que no se hayan clasificado para entonces se informan como no clasificados, con el motivo. La ejecución completa y el código de salida nunca se ven afectados. El informe muestra los límites usados y cuánto del presupuesto se gastó.</p>
+<p>Un <code>&lt;time&gt;</code> es <code>90s</code>, <code>15m</code>, <code>1h</code> o <code>1h30m</code>, como máximo <code>168h</code>; un número solo significa minutos; <code>0</code> o <code>none</code> significa sin límite. En la GitHub Action, las entradas del mismo nombre (<code>shadow-rerun-timeout</code>, <code>shadow-classify-budget</code>, etc.) los fijan.</p>
+<pre><code>td test --shadow --shadow-classify-budget 20m --shadow-base-timeout none</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p>Todo lo que va después de <code>--</code> se pasa a cada llamada a <code>dotnet test</code>. Su propio <code>--filter</code> se conserva: {{name}} lo combina con su filtro de clases, así que solo se ejecutan las pruebas seleccionadas que entran en su filtro. Los filtros de trait, método y espacio de nombres de xUnit v3 acotan la selección de la misma forma. Un filtro que el ejecutor no puede combinar con un filtro de clases (un filtro de clase o de consulta de xUnit v3, un filtro tree-node de TUnit) hace que el proyecto se ejecute completo bajo su filtro.</p>

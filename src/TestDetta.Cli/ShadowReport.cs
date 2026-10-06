@@ -74,7 +74,7 @@ internal sealed record ShadowProject(string Path, string Mode, string Reason, in
 /// <param name="MergeBase">The merge base the change was measured from, or null when git could not tell.</param>
 /// <param name="Head">The commit tested, or null.</param>
 /// <param name="Maps">Coverage maps used: test project, the commit they were recorded at, and the file's SHA-256.</param>
-/// <param name="Options">The options that shape the selection.</param>
+/// <param name="Options">The options that shape the selection and the classification (its time limits).</param>
 /// <param name="Command">The command that repeats the selection locally.</param>
 internal sealed record ShadowReproduction(
     string Version,
@@ -86,6 +86,21 @@ internal sealed record ShadowReproduction(
     IReadOnlyList<string> Options,
     string Command);
 
+/// <summary>How the classification went: the limits it had and the part of its budget it spent.</summary>
+/// <param name="Limits">The limits in effect.</param>
+/// <param name="Seconds">Time the classification took, every rerun and the base checkout together.</param>
+/// <param name="BudgetRanOut">True when the budget left classes unclassified or stopped a rerun.</param>
+internal sealed record ShadowClassification(ShadowLimits Limits, double Seconds, bool BudgetRanOut)
+{
+    /// <summary>One sentence for the reports: time spent of the budget, the limits per rerun, and whether the budget ran out.</summary>
+    public string Describe()
+    {
+        var budget = Limits.Budget is { } limit ? $"{Durations.Format(Seconds)} of its {Durations.DescribeLimit(limit)} budget" : $"{Durations.Format(Seconds)}, with no budget";
+        var ranOut = BudgetRanOut ? "; the budget ran out, so the classes left then are not classified" : string.Empty;
+        return $"Classification took {budget}; {Limits.Describe()}{ranOut}.";
+    }
+}
+
 /// <summary>The outcome of one shadow run (docs/design/shadow-mode.md).</summary>
 /// <param name="Compared">False when TestDetta could not select (the full run still ran); <see cref="NoResultReason"/> says why.</param>
 /// <param name="NoResultReason">Why there is no shadow result, or null.</param>
@@ -96,6 +111,9 @@ internal sealed record ShadowResult(bool Compared, string? NoResultReason, IRead
 {
     /// <summary>True when classification reruns were switched off.</summary>
     public bool ClassificationOff { get; init; }
+
+    /// <summary>The classification's limits and time; null when it did not run (switched off, or nothing to compare).</summary>
+    public ShadowClassification? Classification { get; init; }
 
     /// <summary>Failed classes with the given verdict, with their project.</summary>
     /// <param name="verdict">Verdict to list.</param>
@@ -167,6 +185,19 @@ internal static class ShadowReport
 
         json.WriteBoolean("classified"u8, !result.ClassificationOff);
         json.WriteNumber("analysisSeconds"u8, Math.Round(result.AnalysisSeconds, 3));
+        if (result.Classification is { } classification)
+        {
+            var limits = classification.Limits;
+            json.WriteStartObject("classification"u8);
+            WriteLimit(json, "rerunTimeoutSeconds"u8, limits.RerunTimeout);
+            WriteLimit(json, "rerunIdleSeconds"u8, limits.RerunIdle);
+            WriteLimit(json, "baseTimeoutSeconds"u8, limits.BaseTimeout);
+            WriteLimit(json, "baseIdleSeconds"u8, limits.BaseIdle);
+            WriteLimit(json, "budgetSeconds"u8, limits.Budget);
+            json.WriteNumber("spentSeconds"u8, Math.Round(classification.Seconds, 3));
+            json.WriteBoolean("budgetRanOut"u8, classification.BudgetRanOut);
+            json.WriteEndObject();
+        }
 
         json.WriteStartObject("totals"u8);
         json.WriteNumber("projects"u8, result.Projects.Count);
@@ -335,6 +366,12 @@ internal static class ShadowReport
         writer.WriteLine();
         writer.WriteLine("The selection's part of a filtered project is its time outside test classes (build, start-up, discovery) plus the measured time of the selected classes.");
         writer.WriteLine();
+        if (result.Classification is { } classification)
+        {
+            writer.WriteLine(classification.Describe());
+            writer.WriteLine();
+        }
+
         WriteReproduction(result.Reproduction, writer, code);
     }
 
@@ -358,6 +395,11 @@ internal static class ShadowReport
         foreach (var project in result.Unexplained)
         {
             stdout.WriteLine($"  failed without a failed class in a report: {project.Path} (exit code {project.ExitCode})");
+        }
+
+        if (result.Classification is { } classification)
+        {
+            stdout.WriteLine($"  {classification.Describe()}");
         }
 
         stdout.WriteLine($"  reproduce the selection: {result.Reproduction.Command}");
@@ -389,10 +431,27 @@ internal static class ShadowReport
             writer.WriteLine($"- map of {code(testProject)} recorded at {code(commit)}, SHA-256 {code(mapSha)}");
         }
 
+        writer.WriteLine($"- options: {code(string.Join(' ', reproduction.Options))}");
         writer.WriteLine($"- with these maps in {code(".testdetta/coverage")}, at the head commit: {code(reproduction.Command)}");
         writer.WriteLine();
         writer.WriteLine("</details>");
         writer.WriteLine();
+    }
+
+    /// <summary>Writes a limit in seconds, or null for no limit.</summary>
+    /// <param name="json">Writer.</param>
+    /// <param name="name">Property name.</param>
+    /// <param name="limit">The limit, or null for none.</param>
+    private static void WriteLimit(Utf8JsonWriter json, ReadOnlySpan<byte> name, TimeSpan? limit)
+    {
+        if (limit is { } time)
+        {
+            json.WriteNumber(name, Math.Round(time.TotalSeconds, 3));
+        }
+        else
+        {
+            json.WriteNull(name);
+        }
     }
 
     /// <summary>Writes a string property, or nothing for null.</summary>

@@ -80,6 +80,17 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
 <p>Where the JSON report goes. Default: <code>.testdetta/testdetta-shadow.json</code> in the repository.</p>
 
+<h3 id="shadow-rerun-timeout"><code>--shadow-rerun-timeout &lt;time&gt;</code>, <code>--shadow-rerun-idle-timeout &lt;time&gt;</code></h3>
+<p>How long one rerun with the change may take, and how long its processes may use almost no CPU before it is stopped as stuck. Defaults: <code>15m</code> and <code>5m</code>. The classes of a rerun that is stopped are reported as not classified.</p>
+
+<h3 id="shadow-base-timeout"><code>--shadow-base-timeout &lt;time&gt;</code>, <code>--shadow-base-idle-timeout &lt;time&gt;</code></h3>
+<p>The same for the rerun on the base commit, which restores and builds in its checkout first. Defaults: <code>30m</code> and <code>10m</code>; the idle limit is longer because a restore waits on the network while the CPU is nearly still.</p>
+
+<h3 id="shadow-classify-budget"><code>--shadow-classify-budget &lt;time&gt;</code></h3>
+<p>How long the whole classification may take: every rerun and the base checkout together. Default: <code>45m</code>. A running rerun is stopped where the budget ends, and the failures not classified by then are reported as not classified, with the reason. The full run and the exit code are never affected. The report shows the limits used and how much of the budget was spent.</p>
+<p>A <code>&lt;time&gt;</code> is <code>90s</code>, <code>15m</code>, <code>1h</code> or <code>1h30m</code>, at most <code>168h</code>; a plain number means minutes; <code>0</code> or <code>none</code> means no limit. In the GitHub Action, the inputs of the same names (<code>shadow-rerun-timeout</code>, <code>shadow-classify-budget</code> and so on) set them.</p>
+<pre><code>td test --shadow --shadow-classify-budget 20m --shadow-base-timeout none</code></pre>
+
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p>Everything after <code>--</code> is passed to every <code>dotnet test</code> call. Your own <code>--filter</code> is kept: {{name}} joins it with its class filter, so only the selected tests inside your filter run. xUnit v3 trait, method and namespace filters narrow the selection the same way. A filter the runner cannot join with a class filter (an xUnit v3 class or query filter, a TUnit tree-node filter) makes the project run completely under your filter.</p>
 <pre><code>td test -- -c Release --logger trx

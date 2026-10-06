@@ -274,7 +274,8 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    roll-up over weeks with the statistical bound, and documentation for reviewers. Design and open
    decisions: docs/design/shadow-mode.md. Status 2026-10-07: `td test --shadow` with classification and
    the report, and the Action's `mode: shadow` with the artifact, are built (as-built section of the
-   design). Open: the roll-up (`td shadow report`), the shadow-mode and reviewer pages, replaying real
+   design); every classification time limit is an option and an Action input, with defaults, under an
+   overall budget (45 min) that never touches the full run. Open: the roll-up (`td shadow report`), the shadow-mode and reviewer pages, replaying real
    pull request histories before a partner sees it.
 
 Until v1 only misses are fixed. Parked until after v1: narrowing the run-once rules, Microsoft

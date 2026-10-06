@@ -40,6 +40,26 @@ inputs:
     description: "Test and shadow modes only. When the changes since an older map include a build file, configuration or a global using: 'all' runs the affected test projects completely (safest), 'name' decides them by name (faster, blind to calls made through configuration or reflection)."
     required: false
     default: all
+  shadow-rerun-timeout:
+    description: "Shadow mode only. Longest one rerun of a project's left-out failed classes with the change may take: 90s, 15m, 1h or 1h30m; a plain number is minutes; 0 or none means no limit. Empty keeps the default (15m)."
+    required: false
+    default: ''
+  shadow-rerun-idle-timeout:
+    description: "Shadow mode only. Stop such a rerun after this long with almost no CPU (stuck). Same syntax; empty keeps the default (5m)."
+    required: false
+    default: ''
+  shadow-base-timeout:
+    description: "Shadow mode only. Longest the rerun on the base commit may take, its restore and build included. Same syntax; empty keeps the default (30m)."
+    required: false
+    default: ''
+  shadow-base-idle-timeout:
+    description: "Shadow mode only. Idle limit of the rerun on the base commit. Same syntax; empty keeps the default (10m)."
+    required: false
+    default: ''
+  shadow-classify-budget:
+    description: "Shadow mode only. Longest all classification reruns and the base checkout may take together; failures not classified by then are reported as not classified. The full run and the job's result are never affected. Same syntax; empty keeps the default (45m)."
+    required: false
+    default: ''
   github-token:
     description: Test and shadow modes only. Token that lists the repository's Actions caches to find the newest map (needs the actions read permission). Without it only a map at the merge base is found.
     required: false
@@ -201,9 +221,21 @@ runs:
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
         TESTDETTA_LICENSE: ${{ inputs.license }}
         SHADOW_REPORT: ${{ runner.temp }}/testdetta-shadow/testdetta-shadow.json
+        SHADOW_RERUN_TIMEOUT: ${{ inputs.shadow-rerun-timeout }}
+        SHADOW_RERUN_IDLE_TIMEOUT: ${{ inputs.shadow-rerun-idle-timeout }}
+        SHADOW_BASE_TIMEOUT: ${{ inputs.shadow-base-timeout }}
+        SHADOW_BASE_IDLE_TIMEOUT: ${{ inputs.shadow-base-idle-timeout }}
+        SHADOW_CLASSIFY_BUDGET: ${{ inputs.shadow-classify-budget }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
-        dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+        # Only the limits given are passed; td checks their syntax and keeps its defaults for the rest.
+        limits=()
+        if [ -n "$SHADOW_RERUN_TIMEOUT" ]; then limits+=(--shadow-rerun-timeout "$SHADOW_RERUN_TIMEOUT"); fi
+        if [ -n "$SHADOW_RERUN_IDLE_TIMEOUT" ]; then limits+=(--shadow-rerun-idle-timeout "$SHADOW_RERUN_IDLE_TIMEOUT"); fi
+        if [ -n "$SHADOW_BASE_TIMEOUT" ]; then limits+=(--shadow-base-timeout "$SHADOW_BASE_TIMEOUT"); fi
+        if [ -n "$SHADOW_BASE_IDLE_TIMEOUT" ]; then limits+=(--shadow-base-idle-timeout "$SHADOW_BASE_IDLE_TIMEOUT"); fi
+        if [ -n "$SHADOW_CLASSIFY_BUDGET" ]; then limits+=(--shadow-classify-budget "$SHADOW_CLASSIFY_BUDGET"); fi
+        dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" "${limits[@]}" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
 
     # Kept whether the tests passed or not: the roll-up over pull requests reads these artifacts.
     - name: Keep the shadow report

@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 8031b5cc3ea9 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 5061bb679bfc -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -79,6 +79,17 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 
 <h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
 <p>JSON raporun yazılacağı yer. Varsayılan: depoda <code>.testdetta/testdetta-shadow.json</code>.</p>
+
+<h3 id="shadow-rerun-timeout"><code>--shadow-rerun-timeout &lt;time&gt;</code>, <code>--shadow-rerun-idle-timeout &lt;time&gt;</code></h3>
+<p>Değişiklikle yapılan bir yeniden çalıştırmanın en fazla ne kadar sürebileceği ve süreçlerinin, takılmış sayılıp durdurulmadan önce ne kadar süre neredeyse hiç CPU kullanmadan kalabileceği. Varsayılanlar: <code>15m</code> ve <code>5m</code>. Durdurulan bir yeniden çalıştırmanın sınıfları sınıflandırılmamış olarak raporlanır.</p>
+
+<h3 id="shadow-base-timeout"><code>--shadow-base-timeout &lt;time&gt;</code>, <code>--shadow-base-idle-timeout &lt;time&gt;</code></h3>
+<p>Aynısı, base commit üzerindeki yeniden çalıştırma için; o, kendi checkout'unda önce restore ve derleme yapar. Varsayılanlar: <code>30m</code> ve <code>10m</code>; boşta kalma sınırı daha uzundur, çünkü restore, CPU neredeyse dururken ağı bekler.</p>
+
+<h3 id="shadow-classify-budget"><code>--shadow-classify-budget &lt;time&gt;</code></h3>
+<p>Sınıflandırmanın tamamının en fazla ne kadar sürebileceği: tüm yeniden çalıştırmalar ve base checkout'u birlikte. Varsayılan: <code>45m</code>. Süren bir yeniden çalıştırma bütçenin bittiği yerde durdurulur ve o zamana kadar sınıflandırılmamış başarısızlıklar, nedeniyle birlikte sınıflandırılmamış olarak raporlanır. Tam çalıştırma ve çıkış kodu bundan asla etkilenmez. Rapor, kullanılan sınırları ve bütçenin ne kadarının harcandığını gösterir.</p>
+<p>Bir <code>&lt;time&gt;</code> değeri <code>90s</code>, <code>15m</code>, <code>1h</code> ya da <code>1h30m</code> biçimindedir, en fazla <code>168h</code>; düz bir sayı dakika demektir; <code>0</code> ya da <code>none</code> sınır yok demektir. GitHub Action'da aynı adlı girdiler (<code>shadow-rerun-timeout</code>, <code>shadow-classify-budget</code> vb.) bunları ayarlar.</p>
+<pre><code>td test --shadow --shadow-classify-budget 20m --shadow-base-timeout none</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p><code>--</code> sonrasındaki her şey her <code>dotnet test</code> çağrısına iletilir. Kendi <code>--filter</code> filtreniz korunur: {{name}} onu kendi sınıf filtresiyle birleştirir, yalnızca seçilen testlerden filtrenize uyanlar çalışır. xUnit v3 trait, method ve namespace filtreleri seçimi aynı şekilde daraltır. Çalıştırıcının sınıf filtresiyle birleştiremediği bir filtre (xUnit v3 class veya query filtresi, TUnit tree-node filtresi) verilirse proje filtrenizle birlikte tamamen çalışır.</p>

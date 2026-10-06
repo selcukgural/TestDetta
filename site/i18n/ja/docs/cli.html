@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 8031b5cc3ea9 -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 5061bb679bfc -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -79,6 +79,17 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 
 <h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
 <p>JSON レポートの出力先です。既定値: リポジトリ内の <code>.testdetta/testdetta-shadow.json</code>。</p>
+
+<h3 id="shadow-rerun-timeout"><code>--shadow-rerun-timeout &lt;time&gt;</code>, <code>--shadow-rerun-idle-timeout &lt;time&gt;</code></h3>
+<p>変更ありでの 1 回の再実行にかけられる最長時間と、そのプロセスがほとんど CPU を使わない状態が続いたときに停止と見なして止めるまでの時間です。既定値: <code>15m</code> と <code>5m</code>。停止された再実行のクラスは未分類として報告されます。</p>
+
+<h3 id="shadow-base-timeout"><code>--shadow-base-timeout &lt;time&gt;</code>, <code>--shadow-base-idle-timeout &lt;time&gt;</code></h3>
+<p>ベースコミット上の再実行について同じものを指定します。こちらはまずそのチェックアウトで復元とビルドを行います。既定値: <code>30m</code> と <code>10m</code>。復元は CPU がほぼ止まったままネットワークを待つため、アイドル制限が長くなっています。</p>
+
+<h3 id="shadow-classify-budget"><code>--shadow-classify-budget &lt;time&gt;</code></h3>
+<p>分類全体にかけられる最長時間です。すべての再実行とベースのチェックアウトを合わせた時間です。既定値: <code>45m</code>。実行中の再実行は予算が尽きた時点で停止され、それまでに分類されなかった失敗は理由とともに未分類として報告されます。完全実行と終了コードが影響を受けることはありません。レポートには、使用された制限と予算のうち消費した時間が表示されます。</p>
+<p><code>&lt;time&gt;</code> は <code>90s</code>、<code>15m</code>、<code>1h</code>、<code>1h30m</code> の形式で、最大 <code>168h</code> です。数字だけの場合は分を意味し、<code>0</code> または <code>none</code> は制限なしを意味します。GitHub Action では、同じ名前の入力（<code>shadow-rerun-timeout</code>、<code>shadow-classify-budget</code> など）で設定します。</p>
+<pre><code>td test --shadow --shadow-classify-budget 20m --shadow-base-timeout none</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p><code>--</code> の後に指定したものはすべて、各 <code>dotnet test</code> の呼び出しに渡されます。独自の <code>--filter</code> はそのまま生かされます。{{name}} はそれを自身のクラスフィルターと結合するため、選択されたテストのうちフィルターに合うものだけが実行されます。xUnit v3 の trait、method、namespace フィルターも同じように選択を絞り込みます。ランナーがクラスフィルターと結合できないフィルター（xUnit v3 の class フィルターや query フィルター、TUnit の tree-node フィルター）を指定した場合、そのプロジェクトはあなたのフィルターの下ですべて実行されます。</p>

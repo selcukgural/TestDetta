@@ -69,6 +69,13 @@ internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTes
     public string? ShadowReport { get; init; }
 
     /// <summary>
+    /// In shadow mode, the classification's time limits; null when none was given on the command line, which
+    /// means <see cref="TestDetta.Cli.ShadowLimits.Default"/> (kept apart so that giving one without
+    /// <c>--shadow</c> is an error, even with its default value).
+    /// </summary>
+    public ShadowLimits? ShadowLimits { get; init; }
+
+    /// <summary>
     /// The configuration <c>dotnet test</c> builds, from <c>-c</c> or <c>--configuration</c> among
     /// <see cref="DotnetTestArguments"/>; Debug when none is given. A changed source generator is read
     /// from a build of this configuration, the one the tests then run.
@@ -97,6 +104,51 @@ internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTes
             return "Debug";
         }
     }
+}
+
+/// <summary>
+/// How long shadow mode's classification may take (docs/design/shadow-mode.md); every value is null for no
+/// limit. The full run has none of these: it runs as the team's own run would.
+/// </summary>
+/// <param name="RerunTimeout">Longest one rerun of a project's left-out failed classes with the change may take.</param>
+/// <param name="RerunIdle">Longest such a rerun's process tree may use almost no CPU before it is killed as stuck.</param>
+/// <param name="BaseTimeout">Longest the rerun on the base commit may take, its restore and build included.</param>
+/// <param name="BaseIdle">
+/// The idle limit of the rerun on the base commit: longer, because its restore in a fresh checkout waits on
+/// the network with the CPU nearly still.
+/// </param>
+/// <param name="Budget">
+/// Longest the whole classification may take, every rerun and the base commit's checkout together; a rerun
+/// is stopped where the budget ends, and the classes not classified by then are reported as not classified.
+/// </param>
+internal sealed record ShadowLimits(TimeSpan? RerunTimeout, TimeSpan? RerunIdle, TimeSpan? BaseTimeout, TimeSpan? BaseIdle, TimeSpan? Budget)
+{
+    /// <summary>
+    /// The defaults: a rerun with the change needs no build, so 15 minutes (5 idle) is plenty; the base commit
+    /// restores and builds first, 30 minutes (10 idle); 45 minutes in all keep a pull request's job from
+    /// growing by more than that, however many projects have left-out failures.
+    /// </summary>
+    public static ShadowLimits Default { get; } = new(
+        TimeSpan.FromMinutes(15),
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMinutes(30),
+        TimeSpan.FromMinutes(10),
+        TimeSpan.FromMinutes(45));
+
+    /// <summary>The limits as the command line gives them, for the reproduction block.</summary>
+    public IReadOnlyList<string> Options =>
+    [
+        $"--shadow-rerun-timeout {Durations.Limit(RerunTimeout)}",
+        $"--shadow-rerun-idle-timeout {Durations.Limit(RerunIdle)}",
+        $"--shadow-base-timeout {Durations.Limit(BaseTimeout)}",
+        $"--shadow-base-idle-timeout {Durations.Limit(BaseIdle)}",
+        $"--shadow-classify-budget {Durations.Limit(Budget)}",
+    ];
+
+    /// <summary>The per-rerun limits in one phrase, for the reports.</summary>
+    public string Describe() =>
+        $"a rerun with the change at most {Durations.DescribeLimit(RerunTimeout)} (idle {Durations.DescribeLimit(RerunIdle)}), " +
+        $"on the base commit at most {Durations.DescribeLimit(BaseTimeout)} (idle {Durations.DescribeLimit(BaseIdle)})";
 }
 
 /// <summary>Options of <c>td record</c>.</summary>
@@ -171,6 +223,15 @@ internal sealed record CliOptions(
           --shadow-no-classify Do not rerun failed classes the selection left out to tell a miss from
                                a flaky or pre-existing failure
           --shadow-report <path>  Shadow report file (default: .testdetta/testdetta-shadow.json)
+          --shadow-rerun-timeout <time>       Longest one rerun with the change may take (default: 15m)
+          --shadow-rerun-idle-timeout <time>  Stop such a rerun after this long with almost no CPU (default: 5m)
+          --shadow-base-timeout <time>        Longest the rerun on the base commit may take, build
+                               included (default: 30m)
+          --shadow-base-idle-timeout <time>   Idle limit of the rerun on the base commit (default: 10m)
+          --shadow-classify-budget <time>     Longest all reruns together may take; what is left then
+                               is reported as not classified (default: 45m)
+                               A <time> is 90s, 15m, 1h or 1h30m; a plain number is minutes;
+                               0 or none means no limit. The full run itself has no limit.
           -- <args>            Pass the remaining arguments to every dotnet test, e.g. -- -c Release
 
         td record:
@@ -278,7 +339,8 @@ internal sealed record CliOptions(
         error = test switch
         {
             { Shadow: true, DryRun: true } => "--shadow runs every test; it cannot be combined with --dry-run",
-            { Shadow: false, ShadowClassify: false } or { Shadow: false, ShadowReport: not null } => "--shadow-no-classify and --shadow-report need --shadow",
+            { Shadow: false, ShadowClassify: false } or { Shadow: false, ShadowReport: not null } or { Shadow: false, ShadowLimits: not null } =>
+                "--shadow-no-classify, --shadow-report, the --shadow-*-timeout options and --shadow-classify-budget need --shadow",
             _ => null,
         };
         return error is null;
@@ -329,6 +391,7 @@ internal sealed record CliOptions(
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
             case "--summary-file" or "--shadow-report" when options.Command == CliCommand.Test:
+            case "--shadow-rerun-timeout" or "--shadow-rerun-idle-timeout" or "--shadow-base-timeout" or "--shadow-base-idle-timeout" or "--shadow-classify-budget" when options.Command == CliCommand.Test:
                 break;
 
             default:
@@ -408,6 +471,25 @@ internal sealed record CliOptions(
 
             case "--shadow-report":
                 options = options with { Test = options.Test with { ShadowReport = value } };
+                return true;
+
+            case "--shadow-rerun-timeout" or "--shadow-rerun-idle-timeout" or "--shadow-base-timeout" or "--shadow-base-idle-timeout" or "--shadow-classify-budget":
+                if (!Durations.TryParseLimit(value, out var limit))
+                {
+                    error = $"{arg} needs a time such as 90s, 15m, 1h or 1h30m, at most 168h (a plain number is minutes; 0 or none means no limit), not {value}";
+                    return false;
+                }
+
+                var limits = options.Test.ShadowLimits ?? ShadowLimits.Default;
+                limits = arg switch
+                {
+                    "--shadow-rerun-timeout" => limits with { RerunTimeout = limit },
+                    "--shadow-rerun-idle-timeout" => limits with { RerunIdle = limit },
+                    "--shadow-base-timeout" => limits with { BaseTimeout = limit },
+                    "--shadow-base-idle-timeout" => limits with { BaseIdle = limit },
+                    _ => limits with { Budget = limit },
+                };
+                options = options with { Test = options.Test with { ShadowLimits = limits } };
                 return true;
 
             case "--format":

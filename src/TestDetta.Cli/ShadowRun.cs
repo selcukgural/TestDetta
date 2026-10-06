@@ -18,12 +18,6 @@ namespace TestDetta.Cli;
 /// <param name="stdout">Receives the test output and the report.</param>
 internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter stdout)
 {
-    /// <summary>Longest a rerun of left-out classes with the change may take.</summary>
-    private static readonly RunLimits AloneLimits = new(TimeSpan.FromMinutes(15), Idle: TimeSpan.FromMinutes(5));
-
-    /// <summary>Longest the rerun on the base commit may take, its restore and build included.</summary>
-    private static readonly RunLimits BaseLimits = new(TimeSpan.FromMinutes(30), Idle: TimeSpan.FromMinutes(10));
-
     private readonly ILogger _logger = loggerFactory.CreateLogger<ShadowRun>();
     private readonly GitClient _git = new(loggerFactory.CreateLogger<GitClient>());
 
@@ -56,13 +50,19 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             var runs = RunEverything(root, graph, userArguments, runner, work);
             var compared = analysis is not null;
             var projects = runs.Select(r => Compare(root, analysis, r)).ToList();
+            ShadowClassification? classification = null;
             if (compared && options.Test.ShadowClassify)
             {
-                var mergeBase = Try(() => _git.MergeBase(root, options.Analysis.BaseRef));
+                // The budget starts after the full run: it limits what TestDetta adds, never the team's own run.
+                var limits = options.Test.ShadowLimits ?? ShadowLimits.Default;
+                var budget = new ShadowBudget(limits.Budget);
+                var context = new Classification(root, graph, userArguments, work, Try(() => _git.MergeBase(root, options.Analysis.BaseRef)), limits, budget);
                 for (var i = 0; i < projects.Count; i++)
                 {
-                    projects[i] = Classify(root, graph, runs[i], projects[i], userArguments, work, mergeBase, ref baseTree);
+                    projects[i] = Classify(context, runs[i], projects[i], ref baseTree);
                 }
+
+                classification = new ShadowClassification(limits, budget.Spent.TotalSeconds, budget.CutShort);
             }
             else if (compared)
             {
@@ -75,6 +75,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             var shadow = new ShadowResult(compared, compared ? null : analysisError, projects, Reproduce(options, root, graph), analysisSeconds)
             {
                 ClassificationOff = !options.Test.ShadowClassify,
+                Classification = classification,
             };
             Report(options, shadow, root);
             return runs.Any(static r => r.Result.ExitCode != 0) ? 3 : 0;
@@ -185,20 +186,27 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         };
     }
 
+    /// <summary>What every classification step of one shadow run shares.</summary>
+    /// <param name="Root">Repository root.</param>
+    /// <param name="Graph">Projects of the repository.</param>
+    /// <param name="UserArguments">The user's <c>dotnet test</c> arguments.</param>
+    /// <param name="Work">Folder for the reports and the base commit's worktree.</param>
+    /// <param name="MergeBase">Commit to rerun on, or null when unknown.</param>
+    /// <param name="Limits">How long each rerun may take.</param>
+    /// <param name="Budget">How long all of them together may take.</param>
+    private sealed record Classification(string Root, ProjectGraph Graph, IReadOnlyList<string> UserArguments, string Work, string? MergeBase, ShadowLimits Limits, ShadowBudget Budget);
+
     /// <summary>
     /// Reruns the failed classes of <paramref name="project"/> the selection left out: alone with the change,
     /// twice for those that pass the first time, and alone on the base commit for those that fail. Until a
-    /// rerun shows otherwise, such a class is a miss; a rerun that cannot run leaves it unclassified.
+    /// rerun shows otherwise, such a class is a miss; a rerun that cannot run, or that the budget leaves no
+    /// time for, leaves it unclassified.
     /// </summary>
-    /// <param name="root">Repository root.</param>
-    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="context">What the classification steps share.</param>
     /// <param name="run">The project's full run.</param>
     /// <param name="project">The comparison; candidates carry <see cref="ShadowVerdict.Miss"/>.</param>
-    /// <param name="userArguments">The user's <c>dotnet test</c> arguments.</param>
-    /// <param name="work">Folder for the reports.</param>
-    /// <param name="mergeBase">Commit to rerun on, or null when unknown.</param>
     /// <param name="baseTree">The base commit's worktree, made on first use and shared by every project.</param>
-    private ShadowProject Classify(string root, ProjectGraph graph, FullRun run, ShadowProject project, IReadOnlyList<string> userArguments, string work, string? mergeBase, ref string? baseTree)
+    private ShadowProject Classify(Classification context, FullRun run, ShadowProject project, ref string? baseTree)
     {
         var candidates = project.Classes.Where(static c => c.Verdict == ShadowVerdict.Miss).Select(static c => c.Name).ToList();
         if (candidates.Count == 0)
@@ -207,17 +215,25 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         var verdicts = new Dictionary<string, (ShadowVerdict Verdict, string Note)>(StringComparer.Ordinal);
-        if (run.Location.Mode == DotnetTestMode.VSTest && graph.NeedsFullMsBuild(run.Project))
+        if (run.Location.Mode == DotnetTestMode.VSTest && context.Graph.NeedsFullMsBuild(run.Project))
         {
             candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, "a legacy project is not rerun class by class"));
             return Apply(project, verdicts);
         }
 
+        if (context.Budget.RanOut)
+        {
+            var reason = context.Budget.Exhausted();
+            candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, reason));
+            return Apply(project, verdicts);
+        }
+
         LogClassifying(project.Path, candidates.Count);
-        var withChange = Rerun(run, run.Project.Path, root, candidates, userArguments, Path.Combine(work, "alone-1-" + project.Path.GetHashCode(StringComparison.Ordinal)), AloneLimits, noBuild: true);
+        var withChange = Rerun(context, run, run.Project.Path, context.Root, candidates, Path.Combine(context.Work, "alone-1-" + project.Path.GetHashCode(StringComparison.Ordinal)));
         if (withChange.Error is { } error)
         {
-            candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, $"the rerun with the change {error}"));
+            var note = withChange.OutOfBudget ? context.Budget.Exhausted() : $"the rerun with the change {error}";
+            candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, note));
             return Apply(project, verdicts);
         }
 
@@ -230,20 +246,24 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
 
         if (passed.Count > 0)
         {
-            var again = Rerun(run, run.Project.Path, root, passed, userArguments, Path.Combine(work, "alone-2-" + project.Path.GetHashCode(StringComparison.Ordinal)), AloneLimits, noBuild: true);
+            // Passing alone once is already flaky; the second rerun only says more, so the budget may skip it.
+            var again = context.Budget.RanOut
+                ? null
+                : Rerun(context, run, run.Project.Path, context.Root, passed, Path.Combine(context.Work, "alone-2-" + project.Path.GetHashCode(StringComparison.Ordinal)));
+            var cut = again is null || again.OutOfBudget ? $"; {context.Budget.Exhausted()} before the second rerun" : string.Empty;
             foreach (var name in passed)
             {
-                verdicts[name] = again.Outcome?.FailedClasses.Contains(name) == true
+                verdicts[name] = again?.Outcome?.FailedClasses.Contains(name) == true
                     ? (ShadowVerdict.Flaky, "passed once and failed once when rerun alone with the change")
-                    : (ShadowVerdict.Flaky, again.Outcome?.ExecutedClasses.Contains(name) == true
+                    : (ShadowVerdict.Flaky, again?.Outcome?.ExecutedClasses.Contains(name) == true
                         ? "passed twice when rerun alone with the change; it failed only next to the other tests"
-                        : "passed when rerun alone with the change");
+                        : "passed when rerun alone with the change" + cut);
             }
         }
 
         if (failedAlone.Count > 0)
         {
-            foreach (var (name, verdict) in OnBase(root, run, failedAlone, userArguments, work, mergeBase, ref baseTree))
+            foreach (var (name, verdict) in OnBase(context, run, failedAlone, ref baseTree))
             {
                 verdicts[name] = verdict;
             }
@@ -256,19 +276,23 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     /// Reruns <paramref name="classes"/> (which failed alone with the change) on the base commit, in a worktree
     /// beside the working tree: failing there too makes a class pre-existing, passing makes it a miss.
     /// </summary>
-    private Dictionary<string, (ShadowVerdict Verdict, string Note)> OnBase(string root, FullRun run, List<string> classes, IReadOnlyList<string> userArguments, string work, string? mergeBase, ref string? baseTree)
+    /// <param name="context">What the classification steps share.</param>
+    /// <param name="run">The project's full run.</param>
+    /// <param name="classes">Classes that failed alone with the change.</param>
+    /// <param name="baseTree">The base commit's worktree, made on first use and shared by every project.</param>
+    private Dictionary<string, (ShadowVerdict Verdict, string Note)> OnBase(Classification context, FullRun run, List<string> classes, ref string? baseTree)
     {
         var verdicts = new Dictionary<string, (ShadowVerdict, string)>(StringComparer.Ordinal);
-        if (mergeBase is null)
+        if (context.MergeBase is not { } mergeBase)
         {
             classes.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, "it fails alone with the change; the base commit to rerun it on is unknown"));
             return verdicts;
         }
 
-        if (baseTree is null)
+        if (baseTree is null && !context.Budget.RanOut)
         {
-            var path = Path.Combine(work, "base");
-            if (!TryDo(() => _git.AddWorktree(root, path, mergeBase)))
+            var path = Path.Combine(context.Work, "base");
+            if (!TryDo(() => _git.AddWorktree(context.Root, path, mergeBase)))
             {
                 classes.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, "it fails alone with the change; the base commit could not be checked out"));
                 return verdicts;
@@ -277,7 +301,15 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             baseTree = path;
         }
 
-        var project = Path.Combine(baseTree, Path.GetRelativePath(root, run.Project.Path));
+        // Checked again after the checkout, which draws from the budget too.
+        if (context.Budget.RanOut)
+        {
+            var reason = $"it fails alone with the change; {context.Budget.Exhausted()} before the rerun on the base commit";
+            classes.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, reason));
+            return verdicts;
+        }
+
+        var project = Path.Combine(baseTree!, Path.GetRelativePath(context.Root, run.Project.Path));
         if (!File.Exists(project))
         {
             classes.ForEach(c => verdicts[c] = (ShadowVerdict.Miss, "it fails alone with the change; its test project does not exist on the base commit"));
@@ -285,11 +317,13 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         var commit = mergeBase[..Math.Min(12, mergeBase.Length)];
-        var onBase = Rerun(run, project, baseTree, classes, userArguments, Path.Combine(work, "base-" + run.Project.Path.GetHashCode(StringComparison.Ordinal)), BaseLimits, noBuild: false);
+        var onBase = Rerun(context, run, project, baseTree!, classes, Path.Combine(context.Work, "base-" + run.Project.Path.GetHashCode(StringComparison.Ordinal)));
+        var stopped = onBase.OutOfBudget ? $"it fails alone with the change; {context.Budget.Exhausted()} during the rerun on the base commit {commit}" : null;
         foreach (var name in classes)
         {
             verdicts[name] = onBase switch
             {
+                _ when stopped is not null => (ShadowVerdict.Unclassified, stopped),
                 { Outcome: { } outcome } when outcome.FailedClasses.Contains(name) => (ShadowVerdict.PreExisting, $"it fails alone on the base commit {commit} too"),
                 { Outcome: { } outcome } when outcome.ExecutedClasses.Contains(name) => (ShadowVerdict.Miss, $"it fails alone with the change and passes alone on the base commit {commit}"),
                 { Outcome: not null } or { Error: null } => (ShadowVerdict.Miss, $"it fails alone with the change and has no test on the base commit {commit}"),
@@ -303,22 +337,24 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     /// <summary>What a rerun showed: its report, or why it has none.</summary>
     /// <param name="Outcome">The report.</param>
     /// <param name="Error">Why there is no report (it timed out, did not start, wrote none), or null.</param>
-    private sealed record RerunResult(TrxOutcome? Outcome, string? Error);
+    /// <param name="OutOfBudget">True when it was stopped because the classification's budget ran out.</param>
+    private sealed record RerunResult(TrxOutcome? Outcome, string? Error, bool OutOfBudget = false);
 
     /// <summary>
     /// Runs only <paramref name="classes"/> of a test project, inside the user's own filter, with the same kind
-    /// of report as the full run.
+    /// of report as the full run. A rerun in the working tree uses the full run's build and the rerun limits;
+    /// one in the base worktree builds there and has the base limits. Either is cut to what is left of the budget.
     /// </summary>
+    /// <param name="context">What the classification steps share.</param>
     /// <param name="run">The project's full run (its runner, project and output).</param>
     /// <param name="projectPath">The project file to run: the working tree's, or the base worktree's.</param>
     /// <param name="treeRoot">Root of the tree the project file is in.</param>
     /// <param name="classes">Runtime class names.</param>
-    /// <param name="userArguments">The user's <c>dotnet test</c> arguments.</param>
     /// <param name="results">Folder for the report.</param>
-    /// <param name="limits">How long it may take.</param>
-    /// <param name="noBuild">True to run the build the full run made; false to build (the base commit).</param>
-    private RerunResult Rerun(FullRun run, string projectPath, string treeRoot, List<string> classes, IReadOnlyList<string> userArguments, string results, RunLimits limits, bool noBuild)
+    private RerunResult Rerun(Classification context, FullRun run, string projectPath, string treeRoot, List<string> classes, string results)
     {
+        var noBuild = string.Equals(treeRoot, context.Root, StringComparison.Ordinal);
+        var userArguments = context.UserArguments;
         var location = DotnetTestLocation.For(treeRoot, projectPath);
         var syntax = TestFilter.SyntaxFor(run.Project, location.Mode);
         var arguments = noBuild || !userArguments.Contains("--no-build") ? userArguments : [.. userArguments.Where(static a => a != "--no-build")];
@@ -341,6 +377,9 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         var before = Snapshot(userResults);
+        var (limits, capped) = noBuild
+            ? context.Budget.For(context.Limits.RerunTimeout, context.Limits.RerunIdle)
+            : context.Budget.For(context.Limits.BaseTimeout, context.Limits.BaseIdle);
         stdout.WriteLine($"td shadow: rerunning {classes.Count} class(es) of {Path.GetFileName(projectPath)} {(noBuild ? "alone with the change" : "alone on the base commit")}");
         stdout.Flush();
         int exitCode;
@@ -355,7 +394,9 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
 
         if (exitCode == DotnetProcess.TimedOut)
         {
-            return new RerunResult(null, "timed out");
+            // Killed at the budget's end rather than at its own limit or for sitting idle.
+            var outOfBudget = capped && context.Budget.RanOut;
+            return new RerunResult(null, outOfBudget ? "was stopped: the classification time budget ran out" : "timed out", outOfBudget);
         }
 
         var outcome = Collect(location.Mode, treeRoot, reportName, results, userResults, before);
@@ -541,6 +582,8 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             shaping.Add($"--maps-dir {mapsDir}");
         }
 
+        // The classification's limits decide which failures could be classified in time, so they are inputs too.
+        shaping.AddRange(options.Test.ShadowClassify ? (options.Test.ShadowLimits ?? ShadowLimits.Default).Options : ["--shadow-no-classify"]);
         if (options.Test.DotnetTestArguments.Count > 0)
         {
             shaping.Add("-- " + string.Join(' ', options.Test.DotnetTestArguments));

@@ -109,9 +109,11 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
 ## As built (steps 1 and 2, 2026-10-07)
 
 - **CLI** (`ShadowRun`, `ShadowReport`, `CliApp.Shadow`): `td test --shadow [--shadow-no-classify]
-  [--shadow-report <path>]`. Any exception in the analysis or the license check is caught; the full run
-  goes on and the report has `compared: false` with the reason. Without a readable project graph the full
-  run is a plain `dotnet test <args>` in the repository. Every test project runs through `TestRunner`
+  [--shadow-report <path>] [--shadow-rerun-timeout <time>] [--shadow-rerun-idle-timeout <time>]
+  [--shadow-base-timeout <time>] [--shadow-base-idle-timeout <time>] [--shadow-classify-budget <time>]`.
+  Any exception in the analysis or the license check is caught; the full run goes on and the report
+  has `compared: false` with the reason. Without a readable project graph the full run is a plain
+  `dotnet test <args>` in the repository. Every test project runs through `TestRunner`
   (legacy projects as `td test` runs them) with the user's arguments and a report: VSTest gets `--logger
   trx` and a results directory unless the user names their own (kept; the run's new `.trx` files are read
   there); a testing-platform project gets the report option its build output supports (xUnit v3's own,
@@ -119,13 +121,28 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   when the user already asks for a TRX report or nothing fits (its failures are then "unexplained").
 - **Classification**: candidates of a project rerun together, inside the user's own filter
   (`TestFilter.WithinUserFilter`; a filter that cannot be joined leaves them unclassified), with
-  `--no-build`, at most 15 minutes. Classes that pass rerun once more: passing again is flaky ("failed
-  only next to the other tests"), failing is flaky ("passed once and failed once"). Classes that fail
-  alone rerun on the merge base in a detached `git worktree` under the temp folder, built there, at most
-  30 minutes: failing is pre-existing, passing is a miss, no test of it there (a new class) is a miss, a
-  base run that does not build, times out or writes no report leaves them unclassified. The worktree and
-  every report are deleted at the end. Legacy (full MSBuild) projects are not rerun; their left-out
-  failures are unclassified.
+  `--no-build`, at most 15 minutes (`--shadow-rerun-timeout`). Classes that pass rerun once more:
+  passing again is flaky ("failed only next to the other tests"), failing is flaky ("passed once and
+  failed once"). Classes that fail alone rerun on the merge base in a detached `git worktree` under the
+  temp folder, built there, at most 30 minutes (`--shadow-base-timeout`): failing is pre-existing,
+  passing is a miss, no test of it there (a new class) is a miss, a base run that does not build, times
+  out or writes no report leaves them unclassified. The worktree and every report are deleted at the
+  end. Legacy (full MSBuild) projects are not rerun; their left-out failures are unclassified.
+- **Time limits** (owner decision 2026-10-07: sensible defaults, every limit configurable): a rerun with
+  the change at most 15 minutes and 5 minutes idle, the base rerun 30 and 10 (`ShadowLimits.Default`).
+  "Idle" is `DotnetProcess`'s watchdog: the process tree using almost no CPU, not silent output. The
+  idle limits are two options, not one, because their defaults differ for a reason: the base rerun
+  restores in a fresh checkout, which waits on the network with the CPU nearly still. Over all of it
+  a budget (`--shadow-classify-budget`, 45 minutes; `ShadowBudget`) starts when the full run ends and
+  covers every rerun and the base checkout: each rerun's timeout is cut to what is left, a rerun killed
+  at that cut, or a step with less than a second left, leaves the remaining candidates unclassified
+  with "the classification time budget (45 min) ran out" (a class that already passed alone stays
+  flaky, its second rerun skipped). The full run has no TestDetta limit and its exit code is never
+  touched. Syntax: `90s`, `15m`, `1h`, `1h30m`, a plain number of minutes, `0` or `none` for no limit,
+  at most `168h`; the options need `--shadow`. The Action passes its inputs of the same names
+  (`shadow-rerun-timeout` …) only when they are set. The limits used appear in the console, the job
+  summary (with the time spent of the budget), the JSON's `classification` object and the reproduction
+  options.
 - **Times**: a project's `wallSeconds` is its measured `dotnet test` duration (build included); a class's
   `seconds` the sum of its tests' durations in the report. The selection's part: everything for `all`,
   nothing for `skipped` and `not-affected`, and for `filtered` the time outside test classes plus the
@@ -144,6 +161,12 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   "noResultReason": "…",            // only when compared is false
   "classified": true,               // false with --shadow-no-classify
   "analysisSeconds": 4.2,
+  "classification": {               // only when the classification ran; a limit is null when switched off
+    "rerunTimeoutSeconds": 900, "rerunIdleSeconds": 300,
+    "baseTimeoutSeconds": 1800, "baseIdleSeconds": 600,
+    "budgetSeconds": 2700, "spentSeconds": 48.6,
+    "budgetRanOut": false           // true: the budget left failures unclassified or stopped a rerun
+  },
   "totals": {
     "projects": 3, "failedProjects": 1, "classes": 212, "selectedClasses": 14,
     "fullSeconds": 1110.0, "selectedSeconds": 70.0,
@@ -169,7 +192,10 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
     "testDettaVersion": "…", "testDettaSha256": "…", "baseRef": "origin/main",
     "mergeBase": "…", "head": "…",
     "maps": [{ "testProject": "…", "commit": "…", "sha256": "…" }],
-    "options": ["--base origin/main", "--max-map-age 50", "--drift-fallback all", "-- -c Release"],
+    "options": ["--base origin/main", "--max-map-age 50", "--drift-fallback all",
+                "--shadow-rerun-timeout 15m", "--shadow-rerun-idle-timeout 5m", "--shadow-base-timeout 30m",
+                "--shadow-base-idle-timeout 10m", "--shadow-classify-budget 45m",   // or --shadow-no-classify
+                "-- -c Release"],
     "command": "td affected --base <merge base> --max-map-age 50 --drift-fallback all --format json"
   }
 }

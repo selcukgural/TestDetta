@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 8031b5cc3ea9 -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 5061bb679bfc -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -79,6 +79,17 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 
 <h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
 <p>Wohin der JSON-Bericht geschrieben wird. Standard: <code>.testdetta/testdetta-shadow.json</code> im Repository.</p>
+
+<h3 id="shadow-rerun-timeout"><code>--shadow-rerun-timeout &lt;time&gt;</code>, <code>--shadow-rerun-idle-timeout &lt;time&gt;</code></h3>
+<p>Wie lange ein erneuter Lauf mit der Änderung dauern darf und wie lange seine Prozesse fast keine CPU nutzen dürfen, bevor er als hängend gestoppt wird. Standard: <code>15m</code> und <code>5m</code>. Die Klassen eines gestoppten Laufs werden als nicht eingeordnet gemeldet.</p>
+
+<h3 id="shadow-base-timeout"><code>--shadow-base-timeout &lt;time&gt;</code>, <code>--shadow-base-idle-timeout &lt;time&gt;</code></h3>
+<p>Dasselbe für den erneuten Lauf auf dem Basis-Commit, der in seinem Checkout zuerst wiederherstellt und baut. Standard: <code>30m</code> und <code>10m</code>; die Leerlaufgrenze ist länger, weil ein Restore auf das Netzwerk wartet, während die CPU fast stillsteht.</p>
+
+<h3 id="shadow-classify-budget"><code>--shadow-classify-budget &lt;time&gt;</code></h3>
+<p>Wie lange die gesamte Einordnung dauern darf: alle erneuten Läufe und der Basis-Checkout zusammen. Standard: <code>45m</code>. Ein laufender erneuter Lauf wird gestoppt, wo das Budget endet, und die bis dahin nicht eingeordneten Fehlschläge werden mit dem Grund als nicht eingeordnet gemeldet. Der vollständige Lauf und der Exit-Code sind nie betroffen. Der Bericht zeigt die verwendeten Grenzen und wie viel vom Budget verbraucht wurde.</p>
+<p>Eine <code>&lt;time&gt;</code> ist <code>90s</code>, <code>15m</code>, <code>1h</code> oder <code>1h30m</code>, höchstens <code>168h</code>; eine bloße Zahl bedeutet Minuten; <code>0</code> oder <code>none</code> bedeutet keine Grenze. In der GitHub Action setzen die gleichnamigen Eingaben (<code>shadow-rerun-timeout</code>, <code>shadow-classify-budget</code> usw.) sie.</p>
+<pre><code>td test --shadow --shadow-classify-budget 20m --shadow-base-timeout none</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p>Alles nach <code>--</code> wird an jeden <code>dotnet test</code>-Aufruf übergeben. Ihr eigener <code>--filter</code> bleibt erhalten: {{name}} verknüpft ihn mit seinem Klassenfilter, sodass nur die ausgewählten Tests innerhalb Ihres Filters laufen. Trait-, Methoden- und Namespace-Filter von xUnit v3 schränken die Auswahl ebenso ein. Ein Filter, den der Runner nicht mit einem Klassenfilter verknüpfen kann (ein Klassen- oder Query-Filter von xUnit v3, ein Tree-Node-Filter von TUnit), lässt das Projekt vollständig unter Ihrem Filter laufen.</p>
