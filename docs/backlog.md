@@ -275,6 +275,12 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
+- **Eval: mutants do not reach MSBuild's bootstrap copy** (2026-10-06): the eval rewrites the
+  assemblies in the test output folders; MSBuild tests that run the bootstrapped MSBuild
+  (`ExecBootstrapedMSBuild`, about 60 methods, at most ~3% of the suite) load the copy under
+  `artifacts/bin/bootstrap/core/sdk/<version>`, built once in setup. A miss there would go uncounted (no
+  false misses). Fix: a corpus field naming extra folders whose copies of the repository's assemblies get
+  the same mutants.
 - **Recording fingerprint is wider than recording** (owner, 2026-10-06: next job): the eval re-records
   every corpus map when `RecordingFingerprint` changes. It counts the recorder assemblies in full and the
   TestDetta.Core types they reach, type by type (an abstract type brings every implementation). So a
