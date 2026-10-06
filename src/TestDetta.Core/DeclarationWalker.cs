@@ -16,7 +16,7 @@ namespace TestDetta.Core;
 /// types: <c>App.Outer+Box`1</c>.
 /// </param>
 /// <param name="MemberName">Member signature such as <c>Place(string,int)</c>, or null for the type declaration itself.</param>
-/// <param name="Node">The declaration node.</param>
+/// <param name="Node">The declaration node (a C# <c>MemberDeclarationSyntax</c>, a Visual Basic statement or block).</param>
 /// <param name="Descend">
 /// Which child nodes belong to this declaration, given a candidate node and <see cref="Node"/>.
 /// A type excludes its members, which are declarations of their own; a member includes everything.
@@ -25,7 +25,7 @@ internal sealed record Declaration(
     string TypeName,
     string RuntimeTypeName,
     string? MemberName,
-    MemberDeclarationSyntax Node,
+    SyntaxNode Node,
     Func<SyntaxNode, SyntaxNode, bool> Descend);
 
 /// <summary>

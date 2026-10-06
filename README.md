@@ -189,8 +189,9 @@ and the details are in [docs/ci.md](docs/ci.md).
   names the project, a compile input from it), `td test` builds the test project and compares what the
   build fed the consumer's compiler from outside git with the map; a difference, or a map recorded
   before such uses were, runs the consumer completely.
-- F# and Visual Basic projects are part of the project graph, but their code is not analysed: when
-  one is affected, everything that depends on it runs completely.
+- Visual Basic is analysed like C# (member changes, coverage, name tracing ignoring case, the
+  project's root namespace). F# projects are part of the project graph, but their code is not
+  analysed yet: when one is affected, everything that depends on it runs completely.
 
 ## Building
 

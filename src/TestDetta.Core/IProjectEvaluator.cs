@@ -38,6 +38,9 @@ public sealed record EvaluatedProject(
     /// </summary>
     public IReadOnlyList<IReadOnlyList<string>> SymbolSets { get; init; } = [];
 
+    /// <summary>The <c>RootNamespace</c> property, or null when empty; see <see cref="ProjectNode.RootNamespace"/>.</summary>
+    public string? RootNamespace { get; init; }
+
     /// <summary>The part of <see cref="References"/> it does not compile against; see <see cref="ProjectNode.OpaqueReferences"/>.</summary>
     public IReadOnlySet<string> OpaqueReferences { get; init; } = new HashSet<string>(Paths.Comparer);
 

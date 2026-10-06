@@ -1,4 +1,4 @@
-<!-- title: Compatibilidad; layout: docs; description: Los frameworks de pruebas, runners, lenguajes, sistemas operativos y sistemas de CI que admite {{name}}.; source: e9fbd22d8e24 -->
+<!-- title: Compatibilidad; layout: docs; description: Los frameworks de pruebas, runners, lenguajes, sistemas operativos y sistemas de CI que admite {{name}}.; source: 1c5c154ae124 -->
 <h1>Compatibilidad</h1>
 <p class="lead">Qué necesita {{name}} y con qué se ha probado. Lo que no aparece en estas tablas no tiene por qué ser incompatible, pero no se ha probado de extremo a extremo.</p>
 
@@ -45,7 +45,8 @@
   <thead><tr><th>Lenguaje</th><th>Cómo se tratan los cambios</th></tr></thead>
   <tbody>
     <tr><td>C#</td><td>Se analizan hasta el nivel de miembros: árboles de sintaxis, mapas de cobertura y rastreo por nombre.</td></tr>
-    <tr><td>F#, Visual Basic</td><td>Forman parte del grafo de proyectos, pero no se analizan: cuando uno de estos proyectos se ve afectado, todo lo que depende de él se ejecuta completo.</td></tr>
+    <tr><td>Visual Basic</td><td>Se analiza como C#, hasta el nivel de miembros. Los nombres se emparejan sin distinguir mayúsculas y minúsculas, como hace el compilador, y se aplica el espacio de nombres raíz del proyecto.</td></tr>
+    <tr><td>F#</td><td>Forma parte del grafo de proyectos, pero aún no se analiza: cuando un proyecto de F# se ve afectado, todo lo que depende de él se ejecuta completo.</td></tr>
   </tbody>
 </table>
 

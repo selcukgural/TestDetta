@@ -43,8 +43,8 @@
 <h2>Source generators</h2>
 <p>Code written by source generators is not in the source tree. <code>td record</code> reads it from the PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.</p>
 
-<h2>F# and Visual Basic</h2>
-<p>F# and Visual Basic projects are part of the project graph, but their code is not analysed: when one is affected, everything that depends on it runs completely.</p>
+<h2>F#</h2>
+<p>F# projects are part of the project graph, but their code is not analysed yet: when one is affected, everything that depends on it runs completely. Visual Basic is analysed like C#.</p>
 
 <h2 id="related">Related pages</h2>
 <ul>

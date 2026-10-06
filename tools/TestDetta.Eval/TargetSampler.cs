@@ -152,7 +152,7 @@ internal static class TargetSampler
                 }
 
                 var key = (member, false);
-                var edits = Edits(file, declaration.Node);
+                var edits = Edits(file, (Microsoft.CodeAnalysis.CSharp.Syntax.MemberDeclarationSyntax)declaration.Node);
                 candidates.TryGetValue(key, out var existing);
                 if (candidates.ContainsKey(key) && existing is null)
                 {

@@ -1,7 +1,8 @@
-# Visual Basic and F#: the same support as C# (proposal, 2026-10-06)
+# Visual Basic and F#: the same support as C# (2026-10-06)
 
-Status: proposal for the owner. Goal (owner, 2026-10-06): Visual Basic (much used in legacy systems) and
-F# (in many projects in recent years) get the same support as C#.
+Status: Visual Basic done 2026-10-06 (approach A, see "Decision"); F# next. Goal (owner, 2026-10-06):
+Visual Basic (much used in legacy systems) and F# (in many projects in recent years) get the same
+support as C#.
 
 ## Where the languages stand today
 
@@ -57,3 +58,34 @@ doubles the rules to maintain.
 B is the larger change: recorder (hashes per method), map format, a build-first `td test`, the IL change
 detector, an IL call graph, and the selection rules moved onto IL identities. A first step that is useful
 alone: B's change detector for VB and F# projects only, beside today's C# analysis.
+
+## Decision (2026-10-06)
+
+The owner accepted B "unless A is healthier and faster". It is faster: B needs a build before every
+analysis, so `td affected` (seconds today, no build) and every selection of the evaluation (100 per
+repository, none built today) would pay a compile; A parses source in milliseconds. A was taken, with
+the duplication contained: only syntax is per language (`SourceLanguage`: parse, declarations, project-
+and file-level nodes, metadata nodes, significant trivia); identities, the change comparison, the index
+records, name tracing, coverage and the selection rules stay shared.
+
+## As built: Visual Basic (2026-10-06)
+
+- `VisualBasicLanguage` (Roslyn's VB syntax): declarations with C#'s identities (`Add(Integer,Integer)`,
+  `.ctor`/`.cctor`, `` `n `` arity, properties by name and with parameters when indexed, comma-joined
+  fields, operators by their compiled names `op_Addition`/`op_Concatenate`/`op_Implicit`), the project's
+  `RootNamespace` before every namespace (not for `Global.`), `#If` symbols, `<Assembly:>` attributes
+  project-wide, `Option`/`Imports` as file-level, token comparison ignoring case.
+- `RootNamespace` comes from MSBuild (evaluator version 5) or a literal in the project file, else the
+  project name.
+- `VisualBasicIndexer`: types (classes not `MustInherit`, modules; `Inherits`/`Implements` as base names),
+  members (private by VB's defaults: `Dim` fields private in classes and modules, methods public; `Shared`
+  and constants static, module members reachable without the module's name; implicitly called through
+  initializers, attributes, `Overrides`, `Handles`, `Implements`, `Default`), references including the
+  rightmost names of `Imports` and `Handles` containers. Members are `IgnoreCase`: their sets compare
+  ignoring case and the index finds them for a name in any case; C# lookups stay exact.
+- `TestSelector` no longer falls back for Visual Basic projects or `.vb` files.
+- Tests: `VisualBasicTests` (identities, root namespace, `Global`, cosmetic case changes, metadata,
+  selection by name from C# and from VB in another case) and `VisualBasicRecordingTests` (a VB library
+  under VB xUnit tests recorded for real: a changed member selects the classes that ran it, through a
+  module too, by coverage).
+- Not yet: the evaluation's sampler changes C# members only, so no corpus measurement of VB.

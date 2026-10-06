@@ -137,6 +137,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 ItemsOfDeletedFiles = node.ExternalItems,
                 PackageReferences = packages,
                 AssemblyName = project.AssemblyName ?? node.AssemblyName,
+                RootNamespace = project.RootNamespace ?? node.RootNamespace,
                 AssemblyNameUnresolved = project.AssemblyName is null && node.AssemblyNameUnresolved,
                 EvaluatedItems = project.Items,
                 SymbolSets = project.SymbolSets,
@@ -304,6 +305,12 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             UnknownItemPatterns = inputs.UnknownItems,
             PackageReferences = inputs.Packages,
         };
+
+        // A literal RootNamespace the XML alone can tell; MSBuild's evaluation replaces it.
+        if (inputs.Properties.TryGetValue("RootNamespace", out var rootNamespaces) && rootNamespaces.Count == 1 && rootNamespaces.First() is { Length: > 0 } rootNamespace)
+        {
+            node = node with { RootNamespace = rootNamespace };
+        }
 
         return AssemblyNameOf(inputs) switch
         {

@@ -25,7 +25,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <c>using</c>, <c>foreach</c>, <c>await</c>, deconstruction, collection initializers,
     /// string interpolation, equality in collections, and test lifecycle hooks.
     /// </summary>
-    private static readonly FrozenSet<string> ImplicitlyCalledNames = FrozenSet.Create(
+    internal static readonly FrozenSet<string> ImplicitlyCalledNames = FrozenSet.Create(
         StringComparer.Ordinal,
         "Dispose", "DisposeAsync", "GetEnumerator", "GetAsyncEnumerator", "MoveNext", "MoveNextAsync", "Current",
         "Deconstruct", "GetAwaiter", "GetResult", "IsCompleted", "OnCompleted", "Add", "ToString", "Equals",
@@ -225,9 +225,17 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
         // Conditional code is indexed as if its symbols were both undefined and defined; types seen in
         // both are merged like partial types, and a member seen twice only widens its references.
-        foreach (var root in DeclarationWalker.ParseVariants(text, owner.SymbolSets))
+        var language = SourceLanguage.For(path);
+        foreach (var root in language.ParseVariants(text, owner.SymbolSets))
         {
-            IndexRoot(new ParsedFile(path, root), owner, members, types);
+            if (language is VisualBasicLanguage)
+            {
+                VisualBasicIndexer.IndexRoot(path, root, owner, members, types);
+            }
+            else
+            {
+                IndexRoot(new ParsedFile(path, (CompilationUnitSyntax)root), owner, members, types);
+            }
         }
 
         return new FileIndex(path, owner.Path, members, types);
@@ -249,6 +257,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         var usingStatic = UsingStaticTargets(root);
         foreach (var declaration in DeclarationWalker.Collect(root).Values)
         {
+            var node = (MemberDeclarationSyntax)declaration.Node;
             if (declaration.MemberName is null)
             {
                 types.Add(new IndexedType(
@@ -256,11 +265,11 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                     declaration.RuntimeTypeName,
                     owner.Path,
                     owner.IsTestProject,
-                    IsRunnableClass(declaration.Node),
-                    HasTestMethods(declaration.Node),
-                    BaseTypeNames(declaration.Node),
+                    IsRunnableClass(node),
+                    HasTestMethods(node),
+                    BaseTypeNames(node),
                     CanContainTests: false,
-                    declaration.Node.AttributeLists.Count > 0 || declaration.Node is BaseTypeDeclarationSyntax { BaseList: not null })
+                    node.AttributeLists.Count > 0 || node is BaseTypeDeclarationSyntax { BaseList: not null })
                 {
                     Spans = owner.IsTestProject ? [Span(file, declaration.Node)] : [],
                 });
@@ -273,8 +282,8 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                 declaration.MemberName,
                 declaration.MemberName is null ? [] : DeclarationWalker.ReferenceNames(declaration.MemberName),
                 declaration.MemberName is null || MayBeCalledImplicitly(declaration),
-                declaration.MemberName is not null && IsPrivateToType(declaration.Node),
-                declaration.MemberName is not null && IsStaticAccess(declaration.Node),
+                declaration.MemberName is not null && IsPrivateToType(node),
+                declaration.MemberName is not null && IsStaticAccess(node),
                 CollectReferences(declaration.Node, declaration.Descend, usingStatic))
             {
                 MetadataReferences = CollectMetadataReferences(declaration.Node, declaration.Descend),
@@ -467,7 +476,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <param name="declaration">A member declaration.</param>
     private static bool MayBeCalledImplicitly(Declaration declaration)
     {
-        var member = declaration.Node;
+        var member = (MemberDeclarationSyntax)declaration.Node;
         var names = DeclarationWalker.ReferenceNames(declaration.MemberName!);
 
         // An initializer runs in the type initializer (static) or every constructor (instance), which
@@ -551,7 +560,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
     /// <summary>True for <c>Fact</c>, <c>FactAttribute</c> and the other names in <see cref="TestAttributes"/>.</summary>
     /// <param name="name">Attribute name as written.</param>
-    private static bool IsTestAttribute(string name)
+    internal static bool IsTestAttribute(string name)
     {
         var shortName = name.EndsWith("Attribute", StringComparison.Ordinal) ? name[..^"Attribute".Length] : name;
         if (TestAttributes.Contains(shortName))
@@ -573,6 +582,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     }
 
     /// <summary>Endings of custom test attribute names; see <see cref="IsTestAttribute"/>.</summary>
+    /// <remarks>Shared with <see cref="VisualBasicIndexer"/>.</remarks>
     private static readonly string[] TestAttributeSuffixes = ["Fact", "Theory", "Test", "TestMethod", "TestCase"];
 
     /// <summary>Simple names of the base list entries: <c>: TestBase, IAsyncLifetime</c> gives both.</summary>
@@ -622,7 +632,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
         while (pending.TryPop(out var dir))
         {
-            foreach (var file in Directory.EnumerateFiles(dir, "*.cs"))
+            foreach (var file in Directory.EnumerateFiles(dir).Where(SourceLanguage.IsSource))
             {
                 yield return Paths.Normalize(file);
             }

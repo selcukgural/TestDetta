@@ -43,6 +43,12 @@ internal sealed record IndexedMember(
     /// without running the member, so a coverage map cannot say who depends on them.
     /// </summary>
     public FrozenSet<string> MetadataReferences { get; init; } = [];
+
+    /// <summary>
+    /// True for a member of a Visual Basic file, whose names bind ignoring case: its reference sets
+    /// compare that way, and the index finds it for a name in any case.
+    /// </summary>
+    public bool IgnoreCase { get; init; }
 }
 
 /// <summary>A type declared in an indexed project.</summary>
@@ -105,6 +111,9 @@ internal sealed record DeclarationSpan(string File, int StartLine, int EndLine)
 internal sealed class SourceIndex
 {
     private readonly Dictionary<string, List<IndexedMember>> _referencesTo;
+
+    /// <summary>Members of Visual Basic files by the names they mention, ignoring case (<see cref="IndexedMember.IgnoreCase"/>).</summary>
+    private readonly Dictionary<string, List<IndexedMember>> _referencesToIgnoringCase;
     private readonly Dictionary<string, List<IndexedMember>> _membersByType;
     private readonly Dictionary<string, IndexedType> _types;
 
@@ -133,6 +142,7 @@ internal sealed class SourceIndex
         }
 
         _referencesTo = new Dictionary<string, List<IndexedMember>>(StringComparer.Ordinal);
+        _referencesToIgnoringCase = new Dictionary<string, List<IndexedMember>>(StringComparer.OrdinalIgnoreCase);
         _membersByType = new Dictionary<string, List<IndexedMember>>(StringComparer.Ordinal);
         _typeReferences = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
@@ -142,7 +152,7 @@ internal sealed class SourceIndex
 
             if (!_typeReferences.TryGetValue(member.TypeName, out var typeReferences))
             {
-                typeReferences = new HashSet<string>(StringComparer.Ordinal);
+                typeReferences = new HashSet<string>(member.IgnoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
                 _typeReferences[member.TypeName] = typeReferences;
             }
 
@@ -150,7 +160,7 @@ internal sealed class SourceIndex
 
             foreach (var name in member.References)
             {
-                GetOrAdd(_referencesTo, name).Add(member);
+                GetOrAdd(member.IgnoreCase ? _referencesToIgnoringCase : _referencesTo, name).Add(member);
             }
         }
     }
@@ -163,8 +173,11 @@ internal sealed class SourceIndex
 
     /// <summary>Members whose code mentions the identifier <paramref name="name"/>.</summary>
     /// <param name="name">Simple identifier.</param>
-    public IReadOnlyList<IndexedMember> ReferencesTo(string name) =>
-        _referencesTo.TryGetValue(name, out var list) ? list : [];
+    public IReadOnlyList<IndexedMember> ReferencesTo(string name)
+    {
+        var exact = _referencesTo.TryGetValue(name, out var list) ? list : [];
+        return _referencesToIgnoringCase.TryGetValue(name, out var ignoringCase) ? [.. exact, .. ignoringCase] : exact;
+    }
 
     /// <summary>True when any member of <paramref name="typeName"/>, or its declaration, mentions <paramref name="name"/>.</summary>
     /// <param name="typeName">Qualified name of the referencing type.</param>

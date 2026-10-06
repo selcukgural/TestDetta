@@ -72,7 +72,8 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), evaluator).Load(root);
         var symbolSets = SymbolSetsOf(graph, root);
         var reader = new CodeChangeReader(git, new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()), loggerFactory.CreateLogger<CodeChangeReader>());
-        var codeChanges = reader.Read(root, mergeBase, changed, symbolSets);
+        var rootNamespaces = RootNamespaceOf(graph, root);
+        var codeChanges = reader.Read(root, mergeBase, changed, symbolSets, rootNamespaces);
         var packageChanges = PackageChanges(git, root, mergeBase, null, changed);
         var impactAnalyzer = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>());
         var impact = impactAnalyzer.Analyze(graph, root, changed, codeChanges, packageChanges);
@@ -93,7 +94,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
                 graph,
                 root,
                 driftFiles,
-                reader.ReadBetween(root, commit, mergeBase, driftFiles, symbolSets),
+                reader.ReadBetween(root, commit, mergeBase, driftFiles, symbolSets, rootNamespaces),
                 PackageChanges(git, root, commit, mergeBase, driftFiles));
             drifts.Add(new MapDrift(commit, distance, driftFiles, driftImpact));
             LogDrift(commit, distance, driftFiles.Count);
@@ -108,6 +109,15 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
             UnmappedFilesRead = TestSelector.FilesRead(impact.UnmappedFiles, maps),
         };
     }
+
+    /// <summary>The root namespace of the first project that compiles a file, by repository-relative path; empty for none.</summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="root">Repository root.</param>
+    private static Func<string, string> RootNamespaceOf(ProjectGraph graph, string root) =>
+        file => graph.ResolveFile(Paths.Normalize(Path.Combine(root, file)))
+            .Where(static o => o.Role == FileRole.Source)
+            .Select(static o => o.Project.RootNamespace)
+            .FirstOrDefault() ?? string.Empty;
 
     /// <summary>The symbol sets of every project that compiles a file, by repository-relative path.</summary>
     /// <param name="graph">Projects of the repository.</param>

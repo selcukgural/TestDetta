@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace TestDetta.Core;
 
 /// <summary>
-/// Loads the base and working-tree versions of changed C# files and runs
+/// Loads the base and working-tree versions of changed C# and Visual Basic files and runs
 /// <see cref="CodeChangeDetector"/> on each pair.
 /// </summary>
 /// <param name="git">Reads the base versions.</param>
@@ -17,17 +17,19 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     /// <param name="baseRevision">Commit the working tree is compared with, normally the merge base.</param>
     /// <param name="changedFiles">All changed paths relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
     /// <param name="symbolSets">The symbol sets the compiler uses for a file (relative path), from its projects; null when unknown.</param>
-    /// <returns>One entry per changed .cs file, in the order of <paramref name="changedFiles"/>.</returns>
+    /// <param name="rootNamespaces">The root namespace of the project compiling a file (Visual Basic); null for none.</param>
+    /// <returns>One entry per changed .cs or .vb file, in the order of <paramref name="changedFiles"/>.</returns>
     public IReadOnlyList<CodeChange> Read(
         string repoRoot,
         string baseRevision,
         IReadOnlyList<string> changedFiles,
-        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null)
+        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null,
+        Func<string, string>? rootNamespaces = null)
     {
         var csharpFiles = new List<string>();
         foreach (var file in changedFiles)
         {
-            if (file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            if (SourceLanguage.IsSource(file))
             {
                 csharpFiles.Add(file);
             }
@@ -44,7 +46,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
 
         foreach (var file in csharpFiles)
         {
-            changes.Add(detector.Detect(file, Text(oldContents, file), ReadWorkingTree(Path.Combine(repoRoot, file)), symbolSets?.Invoke(file) ?? []));
+            changes.Add(detector.Detect(file, Text(oldContents, file), ReadWorkingTree(Path.Combine(repoRoot, file)), symbolSets?.Invoke(file) ?? [], rootNamespaces?.Invoke(file) ?? string.Empty));
         }
 
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
@@ -57,15 +59,17 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     /// <param name="to">Newer commit.</param>
     /// <param name="changedFiles">Paths changed between the two, relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
     /// <param name="symbolSets">The symbol sets the compiler uses for a file (relative path); null when unknown.</param>
-    /// <returns>One entry per changed .cs file, in the order of <paramref name="changedFiles"/>.</returns>
+    /// <param name="rootNamespaces">The root namespace of the project compiling a file (Visual Basic); null for none.</param>
+    /// <returns>One entry per changed .cs or .vb file, in the order of <paramref name="changedFiles"/>.</returns>
     public IReadOnlyList<CodeChange> ReadBetween(
         string repoRoot,
         string from,
         string to,
         IReadOnlyList<string> changedFiles,
-        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null)
+        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null,
+        Func<string, string>? rootNamespaces = null)
     {
-        var csharpFiles = changedFiles.Where(static f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToList();
+        var csharpFiles = changedFiles.Where(SourceLanguage.IsSource).ToList();
         if (csharpFiles.Count == 0)
         {
             return [];
@@ -74,7 +78,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var oldContents = git.ReadFiles(repoRoot, from, csharpFiles);
         var newContents = git.ReadFiles(repoRoot, to, csharpFiles);
-        var changes = csharpFiles.ConvertAll(file => detector.Detect(file, Text(oldContents, file), Text(newContents, file), symbolSets?.Invoke(file) ?? []));
+        var changes = csharpFiles.ConvertAll(file => detector.Detect(file, Text(oldContents, file), Text(newContents, file), symbolSets?.Invoke(file) ?? [], rootNamespaces?.Invoke(file) ?? string.Empty));
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
         return changes;
     }

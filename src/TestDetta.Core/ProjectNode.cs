@@ -41,6 +41,14 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     public ProjectLanguage Language { get; init; } = ProjectLanguage.CSharp;
 
     /// <summary>
+    /// The <c>RootNamespace</c> property: Visual Basic puts it before every namespace a source file
+    /// declares (a class <c>Calc</c> in a project with root namespace <c>Shop</c> compiles to <c>Shop.Calc</c>);
+    /// C# ignores it. MSBuild's value, else a literal one in the project file, else the project file name,
+    /// which is the SDK's default.
+    /// </summary>
+    public string RootNamespace { get; init; } = System.IO.Path.GetFileNameWithoutExtension(Path);
+
+    /// <summary>
     /// False for a legacy (non-SDK) project file: no <c>Sdk</c> on <c>&lt;Project&gt;</c>, in an
     /// <c>&lt;Sdk&gt;</c> element or on an <c>&lt;Import&gt;</c>, usually with <c>packages.config</c>.
     /// Such a project restores and builds with the full MSBuild (<c>MSBuild.exe</c>, Mono's

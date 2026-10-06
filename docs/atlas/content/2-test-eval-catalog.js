@@ -91,12 +91,12 @@ git ls-files --others --exclude-standard                # yeni, izlenmeyen dosya
       ]),
     },
     {
-      title: "C# dosyaları sözdizimi düzeyinde karşılaştırılır", nodes: ["git", "ccr"], edges: ["c1"],
+      title: "C# ve Visual Basic dosyaları sözdizimi düzeyinde karşılaştırılır", nodes: ["git", "ccr"], edges: ["c1"],
       who: "<code>CodeChangeReader.Read(root, mergeBase, changed, symbolSets)</code> → <code>CodeChangeDetector.Detect(path, old, new, symbolSets)</code>",
       file: "src/TestDetta.Core/CodeChangeReader.cs, CodeChangeDetector.cs, CodeChange.cs",
       input: "Merge base'teki metin (<code>git cat-file --batch</code>) ve çalışma ağacındaki metin; dosyayı derleyen projelerin önişlemci sembol kümeleri",
       output: "<code>CodeChange(Path, IsCosmetic, AffectsWholeProject, Symbols)</code>; örnekte <code>SymbolChange(\"Calc.Calculator\", \"Tax\", Modified)</code>",
-      purpose: "Değişikliği üye düzeyine indirmek. Hiçbir şey derlenmez; Roslyn yalnız ayrıştırır.",
+      purpose: "Değişikliği üye düzeyine indirmek. Hiçbir şey derlenmez; Roslyn yalnız ayrıştırır. Dile özgü kısım <code>SourceLanguage</code>'dadır: C# için <code>CSharpLanguage</code>, Visual Basic için <code>VisualBasicLanguage</code> (kök ad alanı, büyük/küçük harf duyarsız eşleşme, <code>op_</code> adlı operatörler).",
       body: ul([
         "Yalnız boşluk/yorum değiştiyse <code>IsCosmetic = true</code>: dosya yok sayılır.",
         "Öznitelik ya da varsayılan parametre değeri değiştiyse <code>MetadataChanged = true</code> (kapsam haritası bunu cevaplayamaz).",

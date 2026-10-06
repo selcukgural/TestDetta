@@ -1,4 +1,4 @@
-<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: 0d84001c0b8f -->
+<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: a91b3f8f9f44 -->
 <h1>Einschränkungen</h1>
 <p class="lead">Wo {{name}} etwas nicht sehen kann, wählt es mehr aus. Diese Seite listet diese Stellen auf, damit Sie wissen, wann eine Auswahl breiter ist als nötig, sowie die wenigen Fälle, in denen ein handgeschriebenes Muster einen Test verbergen kann.</p>
 
@@ -43,8 +43,8 @@
 <h2>Source Generators</h2>
 <p>Von Source Generators geschriebener Code liegt nicht im Quellbaum. <code>td record</code> liest ihn aus den PDBs der aufgezeichneten Assemblys (portabel oder eingebettet) und behält die darin genannten Namen in der Map, sodass die Namensverfolgung generierte Aufrufer sieht. Assemblys, die ohne portables PDB gebaut wurden, liefern nichts.</p>
 
-<h2>F# und Visual Basic</h2>
-<p>F#- und Visual-Basic-Projekte sind Teil des Projektgraphen, ihr Code wird jedoch nicht analysiert: Ist eines davon betroffen, läuft alles, was davon abhängt, vollständig.</p>
+<h2>F#</h2>
+<p>F#-Projekte sind Teil des Projektgraphen, ihr Code wird jedoch noch nicht analysiert: Ist eines davon betroffen, läuft alles, was davon abhängt, vollständig. Visual Basic wird wie C# analysiert.</p>
 
 <h2 id="related">Verwandte Seiten</h2>
 <ul>

@@ -44,8 +44,8 @@
 <table>
   <thead><tr><th>Language</th><th>How changes are handled</th></tr></thead>
   <tbody>
-    <tr><td>C#</td><td>Analysed down to members: syntax trees, coverage maps and name tracing.</td></tr>
-    <tr><td>F#, Visual Basic</td><td>Part of the project graph, but not analysed: when one of these projects is affected, everything that depends on it runs completely.</td></tr>
+    <tr><td>C#, Visual Basic</td><td>Analysed down to members: syntax trees, coverage maps and name tracing. Visual Basic names are matched ignoring case, and the project's root namespace is applied, as the compiler does.</td></tr>
+    <tr><td>F#</td><td>Part of the project graph, but not analysed yet: when an F# project is affected, everything that depends on it runs completely.</td></tr>
   </tbody>
 </table>
 

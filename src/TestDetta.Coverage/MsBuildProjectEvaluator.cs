@@ -20,7 +20,7 @@ namespace TestDetta.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 4;
+    private const int EvaluatorVersion = 5;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -49,7 +49,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
           <Target Name="TestDettaEvaluate" Returns="@(TestDettaEvaluated)" DependsOnTargets="$(_TestDettaDefineConstantsDependsOn)">
             <ItemGroup>
               <_TestDettaFramework Include="$(TargetFrameworks)" Condition="'$(TargetFramework)' == ''" />
-              <TestDettaEvaluated Include="$(MSBuildProjectFullPath)" Kind="Project" Project="$(MSBuildProjectFullPath)" IsTestProject="$(IsTestProject)" AssemblyName="$(AssemblyName)" />
+              <TestDettaEvaluated Include="$(MSBuildProjectFullPath)" Kind="Project" Project="$(MSBuildProjectFullPath)" IsTestProject="$(IsTestProject)" AssemblyName="$(AssemblyName)" RootNamespace="$(RootNamespace)" />
             </ItemGroup>
             <ItemGroup Condition="'@(_TestDettaFramework)' == ''">
               <TestDettaEvaluated Include="@(ProjectReference->'%(FullPath)')" Kind="Reference" Project="$(MSBuildProjectFullPath)" />
@@ -256,7 +256,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     new XElement("Output", new XAttribute("TaskParameter", "TargetOutputs"), new XAttribute("ItemName", "TestDettaEvaluated"))),
                 new XElement("WriteLinesToFile",
                     new XAttribute("File", Escape(output)),
-                    new XAttribute("Lines", "@(TestDettaEvaluated->'%(Kind)%09%(Project)%09%(Identity)%09%(IsTestProject)%09%(AssemblyName)%09%(Framework)')"),
+                    new XAttribute("Lines", "@(TestDettaEvaluated->'%(Kind)%09%(Project)%09%(Identity)%09%(IsTestProject)%09%(AssemblyName)%09%(Framework)%09%(RootNamespace)')"),
                     new XAttribute("Overwrite", "true")))));
         return document.ToString();
     }
@@ -292,6 +292,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 case "Project":
                     builder.IsTestProject |= string.Equals(fields[3], "true", StringComparison.OrdinalIgnoreCase);
                     builder.AssemblyName ??= fields[4].Length > 0 ? fields[4] : null;
+                    builder.RootNamespace ??= fields.Length > 6 && fields[6].Length > 0 ? fields[6] : null;
                     break;
                 case "Reference":
                     builder.References.Add(Paths.Normalize(fields[2]));
@@ -331,6 +332,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
             static b => new EvaluatedProject(b.Value.IsTestProject, b.Value.AssemblyName, [.. b.Value.References.Order(StringComparer.Ordinal)], b.Value.Items, b.Value.Packages)
             {
                 SymbolSets = SymbolSets(b.Value.Symbols.Values),
+                RootNamespace = b.Value.RootNamespace,
                 OpaqueReferences = b.Value.OpaqueReferences,
                 GeneratorReferences = b.Value.GeneratorReferences,
             },
@@ -366,6 +368,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     c.Value.Packages.ToHashSet(StringComparer.OrdinalIgnoreCase))
                 {
                     SymbolSets = SymbolSets(c.Value.SymbolSets ?? []),
+                    RootNamespace = c.Value.RootNamespace,
                     OpaqueReferences = (c.Value.OpaqueReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
                     GeneratorReferences = (c.Value.GeneratorReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
                 },
@@ -392,6 +395,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
             p => new CachedProject(p.Value.IsTestProject, p.Value.AssemblyName, [.. p.Value.References.Select(Relative)], [.. p.Value.Items.Select(Relative)], [.. p.Value.Packages])
             {
                 SymbolSets = [.. p.Value.SymbolSets.Select(static s => s.ToList())],
+                RootNamespace = p.Value.RootNamespace,
                 OpaqueReferences = [.. p.Value.OpaqueReferences.Select(Relative)],
                 GeneratorReferences = [.. p.Value.GeneratorReferences.Select(Relative)],
             });
@@ -416,6 +420,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 
         /// <summary>See <see cref="EvaluatedProject.AssemblyName"/>.</summary>
         public string? AssemblyName { get; set; }
+
+        /// <summary>See <see cref="EvaluatedProject.RootNamespace"/>.</summary>
+        public string? RootNamespace { get; set; }
 
         /// <summary>See <see cref="EvaluatedProject.References"/>.</summary>
         public HashSet<string> References { get; } = new(Paths.Comparer);
@@ -446,6 +453,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
     {
         /// <summary>See <see cref="EvaluatedProject.SymbolSets"/>; null in caches written before symbols were read.</summary>
         public List<List<string>>? SymbolSets { get; init; }
+
+        /// <summary>See <see cref="EvaluatedProject.RootNamespace"/>.</summary>
+        public string? RootNamespace { get; init; }
 
         /// <summary>See <see cref="EvaluatedProject.OpaqueReferences"/>; null in caches written before they were read.</summary>
         public List<string>? OpaqueReferences { get; init; }
