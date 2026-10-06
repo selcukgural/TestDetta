@@ -445,7 +445,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         json.WriteStartArray("changes");
         foreach (var target in targets)
         {
-            var (analysis, _) = Analyze(sha, target, mapCommit: null);
+            var (analysis, _) = Analyze(sha, target, mapCommit: null, new AnalysisStop(CancellationToken.None, CancellationToken.None));
             json.WriteStartObject();
             json.WriteString("target", $"{target.Member.TypeName}.{target.Member.MemberName}");
             json.WriteString("kind", MutantKinds.Name(target.Kind));
@@ -726,7 +726,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         // A hang in TestDetta (an exponential search, Swashbuckle 2026-10-02) would otherwise stop the
         // evaluation for good without a word; it is reported as what it is, a finding about TestDetta.
-        var analyzing = Task.Run(() => Analyze(sha, target, mapCommit));
+        using var stop = new CancellationTokenSource();
+        using var abandon = new CancellationTokenSource();
+        var analyzing = Task.Run(() => Analyze(sha, target, mapCommit, new AnalysisStop(stop.Token, abandon.Token)));
         AnalysisResult analysis;
         Dictionary<OtherSelector, OtherSelection> drift;
         try
@@ -735,9 +737,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             if (!analyzing.Wait(settings.AnalysisTimeout))
             {
                 LogAnalysisHung(target.Member.TypeName, target.Member.MemberName, settings.AnalysisTimeout.TotalMinutes);
+                var still = !Stopped(analyzing, stop, abandon);
                 throw new InvalidOperationException(
                     $"TestDetta's analysis of a change to {target.Member.TypeName}.{target.Member.MemberName} did not finish within " +
-                    $"{settings.AnalysisTimeout.TotalMinutes:0.#} minute(s): a hang or a slowdown in TestDetta.");
+                    $"{settings.AnalysisTimeout.TotalMinutes:0.#} minute(s): a hang or a slowdown in TestDetta." +
+                    (still ? $" It did not stop within {AbandonGrace.TotalMinutes:0} more minute(s) either and is left running; the clone keeps its edit." : string.Empty));
             }
 
             (analysis, drift) = analyzing.Result;
@@ -764,6 +768,49 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             detected,
             SelectedShare(analysis, maps),
             drift.ToDictionary(static d => d.Key, d => d.Value with { Share = SelectedShare(d.Value.Tests, maps) }));
+    }
+
+    /// <summary>
+    /// Longest an analysis that ran past its timeout is waited for after it was asked to stop: long enough for the
+    /// step it is in (an MSBuild evaluation, a build of a generator's consumer) to end on a loaded machine.
+    /// </summary>
+    private static readonly TimeSpan AbandonGrace = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// How an analysis that ran past its timeout is ended. <see cref="Stop"/> asks it to stop at its next step; it then
+    /// restores the sources and removes the maps as usual, and the evaluation waits for that before it reports the
+    /// timeout, so nothing writes into the clone (or a folder being deleted) after the evaluation moved on.
+    /// <see cref="Abandon"/> says the evaluation gave up waiting: from then on the analysis writes nothing at all.
+    /// </summary>
+    /// <param name="Stop">Cancelled when the analysis should stop.</param>
+    /// <param name="Abandon">Cancelled when nobody waits for it any more.</param>
+    private sealed record AnalysisStop(CancellationToken Stop, CancellationToken Abandon);
+
+    /// <summary>
+    /// Asks an analysis that ran past its timeout to stop and waits up to <see cref="AbandonGrace"/> for it; true when it
+    /// ended (with a result, an error or its cancellation), false when it is abandoned.
+    /// </summary>
+    /// <param name="analyzing">The analysis.</param>
+    /// <param name="stop">Asks it to stop.</param>
+    /// <param name="abandon">Tells it nobody waits any more.</param>
+    private static bool Stopped(Task analyzing, CancellationTokenSource stop, CancellationTokenSource abandon)
+    {
+        stop.Cancel();
+        try
+        {
+            if (analyzing.Wait(AbandonGrace))
+            {
+                return true;
+            }
+        }
+        catch (AggregateException)
+        {
+            // It ended by throwing, most likely its cancellation: it has stopped either way.
+            return true;
+        }
+
+        abandon.Cancel();
+        return false;
     }
 
     /// <summary>
@@ -1356,13 +1403,16 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="sha">Commit the maps were recorded at and the base of the diff.</param>
     /// <param name="target">Member to change.</param>
     /// <param name="mapCommit">Older commit whose maps the drift modes use; null for none.</param>
-    private (AnalysisResult Analysis, Dictionary<OtherSelector, OtherSelection> Others) Analyze(string sha, SyntheticTarget target, string? mapCommit)
+    /// <param name="cancel">Stops it between its steps after the timeout; see <see cref="AnalysisStop"/>.</param>
+    private (AnalysisResult Analysis, Dictionary<OtherSelector, OtherSelection> Others) Analyze(string sha, SyntheticTarget target, string? mapCommit, AnalysisStop cancel)
     {
         // Bytes, not text: a rewrite through File.WriteAllText drops a UTF-8 byte order mark, and the
         // clone would keep a change in that file for every later mutant.
         var originals = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var stop = cancel.Stop;
         try
         {
+            stop.ThrowIfCancellationRequested();
             foreach (var group in target.Edits.GroupBy(static e => e.Path, StringComparer.Ordinal))
             {
                 originals[group.Key] = File.ReadAllBytes(group.Key);
@@ -1381,7 +1431,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var pipeline = new AnalysisPipeline(workspace.LoggerFactory, workspace.Evaluator);
             _steps.PlaceMaps(sha);
             // As td test does: a change that reaches a generator is built, to compare what it generates.
-            var analysis = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { GeneratedCode = _generators?.For(target, originals) });
+            var analysis = pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { GeneratedCode = _generators?.For(target, originals), Cancellation = stop });
             var others = new Dictionary<OtherSelector, OtherSelection>
             {
                 [OtherSelector.ProjectLevel] = new([.. analysis.Impact.Tests.Select(static t => new TestProjectSelection(t.Project, TestRunMode.All, [], "affected test project"))], 0),
@@ -1389,12 +1439,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             if (mapCommit is not null)
             {
                 // The measured age may exceed TestDetta's default limit; the bridge is judged on what it does with it.
+                stop.ThrowIfCancellationRequested();
                 _steps.PlaceMaps(mapCommit);
-                others[OtherSelector.Bridge] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { MaxMapAge = int.MaxValue }).Tests, 0);
-                others[OtherSelector.Naive] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.AsIfCurrent }).Tests, 0);
-                others[OtherSelector.NoMap] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.None }).Tests, 0);
+                others[OtherSelector.Bridge] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { MaxMapAge = int.MaxValue, Cancellation = stop }).Tests, 0);
+                others[OtherSelector.Naive] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.AsIfCurrent, Cancellation = stop }).Tests, 0);
+                others[OtherSelector.NoMap] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.None, Cancellation = stop }).Tests, 0);
             }
 
+            stop.ThrowIfCancellationRequested();
             if (settings.TiaCli is not null || settings.AffectedCli is not null)
             {
                 // Maps are TestDetta's own data; the other tools see the same tree TestDetta saw, without them.
@@ -1415,10 +1467,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
         finally
         {
-            _steps.ClearMaps();
-            foreach (var (path, bytes) in originals)
+            // Abandoned: the evaluation has moved on (or is deleting the clone), so nothing is written any more.
+            if (!cancel.Abandon.IsCancellationRequested)
             {
-                File.WriteAllBytes(path, bytes);
+                _steps.ClearMaps();
+                foreach (var (path, bytes) in originals)
+                {
+                    File.WriteAllBytes(path, bytes);
+                }
             }
         }
     }

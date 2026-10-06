@@ -37,6 +37,13 @@ public sealed record AnalysisOptions
 
     /// <summary>How maps are used; anything but <see cref="MapUse.Bridge"/> exists for evaluation only.</summary>
     internal MapUse Maps { get; init; } = MapUse.Bridge;
+
+    /// <summary>
+    /// Stops the analysis between its steps (after the graph, after reading the changes, before selecting), so a
+    /// caller that gave up waiting for it (the evaluation's analysis timeout) can wait for it to end before it uses
+    /// the repository again. A step that is running finishes first; none can.
+    /// </summary>
+    public CancellationToken Cancellation { get; init; }
 }
 
 /// <summary>

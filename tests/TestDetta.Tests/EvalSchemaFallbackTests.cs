@@ -107,7 +107,16 @@ public sealed class EvalSchemaFallbackTests : IDisposable
 
         var run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_output, "synthetic.json"))).RootElement;
         Assert.Contains("did not finish within", run.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("left running", run.GetProperty("error").GetString(), StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(_output, "schema-backup")));
+
+        // The analysis was stopped and waited for before the evaluation returned: the clone is back as it was, and
+        // nothing writes into it while the folder is deleted below.
+        var clone = Path.Combine(_output, "repo");
+        Assert.False(Directory.Exists(Path.Combine(clone, ".testdetta")));
+        Assert.Equal(
+            "namespace Calc; public static class Calculator { public static int Add(int a, int b) => a + b; }",
+            File.ReadAllText(Path.Combine(clone, "src", "Calc", "Calculator.cs")));
     }
 
     public void Dispose()

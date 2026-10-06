@@ -58,6 +58,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
     /// <param name="options">How coverage maps are used.</param>
     /// <exception cref="InvalidOperationException">git failed, for example because <paramref name="baseRef"/> does not exist.</exception>
     /// <exception cref="InvalidDataException">A project file is not valid XML.</exception>
+    /// <exception cref="OperationCanceledException"><see cref="AnalysisOptions.Cancellation"/> was cancelled.</exception>
     public AnalysisResult Run(string repoPath, string baseRef, AnalysisOptions options)
     {
         var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
@@ -67,9 +68,11 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
             .Where(static f => !f.StartsWith(".testdetta/", StringComparison.Ordinal))
             .ToList();
         var mergeBase = git.MergeBase(root, baseRef);
+        options.Cancellation.ThrowIfCancellationRequested();
 
         // The graph first: its evaluation says which preprocessor symbols each project compiles with.
         var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), evaluator).Load(root);
+        options.Cancellation.ThrowIfCancellationRequested();
         var symbolSets = SymbolSetsOf(graph, root);
         var reader = new CodeChangeReader(git, new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()), loggerFactory.CreateLogger<CodeChangeReader>());
         var rootNamespaces = RootNamespaceOf(graph, root);
@@ -78,6 +81,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         var impactAnalyzer = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>());
         var impact = impactAnalyzer.Analyze(graph, root, changed, codeChanges, packageChanges);
         var (maps, mapCommits) = LoadCoverageMaps(git, root, graph, mergeBase, options);
+        options.Cancellation.ThrowIfCancellationRequested();
 
         var drifts = new List<MapDrift>();
         foreach (var (commit, distance) in mapCommits)
@@ -100,6 +104,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
             LogDrift(commit, distance, driftFiles.Count);
         }
 
+        options.Cancellation.ThrowIfCancellationRequested();
         var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>(), new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()))
             .Select(new TestSelectionRequest(graph, root, changed, impact, maps) { Drifts = drifts, DriftFallback = options.DriftFallback, GeneratedCode = options.GeneratedCode });
 
