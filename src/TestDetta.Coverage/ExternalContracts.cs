@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Mono.Cecil;
 
 namespace TestDetta.Coverage;
@@ -88,8 +89,16 @@ internal static class ExternalContracts
             var other => other?.Name,
         };
 
-        return name is not null && !ownAssemblies.Contains(name) && !FrameworkAssemblies.Value.Contains(name);
+        return name is not null && !ownAssemblies.Contains(name) && !FrameworkAssemblies.Value.Contains(name) && !LanguageRuntimes.Contains(name);
     }
+
+    /// <summary>
+    /// Runtime libraries a language compiles its own constructs against, counted as part of the
+    /// framework: every F# lambda is a class overriding FSharp.Core's <c>FSharpFunc.Invoke</c>, and
+    /// sequence and computation expressions subclass its generated bases, which are no more a
+    /// third-party callback than a C# delegate is (docs/design/vb-fsharp-support.md).
+    /// </summary>
+    private static readonly FrozenSet<string> LanguageRuntimes = FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "FSharp.Core", "Microsoft.VisualBasic", "Microsoft.VisualBasic.Core");
 
     /// <summary>True when the type declares a method named <paramref name="name"/>, or cannot be loaded to tell.</summary>
     /// <param name="type">A contract type.</param>

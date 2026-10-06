@@ -1,4 +1,4 @@
-<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 00f56a145120 -->
+<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 7b16c078e097 -->
 <h1>Qué lo ejecuta todo</h1>
 <p class="lead">La mayoría de los cambios seleccionan unas pocas clases de prueba. Algunos no se pueden acotar de forma segura, así que {{name}} ejecuta un proyecto de pruebas completo o todos los proyectos bajo una carpeta. Esta página los enumera todos, para que una selección amplia nunca te sorprenda.</p>
 
@@ -21,11 +21,10 @@
   <thead><tr><th>Cambio</th><th>Por qué no se puede acotar</th></tr></thead>
   <tbody>
     <tr><td>El archivo de proyecto, o un archivo <code>.props</code> o <code>.targets</code> que importa</td><td>Puede cambiar cómo se compila cualquier cosa del proyecto.</td></tr>
-    <tr><td>Cualquier archivo del proyecto que no sea de C#, como <code>appsettings.json</code>, un <code>.resx</code> o un archivo de datos de prueba</td><td>Ningún mapa de cobertura indica quién lo lee.</td></tr>
+    <tr><td>Cualquier archivo del proyecto que no sea código fuente de C#, Visual Basic o F#, como <code>appsettings.json</code>, un <code>.resx</code>, un archivo de firma de F# (<code>.fsi</code>) o un archivo de datos de prueba</td><td>Ningún mapa de cobertura indica quién lo lee.</td></tr>
     <tr><td>Un <code>global using</code> o un atributo de ensamblado</td><td>Se aplica a todos los archivos.</td></tr>
     <tr><td>Un cambio de C# en código que ninguna declaración abarca, por ejemplo bajo una condición del preprocesador</td><td>No hay ningún miembro que seguir.</td></tr>
     <tr><td>Un tipo modificado que nada nombra, pero que un framework podría descubrir por reflexión (controladores, manejadores de mensajes, configuraciones de EF)</td><td>Ni los nombres ni la cobertura pueden decir quién lo encuentra.</td></tr>
-    <tr><td>Un cambio en un proyecto de F#</td><td>Su código aún no se analiza.</td></tr>
     <tr><td>Un proyecto usado como analizador o generador de código fuente</td><td>Su efecto está en la compilación, no en las llamadas.</td></tr>
   </tbody>
 </table>

@@ -265,7 +265,7 @@ ASP.NET Core app with integration tests like AfterApply.
   by coverage.
 - Name tracing is coarse for common override names: a change to one analyzer's `Initialize` reaches
   every type named by an `Initialize`. Scoping overrides to their type hierarchy would narrow this.
-- F# and VB code is not analysed; affected F#/VB projects and their dependents run completely.
+- F# and VB code is not analysed; affected F#/VB projects and their dependents run completely. (Since 2026-10-06 both are analysed like C#: docs/design/vb-fsharp-support.md.)
 - Test projects are also recognised by a `*.Tests`/`*.Test` name; false positives are skipped at
   run time.
 - Repositories that run Microsoft's code coverage in every test run (Polly: `--coverage` in

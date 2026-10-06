@@ -4,6 +4,8 @@
     <!-- Syntax trees only: no MSBuild workspace, no compilation. -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" />
+    <!-- F# has no Roslyn: its own compiler service parses and tokenizes F# files (docs/design/vb-fsharp-support.md). -->
+    <PackageReference Include="FSharp.Compiler.Service" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 

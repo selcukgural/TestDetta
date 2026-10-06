@@ -1,4 +1,4 @@
-<!-- title: Was alle Tests auslöst; layout: docs; description: Die Änderungen, bei denen {{name}} ein ganzes Testprojekt oder alle Projekte unterhalb eines Ordners ausführt, und die Dateien, die es ignoriert.; source: 00f56a145120 -->
+<!-- title: Was alle Tests auslöst; layout: docs; description: Die Änderungen, bei denen {{name}} ein ganzes Testprojekt oder alle Projekte unterhalb eines Ordners ausführt, und die Dateien, die es ignoriert.; source: 7b16c078e097 -->
 <h1>Was alle Tests auslöst</h1>
 <p class="lead">Die meisten Änderungen wählen wenige Testklassen aus. Manche lassen sich nicht sicher eingrenzen, deshalb führt {{name}} dann ein ganzes Testprojekt aus oder alle Projekte unterhalb eines Ordners. Diese Seite listet sie alle auf, damit eine breite Auswahl nie überrascht.</p>
 
@@ -21,11 +21,10 @@
   <thead><tr><th>Änderung</th><th>Warum sie sich nicht eingrenzen lässt</th></tr></thead>
   <tbody>
     <tr><td>Die Projektdatei oder eine von ihr importierte <code>.props</code>- oder <code>.targets</code>-Datei</td><td>Sie kann ändern, wie alles im Projekt gebaut wird.</td></tr>
-    <tr><td>Jede Nicht-C#-Datei im Projekt, etwa <code>appsettings.json</code>, eine <code>.resx</code> oder eine Testdatendatei</td><td>Keine Coverage-Map sagt, wer sie liest.</td></tr>
+    <tr><td>Jede Datei im Projekt, die kein C#-, Visual-Basic- oder F#-Quellcode ist, etwa <code>appsettings.json</code>, eine <code>.resx</code>, eine F#-Signaturdatei (<code>.fsi</code>) oder eine Testdatendatei</td><td>Keine Coverage-Map sagt, wer sie liest.</td></tr>
     <tr><td>Ein <code>global using</code> oder ein Assembly-Attribut</td><td>Es gilt für jede Datei.</td></tr>
     <tr><td>Eine C#-Änderung in Code, den keine Deklaration umfasst, etwa unter einer Präprozessorbedingung</td><td>Es gibt keinen Member, dem man folgen kann.</td></tr>
     <tr><td>Ein geänderter Typ, den nichts beim Namen nennt, den ein Framework aber per Reflection finden könnte (Controller, Message-Handler, EF-Konfigurationen)</td><td>Namen und Coverage können nicht sagen, wer ihn findet.</td></tr>
-    <tr><td>Eine Änderung in einem F#-Projekt</td><td>Sein Code wird noch nicht analysiert.</td></tr>
     <tr><td>Ein Projekt, das als Analyzer oder Source Generator verwendet wird</td><td>Es wirkt auf die Kompilierung, nicht auf Aufrufe.</td></tr>
   </tbody>
 </table>

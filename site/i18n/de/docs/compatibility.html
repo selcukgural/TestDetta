@@ -1,4 +1,4 @@
-<!-- title: Kompatibilität; layout: docs; description: Die Test-Frameworks, Test Runner, Sprachen, Betriebssysteme und CI-Systeme, die {{name}} unterstützt.; source: 1c5c154ae124 -->
+<!-- title: Kompatibilität; layout: docs; description: Die Test-Frameworks, Test Runner, Sprachen, Betriebssysteme und CI-Systeme, die {{name}} unterstützt.; source: 036dd506d156 -->
 <h1>Kompatibilität</h1>
 <p class="lead">Was {{name}} benötigt und womit es getestet wurde. Was nicht in diesen Tabellen steht, ist nicht unbedingt nicht unterstützt, wurde aber nicht durchgängig getestet.</p>
 
@@ -46,7 +46,7 @@
   <tbody>
     <tr><td>C#</td><td>Bis auf Member-Ebene analysiert: Syntaxbäume, Coverage-Maps und Namensverfolgung.</td></tr>
     <tr><td>Visual Basic</td><td>Wie C# bis auf Member-Ebene analysiert. Namen werden wie vom Compiler ohne Beachtung der Groß-/Kleinschreibung zugeordnet, und der Stamm-Namespace des Projekts wird angewendet.</td></tr>
-    <tr><td>F#</td><td>Teil des Projektgraphen, aber noch nicht analysiert: Ist ein F#-Projekt betroffen, läuft alles, was davon abhängt, vollständig.</td></tr>
+    <tr><td>F#</td><td>Wie C# bis auf Member-Ebene analysiert. Module zählen wie beim Compiler als Klassen und ihre <code>let</code>-Funktionen als Member; Einrückung zählt als Code. Eine <code>inline</code>-Funktion wird in ihre Aufrufer kompiliert, daher werden diese über den Namen gefunden. Signaturdateien (<code>.fsi</code>) werden nicht analysiert: Eine Änderung daran führt alles aus, was von ihrem Projekt abhängt.</td></tr>
   </tbody>
 </table>
 

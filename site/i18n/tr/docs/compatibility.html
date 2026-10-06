@@ -1,4 +1,4 @@
-<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: 1c5c154ae124 -->
+<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: 036dd506d156 -->
 <h1>Uyumluluk</h1>
 <p class="lead">{{name}}'nın neye ihtiyaç duyduğu ve neyle test edildiği. Bu tabloların dışında kalan bir şey desteklenmiyor demek değildir, ancak uçtan uca test edilmemiştir.</p>
 
@@ -46,7 +46,7 @@
   <tbody>
     <tr><td>C#</td><td>Üye düzeyine kadar analiz edilir: söz dizimi ağaçları, kapsam haritaları ve isim izleme.</td></tr>
     <tr><td>Visual Basic</td><td>C# gibi üye düzeyine kadar analiz edilir. İsimler, derleyicinin yaptığı gibi büyük/küçük harf ayrımı gözetmeden eşleştirilir ve projenin kök ad alanı uygulanır.</td></tr>
-    <tr><td>F#</td><td>Proje grafiğinin bir parçasıdır, ancak henüz analiz edilmez: bir F# projesi etkilendiğinde, ona bağımlı her şey tamamen çalışır.</td></tr>
+    <tr><td>F#</td><td>C# gibi üye düzeyine kadar analiz edilir. Derleyicinin oluşturduğu gibi modüller sınıf, <code>let</code> fonksiyonları da üye sayılır; girinti de koddan sayılır. <code>inline</code> bir fonksiyon onu çağıranların içine derlendiği için çağıranlar isimle bulunur. İmza dosyaları (<code>.fsi</code>) analiz edilmez: birindeki değişiklik, projesine bağımlı her şeyi çalıştırır.</td></tr>
   </tbody>
 </table>
 

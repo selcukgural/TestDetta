@@ -33,6 +33,12 @@ public sealed record SymbolChange(string TypeName, string? MemberName, SymbolCha
     /// credits with running it are not all that see the change.
     /// </summary>
     public bool MetadataChanged { get; init; }
+
+    /// <summary>
+    /// True for an F# <c>inline</c> function or member: its body is compiled into its callers, so a
+    /// coverage map credits them, not it, and its users are traced by name.
+    /// </summary>
+    public bool Inlined { get; init; }
 }
 
 /// <summary>The code-level difference of one C# file.</summary>

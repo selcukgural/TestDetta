@@ -1,4 +1,4 @@
-<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: 00f56a145120 -->
+<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: 7b16c078e097 -->
 <h1>Neler her şeyi çalıştırır</h1>
 <p class="lead">Değişikliklerin çoğu birkaç test sınıfı seçer. Bazıları güvenli bir şekilde daraltılamaz; bu yüzden {{name}} bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırır. Bu sayfa hepsini listeler; böylece geniş bir seçim asla sürpriz olmaz.</p>
 
@@ -21,11 +21,10 @@
   <thead><tr><th>Değişiklik</th><th>Neden daraltılamaz</th></tr></thead>
   <tbody>
     <tr><td>Proje dosyası ya da onun import ettiği bir <code>.props</code> veya <code>.targets</code> dosyası</td><td>Projedeki herhangi bir şeyin nasıl derlendiğini değiştirebilir.</td></tr>
-    <tr><td>Projedeki C# olmayan herhangi bir dosya, örneğin <code>appsettings.json</code>, bir <code>.resx</code> ya da bir test verisi dosyası</td><td>Hiçbir kapsam haritası onu kimin okuduğunu söylemez.</td></tr>
+    <tr><td>Projedeki C#, Visual Basic ya da F# kaynak kodu olmayan herhangi bir dosya, örneğin <code>appsettings.json</code>, bir <code>.resx</code>, bir F# imza dosyası (<code>.fsi</code>) ya da bir test verisi dosyası</td><td>Hiçbir kapsam haritası onu kimin okuduğunu söylemez.</td></tr>
     <tr><td>Bir <code>global using</code> ya da bir assembly attribute'u</td><td>Her dosyaya uygulanır.</td></tr>
     <tr><td>Hiçbir bildirimin kapsamadığı koddaki bir C# değişikliği, örneğin bir önişlemci koşulunun altında</td><td>İzlenecek bir üye yoktur.</td></tr>
     <tr><td>Hiçbir yerde adı geçmeyen, ancak bir framework'ün reflection ile keşfedebileceği değişmiş bir tip (controller'lar, mesaj handler'ları, EF yapılandırmaları)</td><td>İsimler ve kapsam verisi onu kimin bulduğunu söyleyemez.</td></tr>
-    <tr><td>Bir F# projesindeki değişiklik</td><td>Kodu henüz analiz edilmez.</td></tr>
     <tr><td>Analyzer ya da source generator olarak kullanılan bir proje</td><td>Etkisi çağrılar üzerinde değil, derleme üzerindedir.</td></tr>
   </tbody>
 </table>

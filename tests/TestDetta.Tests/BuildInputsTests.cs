@@ -123,23 +123,34 @@ public sealed class BuildInputsTests : IDisposable
     }
 
     [Fact]
-    public void Test_project_in_another_language_runs_completely()
+    public void Test_project_in_fsharp_is_selected_by_name_like_any_other()
     {
         _repo.Write("tests/Calc.FsTests/Calc.FsTests.fsproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <ItemGroup>
+                <Compile Include="Tests.fs" />
                 <PackageReference Include="Microsoft.NET.Test.Sdk" />
                 <ProjectReference Include="../../src/Calc/Calc.csproj" />
               </ItemGroup>
             </Project>
             """);
-        _repo.Write("tests/Calc.FsTests/Tests.fs", "module Tests");
+        _repo.Write("tests/Calc.FsTests/Tests.fs", """
+            namespace Calc.FsTests
+
+            module AddTests =
+                [<Xunit.Fact>]
+                let adds () = Xunit.Assert.Equal(3, Calc.Calculator().Add(1, 2))
+
+            module OtherTests =
+                [<Xunit.Fact>]
+                let other () = ()
+            """);
         _repo.Commit("fsharp tests");
         _repo.Replace("src/Calc/Calculator.cs", "a + b", "b + a");
 
         var fsharp = Selection("Calc.FsTests");
-        Assert.Equal(TestRunMode.All, fsharp.Mode);
-        Assert.Contains("not a C# project", fsharp.Reason);
+        Assert.Equal(TestRunMode.Filtered, fsharp.Mode);
+        Assert.Equal(["Calc.FsTests.AddTests"], fsharp.TestClasses);
         Assert.Equal(["Calc.Tests.AddTests"], Selection("Calc.Tests").TestClasses);
     }
 

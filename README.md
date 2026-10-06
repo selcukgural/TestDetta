@@ -190,8 +190,9 @@ and the details are in [docs/ci.md](docs/ci.md).
   build fed the consumer's compiler from outside git with the map; a difference, or a map recorded
   before such uses were, runs the consumer completely.
 - Visual Basic is analysed like C# (member changes, coverage, name tracing ignoring case, the
-  project's root namespace). F# projects are part of the project graph, but their code is not
-  analysed yet: when one is affected, everything that depends on it runs completely.
+  project's root namespace), and so is F# (modules as classes and their `let` functions as members,
+  as the compiler names them; indentation counts; an `inline` function's callers are traced by
+  name). F# signature files (`.fsi`) are not analysed: a change to one runs its project's dependents.
 
 ## Building
 

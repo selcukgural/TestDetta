@@ -45,7 +45,7 @@
   <thead><tr><th>Language</th><th>How changes are handled</th></tr></thead>
   <tbody>
     <tr><td>C#, Visual Basic</td><td>Analysed down to members: syntax trees, coverage maps and name tracing. Visual Basic names are matched ignoring case, and the project's root namespace is applied, as the compiler does.</td></tr>
-    <tr><td>F#</td><td>Part of the project graph, but not analysed yet: when an F# project is affected, everything that depends on it runs completely.</td></tr>
+    <tr><td>F#</td><td>Analysed like C#, down to members. Modules count as classes and their <code>let</code> functions as members, as the compiler builds them; indentation counts as code. An <code>inline</code> function is compiled into its callers, so they are found by name. Signature files (<code>.fsi</code>) are not analysed: a change to one runs everything that depends on its project.</td></tr>
   </tbody>
 </table>
 

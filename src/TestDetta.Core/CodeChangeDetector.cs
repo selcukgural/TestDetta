@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace TestDetta.Core;
 
 /// <summary>
-/// Compares two versions of a C# or Visual Basic file (<see cref="SourceLanguage"/>) by syntax and reports which types and members changed.
+/// Compares two versions of a C#, Visual Basic (<see cref="SourceLanguage"/>) or F# (<see cref="FSharpChangeDetector"/>) file by syntax and reports which types and members changed.
 /// Only tokens and preprocessor trivia are compared, so whitespace and comment edits do not count.
 /// No compilation is created: this is fast but works on names, not resolved symbols.
 /// </summary>
@@ -29,6 +29,11 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
     /// <param name="rootNamespace">Root namespace of the project compiling the file, which Visual Basic puts before its namespaces.</param>
     public CodeChange Detect(string path, SourceText? oldText, SourceText? newText, IReadOnlyCollection<IReadOnlyList<string>> symbolSets, string rootNamespace = "")
     {
+        if (FSharpSource.IsSource(path))
+        {
+            return DetectFSharp(path, oldText, newText, symbolSets);
+        }
+
         var language = SourceLanguage.For(path);
         var oldRoot = language.Parse(oldText, []);
         var newRoot = language.Parse(newText, []);
@@ -74,6 +79,35 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
 
         // Something that compiles differently changed, but no declaration explains it: code active
         // only under a mix of symbols, for example. The whole project counts as changed.
+        if (symbols.Count == 0 && !affectsWholeProject)
+        {
+            LogUnattributed(path);
+            affectsWholeProject = true;
+        }
+
+        foreach (var symbol in symbols)
+        {
+            LogSymbol(path, symbol.Kind, symbol.TypeName, symbol.MemberName ?? "(type)");
+        }
+
+        LogDetected(path, symbols.Count, affectsWholeProject);
+        return new CodeChange(path, IsCosmetic: false, affectsWholeProject, symbols);
+    }
+
+    /// <summary>Compares two versions of an F# file (<see cref="FSharpChangeDetector"/>).</summary>
+    /// <param name="path">File path relative to the repository root.</param>
+    /// <param name="oldText">Content at the base revision, or null when the file was added.</param>
+    /// <param name="newText">Content in the working tree, or null when the file was deleted.</param>
+    /// <param name="symbolSets">Symbol sets of the projects compiling the file.</param>
+    private CodeChange DetectFSharp(string path, SourceText? oldText, SourceText? newText, IReadOnlyCollection<IReadOnlyList<string>> symbolSets)
+    {
+        var (cosmetic, affectsWholeProject, symbols) = FSharpChangeDetector.Detect(path, oldText?.ToString(), newText?.ToString(), symbolSets);
+        if (cosmetic)
+        {
+            LogCosmetic(path);
+            return new CodeChange(path, IsCosmetic: true, AffectsWholeProject: false, []);
+        }
+
         if (symbols.Count == 0 && !affectsWholeProject)
         {
             LogUnattributed(path);

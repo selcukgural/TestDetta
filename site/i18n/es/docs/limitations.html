@@ -1,4 +1,4 @@
-<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: a91b3f8f9f44 -->
+<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: 49bd4127675b -->
 <h1>Limitaciones</h1>
 <p class="lead">Donde {{name}} no puede ver algo, selecciona más. Esta página enumera esos casos, para que sepas cuándo una selección es más amplia de lo necesario, y los pocos casos en los que un patrón escrito a mano puede ocultar una prueba.</p>
 
@@ -44,7 +44,7 @@
 <p>El código escrito por generadores de código fuente no está en el árbol de código fuente. <code>td record</code> lo lee de los PDB de los ensamblados registrados (portables o incrustados) y guarda en el mapa los nombres que menciona, para que el rastreo por nombre vea a los llamadores generados. Los ensamblados compilados sin un PDB portable no aportan nada.</p>
 
 <h2>F#</h2>
-<p>Los proyectos de F# forman parte del grafo de proyectos, pero su código aún no se analiza: cuando uno se ve afectado, todo lo que depende de él se ejecuta completo. Visual Basic se analiza como C#.</p>
+<p>El código F# se analiza como C#, igual que Visual Basic. Los archivos de firma de F# (<code>.fsi</code>) no: un cambio en uno ejecuta todo lo que depende de su proyecto. Un cambio en una función <code>inline</code> se rastrea por nombre hasta quienes la llaman, porque el compilador copia su cuerpo en ellos y el mapa de cobertura les atribuye la ejecución.</p>
 
 <h2 id="related">Páginas relacionadas</h2>
 <ul>

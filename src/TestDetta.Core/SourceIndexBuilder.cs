@@ -225,6 +225,12 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
 
         // Conditional code is indexed as if its symbols were both undefined and defined; types seen in
         // both are merged like partial types, and a member seen twice only widens its references.
+        if (FSharpSource.IsSource(path))
+        {
+            FSharpIndexer.Index(path, text.ToString(), owner, members, types);
+            return new FileIndex(path, owner.Path, members, types);
+        }
+
         var language = SourceLanguage.For(path);
         foreach (var root in language.ParseVariants(text, owner.SymbolSets))
         {

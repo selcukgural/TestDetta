@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: a91b3f8f9f44 -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 49bd4127675b -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -44,7 +44,7 @@
 <p>Source generator'ların yazdığı kod kaynak ağacında bulunmaz. <code>td record</code> bu kodu kaydedilen assembly'lerin PDB'lerinden (portable ya da embedded) okur ve andığı isimleri haritada tutar; böylece isim izleme, üretilmiş çağıranları görür. Portable PDB olmadan derlenmiş assembly'ler hiçbir şey sağlamaz.</p>
 
 <h2>F#</h2>
-<p>F# projeleri proje grafiğinin bir parçasıdır, ancak kodları henüz analiz edilmez: biri etkilendiğinde, ona bağımlı her şey tamamen çalışır. Visual Basic, C# gibi analiz edilir.</p>
+<p>F# kodu, Visual Basic gibi, C# ile aynı şekilde analiz edilir. F# imza dosyaları (<code>.fsi</code>) analiz edilmez: birindeki değişiklik, projesine bağımlı her şeyi çalıştırır. Derleyici <code>inline</code> bir fonksiyonun gövdesini onu çağıranlara kopyalar ve kapsam haritası çalışmayı onlara yazar; bu yüzden böyle bir fonksiyondaki değişiklik çağıranlarına isimle izlenir.</p>
 
 <h2 id="related">İlgili sayfalar</h2>
 <ul>

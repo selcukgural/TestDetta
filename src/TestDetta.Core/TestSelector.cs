@@ -279,7 +279,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
 
                 if (!SourceLanguage.IsSource(file))
                 {
-                    AddFallback(fallbacks, project, $"{file} is not C# or Visual Basic code");
+                    AddFallback(fallbacks, project, $"{file} is not C#, Visual Basic or F# code");
                     continue;
                 }
 
@@ -302,12 +302,6 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             if (affected.Reason == ImpactReason.BuildConfiguration)
             {
                 AddFallback(fallbacks, affected.Project.Path, "build configuration changed");
-            }
-
-            // TestDetta reads C# and Visual Basic; a change cannot be traced through F# code yet.
-            if (affected.Project.Language == ProjectLanguage.FSharp)
-            {
-                AddFallback(fallbacks, affected.Project.Path, $"{Path.GetFileName(affected.Project.Path)} is not a C# project");
             }
 
             // An analyzer or source generator runs inside the consumer's compiler, and an output the

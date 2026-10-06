@@ -21,11 +21,10 @@
   <thead><tr><th>Change</th><th>Why it cannot be narrowed</th></tr></thead>
   <tbody>
     <tr><td>The project file, or a <code>.props</code> or <code>.targets</code> file it imports</td><td>It can change how anything in the project builds.</td></tr>
-    <tr><td>Any file in the project that is not C#, such as <code>appsettings.json</code>, a <code>.resx</code> or a test data file</td><td>No coverage map says who reads it.</td></tr>
+    <tr><td>Any file in the project that is not C#, Visual Basic or F# source, such as <code>appsettings.json</code>, a <code>.resx</code>, an F# signature file (<code>.fsi</code>) or a test data file</td><td>No coverage map says who reads it.</td></tr>
     <tr><td>A <code>global using</code> or an assembly attribute</td><td>It applies to every file.</td></tr>
     <tr><td>A C# change in code no declaration covers, for example under a preprocessor condition</td><td>There is no member to follow.</td></tr>
     <tr><td>A changed type that nothing names, but that a framework could discover through reflection (controllers, message handlers, EF configurations)</td><td>Names and coverage cannot tell who finds it.</td></tr>
-    <tr><td>A change in an F# project</td><td>Its code is not analysed yet.</td></tr>
     <tr><td>A project used as an analyzer or source generator</td><td>Its effect is on compilation, not on calls.</td></tr>
   </tbody>
 </table>

@@ -1,10 +1,10 @@
 # Visual Basic and F#: the same support as C# (2026-10-06)
 
-Status: Visual Basic done 2026-10-06 (approach A, see "Decision"); F# next. Goal (owner, 2026-10-06):
+Status: Visual Basic and F# done 2026-10-06 (approach A, see "Decision"). Goal (owner, 2026-10-06):
 Visual Basic (much used in legacy systems) and F# (in many projects in recent years) get the same
 support as C#.
 
-## Where the languages stand today
+## Where the languages stood before (2026-10-06 morning)
 
 | Step | C# | Visual Basic | F# |
 |---|---|---|---|
@@ -89,3 +89,40 @@ records, name tracing, coverage and the selection rules stay shared.
   under VB xUnit tests recorded for real: a changed member selects the classes that ran it, through a
   module too, by coverage).
 - Not yet: the evaluation's sampler changes C# members only, so no corpus measurement of VB.
+
+## As built: F# (2026-10-06)
+
+- `FSharpSource` (FSharp.Compiler.Service's untyped tree and tokenizer, parsing only, one shared
+  checker under a lock): declarations with the names the compiler gives them. A module is a type
+  (`Shop.Calc.Helpers`; nested in a module with `+` at runtime), with `Module` after its name when a
+  type of that name sits beside it or `[<CompilationRepresentation(ModuleSuffix)>]` says so; a file
+  without a header is an implicit module named after the file with a capital first letter. Its `let`
+  functions and values are members by name (a nameless `let ()`/`do` is `.cctor()`), type members by
+  name with their argument patterns (`Tax(net:decimal)`, overloads apart), properties by name, the
+  primary constructor and `new` as `.ctor`, class `let`s as private members.
+- `FSharpChangeDetector`: the comparison runs over the compiler's significant tokens (no whitespace or
+  comments; before each line's first token a marker of its column, since indentation is syntax), per
+  declaration span, under every `#if` view like C#. Attribute tokens decide metadata changes;
+  `[<assembly: ...>]` affects the project; tokens outside every member and non-module type (namespace
+  and module lines, `open`s) mark every type of the file. A version that does not parse affects the
+  project.
+- `inline` functions and members carry `SymbolChange.Inlined`: the compiler copies their body into
+  the callers, which the map credits, so coverage cannot answer and the callers are traced by name.
+- `FSharpIndexer`: types (modules runnable; classes unless `[<AbstractClass>]`; `inherit` and
+  `interface` as base names), members (private by `private`; module members reachable through an
+  `open`, so not static access; implicitly called for values, overrides, interface members,
+  attributed members and conventional names), references from identifier tokens plus the rightmost
+  names of the file's `open`s. Case-sensitive.
+- Recording: FSharp.Core (and the Visual Basic runtime) count as part of the framework in
+  `ExternalContracts`: every F# lambda overrides `FSharpFunc.Invoke`, which made all code reached
+  through a closure look like a third-party callback (run-once evidence) and selected every class that
+  used the closure's types.
+- `TestSelector` no longer falls back for F# projects; `.fsi` files fall back as non-source files.
+- Tests: `FSharpTests` (identities, overloads, constructors, cosmetic vs indentation, inline,
+  metadata, `open`s, added types, implicit modules, assembly attributes, `#if`, selection by name from
+  C# and from F# test modules) and `FSharpRecordingTests` (an F# library under F# xUnit test modules
+  recorded for real: a changed member selects the modules that ran it, through a closure too, by
+  coverage; a changed inline function its callers by name).
+- Cost: the CLI package carries FSharp.Compiler.Service and FSharp.Core (about 21 MB); the compilers' satellite
+  resource assemblies are left out of it (`SatelliteResourceLanguages=en`).
+- Not yet: the evaluation's sampler changes C# members only, so no corpus measurement of F# or VB.

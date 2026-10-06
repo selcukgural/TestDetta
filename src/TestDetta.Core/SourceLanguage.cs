@@ -18,10 +18,10 @@ internal abstract class SourceLanguage
     public static SourceLanguage For(string path) =>
         path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) ? VisualBasicLanguage.Instance : CSharpLanguage.Instance;
 
-    /// <summary>True for a source file a language here reads: <c>.cs</c> or <c>.vb</c>.</summary>
+    /// <summary>True for a source file TestDetta reads: <c>.cs</c>, <c>.vb</c> or <c>.fs</c> (F# goes through <see cref="FSharpSource"/>).</summary>
     /// <param name="path">File path.</param>
     public static bool IsSource(string path) =>
-        path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase);
+        path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) || FSharpSource.IsSource(path);
 
     /// <summary>True when identifiers differ only by case are the same name (Visual Basic).</summary>
     public abstract bool IgnoresCase { get; }

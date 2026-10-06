@@ -472,6 +472,13 @@ internal sealed partial class CoverageSelection
             // Run-once code is traced by name, but the classes the map saw running it depend on it
             // all the same: name tracing can miss them (through generated code or reflection).
             unresolved ??= RunOnceReason(map, change);
+
+            // An inline function's body is compiled into its callers, which the map credits instead.
+            if (change.Inlined)
+            {
+                unresolved ??= "it is inlined into its callers";
+            }
+
             answers.Add((project, classes));
         }
 
