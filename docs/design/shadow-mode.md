@@ -117,7 +117,10 @@ tests the full way, and checks that TestDetta's selection contains every class t
 "On your code: 160 changes, 104 broke tests, 0 missed (95% upper bound 2.8%)". This is the strongest
 evidence we can give, because it does not wait for real failures to happen. It runs on the team's
 runners, so it costs their CI minutes: off by default, with a cap. It is part of v1 (owner, 2026-10-07),
-because the graduation criteria need one run of it; it is built after shadow mode.
+because the graduation criteria need one run of it; it is built after shadow mode. Design and as built:
+docs/design/audit.md (the team's build output is never written: every mutant lives in a copy of the working
+tree; the selection per change is `td test`'s own, from the team's maps; the sample is uniform, not weighted
+toward covered members; no license and no network call).
 
 ## Next step after shadow: run first, then the rest
 
