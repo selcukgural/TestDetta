@@ -41,6 +41,20 @@ public sealed class TestDettaTrackerNestingTests
     private static bool RowsOfRunning(string running, string entered) => TestDettaTracker.CalledFromRunningTest(running, entered);
 }
 
+/// <summary>Stands for a test class (or F# test module) with a helper that classes nested in it call.</summary>
+public sealed class OuterNestingTests
+{
+    public static bool Helper(string running, string entered) => TestDettaTracker.CalledFromRunningTest(running, entered);
+
+    /// <summary>A test class nested in the class whose entry point it calls.</summary>
+    public sealed class Inner
+    {
+        [Fact]
+        public void Helper_of_the_enclosing_class_called_by_a_nested_class_test_is_nested() =>
+            Assert.True(Helper("TestDetta.Tests.OuterNestingTests+Inner", "TestDetta.Tests.OuterNestingTests"));
+    }
+}
+
 /// <summary>A test declared on a base class runs for the derived class: its frames are the running class's.</summary>
 public abstract class NestingBase
 {

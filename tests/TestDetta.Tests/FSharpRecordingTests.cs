@@ -100,6 +100,16 @@ public sealed class FSharpRecordingTests : IDisposable
             module HalfTests =
                 [<Fact>]
                 let ``halves`` () = Assert.Equal(2, Helpers.half 4)
+
+            module Outer =
+                let helper (a: int) (b: int) = Calculator().Sub2(a, b)
+
+                [<Fact>]
+                let ``outer`` () = Assert.True(true)
+
+                module Inner =
+                    [<Fact>]
+                    let ``inner`` () = Assert.Equal(4, helper 5 1)
             """);
         _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
         _repo.Commit("base");
@@ -112,6 +122,11 @@ public sealed class FSharpRecordingTests : IDisposable
         Assert.True(passed, output.ToString());
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         Assert.Contains(new CoveredMethod("Shop.Calc.Calculator", "Add"), map.Classes["Shop.Tests.AddTests"].Select(id => map.Methods[id]));
+
+        // The F# compiler's attributes on the outer module's helper do not make it a test entry point:
+        // what the nested module's test runs through it stays the nested module's.
+        Assert.Contains(new CoveredMethod("Shop.Calc.Calculator", "Sub2"), map.Classes["Shop.Tests.Outer+Inner"].Select(id => map.Methods[id]));
+        Assert.DoesNotContain(new CoveredMethod("Shop.Calc.Calculator", "Sub2"), map.Classes["Shop.Tests.Outer"].Select(id => map.Methods[id]));
     }
 
     private TestProjectSelection Select() =>

@@ -1131,6 +1131,14 @@ public static class TestDettaTracker
             }
 
             entryPoint ??= RuntimeName(Outermost(type));
+
+            // The running class nested in the entry point's (a test of Outer+Inner calling Outer's
+            // helper, an F# test module nested in another): its frames are the running test's.
+            if (IsOrIsNestedIn(type, running) && (IsNestedName(running, entryPoint) || entered is not null && IsNestedName(running, entered)))
+            {
+                return true;
+            }
+
             if (IsOrIsNestedIn(type, entryPoint) || entered is not null && IsOrIsNestedIn(type, entered))
             {
                 continue;
@@ -1169,6 +1177,12 @@ public static class TestDettaTracker
 
         return false;
     }
+
+    /// <summary>True when the runtime name <paramref name="inner"/> is of a type nested in <paramref name="outer"/>.</summary>
+    /// <param name="inner">Runtime type name, nested types joined with '+'.</param>
+    /// <param name="outer">Runtime type name.</param>
+    private static bool IsNestedName(string inner, string outer) =>
+        inner.Length > outer.Length + 1 && inner[outer.Length] == '+' && inner.StartsWith(outer, StringComparison.Ordinal);
 
     /// <summary>The top-level type <paramref name="type"/> is nested in, or itself.</summary>
     /// <param name="type">A type.</param>

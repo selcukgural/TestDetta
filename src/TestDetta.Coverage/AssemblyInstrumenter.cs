@@ -1891,11 +1891,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// machines, suppressions), which say nothing about a test framework calling it. With them, a
     /// static helper of a test class that another class's test calls (OpenTelemetry's
     /// SpanContextShimTests.GetSpanContextShim) became an entry point and took the rest of that
-    /// test's code into its own class.
+    /// test's code into its own class. The F# compiler puts its own on every function of a module
+    /// (<c>CompilationMapping</c>, <c>CompilationArgumentCounts</c>, <c>CompilationSourceName</c>): with
+    /// them, an F# test module's helper (Argu's EnvVarTests.envOverride) took the code of the tests of a
+    /// module nested in it.
     /// </summary>
     /// <param name="attribute">Attribute of a method.</param>
     private static bool IsCompilerAttribute(CustomAttribute attribute) =>
-        attribute.AttributeType.Namespace is "System.Runtime.CompilerServices" or "System.Diagnostics" or "System.Diagnostics.CodeAnalysis";
+        attribute.AttributeType.Namespace is "System.Runtime.CompilerServices" or "System.Diagnostics" or "System.Diagnostics.CodeAnalysis"
+        || attribute.AttributeType.FullName is "Microsoft.FSharp.Core.CompilationMappingAttribute"
+            or "Microsoft.FSharp.Core.CompilationArgumentCountsAttribute" or "Microsoft.FSharp.Core.CompilationSourceNameAttribute";
 
     /// <summary>True when the method has a test attribute, directly or through a custom attribute derived from one.</summary>
     /// <param name="method">Method definition.</param>

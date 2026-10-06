@@ -116,6 +116,12 @@ records, name tracing, coverage and the selection rules stay shared.
   `ExternalContracts`: every F# lambda overrides `FSharpFunc.Invoke`, which made all code reached
   through a closure look like a third-party callback (run-once evidence) and selected every class that
   used the closure's types.
+- Recording, test entry points: the F# compiler puts `CompilationMapping`, `CompilationArgumentCounts`
+  and `CompilationSourceName` on module functions; they count as compiler attributes, so an F# test
+  module's helper is no test entry point. Before, Argu's `EnvVarTests.envOverride` (curried, so with
+  `CompilationArgumentCounts`) took the code of the tests of the nested module `EnvVarTests.Prefixed`,
+  and 4 of 64 failing mutants were missed. Independently, a running class nested in the entry point's
+  class (`Outer+Inner`) now keeps its frames in `CalledFromRunningTest`.
 - `TestSelector` no longer falls back for F# projects; `.fsi` files fall back as non-source files.
 - Tests: `FSharpTests` (identities, overloads, constructors, cosmetic vs indentation, inline,
   metadata, `open`s, added types, implicit modules, assembly attributes, `#if`, selection by name from

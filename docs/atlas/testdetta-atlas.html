@@ -558,6 +558,7 @@ public static void Hit(int id)
     Remember(id);                             // iş parçacığı halkası: alan değerlerini kimin kurduğu
 }`) + ul([
         "Hiçbir test girilmeden çalışan kod (keşif, teori verisi) <code>Startup</code> kovasına, yani <code>ambient</code>'e gider.",
+        "Başka bir test sınıfının giriş noktası (öznitelikli metot) çalışan testten çağrılırsa kova değişmez (<code>CalledFromRunningTest</code>, yığın okunur); çalışan sınıf giriş noktasının sınıfına iç içeyse (<code>Outer+Inner</code>, F#'ta iç içe test modülü) o sınıfın çerçeveleri çalışan testindir. F# derleyicisinin her fonksiyona koyduğu <code>CompilationMapping</code>/<code>CompilationArgumentCounts</code>/<code>CompilationSourceName</code> derleyici özniteliği sayılır: bir metodu giriş noktası yapmaz.",
         "Başlatma kapsamında çalışan kod (<code>initialization</code>) ilk kullanıcıya yazılır; seçim tarafı bunu bilir ve tüm kullanıcıları seçer.",
         "<code>FileRead(path)</code> yolu tam yola çevirip aynı kovanın <code>Files</code> kümesine ekler.",
         "<code>OutputUsed</code> başlatılan dosya, argümanlar, çalışma klasörü ve assembly adından isimleri çıkarır (son yol parçası, <code>.dll</code>/<code>.exe</code>/<code>.csproj</code> olmadan) ve kovanın <code>Outputs</code> kümesine ekler.",
