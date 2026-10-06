@@ -275,6 +275,14 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
+- **Recording fingerprint is wider than recording** (owner, 2026-10-06: next job): the eval re-records
+  every corpus map when `RecordingFingerprint` changes. It counts the recorder assemblies in full and the
+  TestDetta.Core types they reach, type by type (an abstract type brings every implementation). So a
+  selection-only change can still re-record everything: 7b455e8 (initializer rule in `SourceLanguage`,
+  `VisualBasicLanguage`, `CodeChangeDetector`) re-recorded AspNetCoreOData (new key `5956183f…`) because the
+  recorder reaches the language classes. Narrow it: reach by method instead of by type (hash only the
+  members the recorder can call), or move what the recorder shares with selection (parsing helpers) out
+  of the types selection changes. Check with a selection-only commit that the key stays the same.
 - **Job summary evidence for classes the name spread selects** (seen 2026-10-04 on Spectre.Console,
   a refactor of `Calendar.GetWeekdays`, map at 01027ef): 15 classes were selected, but the map
   records only CalendarTests and TreeTests running `GetWeekdays`. The debug log shows the name
