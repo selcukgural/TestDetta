@@ -94,9 +94,8 @@
       "tags": [
         "fsharp"
       ],
-      "synthetic": 0,
       "merges": 6,
-      "notes": "F# is not analysed; history only"
+      "notes": "F# library under F# Expecto/xUnit tests; analysed since 2026-10-06 (docs/design/vb-fsharp-support.md)"
     },
     {
       "name": "automapper",

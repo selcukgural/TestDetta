@@ -1,5 +1,21 @@
 # Evaluation on real repositories
 
+## F#: Argu (2026-10-06)
+
+First measurement of F# analysis (docs/design/vb-fsharp-support.md), Argu at the corpus commit, 100
+synthetic changes sampled from F# members (`|> id` source edits, IL mutants of every kind):
+
+| Binary | Failing mutants | Missed | Selected | Project level |
+|---|---|---|---|---|
+| 5311fbb | 64 | 4 | 56 % | 100 % |
+| a9a11cd | 64 | **0** | 56 % | 100 % |
+
+All four misses were one class, `EnvVarTests+Prefixed`: its tests call `envOverride` of the enclosing
+module, and the F# compiler's `CompilationArgumentCounts` attribute made that helper a test entry point,
+so the recorder credited the rest of the tests' code to `EnvVarTests`. Fixed in a9a11cd (F# compiler
+attributes are compiler attributes; a running class nested in the entry point's class keeps its frames).
+Argu was "not informative" before (F# not analysed); it is now sampled like every other repository.
+
 ## Corpus round 3 (2026-10-06)
 
 The whole corpus at the pinned commits, built from `592c15b` plus the generator-copy fix, run twice:
