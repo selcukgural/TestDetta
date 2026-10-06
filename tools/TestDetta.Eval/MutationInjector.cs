@@ -178,7 +178,10 @@ internal static class MutationInjector
         var copies = new Dictionary<int, HashSet<string>>();
         try
         {
-            foreach (var assembly in assemblies)
+            // Test projects that share one output folder (AspNetCoreOData's bin/AnyCPU/Debug) list the same
+            // file once each: rewritten twice it held two switch types, which no test host could load, and
+            // the second backup would have kept the mutant.
+            foreach (var assembly in assemblies.Select(Path.GetFullPath).Distinct(StringComparer.Ordinal))
             {
                 var backup = Path.Combine(backupDirectory, $"{backups.Count}-{Path.GetFileName(assembly)}");
                 File.Copy(assembly, backup, overwrite: true);

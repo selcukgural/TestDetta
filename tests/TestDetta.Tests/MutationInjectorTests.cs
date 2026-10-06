@@ -43,6 +43,29 @@ public sealed class MutationInjectorTests : IDisposable
     }
 
     [Fact]
+    public void An_assembly_listed_twice_is_rewritten_once_and_restored_to_the_original()
+    {
+        // Test projects sharing one output folder list the same file once each (AspNetCoreOData).
+        var source = typeof(GitClient).Assembly.Location;
+        var assembly = Path.Combine(_directory, Path.GetFileName(source));
+        File.Copy(source, assembly);
+        File.Copy(Path.ChangeExtension(source, ".pdb"), Path.ChangeExtension(assembly, ".pdb"));
+        var original = File.ReadAllBytes(assembly);
+        var sameFile = Path.Combine(_directory, ".", Path.GetFileName(source));
+
+        using (var schema = MutationInjector.InjectSchema(
+                   [assembly, sameFile],
+                   [new SchemaTarget(1, new CoveredMethod("TestDetta.Core.GitClient", "Head"), MutantKind.Throw)],
+                   Path.Combine(_directory, "backup")))
+        {
+            using var module = ModuleDefinition.ReadModule(assembly);
+            Assert.Single(module.Types, static t => t.Name == "<TestDettaMutantSwitch>");
+        }
+
+        Assert.Equal(original, File.ReadAllBytes(assembly));
+    }
+
+    [Fact]
     [Trait("Category", "Slow")]
     public void Mutant_is_written_when_a_constant_has_a_type_from_a_shared_framework()
     {
