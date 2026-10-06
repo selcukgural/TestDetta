@@ -49,7 +49,7 @@
       "FSharp.Core": {
         "type": "Transitive",
         "resolved": "10.1.401",
-        "contentHash": "Cy8Hc/RlNIXGmpgjq/IAZLIybsS06YbXLlCj/qT+RhPeU8Nm+vg5Kj1l2Y3RE4teQXLOX8IgSoXxVS5XvDYIRA=="
+        "contentHash": "/lvOK51KD8IangBYkfDVna3/HrE/r4VUnX3dI01KDspctoYXmind3POeoYkqWKeXHwiKlf6Hc9TxwSnoSCWcjw=="
       },
       "Microsoft.AspNetCore.TestHost": {
         "type": "Transitive",
