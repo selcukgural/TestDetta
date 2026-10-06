@@ -7,7 +7,8 @@ namespace TestDetta.Cli;
 /// <summary>
 /// Applies the license to a run of <c>td affected</c> or <c>td test</c> (docs/design/licensing.md):
 /// without a covering license every test project runs completely and the run says why. Never fails
-/// the build; its only network use is the optional refresh, which runs next to the analysis.
+/// the build; its only network use is the optional refresh, which runs next to the analysis. Not used
+/// by <c>td test --shadow</c>, which needs no license and reads none (docs/design/shadow-mode.md).
 /// </summary>
 internal static partial class LicenseGate
 {

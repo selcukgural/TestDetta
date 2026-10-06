@@ -57,8 +57,9 @@ internal sealed record AffectedSettings(bool TestsOnly, OutputFormat Format)
 internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTestArguments, string? SummaryFile)
 {
     /// <summary>
-    /// Shadow mode (docs/design/shadow-mode.md): select as usual, run every test project completely, and
-    /// report what the selection would have left out. The exit code is the full run's.
+    /// Shadow mode (docs/design/shadow-mode.md): select as usual, run every test with the team's own command, and
+    /// report what the selection would have left out, for the tests that ran. No license is read. The exit code is
+    /// the full run's.
     /// </summary>
     public bool Shadow { get; init; }
 
@@ -217,9 +218,11 @@ internal sealed record CliOptions(
         td test:
           --dry-run            Print the dotnet test commands instead of running them
           --summary-file <path>  Append a Markdown summary, e.g. to $GITHUB_STEP_SUMMARY
-          --shadow             Shadow mode: select as usual, but run every test project completely and
-                               report what the selection would have left out; the exit code is the
-                               full run's, and a TestDetta error never fails it
+          --shadow             Shadow mode: select as usual, but run every test with your own dotnet test
+                               arguments (as one command when they name a solution, a project or nothing,
+                               otherwise per test project) and report what the selection would have left
+                               out, for the tests that ran; needs no license and sends nothing; the exit
+                               code is the full run's, and a TestDetta error never fails it
           --shadow-no-classify Do not rerun failed classes the selection left out to tell a miss from
                                a flaky or pre-existing failure
           --shadow-report <path>  Shadow report file (default: .testdetta/testdetta-shadow.json)

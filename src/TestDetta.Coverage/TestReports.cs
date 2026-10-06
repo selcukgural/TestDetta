@@ -55,6 +55,19 @@ internal static class TestReports
     }
 
     /// <summary>
+    /// The testing platform's option that turns on a TRX report for a test project with this build output, without
+    /// a file name: <c>--report-xunit-trx</c> for xUnit v3, <c>--report-trx</c> with the TRX extension; null when
+    /// neither is there (NUnit's result XML goes through run settings instead, see <see cref="UsesNUnitXml"/>). One
+    /// <c>dotnet test</c> over a solution passes the same options to every test project, so it can ask for a report
+    /// only when all of them take the same one; without a file name each writes its own, named by the run's time.
+    /// </summary>
+    /// <param name="outputDirectory">Output directory of the test project.</param>
+    public static string? PlatformReportOption(string outputDirectory) =>
+        File.Exists(Path.Combine(outputDirectory, "xunit.v3.core.dll")) ? "--report-xunit-trx"
+        : File.Exists(Path.Combine(outputDirectory, "Microsoft.Testing.Extensions.TrxReport.dll")) ? "--report-trx"
+        : null;
+
+    /// <summary>
     /// True for NUnit under the testing platform without the TRX extension (NSubstitute): no TRX
     /// report can be asked for, but NUnit's adapter writes its own result file when the run settings
     /// name a folder (<see cref="AddNUnitXml"/>), which <see cref="TrxReport.Read"/> reads as well.

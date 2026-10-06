@@ -13,6 +13,7 @@
     <InternalsVisibleTo Include="TestDetta.Tests" />
     <InternalsVisibleTo Include="TestDetta.Eval" />
     <InternalsVisibleTo Include="TestDetta.Coverage" />
+    <InternalsVisibleTo Include="TestDetta.Cli" />
   </ItemGroup>
 
 </Project>

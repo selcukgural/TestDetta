@@ -6,7 +6,7 @@ branding:
 
 inputs:
   mode:
-    description: "'test' on pull requests (run affected tests), 'shadow' on pull requests while you evaluate TestDetta (run every test, report what the selection would have left out, keep the report as an artifact), 'record' on the default branch (record coverage maps)."
+    description: "'test' on pull requests (run affected tests), 'shadow' on pull requests while you evaluate TestDetta (run every test, report what the selection would have left out, keep the report as an artifact; needs no license), 'record' on the default branch (record coverage maps)."
     required: true
   base:
     description: Branch to compare with in test and shadow modes. Defaults to the pull request's base branch.
@@ -29,7 +29,7 @@ inputs:
     required: false
     default: 'false'
   dotnet-test-args:
-    description: Test and shadow modes only. Extra arguments for every dotnet test, separated by spaces.
+    description: "Test and shadow modes only. Extra arguments for every dotnet test, separated by spaces. In shadow mode, name your solution here (for example 'MySolution.sln') to have it run as one dotnet test command, as your own job runs it; without one, the one solution or project in working-directory runs, and with none there each test project runs on its own."
     required: false
     default: ''
   max-map-age:
@@ -65,7 +65,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   license:
-    description: "Test and shadow modes only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none. Without a valid license every test runs; the job never fails because of it."
+    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none, and shadow mode never reads it. Without a valid license every test runs; the job never fails because of it."
     required: false
     default: ''
   working-directory:
@@ -207,7 +207,9 @@ runs:
         dotnet "$TESTDETTA" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
 
     # Shadow mode (docs/design/shadow-mode.md): every test runs as without TestDetta and the job's result is
-    # that run's; the report says what the selection would have left out.
+    # that run's; the report says what the selection would have left out. dotnet test runs as given (one command
+    # for a solution) when its reports can be matched to test projects, otherwise per project, and the report
+    # says why. No license is read and nothing is sent, so the license secret is not passed to this step.
     - name: Run every test in shadow mode
       if: inputs.mode == 'shadow'
       shell: bash
@@ -219,7 +221,6 @@ runs:
         EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
         MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
-        TESTDETTA_LICENSE: ${{ inputs.license }}
         SHADOW_REPORT: ${{ runner.temp }}/testdetta-shadow/testdetta-shadow.json
         SHADOW_RERUN_TIMEOUT: ${{ inputs.shadow-rerun-timeout }}
         SHADOW_RERUN_IDLE_TIMEOUT: ${{ inputs.shadow-rerun-idle-timeout }}

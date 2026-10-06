@@ -22,7 +22,14 @@ internal static partial class CliApp
     /// <param name="args">Raw command line arguments.</param>
     /// <param name="stdout">Receives the result.</param>
     /// <param name="stderr">Receives usage help, errors and diagnostic logs.</param>
-    public static int Run(string[] args, TextWriter stdout, TextWriter stderr)
+    public static int Run(string[] args, TextWriter stdout, TextWriter stderr) => Run(args, stdout, stderr, CliHost.Default);
+
+    /// <summary>Runs the command with the given view of the machine and returns the process exit code.</summary>
+    /// <param name="args">Raw command line arguments.</param>
+    /// <param name="stdout">Receives the result.</param>
+    /// <param name="stderr">Receives usage help, errors and diagnostic logs.</param>
+    /// <param name="host">The environment variables and home directory the license is read from.</param>
+    internal static int Run(string[] args, TextWriter stdout, TextWriter stderr, CliHost host)
     {
         if (args is ["-h" or "--help", ..])
         {
@@ -47,16 +54,17 @@ internal static partial class CliApp
 
         if (options.Command is CliCommand.LicenseStatus or CliCommand.LicenseInstall)
         {
-            return LicenseCommand(options, loggerFactory, stdout, stderr);
+            return LicenseCommand(options, loggerFactory, stdout, stderr, host);
+        }
+
+        // Shadow mode needs no license: it reads none, refreshes none and sends nothing (docs/design/shadow-mode.md).
+        if (options.Command == CliCommand.Test && options.Test.Shadow)
+        {
+            return Shadow(options, loggerFactory, stdout, stderr);
         }
 
         // The license refresh waits on the network while the analysis works; the check below waits for it.
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var refresh = LicenseGate.Refresh(options.Analysis.RepoPath, loggerFactory, Environment.GetEnvironmentVariable, home);
-        if (options.Command == CliCommand.Test && options.Test.Shadow)
-        {
-            return Shadow(options, loggerFactory, logger, stdout, refresh, home);
-        }
+        var refresh = LicenseGate.Refresh(options.Analysis.RepoPath, loggerFactory, host.Environment, host.Home);
 
         AnalysisResult analysis;
         try
@@ -71,7 +79,7 @@ internal static partial class CliApp
             return Failure;
         }
 
-        var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, Environment.GetEnvironmentVariable, home, refresh);
+        var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, host.Environment, host.Home, refresh);
         analysis = LicenseGate.Apply(analysis, license, TestDetta.Core.Licensing.LicenseKeys.Enforced, logger);
 
         if (options.Command == CliCommand.Test)
@@ -121,37 +129,40 @@ internal static partial class CliApp
     }
 
     /// <summary>
-    /// Carries out <c>td test --shadow</c> (<see cref="ShadowRun"/>). An analysis that fails for any reason
-    /// leaves the full run as it is and the report says why it has no shadow result.
+    /// Carries out <c>td test --shadow</c> (<see cref="ShadowRun"/>). No license is checked, refreshed or read, so
+    /// nothing goes over the network. The analysis runs before the full run, on the tree as the pull request has it,
+    /// but nothing of it is shown until that run has finished: its log is held, and the plan is printed with the
+    /// report, for the classes that ran. An analysis that fails for any reason leaves the full run as it is and the
+    /// report says why it has no shadow result.
     /// </summary>
     /// <param name="options">Parsed command line.</param>
-    /// <param name="loggerFactory">Creates the loggers.</param>
-    /// <param name="logger">Logger of the CLI.</param>
+    /// <param name="loggerFactory">Creates the loggers of the full run and the classification.</param>
     /// <param name="stdout">Receives the test output and the report.</param>
-    /// <param name="refresh">The license refresh started before the analysis.</param>
-    /// <param name="home">The user's home directory, for an installed license.</param>
+    /// <param name="stderr">Receives the held analysis log after the full run.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Shadow mode is fail-open by design: a TestDetta error must never fail the team's job.")]
-    private static int Shadow(CliOptions options, ILoggerFactory loggerFactory, ILogger logger, TextWriter stdout, Task refresh, string home)
+    private static int Shadow(CliOptions options, ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        using var held = new StringWriter();
         AnalysisResult? analysis = null;
         string? error = null;
-        try
+        using (var analysisLogs = new StderrLoggerFactory(held, options.Analysis.LogLevel))
         {
-            analysis = Analyze(options, loggerFactory, logger);
-            var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, Environment.GetEnvironmentVariable, home, refresh);
-            analysis = LicenseGate.Apply(analysis, license, TestDetta.Core.Licensing.LicenseKeys.Enforced, logger);
-            ResultWriter.WritePlan(analysis, stdout);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            LogFailed(logger, ex);
-            analysis = null;
-            error = $"the analysis failed ({ex.GetType().Name}: {ex.Message})";
-            stdout.WriteLine($"td: {error}; every test still runs.");
+            var analysisLogger = analysisLogs.CreateLogger(typeof(CliApp).FullName!);
+            try
+            {
+                analysis = Analyze(options, analysisLogs, analysisLogger);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                LogFailed(analysisLogger, ex);
+                analysis = null;
+                error = $"the analysis failed ({ex.GetType().Name}: {ex.Message})";
+                stdout.WriteLine($"td: {error}; every test still runs.");
+            }
         }
 
-        return new ShadowRun(loggerFactory, stdout).Run(options, analysis, error, stopwatch.Elapsed.TotalSeconds);
+        return new ShadowRun(loggerFactory, stdout, stderr).Run(options, new ShadowAnalysis(analysis, error, stopwatch.Elapsed.TotalSeconds, held.ToString()));
     }
 
     /// <summary>
@@ -162,9 +173,10 @@ internal static partial class CliApp
     /// <param name="loggerFactory">Creates the git client's logger.</param>
     /// <param name="stdout">Receives the result.</param>
     /// <param name="stderr">Receives errors.</param>
-    private static int LicenseCommand(CliOptions options, ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr)
+    /// <param name="host">The environment variables and home directory the license is read from.</param>
+    private static int LicenseCommand(CliOptions options, ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr, CliHost host)
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = host.Home;
         if (options.Command == CliCommand.LicenseInstall)
         {
             var value = options.License.Install!;
@@ -193,7 +205,7 @@ internal static partial class CliApp
             return Failure;
         }
 
-        var status = LicenseGate.Check(root, loggerFactory, Environment.GetEnvironmentVariable, home);
+        var status = LicenseGate.Check(root, loggerFactory, host.Environment, home);
         stdout.WriteLine($"License: {status.State}");
         stdout.WriteLine($"  {status.Message}");
         if (status.Claims is { } license)

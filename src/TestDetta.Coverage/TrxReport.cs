@@ -21,6 +21,23 @@ internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses,
     public IReadOnlyDictionary<string, double> ClassSeconds { get; init; } = new Dictionary<string, double>(StringComparer.Ordinal);
 }
 
+/// <summary>What one TRX file says about the run that wrote it (<see cref="TrxReport.Facts"/>).</summary>
+/// <param name="Assemblies">Full paths of the test assemblies its tests ran from; empty when it holds no test.</param>
+/// <param name="Start">When its run started, or null when the report does not say.</param>
+/// <param name="Finish">When its run finished, or null.</param>
+/// <param name="Outcome">The run's overall outcome (<c>Completed</c>, <c>Failed</c>, <c>Error</c>, <c>Aborted</c> …), or null.</param>
+internal sealed record TrxFileFacts(IReadOnlySet<string> Assemblies, DateTimeOffset? Start, DateTimeOffset? Finish, string? Outcome)
+{
+    /// <summary>
+    /// True when the run as a whole did not pass (failed tests, a crashed or aborted test host, a timeout).
+    /// "Warning" is not a failure: VSTest uses it for a run that passed with messages.
+    /// </summary>
+    public bool Failed => Outcome is { } outcome && (outcome.Equals("Failed", StringComparison.OrdinalIgnoreCase)
+                                                     || outcome.Equals("Error", StringComparison.OrdinalIgnoreCase)
+                                                     || outcome.Equals("Aborted", StringComparison.OrdinalIgnoreCase)
+                                                     || outcome.Equals("Timeout", StringComparison.OrdinalIgnoreCase));
+}
+
 /// <summary>
 /// Reads the parts of a test report TestDetta needs: how many tests ran, which classes failed and which
 /// had every test skipped. Visual Studio TRX reports, and NUnit's own result XML for NUnit runs that
@@ -136,6 +153,50 @@ internal static class TrxReport
         }
 
         return new TrxOutcome(total, failed, executed) { ReportedClasses = reported, ClassSeconds = seconds };
+    }
+
+    /// <summary>
+    /// What one TRX file says about where it came from, so the reports of one <c>dotnet test</c> over a solution
+    /// can be told apart: the test assemblies its tests ran from, its run's start and finish, and its overall
+    /// outcome. VSTest and the testing platform's TRX writers (xUnit v3's own, the TRX extension) all write the
+    /// assembly as <c>TestMethod/@codeBase</c> with its case kept; <c>UnitTest/@storage</c>, which VSTest
+    /// lower-cases, is only used when no code base is given.
+    /// </summary>
+    /// <param name="file">A <c>.trx</c> file.</param>
+    /// <returns>The facts, or null when the file is not a TRX report.</returns>
+    public static TrxFileFacts? Facts(string file)
+    {
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(file);
+        }
+        catch (System.Xml.XmlException)
+        {
+            return null;
+        }
+
+        if (document.Root is not { Name.LocalName: "TestRun" } run)
+        {
+            return null;
+        }
+
+        var ns = run.Name.Namespace;
+        var assemblies = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var test in run.Descendants(ns + "UnitTest"))
+        {
+            var path = test.Element(ns + "TestMethod")?.Attribute("codeBase")?.Value ?? test.Attribute("storage")?.Value;
+            if (path is { Length: > 0 })
+            {
+                assemblies.Add(path);
+            }
+        }
+
+        var times = run.Element(ns + "Times");
+        return new TrxFileFacts(assemblies, Time(times?.Attribute("start")?.Value), Time(times?.Attribute("finish")?.Value), run.Element(ns + "ResultSummary")?.Attribute("outcome")?.Value);
+
+        static DateTimeOffset? Time(string? value) =>
+            DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var time) ? time : null;
     }
 
     /// <summary>Adapter of Machine.Specifications (MSpec), which names tests unlike the others.</summary>

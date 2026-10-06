@@ -100,7 +100,14 @@ public sealed class ShadowModeTests : IDisposable
         var reproduction = report.GetProperty("reproduction");
         Assert.Equal(64, reproduction.GetProperty("testDettaSha256").GetString()!.Length);
         Assert.Equal("tests/Shop.Tests/Shop.Tests.csproj", reproduction.GetProperty("maps").EnumerateArray().Single().GetProperty("testProject").GetString());
-        Assert.StartsWith("td affected --base ", reproduction.GetProperty("command").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith("td test --shadow --base ", reproduction.GetProperty("command").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith("td affected --base ", reproduction.GetProperty("explainCommand").GetString(), StringComparison.Ordinal);
+
+        // No solution or project in the root, so dotnet test without a project argument would find nothing to run.
+        var run = report.GetProperty("run");
+        Assert.Equal("per-project", run.GetProperty("kind").GetString());
+        Assert.Contains("no single solution or project", run.GetProperty("fallbackReason").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Ran each test project on its own, one after another, because", stdout.ToString(), StringComparison.Ordinal);
         Assert.Contains("--shadow-classify-budget 45m", reproduction.GetProperty("options").EnumerateArray().Select(static o => o.GetString()));
         var classification = report.GetProperty("classification");
         Assert.Equal(900, classification.GetProperty("rerunTimeoutSeconds").GetDouble());
@@ -202,6 +209,299 @@ public sealed class ShadowModeTests : IDisposable
         Assert.Equal("unclassified", classes["Shop.Tests.DiscountTests"].GetProperty("verdict").GetString());
         Assert.Equal("unclassified", classes["Shop.Tests.BrokenTests"].GetProperty("verdict").GetString());
         Assert.NotEmpty(Directory.GetFiles(results, "*.trx", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void A_solution_runs_as_one_command_and_is_still_compared_and_classified_per_project()
+    {
+        WriteSolutionWithSecondProject();
+        WriteMap(new()
+        {
+            ["Shop.Tests.TaxTests"] = [0],
+            ["Shop.Tests.DiscountTests"] = [],
+            ["Shop.Tests.FlakyTests"] = [],
+            ["Shop.Tests.BrokenTests"] = [],
+        });
+        _repo.Replace("src/Shop/Calc.cs", "net * 0.2m", "net * 0.3m");
+        _repo.Replace("src/Shop/Calc.cs", "price - 1m", "price - 2m");
+        var log = new OrderedLog();
+
+        // No project argument: dotnet test runs the one solution in the root, as the team's own job would.
+        var exit = CliApp.Run(["test", "--shadow", "--log-level", "debug", "--repo", _repo.Root, "--base", "HEAD"], log.Stdout, log.Stderr);
+
+        Assert.True(exit == 3, log.Text);
+        var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"))).RootElement;
+        Assert.Equal(2, report.GetProperty("schema").GetInt32());
+        var run = report.GetProperty("run");
+        Assert.Equal("verbatim", run.GetProperty("kind").GetString());
+        Assert.StartsWith("dotnet test --logger trx --results-directory ", run.GetProperty("command").GetString(), StringComparison.Ordinal);
+        Assert.Equal(1, run.GetProperty("exitCode").GetInt32());
+        Assert.InRange(run.GetProperty("wallSeconds").GetDouble(), 0.1, 3600);
+        Assert.Empty(run.GetProperty("unmappedReports").EnumerateArray());
+
+        // One dotnet test for the full run; the reruns that follow are TestDetta's own, one project at a time.
+        Assert.Single(log.Lines, static l => l.Contains("TestRunner: Running dotnet test", StringComparison.Ordinal));
+
+        var projects = report.GetProperty("projects").EnumerateArray().ToDictionary(static p => p.GetProperty("path").GetString()!);
+        var shop = projects["tests/Shop.Tests/Shop.Tests.csproj"];
+        Assert.Equal("filtered", shop.GetProperty("mode").GetString());
+        Assert.Equal(1, shop.GetProperty("exitCode").GetInt32());
+        Assert.InRange(shop.GetProperty("wallSeconds").GetDouble(), 0.001, 3600);
+        var classes = shop.GetProperty("classes").EnumerateArray().ToDictionary(static c => c.GetProperty("name").GetString()!, static c => c);
+        Assert.Equal("caught", classes["Shop.Tests.TaxTests"].GetProperty("verdict").GetString());
+        Assert.Equal("miss", classes["Shop.Tests.DiscountTests"].GetProperty("verdict").GetString());
+        Assert.Equal("flaky", classes["Shop.Tests.FlakyTests"].GetProperty("verdict").GetString());
+        Assert.Equal("pre-existing", classes["Shop.Tests.BrokenTests"].GetProperty("verdict").GetString());
+        var other = projects["tests/Other.Tests/Other.Tests.csproj"];
+        Assert.Equal("not-affected", other.GetProperty("mode").GetString());
+        Assert.Equal(0, other.GetProperty("exitCode").GetInt32());
+        Assert.False(other.GetProperty("classes").EnumerateArray().Single().GetProperty("selected").GetBoolean());
+        Assert.StartsWith("Would have run 1 of 5 test classes", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
+        Assert.Contains("the whole test run took", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
+
+        // Nothing of the selection before the full run has ended; the analysis's log comes after it, since everything ran.
+        var ended = log.Lines.FindIndex(static l => l.Contains("TestRunner: dotnet test", StringComparison.Ordinal) && l.Contains(" exited with ", StringComparison.Ordinal));
+        Assert.True(ended > 0, log.Text);
+        Assert.DoesNotContain(log.Lines.Take(ended), static l => RevealsSelection(l));
+        Assert.Contains(log.Lines.Skip(ended), static l => l.Contains("] TestSelector:", StringComparison.Ordinal));
+        Assert.True(log.Lines.FindIndex(static l => l.StartsWith("  tests/Shop.Tests/Shop.Tests.csproj: filtered, would have run", StringComparison.Ordinal)) > ended, log.Text);
+        Assert.DoesNotContain("testdetta-shadow", Worktrees(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_single_project_runs_as_given_and_a_partial_filter_shows_decisions_only_for_the_classes_that_ran()
+    {
+        WriteMap(new()
+        {
+            ["Shop.Tests.TaxTests"] = [0],
+            ["Shop.Tests.DiscountTests"] = [],
+            ["Shop.Tests.FlakyTests"] = [],
+            ["Shop.Tests.BrokenTests"] = [],
+        });
+        _repo.Write(".testdetta/flaky-marker", "ran");
+        _repo.Replace("src/Shop/Calc.cs", "price - 1m", "price - 2m");
+        var stdout = new StringWriter();
+
+        var exit = CliApp.Run(
+            ["test", "--shadow", "--shadow-no-classify", "--repo", _repo.Root, "--base", "HEAD", "--", "tests/Shop.Tests/Shop.Tests.csproj", "--filter", "Category!=Broken"],
+            stdout,
+            new StringWriter());
+
+        Assert.True(exit == 3, stdout.ToString());
+        var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"))).RootElement;
+        var run = report.GetProperty("run");
+        Assert.Equal("verbatim", run.GetProperty("kind").GetString());
+        Assert.StartsWith("dotnet test tests/Shop.Tests/Shop.Tests.csproj --filter Category!=Broken --logger trx", run.GetProperty("command").GetString(), StringComparison.Ordinal);
+        var project = report.GetProperty("projects").EnumerateArray().Single();
+        var classes = project.GetProperty("classes").EnumerateArray().Select(static c => c.GetProperty("name").GetString()).ToList();
+        Assert.Equal(["Shop.Tests.DiscountTests", "Shop.Tests.FlakyTests", "Shop.Tests.TaxTests"], classes);
+        Assert.Equal(["Shop.Tests.BrokenTests"], project.GetProperty("notRun").EnumerateArray().Select(static c => c.GetString()));
+        Assert.False(project.TryGetProperty("estimatedFullSeconds", out _));
+        var totals = report.GetProperty("totals");
+        Assert.Equal(3, totals.GetProperty("classes").GetInt32());
+        Assert.Equal(1, totals.GetProperty("notRunClasses").GetInt32());
+        Assert.Contains("1 class(es) the selection knows did not run in this job", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
+
+        // The reproduction needs no license: it is td test --shadow again, with the same arguments.
+        var command = report.GetProperty("reproduction").GetProperty("command").GetString()!;
+        Assert.DoesNotContain("affected", command, StringComparison.Ordinal);
+        Assert.True(CliOptions.TryParse([.. command.Split(' ').Skip(1)], _repo.Root, out var again, out var error), error);
+        Assert.True(again.Test.Shadow);
+        Assert.Equal(["tests/Shop.Tests/Shop.Tests.csproj", "--filter", "Category!=Broken"], again.Test.DotnetTestArguments);
+    }
+
+    [Fact]
+    public void A_filter_that_matches_nothing_reveals_no_decision_and_shadow_mode_reads_no_license()
+    {
+        WriteMap(new()
+        {
+            ["Shop.Tests.TaxTests"] = [0],
+            ["Shop.Tests.DiscountTests"] = [],
+            ["Shop.Tests.FlakyTests"] = [],
+            ["Shop.Tests.BrokenTests"] = [],
+        });
+        _repo.Replace("src/Shop/Calc.cs", "price - 1m", "price - 2m");
+        var read = new List<string>();
+        var home = Path.Combine(_repo.Root, ".testdetta", "home");
+        var host = new CliHost(name =>
+        {
+            lock (read)
+            {
+                read.Add(name);
+            }
+
+            // A license and a refresh setting are there to be read; shadow mode must not look.
+            return name.StartsWith("TESTDETTA_LICENSE", StringComparison.Ordinal) ? "testdetta1.not-a-real-license" : null;
+        }, home);
+        var log = new OrderedLog();
+
+        var exit = CliApp.Run(
+            ["test", "--shadow", "--shadow-no-classify", "--log-level", "debug", "--repo", _repo.Root, "--base", "HEAD", "--", "tests/Shop.Tests/Shop.Tests.csproj", "--filter", "FullyQualifiedName~Nothing"],
+            log.Stdout,
+            log.Stderr,
+            host);
+
+        Assert.True(exit is 0 or 3, log.Text);
+        Assert.Empty(read);
+        Assert.False(Directory.Exists(home));
+        var json = File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"));
+        var report = JsonDocument.Parse(json).RootElement;
+        var project = report.GetProperty("projects").EnumerateArray().Single();
+        Assert.Equal("not-shown", project.GetProperty("mode").GetString());
+        Assert.Empty(project.GetProperty("classes").EnumerateArray());
+        Assert.Equal(4, project.GetProperty("notRun").GetArrayLength());
+        Assert.Equal(0, report.GetProperty("totals").GetProperty("classes").GetInt32());
+        Assert.Equal(0, report.GetProperty("totals").GetProperty("selectedClasses").GetInt32());
+        Assert.DoesNotContain("\"decision\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"evidence\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("filtered", json, StringComparison.Ordinal);
+
+        // Neither the console nor the logs say anything about the selection, before or after the run.
+        Assert.DoesNotContain(log.Lines, static l => RevealsSelection(l));
+        Assert.Contains("the analysis's log is not shown", log.Text, StringComparison.Ordinal);
+
+        // td test without --shadow still checks the license.
+        Assert.Equal(0, CliApp.Run(["test", "--dry-run", "--repo", _repo.Root, "--base", "HEAD"], new StringWriter(), new StringWriter(), host));
+        Assert.Contains("TESTDETTA_LICENSE", read);
+        Assert.Contains("TESTDETTA_LICENSE_REFRESH", read);
+    }
+
+    [Fact]
+    public void Under_the_testing_platform_a_built_solution_runs_as_one_command_with_one_report_option()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        _repo.Write("tests/Shop.Tests/Shop.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="xunit.v3" Version="4.0.1" />
+                <ProjectReference Include="../../src/Shop/Shop.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("Shop.slnx", """<Solution><Project Path="src/Shop/Shop.csproj" /><Project Path="tests/Shop.Tests/Shop.Tests.csproj" /></Solution>""");
+        _repo.Write(".testdetta/flaky-marker", "ran");
+        _repo.Commit("testing platform");
+        WriteMap(new()
+        {
+            ["Shop.Tests.TaxTests"] = [0],
+            ["Shop.Tests.DiscountTests"] = [],
+            ["Shop.Tests.FlakyTests"] = [],
+            ["Shop.Tests.BrokenTests"] = [],
+        });
+        _repo.Replace("src/Shop/Calc.cs", "net * 0.2m", "net * 0.3m");
+        var build = new StringWriter();
+
+        // Built first, as a job that runs dotnet test --no-build does: the report option is read from the build output.
+        Assert.True(new DotnetProcess(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance).Run(["build", "Shop.slnx"], _repo.Root, new Dictionary<string, string>(), build) == 0, build.ToString());
+        var stdout = new StringWriter();
+        var exit = CliApp.Run(["test", "--shadow", "--shadow-no-classify", "--repo", _repo.Root, "--base", "HEAD", "--", "--solution", "Shop.slnx", "--no-build"], stdout, new StringWriter());
+
+        Assert.True(exit == 3, stdout.ToString());
+        var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"))).RootElement;
+        var run = report.GetProperty("run");
+        Assert.Equal("verbatim", run.GetProperty("kind").GetString());
+        Assert.Equal("dotnet test --solution Shop.slnx --no-build --report-xunit-trx", run.GetProperty("command").GetString());
+        var classes = report.GetProperty("projects").EnumerateArray().Single().GetProperty("classes").EnumerateArray()
+            .ToDictionary(static c => c.GetProperty("name").GetString()!, static c => c);
+        Assert.Equal("caught", classes["Shop.Tests.TaxTests"].GetProperty("verdict").GetString());
+        Assert.Equal("unclassified", classes["Shop.Tests.BrokenTests"].GetProperty("verdict").GetString());
+
+        // The reports TestDetta asked for are gone from the build output again.
+        Assert.Empty(Directory.GetFiles(_repo.Root, "*.trx", SearchOption.AllDirectories));
+    }
+
+    /// <summary>A line from the analysis's log or the plan: anything that tells what the selection decided.</summary>
+    private static bool RevealsSelection(string line) =>
+        line.Contains("] TestSelector:", StringComparison.Ordinal)
+        || line.Contains("] CoverageSelection:", StringComparison.Ordinal)
+        || line.Contains("] AnalysisPipeline:", StringComparison.Ordinal)
+        || line.Contains("] ImpactAnalyzer:", StringComparison.Ordinal)
+        || line.Contains("would have run", StringComparison.Ordinal)
+        || line.Contains("affected test project", StringComparison.Ordinal)
+        || line.Contains("Tests to run", StringComparison.Ordinal);
+
+    /// <summary>Adds a solution in the root and a second test project the change does not reach.</summary>
+    private void WriteSolutionWithSecondProject()
+    {
+        _repo.Write("tests/Other.Tests/Other.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Other.Tests/Tests.cs", "using Xunit; namespace Other.Tests; public class OtherTests { [Fact] public void Holds() => Assert.True(true); }");
+        _repo.Write("Shop.slnx", """
+            <Solution>
+              <Project Path="src/Shop/Shop.csproj" />
+              <Project Path="tests/Shop.Tests/Shop.Tests.csproj" />
+              <Project Path="tests/Other.Tests/Other.Tests.csproj" />
+            </Solution>
+            """);
+        _repo.Commit("solution");
+    }
+
+    /// <summary>stdout and stderr as one list of lines in the order they were written.</summary>
+    private sealed class OrderedLog
+    {
+        private readonly List<string> _lines = [];
+
+        public OrderedLog()
+        {
+            Stdout = new LineWriter(this, string.Empty);
+            Stderr = new LineWriter(this, string.Empty);
+        }
+
+        public TextWriter Stdout { get; }
+
+        public TextWriter Stderr { get; }
+
+        public List<string> Lines
+        {
+            get
+            {
+                lock (_lines)
+                {
+                    return [.. _lines];
+                }
+            }
+        }
+
+        public string Text => string.Join('\n', Lines);
+
+        private void Add(string line)
+        {
+            lock (_lines)
+            {
+                _lines.Add(line);
+            }
+        }
+
+        private sealed class LineWriter(OrderedLog log, string prefix) : TextWriter
+        {
+            private readonly System.Text.StringBuilder _pending = new();
+
+            public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
+
+            public override void Write(char value)
+            {
+                lock (_pending)
+                {
+                    if (value == '\n')
+                    {
+                        log.Add(prefix + _pending.ToString().TrimEnd('\r'));
+                        _pending.Clear();
+                        return;
+                    }
+
+                    _pending.Append(value);
+                }
+            }
+        }
     }
 
     private string Worktrees()
@@ -400,6 +700,149 @@ public sealed class ShadowReportTests
         Assert.Contains("`` Evil`[x](http://e)@team ``", writer.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_target_of_the_teams_command_is_found_in_either_runners_spelling()
+    {
+        var directory = Directory.CreateTempSubdirectory("testdetta-target-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(directory, "tests"));
+            var solution = ShadowCommand.Target(["-c", "Release", "Shop.sln", "--filter", "Category!=Slow"], directory);
+            Assert.Equal((ShadowTargetKind.Solution, Path.Combine(directory, "Shop.sln"), 2), (solution.Kind, solution.Path, solution.Index));
+            Assert.Equal(["-c", "Release", "--filter", "Category!=Slow"], solution.Without(["-c", "Release", "Shop.sln", "--filter", "Category!=Slow"]));
+
+            var platform = ShadowCommand.Target(["--solution", "Shop.slnx", "--report-trx"], directory);
+            Assert.Equal((ShadowTargetKind.Solution, 0, 2), (platform.Kind, platform.Index, platform.Length));
+            Assert.Equal(["--report-trx"], platform.Without(["--solution", "Shop.slnx", "--report-trx"]));
+
+            Assert.Equal(ShadowTargetKind.Project, ShadowCommand.Target(["--project", "tests/A.Tests/A.Tests.fsproj"], directory).Kind);
+            Assert.Equal(ShadowTargetKind.Project, ShadowCommand.Target(["tests/A.Tests/A.Tests.csproj"], directory).Kind);
+            Assert.Equal(ShadowTargetKind.Directory, ShadowCommand.Target(["tests"], directory).Kind);
+            Assert.Equal(ShadowTargetKind.Other, ShadowCommand.Target(["bin/A.Tests.dll"], directory).Kind);
+
+            // An option's value is not the target, nor is anything after "--" (run settings).
+            Assert.Equal(ShadowTargetKind.None, ShadowCommand.Target(["--results-directory", "tests", "-c", "Release"], directory).Kind);
+            Assert.Equal(ShadowTargetKind.None, ShadowCommand.Target(["--", "tests"], directory).Kind);
+            Assert.Equal(-1, ShadowCommand.Target([], directory).Index);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void The_projects_of_a_solution_or_filter_are_read_in_every_format()
+    {
+        var directory = Directory.CreateTempSubdirectory("testdetta-solution-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, "Shop.sln"), """
+                Microsoft Visual Studio Solution File, Format Version 12.00
+                Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+                EndProject
+                Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "A.Tests", "tests\A.Tests\A.Tests.csproj", "{BAB3E586-92B8-4144-A876-970840FC9DF4}"
+                EndProject
+                """);
+            File.WriteAllText(Path.Combine(directory, "Shop.slnx"), """<Solution><Folder Name="/tests/"><Project Path="tests/B.Tests/B.Tests.csproj" /></Folder></Solution>""");
+            File.WriteAllText(Path.Combine(directory, "Fast.slnf"), """{ "solution": { "path": "Shop.sln", "projects": [ "tests\\A.Tests\\A.Tests.csproj" ] } }""");
+            string Full(string relative) => Path.GetFullPath(Path.Combine(directory, relative)).Replace('\\', '/');
+
+            Assert.Equal([Full("tests/A.Tests/A.Tests.csproj")], ShadowCommand.Projects(ShadowCommand.Target(["Shop.sln"], directory)));
+            Assert.Equal([Full("tests/B.Tests/B.Tests.csproj")], ShadowCommand.Projects(ShadowCommand.Target(["Shop.slnx"], directory)));
+            Assert.Equal([Full("tests/A.Tests/A.Tests.csproj")], ShadowCommand.Projects(ShadowCommand.Target(["Fast.slnf"], directory)));
+
+            // Two solutions in the directory: dotnet test without an argument stops, so there is nothing to tell.
+            Assert.False(ShadowCommand.FindsOne(directory));
+            Assert.Null(ShadowCommand.Projects(ShadowCommand.Target([], directory)));
+            File.Delete(Path.Combine(directory, "Shop.sln"));
+            Assert.True(ShadowCommand.FindsOne(directory));
+            Assert.Equal([Full("tests/B.Tests/B.Tests.csproj")], ShadowCommand.Projects(ShadowCommand.Target([], directory)));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_report_tells_its_test_assembly_its_times_and_its_outcome()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "testdetta-facts-" + Guid.NewGuid().ToString("N") + ".trx");
+        File.WriteAllText(file, """
+            <TestRun id="1" name="run" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Times creation="2026-10-07T01:31:49.29+03:00" start="2026-10-07T01:31:47.5+03:00" finish="2026-10-07T01:31:49.5+03:00" />
+              <ResultSummary outcome="Failed" />
+              <TestDefinitions>
+                <UnitTest name="X" storage="/repo/tests/a.tests/bin/debug/net10.0/a.tests.dll" id="t1">
+                  <TestMethod codeBase="/repo/tests/A.Tests/bin/Debug/net10.0/A.Tests.dll" className="A.Tests.A1Tests" name="X" />
+                </UnitTest>
+              </TestDefinitions>
+            </TestRun>
+            """);
+        try
+        {
+            var facts = TrxReport.Facts(file)!;
+            Assert.Equal(["/repo/tests/A.Tests/bin/Debug/net10.0/A.Tests.dll"], facts.Assemblies);
+            Assert.Equal(2, (facts.Finish!.Value - facts.Start!.Value).TotalSeconds, 3);
+            Assert.True(facts.Failed);
+            Assert.False((facts with { Outcome = "Completed" }).Failed);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void A_project_none_of_whose_tests_ran_shows_no_decision_anywhere()
+    {
+        var ran = Project("filtered", 10, ("A", true, 2, false), ("B", false, 5, false)) with { NotRun = ["C"] };
+        var hidden = new ShadowProject("tests/B.Tests/B.Tests.csproj", ShadowProject.NotShown, "no test of it ran in this job", 0, 1, true, []) { NotRun = ["Secret.Tests.Kept"] };
+        var result = Result(ran, hidden) with { Run = new ShadowRunInfo(ShadowRunKind.Verbatim, "dotnet test Shop.slnx --logger trx", null, 12, 0) };
+        var path = Path.Combine(Path.GetTempPath(), "testdetta-shadow-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            ShadowReport.WriteJson(result, path);
+            var report = JsonDocument.Parse(File.ReadAllText(path)).RootElement;
+            var totals = report.GetProperty("totals");
+            Assert.Equal(2, totals.GetProperty("classes").GetInt32());
+            Assert.Equal(2, totals.GetProperty("notRunClasses").GetInt32());
+            Assert.Equal(10, totals.GetProperty("fullSeconds").GetDouble());
+            Assert.Equal(12, totals.GetProperty("wallSeconds").GetDouble());
+            var second = report.GetProperty("projects")[1];
+            Assert.Equal("not-shown", second.GetProperty("mode").GetString());
+            Assert.Empty(second.GetProperty("classes").EnumerateArray());
+            Assert.Equal(0, second.GetProperty("selectedSeconds").GetDouble());
+            Assert.Equal("verbatim", report.GetProperty("run").GetProperty("kind").GetString());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        var console = new StringWriter();
+        ShadowReport.WriteConsole(result, console);
+        Assert.Contains("  tests/B.Tests/B.Tests.csproj: not shown, no test of it ran in this job", console.ToString(), StringComparison.Ordinal);
+        Assert.Contains("1 class(es) did not run in this job", console.ToString(), StringComparison.Ordinal);
+        Assert.Contains("the whole test run took 12.0 s", result.Verdict(), StringComparison.Ordinal);
+        Assert.Contains("2 class(es) the selection knows did not run in this job", result.Verdict(), StringComparison.Ordinal);
+        var markdown = WriteMarkdown(result);
+        Assert.Contains("| `tests/B.Tests/B.Tests.csproj` | not shown: `no test of it ran in this job` |", markdown, StringComparison.Ordinal);
+        Assert.Contains("Ran your own command as given, adding only a test report per project: `dotnet test Shop.slnx --logger trx`", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("Secret.Tests.Kept", console + markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_run_that_failed_without_a_failed_test_in_any_report_cannot_be_checked()
+    {
+        var result = Result(Project("filtered", 10, ("A", true, 2, false))) with { Run = new ShadowRunInfo(ShadowRunKind.Verbatim, "dotnet test", null, 5, 1) };
+
+        Assert.True(result.UnexplainedRun);
+        Assert.EndsWith("the test run failed (exit code 1) without a report naming a failed test, so the selection cannot be checked.", result.Verdict(), StringComparison.Ordinal);
+        Assert.False((result with { Run = result.Run! with { ExitCode = 0 } }).UnexplainedRun);
+    }
+
     private static ShadowResult Verdicts(ShadowResult result, ShadowVerdict verdict) => result with
     {
         Projects = [.. result.Projects.Select(p => p with { Classes = [.. p.Classes.Select(c => c.Failed ? c with { Verdict = verdict } : c)] })],
@@ -407,7 +850,7 @@ public sealed class ShadowReportTests
 
     private static ShadowResult Result(params ShadowProject[] projects) => new(true, null, projects, Reproduction(), 1);
 
-    private static ShadowReproduction Reproduction() => new("1.0", null, "origin/main", "abc", "def", [], ["--base origin/main", "--shadow-classify-budget 45m"], "td affected --base abc");
+    private static ShadowReproduction Reproduction() => new("1.0", null, "origin/main", "abc", "def", [], ["--base origin/main", "--shadow-classify-budget 45m"], "td test --shadow --base abc", "td affected --base abc --format json");
 
     private static string WriteMarkdown(ShadowResult result)
     {
