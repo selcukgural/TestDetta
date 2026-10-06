@@ -569,6 +569,41 @@
         "snapshots",
         "cpm"
       ]
+    },
+    {
+      "name": "efcore",
+      "url": "https://github.com/dotnet/efcore.git",
+      "commit": "4ef8d8d3bd92f4b8d74e997ad7cb13ef1f90667b",
+      "branch": "release/11.0-rc1",
+      "framework": "net11.0",
+      "toolchain": { "sdk": "11.0.100-rc.1.26425.128", "runtimes": [] },
+      "synthetic": 30,
+      "tags": [
+        "large",
+        "large-suite",
+        "mtp",
+        "xunit",
+        "arcade",
+        "expression-trees"
+      ],
+      "projects": [
+        "test/EFCore.Sqlite.FunctionalTests/EFCore.Sqlite.FunctionalTests.csproj",
+        "test/EFCore.InMemory.FunctionalTests/EFCore.InMemory.FunctionalTests.csproj",
+        "test/EFCore.Tests/EFCore.Tests.csproj",
+        "test/EFCore.InMemory.Tests/EFCore.InMemory.Tests.csproj",
+        "test/EFCore.Sqlite.Tests/EFCore.Sqlite.Tests.csproj",
+        "test/EFCore.Relational.Tests/EFCore.Relational.Tests.csproj",
+        "test/Microsoft.Data.Sqlite.Tests/Microsoft.Data.Sqlite.Tests.csproj",
+        "test/EFCore.Design.Tests/EFCore.Design.Tests.csproj",
+        "test/EFCore.Proxies.Tests/EFCore.Proxies.Tests.csproj",
+        "test/EFCore.Analyzers.Tests/EFCore.Analyzers.Tests.csproj",
+        "test/EFCore.AspNet.InMemory.FunctionalTests/EFCore.AspNet.InMemory.FunctionalTests.csproj",
+        "test/EFCore.AspNet.Sqlite.FunctionalTests/EFCore.AspNet.Sqlite.FunctionalTests.csproj",
+        "test/dotnet-ef.Tests/dotnet-ef.Tests.csproj",
+        "test/ef.Tests/ef.Tests.csproj",
+        "test/EFCore.ApiBaseline.Tests/EFCore.ApiBaseline.Tests.csproj"
+      ],
+      "notes": "release/11.0-rc1: main needs the .NET 12 alpha runtime. Sqlite + InMemory only: SqlServer, Cosmos, CrossStore and OData tests need a server; the F# and VB functional tests run nothing without SQL Server. ~78k tests, 5.7 min on an M-series Mac (2026-10-06)."
     }
   ]
 }
