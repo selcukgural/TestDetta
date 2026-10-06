@@ -70,6 +70,16 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <p>Append a Markdown summary: each project's result, which classes ran and why, which were skipped, and the recorded test time saved. Point it at <code>$GITHUB_STEP_SUMMARY</code> in GitHub Actions; the action does this for you. See an <a href="/docs/examples/">example</a>.</p>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
 
+<h3 id="shadow"><code>--shadow</code></h3>
+<p>Shadow mode, for trying {{name}} without skipping anything. Every test project runs completely, with your own <code>--</code> arguments, as it would without {{name}}, and the exit code is that run's. A {{name}} error never fails the job: the report then says why it has no shadow result. Afterwards {{name}} compares the run with what it would have selected, and reruns each failed class it would have left out: alone with the change (if it passes, it is flaky or order-dependent), then alone on the base commit in a separate checkout (if it fails there too, the change did not break it; if it passes, it is a <strong>miss</strong>). A class that cannot be rerun counts as a miss until checked. The report gives the verdict first, then every class's decision and outcome, the measured time of the full run next to the part the selection would have run, and what you need to reproduce the selection: the {{name}} version and its SHA-256, the commits, the coverage maps and their hashes, and a <code>td affected</code> command.</p>
+<pre><code>td test --shadow --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="shadow-no-classify"><code>--shadow-no-classify</code></h3>
+<p>Do not rerun the failed classes the selection left out. They are then reported as not classified.</p>
+
+<h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
+<p>Where the JSON report goes. Default: <code>.testdetta/testdetta-shadow.json</code> in the repository.</p>
+
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p>Everything after <code>--</code> is passed to every <code>dotnet test</code> call. Your own <code>--filter</code> is kept: {{name}} joins it with its class filter, so only the selected tests inside your filter run. xUnit v3 trait, method and namespace filters narrow the selection the same way. A filter the runner cannot join with a class filter (an xUnit v3 class or query filter, a TUnit tree-node filter) makes the project run completely under your filter.</p>
 <pre><code>td test -- -c Release --logger trx

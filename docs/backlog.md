@@ -272,7 +272,10 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    see TestDetta select on their own pull requests while everything still runs, with every claim
    measured, explained and reproducible, misses told apart from flaky and pre-existing failures, a
    roll-up over weeks with the statistical bound, and documentation for reviewers. Design and open
-   decisions: docs/design/shadow-mode.md. Not started.
+   decisions: docs/design/shadow-mode.md. Status 2026-10-07: `td test --shadow` with classification and
+   the report, and the Action's `mode: shadow` with the artifact, are built (as-built section of the
+   design). Open: the roll-up (`td shadow report`), the shadow-mode and reviewer pages, replaying real
+   pull request histories before a partner sees it.
 
 Until v1 only misses are fixed. Parked until after v1: narrowing the run-once rules, Microsoft
 code coverage next to recording, per-call third-party callbacks, the precision round (3),

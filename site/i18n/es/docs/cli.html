@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 6a9d880d2ebd -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 8031b5cc3ea9 -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -69,6 +69,16 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <h3 id="summary-file"><code>--summary-file &lt;path&gt;</code></h3>
 <p>Añade un resumen en Markdown: el resultado de cada proyecto, qué clases se ejecutaron y por qué, cuáles se omitieron y el tiempo de prueba registrado que se ahorró. Apúntalo a <code>$GITHUB_STEP_SUMMARY</code> en GitHub Actions; la acción lo hace por ti. Mira un <a href="/docs/examples/">ejemplo</a>.</p>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
+
+<h3 id="shadow"><code>--shadow</code></h3>
+<p>Modo sombra, para probar {{name}} sin omitir nada. Cada proyecto de prueba se ejecuta completo, con sus propios argumentos después de <code>--</code>, igual que sin {{name}}, y el código de salida es el de esa ejecución. Un error de {{name}} nunca hace fallar el trabajo: el informe dice entonces por qué no hay resultado en sombra. Después, {{name}} compara la ejecución con lo que habría seleccionado y vuelve a ejecutar cada clase fallida que habría dejado fuera: sola con el cambio (si pasa, es inestable o depende del orden) y luego sola sobre el commit base en una copia aparte (si también falla allí, el cambio no la rompió; si pasa, es un <strong>fallo no detectado</strong>). Una clase que no se puede volver a ejecutar cuenta como fallo no detectado hasta que se compruebe. El informe da primero el veredicto, luego la decisión y el resultado de cada clase, el tiempo medido de la ejecución completa junto a la parte que habría ejecutado la selección, y lo necesario para reproducir la selección: la versión de {{name}} y su SHA-256, los commits, los mapas de cobertura y sus hashes, y un comando <code>td affected</code>.</p>
+<pre><code>td test --shadow --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="shadow-no-classify"><code>--shadow-no-classify</code></h3>
+<p>No vuelve a ejecutar las clases fallidas que la selección dejó fuera. Se informan entonces como no clasificadas.</p>
+
+<h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
+<p>Dónde se escribe el informe JSON. Valor predeterminado: <code>.testdetta/testdetta-shadow.json</code> en el repositorio.</p>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p>Todo lo que va después de <code>--</code> se pasa a cada llamada a <code>dotnet test</code>. Su propio <code>--filter</code> se conserva: {{name}} lo combina con su filtro de clases, así que solo se ejecutan las pruebas seleccionadas que entran en su filtro. Los filtros de trait, método y espacio de nombres de xUnit v3 acotan la selección de la misma forma. Un filtro que el ejecutor no puede combinar con un filtro de clases (un filtro de clase o de consulta de xUnit v3, un filtro tree-node de TUnit) hace que el proyecto se ejecute completo bajo su filtro.</p>

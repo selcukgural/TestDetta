@@ -6,10 +6,10 @@ branding:
 
 inputs:
   mode:
-    description: "'test' on pull requests (run affected tests), 'record' on the default branch (record coverage maps)."
+    description: "'test' on pull requests (run affected tests), 'shadow' on pull requests while you evaluate TestDetta (run every test, report what the selection would have left out, keep the report as an artifact), 'record' on the default branch (record coverage maps)."
     required: true
   base:
-    description: Branch to compare with in test mode. Defaults to the pull request's base branch.
+    description: Branch to compare with in test and shadow modes. Defaults to the pull request's base branch.
     required: false
     default: ''
   configuration:
@@ -29,23 +29,23 @@ inputs:
     required: false
     default: 'false'
   dotnet-test-args:
-    description: Test mode only. Extra arguments for every dotnet test, separated by spaces.
+    description: Test and shadow modes only. Extra arguments for every dotnet test, separated by spaces.
     required: false
     default: ''
   max-map-age:
-    description: Test mode only. Use the newest coverage map recorded up to this many first-parent commits before the merge base; the changes in between are bridged. 0 uses only a map recorded at the merge base.
+    description: Test and shadow modes only. Use the newest coverage map recorded up to this many first-parent commits before the merge base; the changes in between are bridged. 0 uses only a map recorded at the merge base.
     required: false
     default: '50'
   drift-fallback:
-    description: "Test mode only. When the changes since an older map include a build file, configuration or a global using: 'all' runs the affected test projects completely (safest), 'name' decides them by name (faster, blind to calls made through configuration or reflection)."
+    description: "Test and shadow modes only. When the changes since an older map include a build file, configuration or a global using: 'all' runs the affected test projects completely (safest), 'name' decides them by name (faster, blind to calls made through configuration or reflection)."
     required: false
     default: all
   github-token:
-    description: Test mode only. Token that lists the repository's Actions caches to find the newest map (needs the actions read permission). Without it only a map at the merge base is found.
+    description: Test and shadow modes only. Token that lists the repository's Actions caches to find the newest map (needs the actions read permission). Without it only a map at the merge base is found.
     required: false
     default: ${{ github.token }}
   license:
-    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none. Without a valid license every test runs; the job never fails because of it."
+    description: "Test and shadow modes only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none. Without a valid license every test runs; the job never fails because of it."
     required: false
     default: ''
   working-directory:
@@ -100,7 +100,7 @@ runs:
         cp -R "$RUNNER_TEMP/testdetta-package/tools/net10.0/any/." "$TESTDETTA_OUT/"
 
     - name: Find comparison base
-      if: inputs.mode == 'test'
+      if: inputs.mode == 'test' || inputs.mode == 'shadow'
       id: base
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -130,7 +130,7 @@ runs:
         echo "merge-base=$(git merge-base "origin/$base" HEAD)" >> "$GITHUB_OUTPUT"
 
     - name: Find newest coverage map
-      if: inputs.mode == 'test'
+      if: inputs.mode == 'test' || inputs.mode == 'shadow'
       id: map
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -164,7 +164,7 @@ runs:
         echo "key=$key" >> "$GITHUB_OUTPUT"
 
     - name: Restore coverage map
-      if: inputs.mode == 'test'
+      if: inputs.mode == 'test' || inputs.mode == 'shadow'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.working-directory }}/.testdetta/coverage
@@ -185,6 +185,35 @@ runs:
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
         dotnet "$TESTDETTA" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+
+    # Shadow mode (docs/design/shadow-mode.md): every test runs as without TestDetta and the job's result is
+    # that run's; the report says what the selection would have left out.
+    - name: Run every test in shadow mode
+      if: inputs.mode == 'shadow'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TESTDETTA: ${{ runner.temp }}/testdetta/TestDetta.Cli.dll
+        BASE_REF: ${{ steps.base.outputs.ref }}
+        CONFIGURATION: ${{ inputs.configuration }}
+        EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
+        MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
+        DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
+        TESTDETTA_LICENSE: ${{ inputs.license }}
+        SHADOW_REPORT: ${{ runner.temp }}/testdetta-shadow/testdetta-shadow.json
+      run: |
+        read -r -a extra <<< "$EXTRA_ARGS"
+        dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+
+    # Kept whether the tests passed or not: the roll-up over pull requests reads these artifacts.
+    - name: Keep the shadow report
+      if: always() && inputs.mode == 'shadow'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: testdetta-shadow-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/testdetta-shadow/testdetta-shadow.json
+        if-no-files-found: ignore
+        retention-days: 90
 
     - name: Record coverage map
       if: inputs.mode == 'record'

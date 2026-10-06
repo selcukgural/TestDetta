@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 6a9d880d2ebd -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 8031b5cc3ea9 -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -69,6 +69,16 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <h3 id="summary-file"><code>--summary-file &lt;path&gt;</code></h3>
 <p>Markdown のサマリーを追記します。内容は、各プロジェクトの結果、実行されたクラスとその理由、スキップされたクラス、記録済みのテスト時間のうち節約できた分です。GitHub Actions では <code>$GITHUB_STEP_SUMMARY</code> を指定します（アクションが自動的に行います）。<a href="/docs/examples/">例</a>をご覧ください。</p>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
+
+<h3 id="shadow"><code>--shadow</code></h3>
+<p>何もスキップせずに {{name}} を試すためのシャドウモードです。すべてのテストプロジェクトが、{{name}} を使わない場合と同じように、あなた自身の <code>--</code> 引数で完全に実行され、終了コードはその実行のものになります。{{name}} のエラーでジョブが失敗することはありません。その場合、レポートにシャドウ結果がない理由が記載されます。その後 {{name}} は、実行結果を自分が選択したはずのテストと比較し、除外したはずの失敗クラスをそれぞれ再実行します。まず変更ありで単独実行し（成功すれば不安定または順序依存）、次に別のチェックアウトでベースコミット上で単独実行します（そこでも失敗すれば変更が原因ではなく、成功すれば<strong>見逃し</strong>です）。再実行できなかったクラスは、確認されるまで見逃しとして扱われます。レポートには、まず判定、次に各クラスの判断と結果、完全実行の実測時間と選択が実行したはずの部分の時間の比較、そして選択を再現するために必要な情報（{{name}} のバージョンと SHA-256、コミット、カバレッジマップとそのハッシュ、<code>td affected</code> コマンド）が含まれます。</p>
+<pre><code>td test --shadow --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="shadow-no-classify"><code>--shadow-no-classify</code></h3>
+<p>選択が除外した失敗クラスを再実行しません。その場合、それらは未分類として報告されます。</p>
+
+<h3 id="shadow-report"><code>--shadow-report &lt;path&gt;</code></h3>
+<p>JSON レポートの出力先です。既定値: リポジトリ内の <code>.testdetta/testdetta-shadow.json</code>。</p>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p><code>--</code> の後に指定したものはすべて、各 <code>dotnet test</code> の呼び出しに渡されます。独自の <code>--filter</code> はそのまま生かされます。{{name}} はそれを自身のクラスフィルターと結合するため、選択されたテストのうちフィルターに合うものだけが実行されます。xUnit v3 の trait、method、namespace フィルターも同じように選択を絞り込みます。ランナーがクラスフィルターと結合できないフィルター（xUnit v3 の class フィルターや query フィルター、TUnit の tree-node フィルター）を指定した場合、そのプロジェクトはあなたのフィルターの下ですべて実行されます。</p>

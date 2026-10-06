@@ -105,3 +105,72 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
 5. Shadow mode on TestDetta itself and on corpus repositories' real pull request histories (replaying
    merged pull requests) before any partner sees it.
 6. Later: `td audit`, run-first mode.
+
+## As built (steps 1 and 2, 2026-10-07)
+
+- **CLI** (`ShadowRun`, `ShadowReport`, `CliApp.Shadow`): `td test --shadow [--shadow-no-classify]
+  [--shadow-report <path>]`. Any exception in the analysis or the license check is caught; the full run
+  goes on and the report has `compared: false` with the reason. Without a readable project graph the full
+  run is a plain `dotnet test <args>` in the repository. Every test project runs through `TestRunner`
+  (legacy projects as `td test` runs them) with the user's arguments and a report: VSTest gets `--logger
+  trx` and a results directory unless the user names their own (kept; the run's new `.trx` files are read
+  there); a testing-platform project gets the report option its build output supports (xUnit v3's own,
+  the TRX extension, NUnit's result XML), found with `dotnet msbuild -getProperty:TargetPath`, and none
+  when the user already asks for a TRX report or nothing fits (its failures are then "unexplained").
+- **Classification**: candidates of a project rerun together, inside the user's own filter
+  (`TestFilter.WithinUserFilter`; a filter that cannot be joined leaves them unclassified), with
+  `--no-build`, at most 15 minutes. Classes that pass rerun once more: passing again is flaky ("failed
+  only next to the other tests"), failing is flaky ("passed once and failed once"). Classes that fail
+  alone rerun on the merge base in a detached `git worktree` under the temp folder, built there, at most
+  30 minutes: failing is pre-existing, passing is a miss, no test of it there (a new class) is a miss, a
+  base run that does not build, times out or writes no report leaves them unclassified. The worktree and
+  every report are deleted at the end. Legacy (full MSBuild) projects are not rerun; their left-out
+  failures are unclassified.
+- **Times**: a project's `wallSeconds` is its measured `dotnet test` duration (build included); a class's
+  `seconds` the sum of its tests' durations in the report. The selection's part: everything for `all`,
+  nothing for `skipped` and `not-affected`, and for `filtered` the time outside test classes plus the
+  selected classes' time (all of it when the project had no report).
+- **Action**: `mode: shadow` shares the base and map steps of `test`, runs `td test --shadow` with the
+  report in `$RUNNER_TEMP`, and keeps it as the artifact `testdetta-shadow-<run id>-<attempt>` for 90
+  days, also when the tests failed.
+
+### `testdetta-shadow.json` (schema 1)
+
+```jsonc
+{
+  "schema": 1,
+  "verdict": "Would have run 14 of 212 test classes (6.6%), 1 m 10 s of 18 m 30 s of test time; …",
+  "compared": true,                 // false: no selection, see noResultReason
+  "noResultReason": "…",            // only when compared is false
+  "classified": true,               // false with --shadow-no-classify
+  "analysisSeconds": 4.2,
+  "totals": {
+    "projects": 3, "failedProjects": 1, "classes": 212, "selectedClasses": 14,
+    "fullSeconds": 1110.0, "selectedSeconds": 70.0,
+    "estimatedFullSeconds": 900.0, "estimatedSelectedSeconds": 55.0,   // when maps have timings
+    "caught": 1, "misses": 0, "flaky": 0, "preExisting": 0, "unclassified": 0, "unexplainedProjects": 0
+  },
+  "projects": [{
+    "path": "tests/Shop.Tests/Shop.Tests.csproj",
+    "mode": "filtered",             // all | filtered | skipped | not-affected | unknown
+    "reason": "…", "exitCode": 1, "wallSeconds": 30.5, "selectedSeconds": 4.0,
+    "estimatedFullSeconds": 25.0, "estimatedSelectedSeconds": 3.1,
+    "reported": true,               // false: no test report, failures per class unknown
+    "classes": [{
+      "name": "Shop.Tests.TaxTests", "selected": true,
+      "decision": "Coverage",       // ClassDecisionKind, or not-affected / unknown
+      "evidence": "ran Shop.Calc.Tax, which changed (map 9f3c…)",
+      "seconds": 0.8, "failed": true,
+      "verdict": "caught",          // failed classes only: caught | miss | flaky | pre-existing | unclassified
+      "note": "…"                   // what the reruns showed
+    }]
+  }],
+  "reproduction": {
+    "testDettaVersion": "…", "testDettaSha256": "…", "baseRef": "origin/main",
+    "mergeBase": "…", "head": "…",
+    "maps": [{ "testProject": "…", "commit": "…", "sha256": "…" }],
+    "options": ["--base origin/main", "--max-map-age 50", "--drift-fallback all", "-- -c Release"],
+    "command": "td affected --base <merge base> --max-map-age 50 --drift-fallback all --format json"
+  }
+}
+```
