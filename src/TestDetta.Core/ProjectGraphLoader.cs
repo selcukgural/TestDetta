@@ -290,6 +290,10 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         var node = new ProjectNode(projectPath, projectDir, isTest, references)
         {
             Language = ProjectExtensions[Path.GetExtension(projectPath)],
+            SdkStyle = doc.Root is not { } project
+                       || project.Attribute("Sdk") is not null
+                       || project.Elements().Any(static e => e.Name.LocalName == "Sdk"
+                                                             || (e.Name.LocalName == "Import" && e.Attribute("Sdk") is not null)),
             Imports = inputs.Imports,
             ExternalItems = inputs.ExternalItems,
             HasUnresolvedInputs = inputs.Unresolved,

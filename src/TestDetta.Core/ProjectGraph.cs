@@ -155,6 +155,39 @@ public sealed class ProjectGraph
     public ProjectNode? Find(string path) => _nodes.GetValueOrDefault(path);
 
     /// <summary>
+    /// True when <paramref name="project"/> or a project it references is a legacy (non-SDK) project
+    /// (<see cref="ProjectNode.SdkStyle"/>), which only the full MSBuild builds (docs/design/legacy-projects.md).
+    /// </summary>
+    /// <param name="project">A project of this graph.</param>
+    public bool NeedsFullMsBuild(ProjectNode project)
+    {
+        var seen = new HashSet<string>(Paths.Comparer);
+        var pending = new Stack<ProjectNode>([project]);
+        while (pending.TryPop(out var current))
+        {
+            if (!seen.Add(current.Path))
+            {
+                continue;
+            }
+
+            if (!current.SdkStyle)
+            {
+                return true;
+            }
+
+            foreach (var reference in current.References)
+            {
+                if (Find(reference) is { } node)
+                {
+                    pending.Push(node);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// The project whose directory contains <paramref name="file"/>. When projects are nested, the
     /// innermost one wins. Null when the file is outside every project directory.
     /// </summary>

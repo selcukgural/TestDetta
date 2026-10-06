@@ -41,6 +41,15 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     public ProjectLanguage Language { get; init; } = ProjectLanguage.CSharp;
 
     /// <summary>
+    /// False for a legacy (non-SDK) project file: no <c>Sdk</c> on <c>&lt;Project&gt;</c>, in an
+    /// <c>&lt;Sdk&gt;</c> element or on an <c>&lt;Import&gt;</c>, usually with <c>packages.config</c>.
+    /// Such a project restores and builds with the full MSBuild (<c>MSBuild.exe</c>, Mono's
+    /// <c>msbuild</c>), not <c>dotnet build</c>, and its tests run from its compiled assembly
+    /// (docs/design/legacy-projects.md).
+    /// </summary>
+    public bool SdkStyle { get; init; } = true;
+
+    /// <summary>
     /// Files outside <see cref="Directory"/> that the project compiles or ships, such as
     /// <c>&lt;Compile Include="../Shared/*.cs" /&gt;</c> or the items of a shared <c>.projitems</c>:
     /// normalized absolute paths, possibly with wildcards.

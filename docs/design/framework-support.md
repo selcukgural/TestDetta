@@ -102,6 +102,6 @@ and 7 with Test SDK 17.13), code under test on anything.
   selection treats as unknown (they run).
 - Windows: a CI job (manual, to keep Actions cost down; Windows minutes cost about 1.7x Linux) running
   the Legacy category on .NET Framework without Mono, and `vstest.console.exe`.
-- Legacy (non-SDK) projects with `packages.config`: `dotnet restore` does not restore them; they need
-  `nuget.exe restore`, `msbuild.exe` and `vstest.console.exe` (step 3 above).
+- Legacy (non-SDK) projects with `packages.config`: done 2026-10-06, docs/design/legacy-projects.md (full
+  MSBuild to restore and build, tests from the compiled assembly through VSTest); Windows end to end open.
 - Visual Basic and F#: docs/design/vb-fsharp-support.md.

@@ -1,4 +1,4 @@
-<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: c99815a5c44f -->
+<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: e9fbd22d8e24 -->
 <h1>Uyumluluk</h1>
 <p class="lead">{{name}}'nın neye ihtiyaç duyduğu ve neyle test edildiği. Bu tabloların dışında kalan bir şey desteklenmiyor demek değildir, ancak uçtan uca test edilmemiştir.</p>
 
@@ -9,6 +9,7 @@
     <tr><td>.NET SDK</td><td>{{name}}'nın kendisini .NET 10 SDK çalıştırır. Testleriniz, deponuzun zaten kullandığı SDK ve runner ile çalışmaya devam eder.</td></tr>
     <tr><td>Git geçmişi</td><td>Merge base'in bulunabilmesi için branch'inizin ve hedef branch'inin tam geçmişi. Shallow clone'larla çalışmaz.</td></tr>
     <tr><td>İşletim sistemi</td><td>Linux ve macOS, x64 ve arm64. Windows henüz test edilmedi.</td></tr>
+    <tr><td>Eski tip proje dosyaları</td><td><code>packages.config</code> kullanan SDK olmayan <code>.csproj</code> dosyaları tam MSBuild ile geri yüklenir ve derlenir: Windows'ta Visual Studio ya da Build Tools (<code>vswhere</code> ile bulunur), macOS ve Linux'ta Mono'nun <code>msbuild</code>'i, ya da <code>TESTDETTA_MSBUILD</code>'in gösterdiği çalıştırılabilir dosya. Testleri, derlenmiş assembly'den <code>vstest.console.exe</code>'nin motoru olan VSTest ile çalışır. macOS'ta Mono ile test edildi.</td></tr>
   </tbody>
 </table>
 

@@ -1,4 +1,4 @@
-<!-- title: Kompatibilität; layout: docs; description: Die Test-Frameworks, Test Runner, Sprachen, Betriebssysteme und CI-Systeme, die {{name}} unterstützt.; source: c99815a5c44f -->
+<!-- title: Kompatibilität; layout: docs; description: Die Test-Frameworks, Test Runner, Sprachen, Betriebssysteme und CI-Systeme, die {{name}} unterstützt.; source: e9fbd22d8e24 -->
 <h1>Kompatibilität</h1>
 <p class="lead">Was {{name}} benötigt und womit es getestet wurde. Was nicht in diesen Tabellen steht, ist nicht unbedingt nicht unterstützt, wurde aber nicht durchgängig getestet.</p>
 
@@ -9,6 +9,7 @@
     <tr><td>.NET SDK</td><td>Das .NET 10 SDK führt {{name}} selbst aus. Ihre Tests verwenden weiterhin das SDK und den Test Runner, die Ihr Repository bereits nutzt.</td></tr>
     <tr><td>Git-Historie</td><td>Die vollständige Historie Ihres Branches und seines Ziel-Branches, damit die Merge-Base gefunden werden kann. Mit Shallow Clones funktioniert es nicht.</td></tr>
     <tr><td>Betriebssystem</td><td>Linux und macOS, x64 und arm64. Windows wurde noch nicht getestet.</td></tr>
+    <tr><td>Projektdateien im alten Format</td><td>Nicht-SDK-<code>.csproj</code>-Dateien mit <code>packages.config</code> werden mit dem vollständigen MSBuild wiederhergestellt und gebaut: Visual Studio oder seine Build Tools unter Windows (über <code>vswhere</code> gefunden), das <code>msbuild</code> von Mono unter macOS und Linux oder die ausführbare Datei, die <code>TESTDETTA_MSBUILD</code> nennt. Ihre Tests laufen aus der kompilierten Assembly über VSTest, die Engine von <code>vstest.console.exe</code>. Unter macOS mit Mono getestet.</td></tr>
   </tbody>
 </table>
 

@@ -1,4 +1,4 @@
-<!-- title: Compatibilidad; layout: docs; description: Los frameworks de pruebas, runners, lenguajes, sistemas operativos y sistemas de CI que admite {{name}}.; source: c99815a5c44f -->
+<!-- title: Compatibilidad; layout: docs; description: Los frameworks de pruebas, runners, lenguajes, sistemas operativos y sistemas de CI que admite {{name}}.; source: e9fbd22d8e24 -->
 <h1>Compatibilidad</h1>
 <p class="lead">Qué necesita {{name}} y con qué se ha probado. Lo que no aparece en estas tablas no tiene por qué ser incompatible, pero no se ha probado de extremo a extremo.</p>
 
@@ -9,6 +9,7 @@
     <tr><td>SDK de .NET</td><td>El SDK de .NET 10 ejecuta el propio {{name}}. Tus pruebas siguen usando el SDK y el runner que ya usa tu repositorio.</td></tr>
     <tr><td>Historial de git</td><td>El historial completo de tu rama y de su rama de destino, para poder encontrar la merge base. Los clones superficiales (shallow) no funcionan.</td></tr>
     <tr><td>Sistema operativo</td><td>Linux y macOS, x64 y arm64. Windows todavía no se ha probado.</td></tr>
+    <tr><td>Archivos de proyecto antiguos</td><td>Los <code>.csproj</code> que no son de tipo SDK y usan <code>packages.config</code> se restauran y compilan con el MSBuild completo: Visual Studio o sus Build Tools en Windows (encontrados con <code>vswhere</code>), el <code>msbuild</code> de Mono en macOS y Linux, o el ejecutable que indique <code>TESTDETTA_MSBUILD</code>. Sus pruebas se ejecutan desde el ensamblado compilado con VSTest, el motor de <code>vstest.console.exe</code>. Probado en macOS con Mono.</td></tr>
   </tbody>
 </table>
 

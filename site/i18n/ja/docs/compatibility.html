@@ -1,4 +1,4 @@
-<!-- title: 互換性; layout: docs; description: {{name}} が対応しているテストフレームワーク、テストランナー、言語、オペレーティングシステム、CI システムを説明します。; source: c99815a5c44f -->
+<!-- title: 互換性; layout: docs; description: {{name}} が対応しているテストフレームワーク、テストランナー、言語、オペレーティングシステム、CI システムを説明します。; source: e9fbd22d8e24 -->
 <h1>互換性</h1>
 <p class="lead">{{name}} に必要なものと、動作を確認済みの環境です。これらの表にないものが対応していないとは限りませんが、エンドツーエンドではテストされていません。</p>
 
@@ -9,6 +9,7 @@
     <tr><td>.NET SDK</td><td>{{name}} 自体の実行には .NET 10 SDK を使用します。テストは、リポジトリで現在使用している SDK とテストランナーのまま実行されます。</td></tr>
     <tr><td>Git の履歴</td><td>マージベースを見つけられるよう、ブランチとそのターゲットブランチの完全な履歴が必要です。シャロークローンでは動作しません。</td></tr>
     <tr><td>オペレーティングシステム</td><td>Linux と macOS（x64 と arm64）。Windows はまだテストしていません。</td></tr>
+    <tr><td>旧形式のプロジェクトファイル</td><td><code>packages.config</code> を使う SDK 形式でない <code>.csproj</code> は、完全版の MSBuild で復元とビルドを行います。Windows では Visual Studio またはその Build Tools（<code>vswhere</code> で検出）、macOS と Linux では Mono の <code>msbuild</code>、または <code>TESTDETTA_MSBUILD</code> が指す実行ファイルです。テストはコンパイル済みアセンブリから、<code>vstest.console.exe</code> のエンジンである VSTest で実行します。macOS の Mono でテスト済みです。</td></tr>
   </tbody>
 </table>
 

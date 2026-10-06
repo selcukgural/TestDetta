@@ -4,6 +4,15 @@ Work agreed on but not started, in the order we plan to take it. Reliability and
 come first: the evaluation corpus and every finding there before anything below, and features
 that report numbers (value reporting) only once the numbers are proven right.
 
+## Later: Windows (owner, 2026-10-06: noted, to do later)
+
+- A Windows CI job (manual or weekly; Windows minutes cost about 1.7x Linux) that runs the `Legacy`
+  test category on .NET Framework without Mono, and a corpus entry recorded on Windows.
+- NUnit 2 (NUnitTestAdapter 2.3.0) records no class on macOS/Mono: its test AppDomain is not unloaded
+  before the host exits. Check on Windows (docs/design/framework-support.md, "Open").
+- `msbuild.exe` from Visual Studio / Build Tools and `vstest.console.exe` end to end on Windows, once
+  legacy project support (packages.config, non-SDK projects) is in.
+
 ## Now: evaluation corpus, round 1
 
 - Finish the queue in `eval/corpus.json` (sequential, one repository at a time), fix what each

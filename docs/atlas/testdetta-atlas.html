@@ -485,7 +485,7 @@ const CH_RECORD = {
       input: "<code>dotnet build &lt;proj&gt; -c Debug [-f fw]</code>; <code>dotnet msbuild -getProperty:TargetPath -getProperty:TargetFrameworks</code>",
       output: "<code>TargetPath</code> = <code>…/bin/Debug/net10.0/Calc.Tests.dll</code>",
       purpose: "Ölçülecek dll'leri üretmek. Derleme başarısızsa hatalar <code>ErrorCollectingWriter</code> ile toplanıp <code>InvalidOperationException</code> atılır.",
-      body: "<p>Birden çok framework'lü projede bu makinede çalışabilen ilk framework kaydedilir (<code>RecordingFramework</code>: .NET Framework yalnız Windows'ta); <code>--no-build</code> ile mevcut çıktı kullanılır, yoksa hata.</p>",
+      body: "<p>Eski tip (SDK olmayan, <code>packages.config</code>) proje ya da onun referans verdiği eski tip bir proje varsa <code>FullMsBuild</code> geri yükleme ve derlemeyi tam MSBuild ile yapar (<code>TESTDETTA_MSBUILD</code>, Windows'ta <code>vswhere</code>, yoksa PATH'teki <code>msbuild</code>); testler <code>dotnet test &lt;TargetPath&gt;</code> ile derlenmiş dll'den koşar.</p><p>Birden çok framework'lü projede bu makinede çalışabilen ilk framework kaydedilir (<code>RecordingFramework</code>: .NET Framework yalnız Windows'ta); <code>--no-build</code> ile mevcut çıktı kullanılır, yoksa hata.</p>",
     },
     {
       title: "Enstrümantasyondan önce PDB'ler okunur", nodes: ["build", "pre"], edges: ["p"],

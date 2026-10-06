@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using TestDetta.Core;
+using TestDetta.Coverage;
 
 namespace TestDetta.Cli;
 
@@ -54,6 +55,16 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
     private TestRunResult RunWithFallback(TestInvocation invocation, string workingDirectory, TextWriter stdout)
     {
         var stopwatch = Stopwatch.StartNew();
+        if (invocation.LegacyConfiguration is not null)
+        {
+            if (PrepareLegacy(invocation, workingDirectory, stdout) is not { } prepared)
+            {
+                return new TestRunResult(invocation, 1, stopwatch.Elapsed, RanUnfiltered: false);
+            }
+
+            invocation = prepared;
+        }
+
         var (exitCode, matchedNothing, notATestProject) = Run(invocation.Arguments, workingDirectory, stdout);
         if (notATestProject)
         {
@@ -75,6 +86,64 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         var unfiltered = WithoutFilter(invocation.Arguments);
         (exitCode, _, _) = Run(unfiltered, workingDirectory, stdout);
         return new TestRunResult(invocation, exitCode, stopwatch.Elapsed, RanUnfiltered: true);
+    }
+
+    /// <summary>
+    /// Builds a legacy test project with the full MSBuild (unless <c>--no-build</c>) and puts its compiled
+    /// assembly in place of the project path, which <c>dotnet test</c> then runs (docs/design/legacy-projects.md).
+    /// Null, after saying why, when no MSBuild is found or the build fails.
+    /// </summary>
+    /// <param name="invocation">A legacy invocation.</param>
+    /// <param name="workingDirectory">Directory the processes run in.</param>
+    /// <param name="stdout">Receives the build output.</param>
+    private TestInvocation? PrepareLegacy(TestInvocation invocation, string workingDirectory, TextWriter stdout)
+    {
+        var project = invocation.Selection.Project.Path;
+        var configuration = invocation.LegacyConfiguration!;
+        if (!invocation.NoBuild)
+        {
+            if (FullMsBuild.Locate() is not { } msbuild)
+            {
+                stdout.WriteLine($"td: {Path.GetFileName(project)} is a legacy (non-SDK) project or references one, which builds only with the full MSBuild: "
+                                 + $"install Visual Studio or its Build Tools (Windows) or Mono (macOS, Linux), or set {FullMsBuild.Variable}.");
+                return null;
+            }
+
+            var repoRoot = Path.GetDirectoryName(project)!;
+            for (var directory = repoRoot; directory is not null; directory = Path.GetDirectoryName(directory))
+            {
+                if (System.IO.Directory.Exists(Path.Combine(directory, ".git")) || File.Exists(Path.Combine(directory, ".git")))
+                {
+                    repoRoot = directory;
+                    break;
+                }
+            }
+
+            if (new FullMsBuild(logger, msbuild).Build(repoRoot, project, configuration, stdout) is var built and not 0)
+            {
+                stdout.WriteLine($"td: building {Path.GetFileName(project)} with {msbuild} failed with exit code {built}.");
+                return null;
+            }
+        }
+
+        var targetPath = new DotnetProcess(logger).Capture(["msbuild", project, $"-p:Configuration={configuration}", "-getProperty:TargetPath"], workingDirectory).Trim();
+        var arguments = invocation.Arguments.ToList();
+        arguments[1] = targetPath;
+
+        // Outside Windows a .NET Framework test host runs on Mono, where test frameworks that keep an
+        // AppDomain of their own (xUnit v2's adapter) fail across it; inline run settings turn it off
+        // and add to any settings the arguments name.
+        if (!OperatingSystem.IsWindows())
+        {
+            if (!arguments.Contains("--"))
+            {
+                arguments.Add("--");
+            }
+
+            arguments.AddRange(["RunConfiguration.DisableAppDomain=true", "xUnit.AppDomain=denied"]);
+        }
+
+        return invocation with { Arguments = arguments };
     }
 
     /// <summary>Runs dotnet once, forwarding stdout and stderr, and reports whether VSTest said the filter matched nothing.</summary>

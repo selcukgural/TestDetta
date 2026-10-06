@@ -5,7 +5,8 @@ namespace TestDetta.Coverage;
 
 /// <summary>Runs the <c>dotnet</c> executable for builds, property queries and test runs.</summary>
 /// <param name="logger">Receives every command line and exit code.</param>
-internal sealed partial class DotnetProcess(ILogger logger)
+/// <param name="executable">Another program to run the same way, such as the full MSBuild (<see cref="FullMsBuild"/>); null for dotnet.</param>
+internal sealed partial class DotnetProcess(ILogger logger, string? executable = null)
 {
     /// <summary>
     /// How long the output of an exited process is still read. Its end normally arrives at once; a
@@ -278,7 +279,7 @@ internal sealed partial class DotnetProcess(ILogger logger)
     /// <exception cref="InvalidOperationException">The process could not be started.</exception>
     private Process Start(IReadOnlyList<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment)
     {
-        var psi = new ProcessStartInfo(Executable())
+        var psi = new ProcessStartInfo(executable ?? Executable())
         {
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
@@ -288,6 +289,18 @@ internal sealed partial class DotnetProcess(ILogger logger)
         foreach (var argument in arguments)
         {
             psi.ArgumentList.Add(argument);
+        }
+
+        // The full MSBuild must not take the .NET SDK's MSBuild for its own: a dotnet that started this
+        // process (dotnet test, dotnet tool) passes these on, and Mono's msbuild then loads the SDK's
+        // NuGet tasks and fails.
+        if (executable is not null)
+        {
+            foreach (var key in psi.Environment.Keys.Where(static k =>
+                         k.StartsWith("MSBuild", StringComparison.OrdinalIgnoreCase) || k.Equals("MSBUILD_EXE_PATH", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                psi.Environment.Remove(key);
+            }
         }
 
         foreach (var (key, value) in environment)

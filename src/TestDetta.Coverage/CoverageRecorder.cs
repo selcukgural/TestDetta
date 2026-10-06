@@ -81,10 +81,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             build.AddRange(["-f", targetFramework]);
         }
 
+        // A legacy (non-SDK) project, or one it references, restores and builds only with the full
+        // MSBuild; its tests then run from the compiled assembly (docs/design/legacy-projects.md).
+        var legacy = request.Graph.NeedsFullMsBuild(request.TestProject);
         if (!request.Options.NoBuild)
         {
             var errors = new ErrorCollectingWriter(output);
-            var buildExit = dotnet.Run(build, runDirectory, new Dictionary<string, string>(), errors);
+            var buildExit = legacy
+                ? LegacyBuilder(request).Build(root, project, request.Configuration, errors)
+                : dotnet.Run(build, runDirectory, new Dictionary<string, string>(), errors);
             if (buildExit != 0)
             {
                 var reason = errors.Errors.Count == 0 ? string.Empty : ": " + string.Join(" / ", errors.Errors);
@@ -122,7 +127,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var instrumenter = new AssemblyInstrumenter(_logger);
         var testAssemblies = new HashSet<string>(StringComparer.Ordinal) { targetPath };
         var instrumentation = instrumenter.Instrument(assemblies, testAssemblies, Path.Combine(work, "backup"));
-        var mode = location.Mode;
+        var mode = legacy ? DotnetTestMode.VSTest : location.Mode;
         RuntimeDeployment? deployment = null;
 
         try
@@ -133,7 +138,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // collector: xUnit v3 runs tests in the test executable, where no collector loads, and old
             // test hosts (Microsoft.NET.Test.Sdk 16) do not load the collector at all.
             deployment = new RuntimeDeployment(targetPath);
-            var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework), work);
+            var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework) { Legacy = legacy }, work);
             LogMode(project, mode);
 
             // Told by the runner's assembly in the output, which also catches a framework the project
@@ -169,7 +174,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 LogSequentialCrashed(project);
                 var parallel = Path.Combine(work, "parallel");
                 Directory.CreateDirectory(parallel);
-                var parallelArguments = TestArguments(new TestRun(request, mode, targetPath, framework, SuiteParallelism: true), parallel);
+                var parallelArguments = TestArguments(new TestRun(request, mode, targetPath, framework, SuiteParallelism: true) { Legacy = legacy }, parallel);
                 runs = RunShards([[]], new ShardContext(request, mode, runDirectory, outputDirectory, instrumentation, parallel, SuiteParallelism: true), parallelArguments, synchronizedOutput);
                 ThrowIfTimedOut(runs, project, request);
                 suiteParallelism = true;
@@ -266,7 +271,20 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="TargetPath">Compiled test assembly.</param>
     /// <param name="Framework">Target framework to pass, for a multi-targeted project; otherwise null.</param>
     /// <param name="SuiteParallelism">True to let the suite run its tests in parallel, as it normally does.</param>
-    private sealed record TestRun(RecordRequest Request, DotnetTestMode Mode, string TargetPath, string? Framework, bool SuiteParallelism = false);
+    private sealed record TestRun(RecordRequest Request, DotnetTestMode Mode, string TargetPath, string? Framework, bool SuiteParallelism = false)
+    {
+        /// <summary>True when the tests run from the compiled assembly of a legacy project (<see cref="FullMsBuild"/>).</summary>
+        public bool Legacy { get; init; }
+    }
+
+    /// <summary>The full MSBuild for a legacy project, or an error that says how to provide one.</summary>
+    /// <param name="request">What is being recorded.</param>
+    private FullMsBuild LegacyBuilder(RecordRequest request) =>
+        FullMsBuild.Locate() is { } msbuild
+            ? new FullMsBuild(_logger, msbuild)
+            : throw new InvalidOperationException(
+                $"{Path.GetFileName(request.TestProject.Path)} is a legacy (non-SDK) project or references one, which builds only with the full MSBuild: "
+                + $"install Visual Studio or its Build Tools (Windows) or Mono (macOS, Linux), or set {FullMsBuild.Variable} to an MSBuild executable.");
 
     /// <summary>
     /// <c>dotnet test</c> arguments shared by all shards. Tests must run one at a time: VSTest and the
@@ -277,9 +295,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     private static List<string> TestArguments(TestRun run, string work)
     {
         var project = run.Request.TestProject.Path;
-        List<string> arguments = run.Mode == DotnetTestMode.TestingPlatform
-            ? ["test", "--project", project, "--no-build", "-c", run.Request.Configuration]
-            : ["test", project, "--no-build", "-c", run.Request.Configuration];
+        List<string> arguments = run.Legacy ? ["test", run.TargetPath]
+            : run.Mode == DotnetTestMode.TestingPlatform
+                ? ["test", "--project", project, "--no-build", "-c", run.Request.Configuration]
+                : ["test", project, "--no-build", "-c", run.Request.Configuration];
 
         // One test at a time: code outside every test flow goes to the class entered last. xUnit v3
         // and TUnit under the testing platform take their own option; TUnit runs no test at all when
@@ -306,7 +325,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: run.Mode == DotnetTestMode.VSTest, sequential: true, RuntimeDeployment.TrackerFor(run.TargetPath))]);
         }
 
-        if (run.Framework is not null)
+        if (run.Framework is not null && !run.Legacy)
         {
             arguments.AddRange(["-f", run.Framework]);
         }
