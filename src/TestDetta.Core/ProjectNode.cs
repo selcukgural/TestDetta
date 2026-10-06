@@ -6,10 +6,10 @@ public enum ProjectLanguage
     /// <summary><c>.csproj</c>: analysed down to members.</summary>
     CSharp,
 
-    /// <summary><c>.fsproj</c>: TestDetta cannot read its code, so its impact is traced at project level only.</summary>
+    /// <summary><c>.fsproj</c>: analysed down to members through the F# compiler service.</summary>
     FSharp,
 
-    /// <summary><c>.vbproj</c>: TestDetta cannot read its code, so its impact is traced at project level only.</summary>
+    /// <summary><c>.vbproj</c>: analysed down to members, names compared ignoring case.</summary>
     VisualBasic,
 }
 

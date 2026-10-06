@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using TestDetta.Core;
+using VB = Microsoft.CodeAnalysis.VisualBasic.Syntax;
 
 namespace TestDetta.Eval;
 
@@ -137,7 +138,21 @@ internal static class TargetSampler
                 continue;
             }
 
-            var root = DeclarationWalker.Parse(SourceText.From(File.ReadAllText(file)));
+            var text = File.ReadAllText(file);
+            if (FSharpSource.IsSource(file))
+            {
+                AddFSharp(file, text, candidates);
+                continue;
+            }
+
+            if (SourceLanguage.For(file) is VisualBasicLanguage)
+            {
+                var owner = graph.ResolveFile(file).First(static o => o.Role == FileRole.Source).Project;
+                AddVisualBasic(file, text, owner.RootNamespace, candidates);
+                continue;
+            }
+
+            var root = DeclarationWalker.Parse(SourceText.From(text));
             foreach (var declaration in DeclarationWalker.Collect(root).Values)
             {
                 if (withFields && FieldEdit(file, declaration) is { } field)
@@ -151,22 +166,132 @@ internal static class TargetSampler
                     continue;
                 }
 
-                var key = (member, false);
-                var edits = Edits(file, (Microsoft.CodeAnalysis.CSharp.Syntax.MemberDeclarationSyntax)declaration.Node);
-                candidates.TryGetValue(key, out var existing);
-                if (candidates.ContainsKey(key) && existing is null)
-                {
-                    continue;
-                }
-
-                candidates[key] = edits is null ? null : [.. existing ?? [], .. edits];
+                Merge(candidates, member, Edits(file, (Microsoft.CodeAnalysis.CSharp.Syntax.MemberDeclarationSyntax)declaration.Node));
             }
         }
 
         return candidates;
     }
 
-    /// <summary>True for a non-test C# project that some test project depends on.</summary>
+    /// <summary>Adds one declaration's edits to its member's; a member with code that cannot be edited stays null.</summary>
+    /// <param name="candidates">Members so far.</param>
+    /// <param name="member">The member as compiled code names it.</param>
+    /// <param name="edits">The declaration's edits, or null.</param>
+    private static void Merge(Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> candidates, CoveredMethod member, List<SourceEdit>? edits)
+    {
+        var key = (member, false);
+        if (candidates.TryGetValue(key, out var existing) && existing is null)
+        {
+            return;
+        }
+
+        candidates[key] = edits is null ? null : [.. existing ?? [], .. edits];
+    }
+
+    /// <summary>
+    /// The functions, methods and properties with code of an F# file, each edited by piping its body
+    /// through <c>id</c> at its end: a token change inside the member that leaves the lines above and
+    /// the indentation alone. Inline members are left out (their code is compiled into the callers, so
+    /// the mutant could not break them), and so are constructors and auto-properties.
+    /// </summary>
+    /// <param name="file">Normalized file path.</param>
+    /// <param name="text">File content.</param>
+    /// <param name="candidates">Members so far; updated in place.</param>
+    private static void AddFSharp(string file, string text, Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> candidates)
+    {
+        if (FSharpSource.Parse(text, file, []) is not { } parsed)
+        {
+            return;
+        }
+
+        foreach (var declaration in FSharpSource.Collect(parsed, file, text).Values)
+        {
+            if (declaration is not { MemberName: { } memberName, IsInline: false, Body: { } body }
+                || DeclarationWalker.CompiledNames(memberName) is not [var name]
+                || name.StartsWith('.'))
+            {
+                continue;
+            }
+
+            Merge(candidates, new CoveredMethod(declaration.TypeName, name), [new SourceEdit(file, Offset(text, body.EndLine, body.EndColumn), " |> id")]);
+        }
+    }
+
+    /// <summary>The character offset of a 1-based line and 0-based column.</summary>
+    /// <param name="text">File content.</param>
+    /// <param name="line">Line, 1-based.</param>
+    /// <param name="column">Column, 0-based.</param>
+    private static int Offset(string text, int line, int column)
+    {
+        var start = 0;
+        for (var current = 1; current < line; current++)
+        {
+            start = text.IndexOf('\n', start) + 1;
+        }
+
+        return start + column;
+    }
+
+    /// <summary>
+    /// The methods, constructors, properties and events of a Visual Basic file, each block edited by an
+    /// empty <c>If False Then</c> block after its first line; members without code (<c>MustOverride</c>,
+    /// interface members) get no edit, auto-properties make the member unusable.
+    /// </summary>
+    /// <param name="file">Normalized file path.</param>
+    /// <param name="text">File content.</param>
+    /// <param name="rootNamespace">Root namespace of the project compiling the file.</param>
+    /// <param name="candidates">Members so far; updated in place.</param>
+    private static void AddVisualBasic(string file, string text, string rootNamespace, Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> candidates)
+    {
+        var language = VisualBasicLanguage.Instance;
+        foreach (var declaration in language.Collect(language.Parse(SourceText.From(text), []), rootNamespace).Values)
+        {
+            if (declaration.MemberName is not { } memberName)
+            {
+                continue;
+            }
+
+            List<SourceEdit>? edits;
+            switch (declaration.Node)
+            {
+                case VB.MethodBlockSyntax or VB.ConstructorBlockSyntax:
+                    edits = [VisualBasicEdit(file, (VB.MethodBlockBaseSyntax)declaration.Node)];
+                    break;
+                case VB.PropertyBlockSyntax property:
+                    edits = [.. property.Accessors.Select(a => VisualBasicEdit(file, a))];
+                    break;
+                case VB.EventBlockSyntax @event:
+                    edits = [.. @event.Accessors.Select(a => VisualBasicEdit(file, a))];
+                    break;
+                case VB.MethodStatementSyntax or VB.PropertyStatementSyntax when declaration.Node.Parent is VB.InterfaceBlockSyntax
+                                                                                 || VisualBasicLanguage.Modifiers(declaration.Node).Any(Microsoft.CodeAnalysis.VisualBasic.SyntaxKind.MustOverrideKeyword):
+                    edits = [];
+                    break;
+                case VB.PropertyStatementSyntax:
+                    // An auto-property still compiles to accessors the mutant would break.
+                    edits = null;
+                    break;
+                default:
+                    continue;
+            }
+
+            var name = memberName.StartsWith(".ctor", StringComparison.Ordinal) ? ".ctor"
+                : DeclarationWalker.CompiledNames(memberName) is [var single] && !single.StartsWith("op_", StringComparison.Ordinal) ? single
+                : null;
+            if (name is not null)
+            {
+                Merge(candidates, new CoveredMethod(declaration.TypeName, name), edits);
+            }
+        }
+    }
+
+    /// <summary>An empty <c>If False Then</c> block after a Visual Basic block's first line.</summary>
+    /// <param name="file">Normalized file path.</param>
+    /// <param name="block">A method, constructor or accessor block.</param>
+    private static SourceEdit VisualBasicEdit(string file, VB.MethodBlockBaseSyntax block) =>
+        new(file, block.BlockStatement.Span.End, "\nIf False Then\nEnd If");
+
+    /// <summary>True for a non-test project (C#, Visual Basic or F#) that some test project depends on.</summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="project">Owner of a file.</param>
     /// <param name="testProjects">Paths of all test projects.</param>
@@ -176,7 +301,7 @@ internal static class TargetSampler
         if (!cache.TryGetValue(project.Path, out var tested))
         {
             tested = !project.IsTestProject
-                     && project.Language == ProjectLanguage.CSharp
+                     && project.Language is ProjectLanguage.CSharp or ProjectLanguage.VisualBasic or ProjectLanguage.FSharp
                      && graph.WithDependents([project.Path]).Overlaps(testProjects);
             cache[project.Path] = tested;
         }

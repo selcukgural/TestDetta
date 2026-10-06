@@ -89,6 +89,9 @@ internal sealed record FsDeclaration(string TypeName, string RuntimeTypeName, st
     /// <summary>For a member: code may run it without naming it (override, interface, initializer, attribute).</summary>
     public bool MayBeCalledImplicitly { get; init; }
 
+    /// <summary>For a function or member with code: its body expression (the evaluation edits it).</summary>
+    public FsSpan? Body { get; init; }
+
     /// <summary>For a member: one of its attributes is a test attribute.</summary>
     public bool HasTestAttribute { get; init; }
 }
@@ -377,6 +380,7 @@ internal static partial class FSharpSource
                         Add(result, $"{typeName}::{identity}", new FsDeclaration(typeName, runtimeName, identity, span, [], AttributeSpans(binding.attributes))
                         {
                             IsInline = binding.isInline,
+                            Body = isFunction ? FsSpan.Of(binding.expr.Range) : null,
                             IsPrivate = Accessibility(binding.headPat) is { IsPrivate: true },
                             // Module members are reached through an open, without the module's name.
                             IsStatic = false,
@@ -490,6 +494,7 @@ internal static partial class FSharpSource
                 Add(result, $"{typeName}::{memberName}", new FsDeclaration(typeName, runtimeName, memberName, span, [], AttributeSpans(binding.attributes))
                 {
                     IsInline = binding.isInline,
+                    Body = FsSpan.Of(binding.expr.Range),
                     IsPrivate = Accessibility(binding.headPat) is { IsPrivate: true },
                     IsStatic = flags is { IsInstance: false } && !memberName.StartsWith('.'),
                     MayBeCalledImplicitly = implementsInterface || flags is { IsOverrideOrExplicitImpl: true } || !binding.attributes.IsEmpty,

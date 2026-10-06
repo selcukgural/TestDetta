@@ -88,7 +88,6 @@ records, name tracing, coverage and the selection rules stay shared.
   selection by name from C# and from VB in another case) and `VisualBasicRecordingTests` (a VB library
   under VB xUnit tests recorded for real: a changed member selects the classes that ran it, through a
   module too, by coverage).
-- Not yet: the evaluation's sampler changes C# members only, so no corpus measurement of VB.
 
 ## As built: F# (2026-10-06)
 
@@ -125,4 +124,8 @@ records, name tracing, coverage and the selection rules stay shared.
   coverage; a changed inline function its callers by name).
 - Cost: the CLI package carries FSharp.Compiler.Service and FSharp.Core (about 21 MB); the compilers' satellite
   resource assemblies are left out of it (`SatelliteResourceLanguages=en`).
-- Not yet: the evaluation's sampler changes C# members only, so no corpus measurement of F# or VB.
+- Evaluation: the sampler takes Visual Basic and F# members too. A Visual Basic block gets an empty
+  `If False Then` block after its first line; an F# function, method or property gets ` |> id` after its
+  body (a token change that keeps every line's indentation). F# inline members, values, constructors
+  and auto-properties are not sampled. `TargetSamplerTests` checks that the analysis attributes each
+  edit to the sampled member.
