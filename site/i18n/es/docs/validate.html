@@ -1,4 +1,4 @@
-<!-- title: Valídalo en tu repositorio; layout: docs; description: Comprueba en tu propio código que {{name}} selecciona todas las pruebas que rompen tus cambios, antes de confiar en él.; source: ffcff100ded8 -->
+<!-- title: Valídalo en tu repositorio; layout: docs; description: Comprueba en tu propio código que {{name}} selecciona todas las pruebas que rompen tus cambios, antes de confiar en él.; source: c8f6a5ee441c -->
 <h1>Valídalo en tu repositorio</h1>
 <p class="lead">Nuestra evaluación se hace sobre bibliotecas de código abierto. Tu código tiene sus propios patrones, así que comprueba {{name}} con él antes de dejar que decida qué se ejecuta. Lleva un par de semanas de pull requests normales y no cambia nada para tu equipo.</p>
 
@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Sustituye el paso de pruebas completo por <code>td test</code>, o por el modo <code>test</code> de la acción. Sigue registrando en la rama predeterminada: allí se ejecutan todas las pruebas, así que cualquier cosa que una selección pudiera ocultar se detecta antes del lanzamiento.</p>
 
 <h2 id="how-we-test">Cómo lo probamos nosotros</h2>
-<p>La misma comprobación se ejecuta a gran escala en {{corpusRepositories}} repositorios de código abierto: los miembros se modifican de uno en uno y cada clase de prueba que falla tiene que haber sido seleccionada. De {{corpusFailingChanges}} cambios que rompieron una prueba, se pasaron por alto {{corpusMissed}}, y cada uno se corrigió con una prueba que falla sin la corrección. <a href="/docs/examples/#corpus">El corpus en cifras</a>.</p>
+<p>La misma comprobación se ejecuta a gran escala en {{corpusRepositories}} repositorios de código abierto: los miembros se modifican de uno en uno y cada clase de prueba que falla tiene que haber sido seleccionada. De {{corpusFailingChanges}} cambios que rompieron una prueba en la última ronda, se pasaron por alto {{corpusMissed}}; cada prueba pasada por alto en rondas anteriores se corrigió con una prueba que falla sin la corrección. <a href="/docs/examples/#corpus">El corpus en cifras</a>.</p>
 
 <h2 id="related">Páginas relacionadas</h2>
 <ul>

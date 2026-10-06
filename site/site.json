@@ -15,9 +15,9 @@
   "trialDays": "30",
   "refundDays": "14",
   "checkoutUrl": "#checkout",
-  "corpusRepositories": "41",
-  "corpusFailingChanges": "2,941",
-  "corpusMissed": "3",
+  "corpusRepositories": "40",
+  "corpusFailingChanges": "2,422",
+  "corpusMissed": "0",
   "legalUpdated": "2026-10-04",
-  "corpusMedianShare": "28%"
+  "corpusMedianShare": "30%"
 }

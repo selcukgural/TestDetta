@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 92443c495dea -->
+<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 54f9316cd2f6 -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -68,59 +68,59 @@
       <div><strong data-count>{{corpusRepositories}}</strong><span>件のリポジトリ。フレームワークもビルドの癖もそれぞれ異なります</span></div>
       <div><strong data-count>{{corpusFailingChanges}}</strong><span>件の、少なくとも 1 つのテストを失敗させた変更</span></div>
       <div><strong data-count>{{corpusMedianShare}}</strong><span>中央値のリポジトリで、1 回の変更あたりに実行されたテストクラスの割合</span></div>
-      <div><strong data-count>{{corpusMissed}}</strong><span>件の見逃し。それぞれ、修正なしでは失敗するテストを添えて修正済み</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>件の見逃し（最新ラウンド）。過去の見逃しは、それぞれ修正なしでは失敗するテストを添えて修正済み</span></div>
     </div>
     <figure class="dist" data-reveal>
 <svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
 <title id="dist-title">1 回の変更あたりに実行されたテストクラスの割合（リポジトリごとに 1 本の棒）</title>
-<desc id="dist-desc">評価コーパスの第 1 ラウンド：40 件のオープンソースのリポジトリそれぞれについて、1 つのメンバーへの変更に対して {{name}} が選択したテストクラスの平均の割合を、小さい順に並べたものです。中央値は {{corpusMedianShare}} です。</desc>
+<desc id="dist-desc">評価コーパスの最新ラウンド：40 件のオープンソースのリポジトリそれぞれについて、1 つのメンバーへの変更に対して {{name}} が選択したテストクラスの平均の割合を、小さい順に並べたものです。中央値は {{corpusMedianShare}} です。</desc>
 <line class="grid" x1="36" x2="720" y1="150.0" y2="150.0"/><text class="axis" x="30" y="154.0" text-anchor="end">0%</text>
 <line class="grid" x1="36" x2="720" y1="80.0" y2="80.0"/><text class="axis" x="30" y="84.0" text-anchor="end">50%</text>
 <line class="grid" x1="36" x2="720" y1="10.0" y2="10.0"/><text class="axis" x="30" y="14.0" text-anchor="end">100%</text>
 <g class="bars">
-<g class="row"><title>opentelemetry-dotnet: 6%</title><rect class="bar" x="43.2" y="141.6" width="10.5" height="8.4" rx="2"/></g>
-<g class="row"><title>polly: 7%</title><rect class="bar" x="60.2" y="140.2" width="10.5" height="9.8" rx="2"/></g>
-<g class="row"><title>roslynator: 8%</title><rect class="bar" x="77.2" y="138.8" width="10.5" height="11.2" rx="2"/></g>
-<g class="row"><title>spectre: 9%</title><rect class="bar" x="94.2" y="137.4" width="10.5" height="12.6" rx="2"/></g>
-<g class="row"><title>swashbuckle: 12%</title><rect class="bar" x="111.2" y="133.2" width="10.5" height="16.8" rx="2"/></g>
-<g class="row"><title>nsec: 13%</title><rect class="bar" x="128.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
-<g class="row"><title>aspnetcore-odata: 13%</title><rect class="bar" x="145.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
-<g class="row"><title>guardclauses: 13%</title><rect class="bar" x="162.2" y="131.8" width="10.5" height="18.2" rx="2"/></g>
-<g class="row"><title>mimekit: 14%</title><rect class="bar" x="179.2" y="130.4" width="10.5" height="19.6" rx="2"/></g>
-<g class="row"><title>autofixture: 16%</title><rect class="bar" x="196.2" y="127.6" width="10.5" height="22.4" rx="2"/></g>
-<g class="row"><title>communitytoolkit: 18%</title><rect class="bar" x="213.2" y="124.8" width="10.5" height="25.2" rx="2"/></g>
-<g class="row"><title>libgit2sharp: 19%</title><rect class="bar" x="230.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
-<g class="row"><title>castle-core: 19%</title><rect class="bar" x="247.2" y="123.4" width="10.5" height="26.6" rx="2"/></g>
-<g class="row"><title>serilog: 20%</title><rect class="bar" x="264.2" y="122.0" width="10.5" height="28.0" rx="2"/></g>
-<g class="row"><title>mediator: 21%</title><rect class="bar" x="281.2" y="120.6" width="10.5" height="29.4" rx="2"/></g>
-<g class="row"><title>fastendpoints: 23%</title><rect class="bar" x="298.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
-<g class="row"><title>fluid: 23%</title><rect class="bar" x="315.2" y="117.8" width="10.5" height="32.2" rx="2"/></g>
-<g class="row"><title>carter: 24%</title><rect class="bar" x="332.2" y="116.4" width="10.5" height="33.6" rx="2"/></g>
-<g class="row"><title>lamar: 26%</title><rect class="bar" x="349.2" y="113.6" width="10.5" height="36.4" rx="2"/></g>
-<g class="row"><title>awesomeassertions: 27%</title><rect class="bar" x="366.2" y="112.2" width="10.5" height="37.8" rx="2"/></g>
-<g class="row"><title>nsubstitute: 29%</title><rect class="bar" x="383.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
-<g class="row"><title>immediate-handlers: 29%</title><rect class="bar" x="400.2" y="109.4" width="10.5" height="40.6" rx="2"/></g>
-<g class="row"><title>open-xml-sdk: 30%</title><rect class="bar" x="417.2" y="108.0" width="10.5" height="42.0" rx="2"/></g>
-<g class="row"><title>fluentvalidation: 32%</title><rect class="bar" x="434.2" y="105.2" width="10.5" height="44.8" rx="2"/></g>
-<g class="row"><title>unitsnet: 34%</title><rect class="bar" x="451.2" y="102.4" width="10.5" height="47.6" rx="2"/></g>
-<g class="row"><title>vogen: 36%</title><rect class="bar" x="468.2" y="99.6" width="10.5" height="50.4" rx="2"/></g>
-<g class="row"><title>nodatime: 43%</title><rect class="bar" x="485.2" y="89.8" width="10.5" height="60.2" rx="2"/></g>
-<g class="row"><title>graphql-dotnet: 45%</title><rect class="bar" x="502.2" y="87.0" width="10.5" height="63.0" rx="2"/></g>
-<g class="row"><title>newtonsoft-json: 47%</title><rect class="bar" x="519.2" y="84.2" width="10.5" height="65.8" rx="2"/></g>
-<g class="row"><title>autofac: 49%</title><rect class="bar" x="536.2" y="81.4" width="10.5" height="68.6" rx="2"/></g>
-<g class="row"><title>scrutor: 57%</title><rect class="bar" x="553.2" y="70.2" width="10.5" height="79.8" rx="2"/></g>
-<g class="row"><title>meziantou-analyzer: 63%</title><rect class="bar" x="570.2" y="61.8" width="10.5" height="88.2" rx="2"/></g>
-<g class="row"><title>automapper: 67%</title><rect class="bar" x="587.2" y="56.2" width="10.5" height="93.8" rx="2"/></g>
-<g class="row"><title>protobuf-net: 78%</title><rect class="bar" x="604.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
-<g class="row"><title>yamldotnet: 78%</title><rect class="bar" x="621.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
-<g class="row"><title>cliwrap: 81%</title><rect class="bar" x="638.2" y="36.6" width="10.5" height="113.4" rx="2"/></g>
-<g class="row"><title>nlog: 82%</title><rect class="bar" x="655.2" y="35.2" width="10.5" height="114.8" rx="2"/></g>
-<g class="row"><title>mapperly: 89%</title><rect class="bar" x="672.2" y="25.4" width="10.5" height="124.6" rx="2"/></g>
-<g class="row"><title>markdig: 98%</title><rect class="bar" x="689.2" y="12.8" width="10.5" height="137.2" rx="2"/></g>
-<g class="row"><title>scriban: 100%</title><rect class="bar" x="706.2" y="10.0" width="10.5" height="140.0" rx="2"/></g>
+<g class="row"><title>polly: 3%</title><rect class="bar" x="43.2" y="145.8" width="10.5" height="4.2" rx="2"/></g>
+<g class="row"><title>spectre: 6%</title><rect class="bar" x="60.2" y="141.6" width="10.5" height="8.4" rx="2"/></g>
+<g class="row"><title>opentelemetry-dotnet: 8%</title><rect class="bar" x="77.2" y="138.8" width="10.5" height="11.2" rx="2"/></g>
+<g class="row"><title>unitsnet: 10%</title><rect class="bar" x="94.2" y="136.0" width="10.5" height="14.0" rx="2"/></g>
+<g class="row"><title>swashbuckle: 10%</title><rect class="bar" x="111.2" y="136.0" width="10.5" height="14.0" rx="2"/></g>
+<g class="row"><title>nsec: 12%</title><rect class="bar" x="128.2" y="133.2" width="10.5" height="16.8" rx="2"/></g>
+<g class="row"><title>guardclauses: 14%</title><rect class="bar" x="145.2" y="130.4" width="10.5" height="19.6" rx="2"/></g>
+<g class="row"><title>mimekit: 14%</title><rect class="bar" x="162.2" y="130.4" width="10.5" height="19.6" rx="2"/></g>
+<g class="row"><title>fluid: 14%</title><rect class="bar" x="179.2" y="130.4" width="10.5" height="19.6" rx="2"/></g>
+<g class="row"><title>nodatime: 15%</title><rect class="bar" x="196.2" y="129.0" width="10.5" height="21.0" rx="2"/></g>
+<g class="row"><title>communitytoolkit: 16%</title><rect class="bar" x="213.2" y="127.6" width="10.5" height="22.4" rx="2"/></g>
+<g class="row"><title>roslynator: 17%</title><rect class="bar" x="230.2" y="126.2" width="10.5" height="23.8" rx="2"/></g>
+<g class="row"><title>awesomeassertions: 20%</title><rect class="bar" x="247.2" y="122.0" width="10.5" height="28.0" rx="2"/></g>
+<g class="row"><title>autofixture: 20%</title><rect class="bar" x="264.2" y="122.0" width="10.5" height="28.0" rx="2"/></g>
+<g class="row"><title>fluentvalidation: 20%</title><rect class="bar" x="281.2" y="122.0" width="10.5" height="28.0" rx="2"/></g>
+<g class="row"><title>fastendpoints: 21%</title><rect class="bar" x="298.2" y="120.6" width="10.5" height="29.4" rx="2"/></g>
+<g class="row"><title>serilog: 21%</title><rect class="bar" x="315.2" y="120.6" width="10.5" height="29.4" rx="2"/></g>
+<g class="row"><title>carter: 22%</title><rect class="bar" x="332.2" y="119.2" width="10.5" height="30.8" rx="2"/></g>
+<g class="row"><title>open-xml-sdk: 30%</title><rect class="bar" x="349.2" y="108.0" width="10.5" height="42.0" rx="2"/></g>
+<g class="row"><title>castle-core: 30%</title><rect class="bar" x="366.2" y="108.0" width="10.5" height="42.0" rx="2"/></g>
+<g class="row"><title>vogen: 30%</title><rect class="bar" x="383.2" y="108.0" width="10.5" height="42.0" rx="2"/></g>
+<g class="row"><title>markdig: 39%</title><rect class="bar" x="400.2" y="95.4" width="10.5" height="54.6" rx="2"/></g>
+<g class="row"><title>yamldotnet: 42%</title><rect class="bar" x="417.2" y="91.2" width="10.5" height="58.8" rx="2"/></g>
+<g class="row"><title>lamar: 42%</title><rect class="bar" x="434.2" y="91.2" width="10.5" height="58.8" rx="2"/></g>
+<g class="row"><title>refit: 43%</title><rect class="bar" x="451.2" y="89.8" width="10.5" height="60.2" rx="2"/></g>
+<g class="row"><title>scriban: 45%</title><rect class="bar" x="468.2" y="87.0" width="10.5" height="63.0" rx="2"/></g>
+<g class="row"><title>meziantou-analyzer: 45%</title><rect class="bar" x="485.2" y="87.0" width="10.5" height="63.0" rx="2"/></g>
+<g class="row"><title>newtonsoft-json: 47%</title><rect class="bar" x="502.2" y="84.2" width="10.5" height="65.8" rx="2"/></g>
+<g class="row"><title>scrutor: 55%</title><rect class="bar" x="519.2" y="73.0" width="10.5" height="77.0" rx="2"/></g>
+<g class="row"><title>autofac: 57%</title><rect class="bar" x="536.2" y="70.2" width="10.5" height="79.8" rx="2"/></g>
+<g class="row"><title>graphql-dotnet: 59%</title><rect class="bar" x="553.2" y="67.4" width="10.5" height="82.6" rx="2"/></g>
+<g class="row"><title>immediate-handlers: 63%</title><rect class="bar" x="570.2" y="61.8" width="10.5" height="88.2" rx="2"/></g>
+<g class="row"><title>nsubstitute: 77%</title><rect class="bar" x="587.2" y="42.2" width="10.5" height="107.8" rx="2"/></g>
+<g class="row"><title>cliwrap: 78%</title><rect class="bar" x="604.2" y="40.8" width="10.5" height="109.2" rx="2"/></g>
+<g class="row"><title>mediator: 84%</title><rect class="bar" x="621.2" y="32.4" width="10.5" height="117.6" rx="2"/></g>
+<g class="row"><title>protobuf-net: 84%</title><rect class="bar" x="638.2" y="32.4" width="10.5" height="117.6" rx="2"/></g>
+<g class="row"><title>automapper: 85%</title><rect class="bar" x="655.2" y="31.0" width="10.5" height="119.0" rx="2"/></g>
+<g class="row"><title>nlog: 96%</title><rect class="bar" x="672.2" y="15.6" width="10.5" height="134.4" rx="2"/></g>
+<g class="row"><title>mapperly: 97%</title><rect class="bar" x="689.2" y="14.2" width="10.5" height="135.8" rx="2"/></g>
+<g class="row"><title>libgit2sharp: 100%</title><rect class="bar" x="706.2" y="10.0" width="10.5" height="140.0" rx="2"/></g>
 </g>
-<line class="median" x1="36" x2="720" y1="110.8" y2="110.8"/><text class="median-label" x="44" y="104.8">中央値 {{corpusMedianShare}}</text>
-<text class="axis" x="40" y="172">opentelemetry-dotnet</text><text class="axis" x="720" y="172" text-anchor="end">scriban</text>
+<line class="median" x1="36" x2="720" y1="108.0" y2="108.0"/><text class="median-label" x="44" y="102.0">中央値 {{corpusMedianShare}}</text>
+<text class="axis" x="40" y="172">polly</text><text class="axis" x="720" y="172" text-anchor="end">libgit2sharp</text>
 </svg>
       <figcaption>各棒は 1 つのリポジトリを表し、1 つのメンバーへの変更に対して {{name}} が実行したテストクラスの割合を小さい順に並べています。40 件中 18 件では 4 分の 1 以下でした。</figcaption>
     </figure>

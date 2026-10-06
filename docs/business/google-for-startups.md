@@ -41,10 +41,11 @@ DevOps, Jenkins, Bitbucket); no source code leaves the customer's machines.
 method. Teams pay for CI minutes and wait for feedback. Existing approaches tie customers to one CI or
 analytics vendor, or skip tests in ways that can miss failures.
 
-**Solution.** Conservative test selection from the diff, coverage and source analysis, evaluated on 41
+**Solution.** Conservative test selection from the diff, coverage and source analysis, evaluated on 40
 open-source .NET repositories (Polly, Newtonsoft.Json, Serilog, OpenTelemetry and others) by changing one
-member at a time: of 2,941 changes that broke at least one test, 3 were missed, and each was fixed. In the
-median repository a change ran 28% of the test classes.
+member at a time: in the latest round, of 2,422 changes that broke at least one test, none was missed
+(every miss in earlier rounds was fixed with a test). In the median repository a change ran 30% of the
+test classes.
 
 **Market.** Professional .NET teams with private repositories and CI test suites. SlashData estimated about
 10 million C# developers (https://www.developernation.net/blog/language-communities-an-update/). [Owner's

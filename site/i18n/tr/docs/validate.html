@@ -1,4 +1,4 @@
-<!-- title: Kendi deponuzda doğrulayın; layout: docs; description: {{name}}'ya güvenmeden önce, değişikliklerinizin bozduğu her testi seçtiğini kendi kodunuzda kontrol edin.; source: ffcff100ded8 -->
+<!-- title: Kendi deponuzda doğrulayın; layout: docs; description: {{name}}'ya güvenmeden önce, değişikliklerinizin bozduğu her testi seçtiğini kendi kodunuzda kontrol edin.; source: c8f6a5ee441c -->
 <h1>Kendi deponuzda doğrulayın</h1>
 <p class="lead">Değerlendirmemiz açık kaynak kütüphaneler üzerinde çalışır. Sizin kodunuzun kendine özgü kalıpları vardır; bu yüzden neyin çalışacağına karar vermesine izin vermeden önce {{name}}'yı kendi kodunuzda kontrol edin. Bu, birkaç haftalık olağan pull request akışı sürer ve ekibiniz için hiçbir şeyi değiştirmez.</p>
 
@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Tam test adımını <code>td test</code> ile ya da action'ın <code>test</code> moduyla değiştirin. Varsayılan branch'te kayda devam edin: kayıt orada tüm testleri çalıştırır; böylece bir seçimin gizleyebileceği her şey sürümden önce yine yakalanır.</p>
 
 <h2 id="how-we-test">Biz nasıl test ediyoruz</h2>
-<p>Aynı kontrol {{corpusRepositories}} açık kaynak depo üzerinde büyük ölçekte çalışır: üyeler tek tek değiştirilir ve başarısız olan her test sınıfının seçilmiş olması gerekir. Bir testi bozan {{corpusFailingChanges}} değişiklikten {{corpusMissed}} tanesi kaçırıldı ve her biri, düzeltme olmadan başarısız olan bir testle düzeltildi. <a href="/docs/examples/#corpus">Rakamlarla korpus</a>.</p>
+<p>Aynı kontrol {{corpusRepositories}} açık kaynak depo üzerinde büyük ölçekte çalışır: üyeler tek tek değiştirilir ve başarısız olan her test sınıfının seçilmiş olması gerekir. Son turda bir testi bozan {{corpusFailingChanges}} değişiklikten {{corpusMissed}} tanesi kaçırıldı; önceki turlardaki her kaçırma, düzeltme olmadan başarısız olan bir testle düzeltildi. <a href="/docs/examples/#corpus">Rakamlarla korpus</a>.</p>
 
 <h2 id="related">İlgili sayfalar</h2>
 <ul>
