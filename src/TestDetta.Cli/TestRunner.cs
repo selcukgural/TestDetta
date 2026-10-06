@@ -163,6 +163,14 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         }
     }
 
+    /// <summary>Runs one <c>dotnet</c> command as it is, forwarding its output, and returns its exit code.</summary>
+    /// <param name="arguments">Arguments for the dotnet executable.</param>
+    /// <param name="workingDirectory">Directory the process runs in.</param>
+    /// <param name="stdout">Receives the forwarded output.</param>
+    /// <exception cref="InvalidOperationException">The dotnet executable could not be started.</exception>
+    public int RunCommand(IReadOnlyList<string> arguments, string workingDirectory, TextWriter stdout) =>
+        Run(arguments, workingDirectory, stdout).ExitCode;
+
     /// <summary>Runs dotnet once, forwarding stdout and stderr, and reports whether VSTest said the filter matched nothing.</summary>
     /// <param name="arguments">Arguments for the dotnet executable.</param>
     /// <param name="workingDirectory">Directory the process runs in.</param>

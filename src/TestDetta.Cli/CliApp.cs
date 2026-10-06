@@ -53,29 +53,15 @@ internal static partial class CliApp
         // The license refresh waits on the network while the analysis works; the check below waits for it.
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var refresh = LicenseGate.Refresh(options.Analysis.RepoPath, loggerFactory, Environment.GetEnvironmentVariable, home);
+        if (options.Command == CliCommand.Test && options.Test.Shadow)
+        {
+            return Shadow(options, loggerFactory, logger, stdout, refresh, home);
+        }
+
         AnalysisResult analysis;
         try
         {
-            if (options.Analysis.MapsDir is { } mapsDir)
-            {
-                var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
-                MapDirectory.Restore(Path.GetFullPath(mapsDir), git.TopLevel(options.Analysis.RepoPath), options.Analysis.BaseRef, options.Analysis.MaxMapAge, git, logger);
-            }
-
-            analysis = new AnalysisPipeline(loggerFactory, new TestDetta.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(
-                options.Analysis.RepoPath,
-                options.Analysis.BaseRef,
-                new AnalysisOptions
-                {
-                    MaxMapAge = options.Analysis.MaxMapAge,
-                    DriftFallback = options.Analysis.DriftFallback,
-                    // td test builds anyway before it runs tests; td affected only when asked.
-                    GeneratedCode = new TestDetta.Coverage.BuildGeneratedCodeReader(
-                        loggerFactory,
-                        options.Command == CliCommand.Test
-                            ? new TestDetta.Coverage.GeneratedCodeBuild(Build: true, options.Test.Configuration)
-                            : new TestDetta.Coverage.GeneratedCodeBuild(options.Affected.Build)),
-                });
+            analysis = Analyze(options, loggerFactory, logger);
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException
                                        or UnauthorizedAccessException)
@@ -104,6 +90,68 @@ internal static partial class CliApp
             },
             stdout);
         return Success;
+    }
+
+    /// <summary>Restores the maps (with <c>--maps-dir</c>) and runs the analysis.</summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="loggerFactory">Creates the loggers.</param>
+    /// <param name="logger">Logger of the CLI.</param>
+    private static AnalysisResult Analyze(CliOptions options, ILoggerFactory loggerFactory, ILogger logger)
+    {
+        if (options.Analysis.MapsDir is { } mapsDir)
+        {
+            var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
+            MapDirectory.Restore(Path.GetFullPath(mapsDir), git.TopLevel(options.Analysis.RepoPath), options.Analysis.BaseRef, options.Analysis.MaxMapAge, git, logger);
+        }
+
+        return new AnalysisPipeline(loggerFactory, new TestDetta.Coverage.MsBuildProjectEvaluator(loggerFactory)).Run(
+            options.Analysis.RepoPath,
+            options.Analysis.BaseRef,
+            new AnalysisOptions
+            {
+                MaxMapAge = options.Analysis.MaxMapAge,
+                DriftFallback = options.Analysis.DriftFallback,
+                // td test builds anyway before it runs tests; td affected only when asked.
+                GeneratedCode = new TestDetta.Coverage.BuildGeneratedCodeReader(
+                    loggerFactory,
+                    options.Command == CliCommand.Test
+                        ? new TestDetta.Coverage.GeneratedCodeBuild(Build: true, options.Test.Configuration)
+                        : new TestDetta.Coverage.GeneratedCodeBuild(options.Affected.Build)),
+            });
+    }
+
+    /// <summary>
+    /// Carries out <c>td test --shadow</c> (<see cref="ShadowRun"/>). An analysis that fails for any reason
+    /// leaves the full run as it is and the report says why it has no shadow result.
+    /// </summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="loggerFactory">Creates the loggers.</param>
+    /// <param name="logger">Logger of the CLI.</param>
+    /// <param name="stdout">Receives the test output and the report.</param>
+    /// <param name="refresh">The license refresh started before the analysis.</param>
+    /// <param name="home">The user's home directory, for an installed license.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Shadow mode is fail-open by design: a TestDetta error must never fail the team's job.")]
+    private static int Shadow(CliOptions options, ILoggerFactory loggerFactory, ILogger logger, TextWriter stdout, Task refresh, string home)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        AnalysisResult? analysis = null;
+        string? error = null;
+        try
+        {
+            analysis = Analyze(options, loggerFactory, logger);
+            var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, Environment.GetEnvironmentVariable, home, refresh);
+            analysis = LicenseGate.Apply(analysis, license, TestDetta.Core.Licensing.LicenseKeys.Enforced, logger);
+            ResultWriter.WritePlan(analysis, stdout);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogFailed(logger, ex);
+            analysis = null;
+            error = $"the analysis failed ({ex.GetType().Name}: {ex.Message})";
+            stdout.WriteLine($"td: {error}; every test still runs.");
+        }
+
+        return new ShadowRun(loggerFactory, stdout).Run(options, analysis, error, stopwatch.Elapsed.TotalSeconds);
     }
 
     /// <summary>

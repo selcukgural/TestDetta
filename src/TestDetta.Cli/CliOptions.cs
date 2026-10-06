@@ -57,6 +57,18 @@ internal sealed record AffectedSettings(bool TestsOnly, OutputFormat Format)
 internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTestArguments, string? SummaryFile)
 {
     /// <summary>
+    /// Shadow mode (docs/design/shadow-mode.md): select as usual, run every test project completely, and
+    /// report what the selection would have left out. The exit code is the full run's.
+    /// </summary>
+    public bool Shadow { get; init; }
+
+    /// <summary>In shadow mode, rerun each failed class the selection left out to tell a miss from a flaky or pre-existing failure.</summary>
+    public bool ShadowClassify { get; init; } = true;
+
+    /// <summary>In shadow mode, where the JSON report goes; null for <c>.testdetta/testdetta-shadow.json</c> in the repository.</summary>
+    public string? ShadowReport { get; init; }
+
+    /// <summary>
     /// The configuration <c>dotnet test</c> builds, from <c>-c</c> or <c>--configuration</c> among
     /// <see cref="DotnetTestArguments"/>; Debug when none is given. A changed source generator is read
     /// from a build of this configuration, the one the tests then run.
@@ -153,6 +165,12 @@ internal sealed record CliOptions(
         td test:
           --dry-run            Print the dotnet test commands instead of running them
           --summary-file <path>  Append a Markdown summary, e.g. to $GITHUB_STEP_SUMMARY
+          --shadow             Shadow mode: select as usual, but run every test project completely and
+                               report what the selection would have left out; the exit code is the
+                               full run's, and a TestDetta error never fails it
+          --shadow-no-classify Do not rerun failed classes the selection left out to tell a miss from
+                               a flaky or pre-existing failure
+          --shadow-report <path>  Shadow report file (default: .testdetta/testdetta-shadow.json)
           -- <args>            Pass the remaining arguments to every dotnet test, e.g. -- -c Release
 
         td record:
@@ -239,7 +257,7 @@ internal sealed record CliOptions(
                 }
 
                 options = options with { Test = options.Test with { DotnetTestArguments = [.. args[(i + 1)..]] } };
-                return true;
+                return Consistent(options, out error);
             }
 
             if (!TryParseOption(args, ref i, ref options, out error))
@@ -248,7 +266,22 @@ internal sealed record CliOptions(
             }
         }
 
-        return true;
+        return Consistent(options, out error);
+    }
+
+    /// <summary>False, with the reason, for options that contradict each other.</summary>
+    /// <param name="options">Parsed options.</param>
+    /// <param name="error">Why they cannot go together.</param>
+    private static bool Consistent(CliOptions options, out string? error)
+    {
+        var test = options.Test;
+        error = test switch
+        {
+            { Shadow: true, DryRun: true } => "--shadow runs every test; it cannot be combined with --dry-run",
+            { Shadow: false, ShadowClassify: false } or { Shadow: false, ShadowReport: not null } => "--shadow-no-classify and --shadow-report need --shadow",
+            _ => null,
+        };
+        return error is null;
     }
 
     /// <summary>Parses the option at <paramref name="i"/>, advancing past its value when it has one.</summary>
@@ -279,6 +312,14 @@ internal sealed record CliOptions(
                 options = options with { Test = options.Test with { DryRun = true } };
                 return true;
 
+            case "--shadow" when options.Command == CliCommand.Test:
+                options = options with { Test = options.Test with { Shadow = true } };
+                return true;
+
+            case "--shadow-no-classify" when options.Command == CliCommand.Test:
+                options = options with { Test = options.Test with { ShadowClassify = false } };
+                return true;
+
             case "--no-build" when options.Command == CliCommand.Record:
                 options = options with { Record = options.Record with { NoBuild = true } };
                 return true;
@@ -287,7 +328,7 @@ internal sealed record CliOptions(
             case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record:
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
-            case "--summary-file" when options.Command == CliCommand.Test:
+            case "--summary-file" or "--shadow-report" when options.Command == CliCommand.Test:
                 break;
 
             default:
@@ -363,6 +404,10 @@ internal sealed record CliOptions(
 
             case "--summary-file":
                 options = options with { Test = options.Test with { SummaryFile = value } };
+                return true;
+
+            case "--shadow-report":
+                options = options with { Test = options.Test with { ShadowReport = value } };
                 return true;
 
             case "--format":

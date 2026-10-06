@@ -13,6 +13,12 @@ internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses,
     /// <see cref="ExecutedClasses"/> had every test skipped.
     /// </summary>
     public IReadOnlySet<string> ReportedClasses { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Seconds per test class (runtime names): the sum of its tests' reported durations, without the class's
+    /// setup outside its tests, which reports do not time per class.
+    /// </summary>
+    public IReadOnlyDictionary<string, double> ClassSeconds { get; init; } = new Dictionary<string, double>(StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -43,6 +49,7 @@ internal static class TrxReport
         var failed = new HashSet<string>(StringComparer.Ordinal);
         var executed = new HashSet<string>(StringComparer.Ordinal);
         var reported = new HashSet<string>(StringComparer.Ordinal);
+        var seconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var reports = files.Length;
         foreach (var file in nunitFiles)
         {
@@ -63,6 +70,10 @@ internal static class TrxReport
 
                 // Skipped and inconclusive tests never enter their class, as with TRX.
                 reported.Add(testClass);
+                if (double.TryParse(testCase.Attribute("duration")?.Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var duration))
+                {
+                    seconds[testClass] = seconds.GetValueOrDefault(testClass) + duration;
+                }
                 var result = testCase.Attribute("result")?.Value;
                 if (result is "Passed" or "Failed" or "Warning")
                 {
@@ -108,6 +119,10 @@ internal static class TrxReport
 
                 // A skipped test never enters its class, so it proves nothing about the map.
                 reported.Add(testClass);
+                if (TimeSpan.TryParse(result.Attribute("duration")?.Value, System.Globalization.CultureInfo.InvariantCulture, out var duration))
+                {
+                    seconds[testClass] = seconds.GetValueOrDefault(testClass) + duration.TotalSeconds;
+                }
                 if (outcome is not ("NotExecuted" or "Inconclusive" or "Pending"))
                 {
                     executed.Add(testClass);
@@ -120,7 +135,7 @@ internal static class TrxReport
             }
         }
 
-        return new TrxOutcome(total, failed, executed) { ReportedClasses = reported };
+        return new TrxOutcome(total, failed, executed) { ReportedClasses = reported, ClassSeconds = seconds };
     }
 
     /// <summary>Adapter of Machine.Specifications (MSpec), which names tests unlike the others.</summary>

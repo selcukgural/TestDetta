@@ -49,6 +49,22 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
     /// <exception cref="InvalidOperationException">git failed or the two histories share no commit.</exception>
     public string MergeBase(string repoRoot, string baseRef) => Run(repoRoot, "merge-base", baseRef, "HEAD").Single();
 
+    /// <summary>
+    /// Checks <paramref name="commit"/> out into a new, detached worktree at <paramref name="path"/>, beside the
+    /// working tree and without touching it.
+    /// </summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="path">Directory of the new worktree; must not exist.</param>
+    /// <param name="commit">Commit to check out.</param>
+    /// <exception cref="InvalidOperationException">git failed.</exception>
+    public void AddWorktree(string repoRoot, string path, string commit) => Run(repoRoot, "worktree", "add", "--detach", "--quiet", path, commit);
+
+    /// <summary>Removes a worktree <see cref="AddWorktree"/> made, with whatever its build left in it.</summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="path">Directory of the worktree.</param>
+    /// <exception cref="InvalidOperationException">git failed.</exception>
+    public void RemoveWorktree(string repoRoot, string path) => Run(repoRoot, "worktree", "remove", "--force", path);
+
     /// <summary>Files that differ between two commits; renames count as a delete and an add.</summary>
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="from">Older commit.</param>
