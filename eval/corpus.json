@@ -867,6 +867,41 @@
         "modules/blob-storing-database/test/Volo.Abp.BlobStoring.Database.MongoDB.Tests/Volo.Abp.BlobStoring.Database.MongoDB.Tests.csproj"
       ],
       "notes": "framework/test plus the 14 module solutions build/test-all.ps1 tests by default; EF Core tests on in-memory SQLite, MongoDB tests on EphemeralMongo (downloads mongod, works on osx-arm64); cloud blob/SMS/Redis/RabbitMQ test projects need no service (their real tests are disabled); AspNetCore.Mvc.Tests left out: it reads the PlugIn project's bin folder, which a per-project build does not produce; 3 GB clone, 128 test projects; ~4,200 tests, 13.5 min on an M-series Mac"
+    },
+    {
+      "name": "msbuild",
+      "url": "https://github.com/dotnet/msbuild.git",
+      "commit": "a5ccf86e12ca814f1f11ca1391c129f1bfa46689",
+      "framework": "net11.0",
+      "toolchain": {
+        "sdk": "11.0.100-rc.1.26425.128",
+        "runtimes": []
+      },
+      "synthetic": 30,
+      "tags": [
+        "large",
+        "large-suite",
+        "mtp",
+        "xunit-v3",
+        "arcade",
+        "out-of-proc",
+        "static-state"
+      ],
+      "projects": [
+        "src/Framework.UnitTests/Microsoft.Build.Framework.UnitTests.csproj",
+        "src/StringTools.UnitTests/StringTools.UnitTests.csproj",
+        "src/Utilities.UnitTests/Microsoft.Build.Utilities.UnitTests.csproj",
+        "src/Build.OM.UnitTests/Microsoft.Build.Engine.OM.UnitTests.csproj",
+        "src/BuildCheck.UnitTests/Microsoft.Build.BuildCheck.UnitTests.csproj",
+        "src/MSBuild.Coordinator.UnitTests/MSBuild.Coordinator.UnitTests.csproj",
+        "src/MSBuild.UnitTests/Microsoft.Build.CommandLine.UnitTests.csproj",
+        "src/Tasks.UnitTests/Microsoft.Build.Tasks.UnitTests.csproj",
+        "src/Build.UnitTests/Microsoft.Build.Engine.UnitTests.csproj",
+        "src/TaskAnalyzer.Tests/TaskAnalyzer.Tests.csproj",
+        "src/MSBuild.EndToEnd.Tests/Microsoft.Build.EndToEnd.Tests.csproj"
+      ],
+      "setup": "perl -pi -e 's#<BootstrapSdkVersion>[^<]*#<BootstrapSdkVersion>11.0.100-rc.1.26425.128#' eng/Versions.props && { grep -q '<RunArguments>' src/Directory.Build.targets || perl -pi -e 's#(<TestRunnerAdditionalArguments>\\$\\(XunitOptions\\)</TestRunnerAdditionalArguments>)#$1<RunArguments>\\$(RunArguments) --filter-not-trait Category=nonosxtests --filter-not-trait Category=netcore-osx-failing --filter-not-trait Category=nonnetcoreapptests --filter-not-trait Category=failing --filter-not-method Microsoft.Build.UnitTests.XMakeAppTests.SetConsoleUICultureInInvariantCulture --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildMultithreaded_Tests.ReusedTaskHostDiscardsOutputFromCachedWriter --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.CanShutdownServerProcess --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.ServerStartsWhenMtInResponseFileEvenWithoutEnvVar --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.BuildsWhileBuildIsRunningOnServer --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.DeferredLoggerMessagesDoNotAccumulateAcrossServerBuilds --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.NonMultiThreadedServerProcessDoesNotUseServerGC --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.ServerShouldStartWhenBuildIsInteractive --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.PropertyMSBuildStartupDirectoryOnServer --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.MSBuildServerTest --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.TerminalLoggerAutoIsNotSelectedWhenServerOutputIsRedirected --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.VerifyMixedLegacyBehavior --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.ServerStartsWhenMtPresentEvenWithoutEnvVar --filter-not-method Microsoft.Build.UnitTests.BackEnd.TaskHostConsoleTelemetry_Tests.ForwardsConsoleOutputFromBuildObjectDisposal --filter-not-method Microsoft.Build.UnitTests.FileLogger_Tests.EmptyErrorLogUsingWarningsErrorsOnly --filter-not-method Microsoft.Build.Engine.UnitTests.BackEnd.TaskHostFactory_Tests.TransientAndSidecarNodeCanCoexist --filter-not-method Microsoft.Build.Engine.UnitTests.BackEnd.AppHostSupport_Tests.ClearBootstrapDotnetRootEnvironment_*</RunArguments>#' src/Directory.Build.targets; } && git update-index --assume-unchanged eng/Versions.props src/Directory.Build.targets && mkdir -p artifacts/bin/bootstrap artifacts/log/Debug && { [ -d artifacts/bin/bootstrap/core/sdk/11.0.100-rc.1.26425.128 ] || { rm -rf artifacts/bin/bootstrap/core && cp -Rc \"$DOTNET_ROOT\" artifacts/bin/bootstrap/core; }; } && { [ -e .dotnet ] || ln -s \"$DOTNET_ROOT\" .dotnet; } && { grep -qx .dotnet .git/info/exclude || echo .dotnet >> .git/info/exclude; } && dotnet build MSBuild.slnx -c Debug -v:q",
+      "notes": "Setup seeds the bootstrap layout (artifacts/bin/bootstrap/core) with an APFS clone of the pinned toolchain and points BootstrapSdkVersion at it (global.json's 26420.103 is not public), adds CI's macOS trait filters plus 17 macOS/harness-only failures as --filter-not-* in RunArguments, and runs a full MSBuild.slnx build for the packages and net472 samples the tests read. VSTest wrapper projects left out. ~11,700 tests, 20 min on an M-series Mac (2026-10-06)."
     }
   ]
 }
