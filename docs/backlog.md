@@ -24,6 +24,18 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- ~~**The user's own `--filter` broke every narrowed run**~~ (done 2026-10-06): `td test -- --filter
+  "Category!=Integration"` added a second `--filter` next to TestDetta's class filter, and `dotnet test`
+  stops with "Option '--filter' expects a single argument but 2 were provided" (exit 1): a CI that keeps
+  integration tests out by category failed on every pull request TestDetta could narrow. The two are now
+  joined (`(user)&(classes)`, `TestFilter.WithinUserFilter`); xUnit v3 trait, method and namespace filters
+  already narrowed with "and"; a filter the runner cannot join (xUnit v3 class or query filter, which
+  "or" or throw; TUnit's single tree-node filter) runs the project whole under the user's filter. The
+  "matched nothing" rerun keeps the user's filter (`TestInvocation.UnfilteredArguments`); before, it
+  dropped it, and a user's `--filter-not-class` too. Still open: `td record` takes no `dotnet test`
+  arguments, so a category the CI leaves out (tests that need a database) is recorded too, and the
+  evaluation has no per-repository test filter (Umbraco, Aspire, MassTransit and Orleans' CI filter by
+  category).
 - ~~**A deleted file an item glob brings in from outside the project folder selected nothing**~~
   (done 2026-10-05): MSBuild expands `<None Include="..\..\testdata\**" />` on the files present,
   so a deleted data file was in no evaluated item, and the XML item paths that would have matched

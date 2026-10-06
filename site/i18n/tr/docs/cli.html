@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: d7c1d452e7f2 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 6a9d880d2ebd -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -71,9 +71,10 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
-<p><code>--</code> sonrasındaki her şey her <code>dotnet test</code> çağrısına iletilir.</p>
+<p><code>--</code> sonrasındaki her şey her <code>dotnet test</code> çağrısına iletilir. Kendi <code>--filter</code> filtreniz korunur: {{name}} onu kendi sınıf filtresiyle birleştirir, yalnızca seçilen testlerden filtrenize uyanlar çalışır. xUnit v3 trait, method ve namespace filtreleri seçimi aynı şekilde daraltır. Çalıştırıcının sınıf filtresiyle birleştiremediği bir filtre (xUnit v3 class veya query filtresi, TUnit tree-node filtresi) verilirse proje filtrenizle birlikte tamamen çalışır.</p>
 <pre><code>td test -- -c Release --logger trx
-td test -- --no-restore</code></pre>
+td test -- --no-restore
+td test -- --filter "Category!=Integration"</code></pre>
 
 <h2 id="record"><code>td record</code></h2>
 <p>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> (ya da <code>--maps-dir</code>) altına bir harita yazar. Bunu varsayılan branch'inizde çalıştırın; bu aynı zamanda o branch'in tam test koşusudur. Testler başarısız olduğunda çıkış kodu <code>3</code>'tür; haritalar yine de yazılır ve başarısız sınıflar daha sonra her zaman seçilir.</p>

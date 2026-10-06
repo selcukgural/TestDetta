@@ -71,9 +71,10 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
-<p>Everything after <code>--</code> is passed to every <code>dotnet test</code> call.</p>
+<p>Everything after <code>--</code> is passed to every <code>dotnet test</code> call. Your own <code>--filter</code> is kept: {{name}} joins it with its class filter, so only the selected tests inside your filter run. xUnit v3 trait, method and namespace filters narrow the selection the same way. A filter the runner cannot join with a class filter (an xUnit v3 class or query filter, a TUnit tree-node filter) makes the project run completely under your filter.</p>
 <pre><code>td test -- -c Release --logger trx
-td test -- --no-restore</code></pre>
+td test -- --no-restore
+td test -- --filter "Category!=Integration"</code></pre>
 
 <h2 id="record"><code>td record</code></h2>
 <p>Runs every test with coverage and writes one map per test project to <code>.testdetta/coverage</code> (or <code>--maps-dir</code>). Run it on your default branch; it is also that branch's full test run. Exit code <code>3</code> when tests fail; the maps are still written, and the failing classes are always selected later.</p>

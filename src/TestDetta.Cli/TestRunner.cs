@@ -80,10 +80,18 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         }
 
         LogFilterMatchedNothing(invocation.Selection.Project.Path);
-        stdout.WriteLine("td: the filter matched no test, which should not happen; running the whole project instead.");
-        stdout.WriteLine("td: please report this with the output of 'td affected --format json'.");
+        if (invocation.UnfilteredArguments?.Any(static a => a.StartsWith("--filter", StringComparison.Ordinal) || a.StartsWith("--treenode-filter", StringComparison.Ordinal)) == true)
+        {
+            // The selected classes may all lie outside the user's own filter; rerunning under it alone is the safe answer.
+            stdout.WriteLine("td: no selected test is inside your own filter; running the whole project under your filter instead.");
+        }
+        else
+        {
+            stdout.WriteLine("td: the filter matched no test, which should not happen; running the whole project instead.");
+            stdout.WriteLine("td: please report this with the output of 'td affected --format json'.");
+        }
 
-        var unfiltered = WithoutFilter(invocation.Arguments);
+        var unfiltered = invocation.UnfilteredArguments ?? WithoutFilter(invocation.Arguments);
         (exitCode, _, _) = Run(unfiltered, workingDirectory, stdout);
         return new TestRunResult(invocation, exitCode, stopwatch.Elapsed, RanUnfiltered: true);
     }
@@ -127,23 +135,32 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         }
 
         var targetPath = new DotnetProcess(logger).Capture(["msbuild", project, $"-p:Configuration={configuration}", "-getProperty:TargetPath"], workingDirectory).Trim();
-        var arguments = invocation.Arguments.ToList();
-        arguments[1] = targetPath;
-
-        // Outside Windows a .NET Framework test host runs on Mono, where test frameworks that keep an
-        // AppDomain of their own (xUnit v2's adapter) fail across it; inline run settings turn it off
-        // and add to any settings the arguments name.
-        if (!OperatingSystem.IsWindows())
+        return invocation with
         {
-            if (!arguments.Contains("--"))
+            Arguments = ForAssembly(invocation.Arguments),
+            UnfilteredArguments = invocation.UnfilteredArguments is { } unfiltered ? ForAssembly(unfiltered) : null,
+        };
+
+        List<string> ForAssembly(IReadOnlyList<string> original)
+        {
+            var arguments = original.ToList();
+            arguments[1] = targetPath;
+
+            // Outside Windows a .NET Framework test host runs on Mono, where test frameworks that keep an
+            // AppDomain of their own (xUnit v2's adapter) fail across it; inline run settings turn it off
+            // and add to any settings the arguments name.
+            if (!OperatingSystem.IsWindows())
             {
-                arguments.Add("--");
+                if (!arguments.Contains("--"))
+                {
+                    arguments.Add("--");
+                }
+
+                arguments.AddRange(["RunConfiguration.DisableAppDomain=true", "xUnit.AppDomain=denied"]);
             }
 
-            arguments.AddRange(["RunConfiguration.DisableAppDomain=true", "xUnit.AppDomain=denied"]);
+            return arguments;
         }
-
-        return invocation with { Arguments = arguments };
     }
 
     /// <summary>Runs dotnet once, forwarding stdout and stderr, and reports whether VSTest said the filter matched nothing.</summary>

@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: d7c1d452e7f2 -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 6a9d880d2ebd -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -71,9 +71,10 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
-<p><code>--</code> の後に指定したものはすべて、各 <code>dotnet test</code> の呼び出しに渡されます。</p>
+<p><code>--</code> の後に指定したものはすべて、各 <code>dotnet test</code> の呼び出しに渡されます。独自の <code>--filter</code> はそのまま生かされます。{{name}} はそれを自身のクラスフィルターと結合するため、選択されたテストのうちフィルターに合うものだけが実行されます。xUnit v3 の trait、method、namespace フィルターも同じように選択を絞り込みます。ランナーがクラスフィルターと結合できないフィルター（xUnit v3 の class フィルターや query フィルター、TUnit の tree-node フィルター）を指定した場合、そのプロジェクトはあなたのフィルターの下ですべて実行されます。</p>
 <pre><code>td test -- -c Release --logger trx
-td test -- --no-restore</code></pre>
+td test -- --no-restore
+td test -- --filter "Category!=Integration"</code></pre>
 
 <h2 id="record"><code>td record</code></h2>
 <p>すべてのテストをカバレッジ付きで実行し、テストプロジェクトごとに 1 つのマップを <code>.testdetta/coverage</code>（または <code>--maps-dir</code>）に書き込みます。既定のブランチで実行してください。これはそのブランチの完全なテスト実行も兼ねます。テストが失敗すると終了コードは <code>3</code> になりますが、マップは書き込まれ、失敗したクラスは以後常に選択されます。</p>

@@ -57,6 +57,74 @@ public static class TestFilter
         return arguments;
     }
 
+    /// <summary>
+    /// The filter arguments that run <paramref name="testClasses"/> within the user's own filter, and the
+    /// rest of <paramref name="userArguments"/> to append after them; null when the runner cannot combine
+    /// the two. <c>dotnet test</c> rejects a second <c>--filter</c>, so a VSTest filter of the user's is
+    /// joined with the class filter (<c>(user)&amp;(classes)</c>). xUnit v3 joins options of different kinds
+    /// with "and" (a trait, method or namespace filter of the user's narrows the class filter as it should),
+    /// but joins two class filters with "or" and throws when a query filter meets a class filter; TUnit
+    /// takes one tree-node filter. Those cases return null: the project then runs under the user's filter alone.
+    /// </summary>
+    /// <param name="testClasses">Runtime class names, nested classes joined with '+'.</param>
+    /// <param name="syntax">Filter syntax of the project's runner.</param>
+    /// <param name="userArguments">The user's <c>dotnet test</c> arguments; those after a <c>--</c> are run settings and stay as they are.</param>
+    public static (List<string> Filter, List<string> Others)? WithinUserFilter(IReadOnlyCollection<string> testClasses, TestFilterSyntax syntax, IReadOnlyList<string> userArguments)
+    {
+        var ours = Arguments(testClasses, exclude: false, syntax);
+        var end = userArguments.Count;
+        for (var i = 0; i < userArguments.Count; i++)
+        {
+            if (userArguments[i] == "--")
+            {
+                end = i;
+                break;
+            }
+        }
+
+        if (syntax != TestFilterSyntax.VSTest)
+        {
+            string[] conflicting = syntax == TestFilterSyntax.TUnit ? ["--treenode-filter"] : ["--filter-class", "--filter-query"];
+            for (var i = 0; i < end; i++)
+            {
+                var argument = userArguments[i];
+                if (conflicting.Any(option => argument == option || argument.StartsWith(option + "=", StringComparison.Ordinal)))
+                {
+                    return null;
+                }
+            }
+
+            return (ours, [.. userArguments]);
+        }
+
+        var userFilters = new List<string>();
+        var rest = new List<string>(userArguments.Count);
+        for (var i = 0; i < end; i++)
+        {
+            if (userArguments[i] == "--filter" && i + 1 < end)
+            {
+                userFilters.Add(userArguments[++i]);
+            }
+            else if (userArguments[i].StartsWith("--filter=", StringComparison.Ordinal))
+            {
+                userFilters.Add(userArguments[i]["--filter=".Length..]);
+            }
+            else
+            {
+                rest.Add(userArguments[i]);
+            }
+        }
+
+        rest.AddRange(userArguments.Skip(end));
+        if (userFilters.Count == 0)
+        {
+            return (ours, rest);
+        }
+
+        var combined = string.Join('&', userFilters.Select(static filter => $"({filter})")) + $"&({ours[1]})";
+        return (["--filter", combined], rest);
+    }
+
     /// <summary>True when <paramref name="project"/> references TUnit, whose runner takes a tree-node filter.</summary>
     /// <param name="project">Test project.</param>
     public static bool IsTUnit(ProjectNode project) =>

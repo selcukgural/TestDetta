@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: d7c1d452e7f2 -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 6a9d880d2ebd -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -71,9 +71,10 @@ td affected --format paths | xargs -n1 dotnet build</code></pre>
 <pre><code>td test --summary-file "$GITHUB_STEP_SUMMARY"</code></pre>
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
-<p>Alles nach <code>--</code> wird an jeden <code>dotnet test</code>-Aufruf übergeben.</p>
+<p>Alles nach <code>--</code> wird an jeden <code>dotnet test</code>-Aufruf übergeben. Ihr eigener <code>--filter</code> bleibt erhalten: {{name}} verknüpft ihn mit seinem Klassenfilter, sodass nur die ausgewählten Tests innerhalb Ihres Filters laufen. Trait-, Methoden- und Namespace-Filter von xUnit v3 schränken die Auswahl ebenso ein. Ein Filter, den der Runner nicht mit einem Klassenfilter verknüpfen kann (ein Klassen- oder Query-Filter von xUnit v3, ein Tree-Node-Filter von TUnit), lässt das Projekt vollständig unter Ihrem Filter laufen.</p>
 <pre><code>td test -- -c Release --logger trx
-td test -- --no-restore</code></pre>
+td test -- --no-restore
+td test -- --filter "Category!=Integration"</code></pre>
 
 <h2 id="record"><code>td record</code></h2>
 <p>Führt alle Tests mit Coverage aus und schreibt eine Map pro Testprojekt nach <code>.testdetta/coverage</code> (oder <code>--maps-dir</code>). Führen Sie den Befehl auf Ihrem Standard-Branch aus; er ist zugleich der vollständige Testlauf dieses Branches. Exitcode <code>3</code>, wenn Tests fehlschlagen; die Maps werden trotzdem geschrieben, und die fehlschlagenden Klassen werden später immer ausgewählt.</p>

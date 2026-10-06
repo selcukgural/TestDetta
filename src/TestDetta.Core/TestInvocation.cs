@@ -19,6 +19,12 @@ public sealed record TestInvocation(TestProjectSelection Selection, IReadOnlyLis
 
     /// <summary>True when <see cref="Arguments"/> include <c>--no-build</c>: a legacy project is not built either.</summary>
     public bool NoBuild { get; init; }
+
+    /// <summary>
+    /// <see cref="Arguments"/> without TestDetta's class filter but with all of the user's arguments, their own
+    /// filter included: what runs when the class filter matched no test. Null when the invocation has no class filter.
+    /// </summary>
+    public IReadOnlyList<string>? UnfilteredArguments { get; init; }
 }
 
 /// <summary>Turns test selections into <c>dotnet test</c> invocations.</summary>
@@ -59,13 +65,7 @@ public static class TestInvocationBuilder
                 // it, and the build-only arguments stay with the build.
                 location = location with { Mode = DotnetTestMode.VSTest };
                 List<string> legacy = ["test", Path.GetRelativePath(location.FullDirectory(repoRoot), selection.Project.Path)];
-                if (selection.Mode == TestRunMode.Filtered)
-                {
-                    legacy.AddRange(TestFilter.Arguments(selection.TestClasses, exclude: false, TestFilterSyntax.VSTest));
-                }
-
-                legacy.AddRange(WithoutBuildArguments(extraArguments));
-                invocations.Add(new TestInvocation(selection, legacy, location)
+                invocations.Add(Invocation(selection, legacy, WithoutBuildArguments(extraArguments), TestFilterSyntax.VSTest, location) with
                 {
                     LegacyConfiguration = Configuration(extraArguments),
                     NoBuild = extraArguments.Contains("--no-build"),
@@ -74,16 +74,43 @@ public static class TestInvocationBuilder
             }
 
             var arguments = location.TestArguments(repoRoot, selection.Project.Path);
-            if (selection.Mode == TestRunMode.Filtered)
-            {
-                arguments.AddRange(TestFilter.Arguments(selection.TestClasses, exclude: false, TestFilter.SyntaxFor(selection.Project, location.Mode)));
-            }
-
-            arguments.AddRange(extraArguments);
-            invocations.Add(new TestInvocation(selection, arguments, location));
+            invocations.Add(Invocation(selection, arguments, extraArguments, TestFilter.SyntaxFor(selection.Project, location.Mode), location));
         }
 
         return invocations;
+    }
+
+    /// <summary>
+    /// The invocation of <paramref name="start"/> (<c>test</c> and the project) with the selection's class filter
+    /// inside the user's own filter (<see cref="TestFilter.WithinUserFilter"/>). When the runner cannot combine the
+    /// two, the whole project runs under the user's filter: running more is safe, running what the user's
+    /// filter leaves out is not.
+    /// </summary>
+    /// <param name="selection">What to run.</param>
+    /// <param name="start">The arguments before any filter.</param>
+    /// <param name="userArguments">The user's arguments.</param>
+    /// <param name="syntax">Filter syntax of the project's runner.</param>
+    /// <param name="location">Where the process runs.</param>
+    private static TestInvocation Invocation(TestProjectSelection selection, List<string> start, IReadOnlyList<string> userArguments, TestFilterSyntax syntax, DotnetTestLocation location)
+    {
+        List<string> unfiltered = [.. start, .. userArguments];
+        if (selection.Mode != TestRunMode.Filtered)
+        {
+            return new TestInvocation(selection, unfiltered, location);
+        }
+
+        if (TestFilter.WithinUserFilter(selection.TestClasses, syntax, userArguments) is not var (filter, rest))
+        {
+            var whole = selection with
+            {
+                Mode = TestRunMode.All,
+                TestClasses = [],
+                Reason = $"{selection.Reason}; the project's own filter cannot be combined with a class filter, so the whole project runs under it",
+            };
+            return new TestInvocation(whole, unfiltered, location);
+        }
+
+        return new TestInvocation(selection, [.. start, .. filter, .. rest], location) { UnfilteredArguments = unfiltered };
     }
 
     /// <summary>The configuration named by <c>-c</c> or <c>--configuration</c>, or Debug.</summary>
