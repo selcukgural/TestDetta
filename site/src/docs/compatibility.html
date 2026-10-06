@@ -26,6 +26,19 @@
 </table>
 <p>Test projects in the <a href="/docs/examples/#corpus">evaluation corpus</a> target .NET 8 to .NET 10. .NET Framework test projects are not part of it.</p>
 
+<h2 id="target-frameworks">Target frameworks</h2>
+<p>The code under test can target any framework: {{name}} reads its source and rewrites its compiled assemblies while recording, whatever they target. What sets a limit is the test project, because recording runs inside its test host.</p>
+<table>
+  <thead><tr><th>Target</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Code under test: .NET Framework 3.5 and later, .NET Standard 1.0 and later, .NET Core, .NET 5 and later</td><td>Supported; a .NET Framework 3.5 library under .NET Framework 4.8 tests is tested</td></tr>
+    <tr><td>Test projects on .NET 8 and later</td><td>Tested, the whole evaluation corpus</td></tr>
+    <tr><td>Test projects on .NET 6 and 7</td><td>.NET 6 tested with xUnit v2, NUnit 3 and MSTest 3, on Microsoft.NET.Test.Sdk 17.13 (the last version for them)</td></tr>
+    <tr><td>Test projects on .NET Framework 4.6.2 to 4.8.1</td><td>Tested with xUnit v2 (4.6.2 and 4.8) and MSTest 1 and 3 (4.8) under Mono on macOS; Windows not tested yet. NUnit 2's adapter is not supported yet.</td></tr>
+    <tr><td>Test projects on .NET Framework 3.5 to 4.6.1</td><td>Not supported: current test platforms need .NET Framework 4.6.2</td></tr>
+  </tbody>
+</table>
+
 <h2 id="languages">Languages</h2>
 <table>
   <thead><tr><th>Language</th><th>How changes are handled</th></tr></thead>

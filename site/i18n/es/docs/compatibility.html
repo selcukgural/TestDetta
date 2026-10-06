@@ -1,4 +1,4 @@
-<!-- title: Compatibilidad; layout: docs; description: Los frameworks de pruebas, runners, lenguajes, sistemas operativos y sistemas de CI que admite {{name}}.; source: f22588066dde -->
+<!-- title: Compatibilidad; layout: docs; description: Los frameworks de pruebas, runners, lenguajes, sistemas operativos y sistemas de CI que admite {{name}}.; source: c99815a5c44f -->
 <h1>Compatibilidad</h1>
 <p class="lead">Qué necesita {{name}} y con qué se ha probado. Lo que no aparece en estas tablas no tiene por qué ser incompatible, pero no se ha probado de extremo a extremo.</p>
 
@@ -25,6 +25,19 @@
   </tbody>
 </table>
 <p>Los proyectos de pruebas del <a href="/docs/examples/#corpus">corpus de evaluación</a> tienen como destino de .NET 8 a .NET 10. Los proyectos de pruebas de .NET Framework no forman parte de él.</p>
+
+<h2 id="target-frameworks">Frameworks de destino</h2>
+<p>El código bajo prueba puede tener cualquier framework de destino: {{name}} lee su código fuente y, al grabar, reescribe sus ensamblados compilados sea cual sea su destino. Lo que pone el límite es el proyecto de pruebas, porque la grabación se ejecuta dentro de su host de pruebas.</p>
+<table>
+  <thead><tr><th>Destino</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Código bajo prueba: .NET Framework 3.5 y posteriores, .NET Standard 1.0 y posteriores, .NET Core, .NET 5 y posteriores</td><td>Compatible; probado con una biblioteca de .NET Framework 3.5 bajo pruebas de .NET Framework 4.8</td></tr>
+    <tr><td>Proyectos de pruebas en .NET 8 y posteriores</td><td>Probados, todo el corpus de evaluación</td></tr>
+    <tr><td>Proyectos de pruebas en .NET 6 y 7</td><td>.NET 6 probado con xUnit v2, NUnit 3 y MSTest 3, en Microsoft.NET.Test.Sdk 17.13 (la última versión para ellos)</td></tr>
+    <tr><td>Proyectos de pruebas en .NET Framework 4.6.2 a 4.8.1</td><td>Probados con xUnit v2 (4.6.2 y 4.8) y MSTest 1 y 3 (4.8) con Mono en macOS; Windows aún no se ha probado. El adaptador de NUnit 2 aún no es compatible.</td></tr>
+    <tr><td>Proyectos de pruebas en .NET Framework 3.5 a 4.6.1</td><td>No compatibles: las plataformas de pruebas actuales necesitan .NET Framework 4.6.2</td></tr>
+  </tbody>
+</table>
 
 <h2 id="languages">Lenguajes</h2>
 <table>

@@ -1,4 +1,4 @@
-<!-- title: Kompatibilität; layout: docs; description: Die Test-Frameworks, Test Runner, Sprachen, Betriebssysteme und CI-Systeme, die {{name}} unterstützt.; source: f22588066dde -->
+<!-- title: Kompatibilität; layout: docs; description: Die Test-Frameworks, Test Runner, Sprachen, Betriebssysteme und CI-Systeme, die {{name}} unterstützt.; source: c99815a5c44f -->
 <h1>Kompatibilität</h1>
 <p class="lead">Was {{name}} benötigt und womit es getestet wurde. Was nicht in diesen Tabellen steht, ist nicht unbedingt nicht unterstützt, wurde aber nicht durchgängig getestet.</p>
 
@@ -25,6 +25,19 @@
   </tbody>
 </table>
 <p>Die Testprojekte im <a href="/docs/examples/#corpus">Evaluierungskorpus</a> zielen auf .NET 8 bis .NET 10. Testprojekte für das .NET Framework gehören nicht dazu.</p>
+
+<h2 id="target-frameworks">Ziel-Frameworks</h2>
+<p>Der getestete Code kann jedes Framework anzielen: {{name}} liest seinen Quellcode und schreibt seine kompilierten Assemblys beim Aufzeichnen um, gleich, was sie anzielen. Die Grenze setzt das Testprojekt, denn das Aufzeichnen läuft in seinem Testhost.</p>
+<table>
+  <thead><tr><th>Ziel</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Getesteter Code: .NET Framework 3.5 und neuer, .NET Standard 1.0 und neuer, .NET Core, .NET 5 und neuer</td><td>Unterstützt; eine .NET-Framework-3.5-Bibliothek unter .NET-Framework-4.8-Tests ist getestet</td></tr>
+    <tr><td>Testprojekte auf .NET 8 und neuer</td><td>Getestet, das gesamte Evaluierungskorpus</td></tr>
+    <tr><td>Testprojekte auf .NET 6 und 7</td><td>.NET 6 getestet mit xUnit v2, NUnit 3 und MSTest 3, auf Microsoft.NET.Test.Sdk 17.13 (der letzten Version für sie)</td></tr>
+    <tr><td>Testprojekte auf .NET Framework 4.6.2 bis 4.8.1</td><td>Getestet mit xUnit v2 (4.6.2 und 4.8) sowie MSTest 1 und 3 (4.8) unter Mono auf macOS; Windows noch nicht getestet. Der Adapter von NUnit 2 wird noch nicht unterstützt.</td></tr>
+    <tr><td>Testprojekte auf .NET Framework 3.5 bis 4.6.1</td><td>Nicht unterstützt: aktuelle Testplattformen brauchen .NET Framework 4.6.2</td></tr>
+  </tbody>
+</table>
 
 <h2 id="languages">Sprachen</h2>
 <table>

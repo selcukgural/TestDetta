@@ -278,7 +278,7 @@ call    TestDettaTracker.Hit(int32)`) + ul([
       file: "src/TestDetta.Coverage/RuntimeDeployment.cs",
       input: "Test dll'inin yolu",
       output: "Çıktıda <code>TestDetta.Coverage.Runtime.dll</code> ve güncellenmiş <code>deps.json</code>",
-      purpose: "Yeniden yazılan dll'ler <code>TestDettaTracker</code>'ı çağırıyor; test host'unun onu yükleyebilmesi gerekir.",
+      purpose: "Yeniden yazılan dll'ler <code>TestDettaTracker</code>'ı çağırıyor; test host'unun onu yükleyebilmesi gerekir. İzleyici iki derlemeyle gelir: .NET Framework test assembly'si için <code>runtime/net462</code>, diğerleri için netstandard2.0 (<code>RuntimeDeployment.TrackerFor</code>). .NET Framework çıktısında <code>deps.json</code> yoktur; dosyayı kopyalamak yeter.",
     },
     {
       title: "Testler parçalara bölünüp tek tek koşturulur", nodes: ["instr", "run", "host"], edges: ["r", "h"],
@@ -286,7 +286,7 @@ call    TestDettaTracker.Hit(int32)`) + ul([
       file: "src/TestDetta.Coverage/CoverageRecorder.cs",
       input: "<code>dotnet test [--project] &lt;proj&gt; --no-build -c Debug --settings testdetta.runsettings</code>; ortam: <code>TESTDETTA_METHOD_COUNT</code>, <code>TESTDETTA_FIELD_COUNT</code>, <code>TESTDETTA_COVERAGE_OUTPUT=work/coverage-&lt;i&gt;.json</code>, <code>TESTDETTA_STARTUP_HOOK</code> (kanca dll'i), <code>TESTDETTA_PROCESS_STARTS=work/process-starts-&lt;i&gt;.tsv</code>",
       output: "Parça başına çıkış kodu, TRX raporu ve süreç başına bir sonuç dosyası",
-      purpose: "Paralellik kapatılır (xUnit <code>MaxParallelThreads=1</code>, NUnit <code>NumberOfTestWorkers=0</code>, MSTest <code>Workers=1</code>) ki bir anda tek test sınıfı çalışsın ve vuruşlar doğru sınıfa yazılsın.",
+      purpose: "Paralellik kapatılır (xUnit <code>MaxParallelThreads=1</code>, NUnit <code>NumberOfTestWorkers=0</code>, MSTest <code>Workers=1</code>) ki bir anda tek test sınıfı çalışsın ve vuruşlar doğru sınıfa yazılsın. Test AppDomain'leri de kapatılır (<code>DisableAppDomain</code>, xUnit <code>AppDomain=denied</code>): .NET Framework'te izleyicinin verisi aksi halde ayrı domain'de kalır.",
       body: ul([
         "<code>--parallel n</code>: sınıflar <code>n</code> parçaya dağıtılır, her parça ayrı süreç; sonda bilinen sınıfları dışlayan bir \"artakalan\" parça.",
         "Bir parça sonuç yazmazsa tek süreçte filtresiz tekrar; o da olmazsa testin kendi paralelliğiyle (<code>TESTDETTA_PARALLEL_FLOWS=1</code>).",

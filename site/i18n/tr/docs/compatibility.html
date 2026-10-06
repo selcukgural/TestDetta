@@ -1,4 +1,4 @@
-<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: f22588066dde -->
+<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: c99815a5c44f -->
 <h1>Uyumluluk</h1>
 <p class="lead">{{name}}'nın neye ihtiyaç duyduğu ve neyle test edildiği. Bu tabloların dışında kalan bir şey desteklenmiyor demek değildir, ancak uçtan uca test edilmemiştir.</p>
 
@@ -25,6 +25,19 @@
   </tbody>
 </table>
 <p><a href="/docs/examples/#corpus">Değerlendirme korpusundaki</a> test projeleri .NET 8 ile .NET 10 arasını hedefler. .NET Framework test projeleri bu korpusa dahil değildir.</p>
+
+<h2 id="target-frameworks">Hedef framework'ler</h2>
+<p>Test edilen kod herhangi bir framework'ü hedefleyebilir: {{name}} kaynak kodunu okur ve kayıt sırasında derlenmiş assembly'lerini neyi hedeflerlerse hedeflesinler yeniden yazar. Sınırı test projesi belirler, çünkü kayıt onun test host'unda çalışır.</p>
+<table>
+  <thead><tr><th>Hedef</th><th>Durum</th></tr></thead>
+  <tbody>
+    <tr><td>Test edilen kod: .NET Framework 3.5 ve üzeri, .NET Standard 1.0 ve üzeri, .NET Core, .NET 5 ve üzeri</td><td>Destekleniyor; .NET Framework 4.8 testleri altındaki bir .NET Framework 3.5 kütüphanesi test edildi</td></tr>
+    <tr><td>.NET 8 ve üzerindeki test projeleri</td><td>Test edildi, değerlendirme corpus'unun tamamı</td></tr>
+    <tr><td>.NET 6 ve 7'deki test projeleri</td><td>.NET 6, xUnit v2, NUnit 3 ve MSTest 3 ile, Microsoft.NET.Test.Sdk 17.13 (onlar için son sürüm) üzerinde test edildi</td></tr>
+    <tr><td>.NET Framework 4.6.2 ile 4.8.1 arasındaki test projeleri</td><td>macOS'ta Mono altında xUnit v2 (4.6.2 ve 4.8) ve MSTest 1 ve 3 (4.8) ile test edildi; Windows henüz test edilmedi. NUnit 2 adaptörü henüz desteklenmiyor.</td></tr>
+    <tr><td>.NET Framework 3.5 ile 4.6.1 arasındaki test projeleri</td><td>Desteklenmiyor: güncel test platformları .NET Framework 4.6.2 gerektirir</td></tr>
+  </tbody>
+</table>
 
 <h2 id="languages">Diller</h2>
 <table>
