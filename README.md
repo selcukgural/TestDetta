@@ -183,8 +183,12 @@ and the details are in [docs/ci.md](docs/ci.md).
   really changed counts, framework by framework. A test project without a map, without a portable
   PDB, or recorded with `-f` for one of several frameworks still runs completely; a build that fails
   stops `td test` with the compiler's errors.
-  A project referenced with `ReferenceOutputAssembly="false"` (run as another process) still runs its
-  consumers completely.
+  A project referenced with `ReferenceOutputAssembly="false"` is decided by how its output is used:
+  the classes whose recording started it as a process, loaded it as an assembly or read a build output
+  named after it run. When the consumer's build uses the output (an `OutputItemType`, a target that
+  names the project, a compile input from it), `td test` builds the test project and compares what the
+  build fed the consumer's compiler from outside git with the map; a difference, or a map recorded
+  before such uses were, runs the consumer completely.
 - F# and Visual Basic projects are part of the project graph, but their code is not analysed: when
   one is affected, everything that depends on it runs completely.
 

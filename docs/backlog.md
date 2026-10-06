@@ -26,6 +26,8 @@ that report numbers (value reporting) only once the numbers are proven right.
   docs/design/opaque-project-references.md): a reference with `OutputItemType` or
   `ReferenceOutputAssembly="false"` is opaque, and an affected opaque reference makes its consumer
   a project-level change. Found in protobuf-net; 20 of 41 corpus repositories have such references.
+  Narrowed 2026-10-06 for `ReferenceOutputAssembly="false"` (docs/design/runtime-file-reads.md):
+  the tests that started or loaded the output, after a build-use check and a build-input comparison.
 - **Framework caches that call repository code back** (2026-10-03, docs/design/external-callbacks.md):
   third-party callbacks are now run-once code. .NET's own callbacks are not, because most are
   per use. Those it caches (`JsonConverterFactory.CreateConverter`, `TypeConverter`, ...) and

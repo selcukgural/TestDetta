@@ -1,4 +1,4 @@
-<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: 3f75041f2001 -->
+<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: 0d84001c0b8f -->
 <h1>Limitaciones</h1>
 <p class="lead">Donde {{name}} no puede ver algo, selecciona más. Esta página enumera esos casos, para que sepas cuándo una selección es más amplia de lo necesario, y los pocos casos en los que un patrón escrito a mano puede ocultar una prueba.</p>
 
@@ -29,6 +29,7 @@
 <ul>
   <li><strong>Servicios externos y bases de datos.</strong> Un cambio en otro sistema, como una migración de esquema aplicada en otro lugar o una API a la que llaman tus pruebas, aquí no selecciona nada.</li>
   <li><strong>Archivos que código de terceros lee en tiempo de ejecución desde fuera de las carpetas de proyecto</strong>, como los archivos de una biblioteca de snapshots en la raíz del repositorio. Las lecturas de tu propio código se graban; consulta <a href="/docs/what-runs-everything/#ignored">archivos fuera de todos los proyectos</a>.</li>
+  <li><strong>Programas que inicia código de terceros y que no son .NET (Core)</strong>, como un ejecutable nativo o de .NET Framework de su repositorio que inicia una biblioteca de procesos. Los procesos .NET se registran los inicie quien los inicie, igual que los que inicia su propio código.</li>
   <li><strong>El entorno</strong>: variables, ajustes de la máquina y herramientas instaladas que difieren entre ejecuciones.</li>
 </ul>
 <p>Los cambios de versión de los paquetes sí se ven: un cambio de <code>PackageVersion</code> en <code>Directory.Packages.props</code> ejecuta los proyectos que hacen referencia al paquete, y un cambio de <code>PackageReference</code> es un cambio en el archivo de proyecto.</p>

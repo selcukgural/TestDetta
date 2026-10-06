@@ -79,10 +79,14 @@ public sealed partial class BuildGeneratedCodeReader(ILoggerFactory loggerFactor
         }
 
         var owners = new ProjectAssemblies(_logger).Owners(graph, repoRoot);
-        var assemblies = GeneratedSourceReader.RepositoryAssemblies(owners.Keys, Path.GetDirectoryName(targetPath)!);
+        var assemblies = GeneratedSourceReader.RepositoryAssemblies(GeneratedSourceReader.CompiledAgainst(graph, testProject, owners), Path.GetDirectoryName(targetPath)!);
         var sources = GeneratedSourceReader.Read(repoRoot, testProject, targetPath, owners, assemblies);
         LogRead(testProject.Path, sources.Count, assemblies.Count + 1);
-        return GeneratedCodeRead.Read(sources);
+        var tracked = new GitClient(loggerFactory.CreateLogger<GitClient>()).TrackedFiles(repoRoot).ToHashSet(StringComparer.Ordinal);
+        return GeneratedCodeRead.Read(sources) with
+        {
+            BuildInputs = GeneratedSourceReader.ReadBuildInputs(repoRoot, testProject, targetPath, owners, assemblies, tracked),
+        };
     }
 
     /// <summary>The test assembly's path for the configuration and framework, asked from MSBuild; null when it gives none.</summary>

@@ -12,7 +12,7 @@
     <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Every test project below it</td></tr>
     <tr><td><code>Directory.Packages.props</code>, only <code>PackageVersion</code> items changed</td><td>Only the test projects that reference a changed package, and those that depend on them</td></tr>
     <tr><td>A changed source generator, for a test project that has no coverage map, builds without a portable PDB, or was recorded with <code>-f</code> for one of several frameworks</td><td>What it generates is compared from a build, and here there is nothing to compare. Otherwise only the generated code that changed counts.</td></tr>
-    <tr><td>A project referenced with <code>ReferenceOutputAssembly="false"</code></td><td>The tests may run it as another process, which coverage does not see.</td></tr>
+    <tr><td>A changed project referenced with <code>ReferenceOutputAssembly="false"</code>, when the referencing project's build turns its output into code it compiles, or the test project's map does not record which tests start or load it</td><td>Otherwise only the test classes that started it as a process or loaded it while the map was recorded run, and a reference only for build order runs nothing.</td></tr>
   </tbody>
 </table>
 

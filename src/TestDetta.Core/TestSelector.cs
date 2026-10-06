@@ -26,7 +26,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
 
         (request, var driftRunAll) = WithoutDriftedMaps(request);
         var generatorUses = new List<GeneratorUse>();
-        var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, generatorUses);
+        var outputUses = new List<OutputUse>();
+        var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, generatorUses, outputUses);
+        AddOutputUsers(request, outputUses, projectLevel, readers);
         var generatorOutput = CompareGeneratorOutput(request, projectLevel, generatorUses);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)
@@ -236,12 +238,18 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     /// for <see cref="CompareGeneratorOutput"/> to decide; null to fall back for them too (map drift,
     /// where nothing builds the map's commit).
     /// </param>
+    /// <param name="outputUses">
+    /// Receives the projects that reference an affected project without compiling against it and whose
+    /// build does not use its output (<see cref="BuildOutputUse"/>), instead of a fallback, for
+    /// <see cref="AddOutputUsers"/> to decide; null to fall back for them too.
+    /// </param>
     private Dictionary<string, string> FindProjectLevelChanges(
         ProjectGraph graph,
         string repoRoot,
         IReadOnlyList<string> changedFiles,
         ImpactResult impact,
-        List<GeneratorUse>? generatorUses = null)
+        List<GeneratorUse>? generatorUses = null,
+        List<OutputUse>? outputUses = null)
     {
         var fallbacks = new Dictionary<string, string>(Paths.Comparer);
         var codeChanges = new Dictionary<string, CodeChange>(StringComparer.Ordinal);
@@ -305,19 +313,30 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             // An analyzer or source generator runs inside the consumer's compiler, and an output the
             // consumer does not compile against is run in another process if at all: neither name
             // tracing nor coverage sees what the change does there, so the consumer changed as a whole.
-            // What a generator does shows in the code it generates, which a build can compare.
+            // What a generator does shows in the code it generates, which a build can compare; an
+            // output the build does not use reaches only the tests that start or load it.
             foreach (var consumer in graph.OpaqueConsumersOf(affected.Project.Path))
             {
-                if (generatorUses is not null && consumer.GeneratorReferences.Contains(affected.Project.Path))
+                var generator = consumer.GeneratorReferences.Contains(affected.Project.Path);
+                if (generatorUses is not null && generator)
                 {
                     generatorUses.Add(new GeneratorUse(consumer, affected.Project));
+                    continue;
+                }
+
+                var buildUse = generator ? null : BuildOutputUse.Find(repoRoot, consumer, affected.Project);
+                if (outputUses is not null && !generator)
+                {
+                    outputUses.Add(new OutputUse(consumer, affected.Project, buildUse));
                     continue;
                 }
 
                 AddFallback(
                     fallbacks,
                     consumer.Path,
-                    $"it uses {Path.GetFileName(affected.Project.Path)}, which is affected, as an analyzer or source generator or without compiling against it");
+                    buildUse is null
+                        ? $"it uses {Path.GetFileName(affected.Project.Path)}, which is affected, as an analyzer or source generator or without compiling against it"
+                        : $"it uses {Path.GetFileName(affected.Project.Path)}, which is affected, in its build: {buildUse}");
             }
         }
 

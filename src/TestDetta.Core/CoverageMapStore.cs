@@ -100,6 +100,16 @@ public static class CoverageMapStore
             json.WriteEndObject();
         }
 
+        if (map.OutputUses is { } uses)
+        {
+            json.WriteStartObject("outputUses"u8);
+            WritePaths(json, "classes", uses.Classes);
+            WritePaths(json, "fixtures", uses.Fixtures);
+            WriteStrings(json, "ambient", uses.Ambient);
+            WriteStrings(json, "initialization", uses.Initialization);
+            json.WriteEndObject();
+        }
+
         if (map.FailedClasses is { } failed)
         {
             json.WriteStartArray("failedClasses"u8);
@@ -129,6 +139,23 @@ public static class CoverageMapStore
         if (map.Framework is { } framework)
         {
             json.WriteString("framework"u8, framework);
+        }
+
+        if (map.BuildInputs is { } inputs)
+        {
+            json.WriteStartObject("buildInputs"u8);
+            foreach (var (project, values) in inputs.OrderBy(static p => p.Key, StringComparer.Ordinal))
+            {
+                json.WriteStartObject(project);
+                foreach (var (key, value) in values.OrderBy(static v => v.Key, StringComparer.Ordinal))
+                {
+                    json.WriteString(key, value);
+                }
+
+                json.WriteEndObject();
+            }
+
+            json.WriteEndObject();
         }
 
         if (map.GeneratedFrameworks is { } generatedFrameworks)
@@ -250,6 +277,15 @@ public static class CoverageMapStore
                 ClassLocations = root.TryGetProperty("classLocations", out var locations) ? ReadLocations(locations) : null,
                 FileReads = root.TryGetProperty("fileReads", out var reads)
                     ? new FileReads(ReadPaths(reads.GetProperty("classes")), ReadPaths(reads.GetProperty("fixtures")), ReadStrings(reads.GetProperty("ambient")), ReadStrings(reads.GetProperty("initialization")))
+                    : null,
+                BuildInputs = root.TryGetProperty("buildInputs", out var inputs)
+                    ? inputs.EnumerateObject().ToDictionary(
+                        static p => p.Name,
+                        static p => (IReadOnlyDictionary<string, string>)p.Value.EnumerateObject().ToDictionary(static v => v.Name, static v => v.Value.GetString()!, StringComparer.Ordinal),
+                        StringComparer.Ordinal)
+                    : null,
+                OutputUses = root.TryGetProperty("outputUses", out var uses)
+                    ? new FileReads(ReadPaths(uses.GetProperty("classes")), ReadPaths(uses.GetProperty("fixtures")), ReadStrings(uses.GetProperty("ambient")), ReadStrings(uses.GetProperty("initialization")))
                     : null,
             };
         }

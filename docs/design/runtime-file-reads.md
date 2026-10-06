@@ -1,6 +1,6 @@
 # Files tests read at run time
 
-Status: file reads implemented 2026-10-05 (see "As built"); process starts not yet. In v1 (user decision, 2026-10-05).
+Status: file reads implemented 2026-10-05, process starts and assembly loads 2026-10-06 (see the "As built" sections). In v1 (user decision, 2026-10-05).
 
 ## Problem
 
@@ -132,3 +132,83 @@ What the two repositories do (checked 2026-10-05):
   `net472`, with `OutputItemType="TestAppExe"`; its own target `CopyTestAppExes` copies the exe next to
   the tests, which start it. On macOS net472 is not built, so the 100% selected there needs its own look
   (the condition may not reach the graph, or another rule runs the project).
+
+## Decided: outputs referenced without compiling against them (owner, 2026-10-06)
+
+The owner chose options 1 and 2 above. Checked against the corpus before building: 17 of the
+repositories with a clone on disk have such a reference. Most are analyzers and source generators
+(already compared by building, B); the rest are packing only (protobuf-net, Meziantou), a test app the
+tests start (LibGit2Sharp), AOT and smoke projects (Refit, protobuf-net, YamlDotNet, FastEndpoints), and
+one build-time generator target (Open XML SDK). The rule below names no repository.
+
+**When the referenced project R is affected and a consumer C references it this way:**
+
+1. **Does C's build use R's output?** (option 1, from the MSBuild evaluation, no build). It does when
+   the reference has an `OutputItemType` other than `Analyzer` (the output becomes items that some target
+   consumes), or when a `<Target>` in C's project file or a repository `.props`/`.targets` file that C
+   imports names R (its project file name, its assembly name) or iterates `@(ProjectReference)` /
+   `@(_ResolvedProjectReferencePaths)`. Items outside targets are classified by type: `Compile`,
+   `EmbeddedResource`, `AdditionalFiles` and `Analyzer` naming R's output are a build use; `None` and
+   `Content` (packing, copying) are not, since copying only makes the output available at run time.
+2. **If the build uses it** (option 2): C is built, as for a changed generator, and the documents it
+   compiled that git does not track (PDB document checksums) and its embedded resources are compared
+   with the recording. Different: C changed as a whole (today's rule). Equal: the build only moved R's
+   output around (LibGit2Sharp copies the test app next to the tests), so go on with 3.
+3. **Run-time users.** In every test project with a map below C, the classes that started R's output as
+   a process, loaded it as an assembly, or read a file the build put into the output that git does not
+   track are selected. A reference no test used and no build step used is build order only and selects
+   nothing. A use outside the tests, while initializing, or in a fixture's setup runs the whole project,
+   as for file reads.
+
+**Recording the run-time use.**
+
+- In-repository call sites, like file reads: `Process.Start` (all overloads, and the instance `Start()`,
+  which reads `StartInfo`), `Assembly.LoadFrom`/`LoadFile`/`Load(string)` and
+  `AssemblyLoadContext.LoadFromAssemblyPath`. The tracker keeps the started file and every argument
+  that looks like a path, by name.
+- Starts made by third-party code (CliWrap, SimpleExec, Testcontainers) have no call site in the
+  repository. The test host's environment gets a startup hook (`DOTNET_STARTUP_HOOKS`, appended to any
+  the team set): every .NET process started from a test reports its entry assembly to the tracker's
+  results with the bucket that was running when it started (the tracker keeps the current bucket in an
+  environment variable the child inherits). Native and .NET Framework executables started by
+  third-party code stay unseen; the docs will say so.
+- Map: a new optional section `outputUses` (classes, fixtures, ambient, initialization: file names), so
+  an older map knows no uses and keeps today's rule (whole consumer).
+- Matching is by name: a recorded name whose last path segment, without `.dll`, `.exe` or `.csproj`,
+  equals R's assembly name or project file name.
+
+**Validation.** Red tests first on a sample repository (a helper exe started from a test, a packing-only
+reference, a target that copies the output, a target that generates code from it), then the corpus
+quick check on the repositories that have such references, with `--focus` on members of the referenced
+projects.
+
+## As built (outputs, 2026-10-06)
+
+- **Instrumenter** (`FileReadCalls`): calls of `Process.Start` (every overload and the instance
+  `Start()`), `Assembly.LoadFrom`/`UnsafeLoadFrom`/`LoadFile`/`Load`, `AssemblyLoadContext.LoadFrom*`
+  and `AppDomain.ExecuteAssembly*` go through wrappers that pass their first two arguments to
+  `TestDettaTracker.OutputUsed`. It keeps names: the last path segment of every path in a file name,
+  argument list, working directory, `ProcessStartInfo`, `Process` or `AssemblyName`, before a comma,
+  without `.dll`/`.exe`/project extensions.
+- **Startup hook** (`TestDetta.Coverage.StartupHook`, netstandard2.0, so any .NET child can load it):
+  `td record` passes its path in `TESTDETTA_STARTUP_HOOK`; the tracker appends it to
+  `DOTNET_STARTUP_HOOKS` of the test host only (not of `dotnet test` or MSBuild) and keeps
+  `TESTDETTA_BUCKET` at the bucket entered last (`a|` with tests in parallel). Each .NET child writes
+  one line (bucket, entry assembly, command line) to `process-starts-<shard>.tsv`; failures are
+  swallowed. Not seen: native and .NET Framework programs started by third-party code (documented in
+  the limitations page), and starts inside a static constructor or cache fill through third-party code
+  (they count for the bucket, not as initialization).
+- **Map**: optional `outputUses` (the names, shaped like `fileReads`; reads of untracked files under
+  `bin`/`obj` add their names too) and `buildInputs` (per project in the test output: untracked compiled
+  documents by file name with their PDB checksums, embedded resources with SHA-256; the SDK's assembly
+  info, assembly attributes and global usings files are left out).
+- **Recording scope changed**: only the assemblies of projects the test project compiles against
+  (transitively, without references that do not compile against) are instrumented. A copy of another
+  project's executable in the test output used to be instrumented and broke when a test ran it.
+- **Selection** (`TestSelector.AddOutputUsers`, `BuildOutputUse`, `BuildInputsDiffer`): as decided above.
+  A use outside the tests, while initializing or in a fixture's setup runs the whole project; a map
+  without `outputUses` runs it; a multi-targeted test project whose build uses the output runs it
+  (builds are not compared per framework yet); map drift keeps today's rule.
+- **Tests**: `OutputUseRecordingTests` (repository call, reflection standing in for a third-party
+  starter, assembly load), `OutputUseSelectionTests` (12 cases of the rule), `OutputUseBuildTests` (a
+  build that copies the output selects the starter; one that generates code from it runs everything).

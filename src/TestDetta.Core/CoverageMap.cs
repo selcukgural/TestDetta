@@ -146,6 +146,26 @@ public sealed record CoverageMap(
     public FileReads? FileReads { get; init; }
 
     /// <summary>
+    /// What the tests started as a process, loaded as an assembly, or read from a build output that git
+    /// does not track, by name: the last path segment without <c>.dll</c>, <c>.exe</c> or a project
+    /// extension, shaped like <see cref="FileReads"/>. A project referenced without compiling against
+    /// it is used at run time by the classes whose names include its assembly or project name
+    /// (docs/design/runtime-file-reads.md). Null for a map recorded before uses were (it can answer
+    /// nothing about them).
+    /// </summary>
+    public FileReads? OutputUses { get; init; }
+
+    /// <summary>
+    /// What the build fed the compiler of each project in the test output (the test project included)
+    /// from outside the files git tracks, by project path relative to the repository: compiled documents
+    /// by file name with their PDB checksums, and embedded resources (<c>resource:</c> and name) with their
+    /// SHA-256 (docs/design/runtime-file-reads.md). When the build of a project uses the output of one it
+    /// references without compiling against it, an equal set in a current build shows the output reached
+    /// it only as a file to run. Recorded for <see cref="Framework"/>; null for maps recorded before.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? BuildInputs { get; init; }
+
+    /// <summary>
     /// Test classes (runtime names) the test reports listed although none of their tests executed:
     /// every test was skipped, inconclusive or ignored, so the map cannot say what the class runs.
     /// Together with <see cref="Classes"/> and <see cref="FailedClasses"/> this is every class the

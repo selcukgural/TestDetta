@@ -99,8 +99,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 $"{Path.GetFileName(project)} has no build output at {targetPath}; build it with -c {request.Configuration} first, or drop --no-build.");
         }
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
-        var assemblies = GeneratedSourceReader.RepositoryAssemblies(AssemblyOwners(request).Keys, outputDirectory);
+        var assemblies = GeneratedSourceReader.RepositoryAssemblies(GeneratedSourceReader.CompiledAgainst(request.Graph, request.TestProject, AssemblyOwners(request)), outputDirectory);
         var generated = ReadGenerated(request, targetPath, assemblies, framework);
+        // Read before instrumentation rewrites the assemblies and their PDBs, as the generated code is.
+        var tracked = new GitClient(loggerFactory.CreateLogger<GitClient>()).TrackedFiles(request.RepoRoot).ToHashSet(StringComparer.Ordinal);
+        var buildInputs = GeneratedSourceReader.ReadBuildInputs(request.RepoRoot, request.TestProject, targetPath, AssemblyOwners(request), assemblies, tracked);
         IReadOnlyList<string>? generatedFrameworks = null;
         if (framework is not null && request.Options.Framework is null)
         {
@@ -203,6 +206,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 ClassLocations = Reported(map, locations),
                 Generated = generated,
                 GeneratedFrameworks = generatedFrameworks,
+                BuildInputs = buildInputs,
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
             };
@@ -516,6 +520,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             [TestDettaTracker.MethodCountVariable] = instrumentation.Methods.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
             [TestDettaTracker.FieldCountVariable] = instrumentation.Fields.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
             [TestDettaTracker.OutputVariable] = resultsFile,
+            // Every .NET process a test starts reports itself, whoever starts it (docs/design/runtime-file-reads.md).
+            [TestDettaTracker.StartupHookVariable] = typeof(StartupHook).Assembly.Location,
+            [StartupHook.OutputVariable] = Path.Combine(work, $"{ProcessStartsPrefix}{shard.Index}.tsv"),
         };
         if (context.SuiteParallelism)
         {
@@ -651,7 +658,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 return (all, null);
             }
 
-            var assemblies = GeneratedSourceReader.RepositoryAssemblies(AssemblyOwners(request).Keys, Path.GetDirectoryName(targetPath)!);
+            var assemblies = GeneratedSourceReader.RepositoryAssemblies(GeneratedSourceReader.CompiledAgainst(request.Graph, request.TestProject, AssemblyOwners(request)), Path.GetDirectoryName(targetPath)!);
             all.AddRange(ReadGenerated(request, targetPath, assemblies, other));
         }
 
@@ -708,7 +715,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <summary>Combines the method table with the collectors' per-class hits, merging all shards.</summary>
     /// <param name="request">What was recorded.</param>
     /// <param name="methods">Method table from instrumentation.</param>
-    /// <param name="resultsFiles">JSON files written by <see cref="TestDettaTracker.WriteResults"/>, one per shard.</param>
+    /// <param name="resultsFiles">JSON files written by <see cref="TestDettaTracker.WriteResults()"/>, one per shard.</param>
     private CoverageMap BuildMap(RecordRequest request, IReadOnlyList<CoveredMethod> methods, IReadOnlyList<string> resultsFiles)
     {
         var merged = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
@@ -724,12 +731,14 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var builtFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var builtAmbient = new SortedSet<int>();
         var reads = new RawFileReads();
+        var uses = new RawOutputUses();
 
         foreach (var file in resultsFiles)
         {
             using var document = ReadResults(file);
             var root = document.RootElement;
             reads.Add(root);
+            uses.Add(root);
             // Ids past the methods are tracked fields a bucket read; what built their values in this
             // process counts for the bucket through the value.
             var fieldReads = new FieldReads(root.TryGetProperty("methodCount", out var count) ? count.GetInt32() : methods.Count, Builders(root));
@@ -772,12 +781,21 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
         }
 
+        foreach (var directory in resultsFiles.Select(Path.GetDirectoryName).Distinct(StringComparer.Ordinal))
+        {
+            foreach (var starts in Directory.GetFiles(directory!, $"{ProcessStartsPrefix}*.tsv"))
+            {
+                uses.AddProcessStarts(starts);
+            }
+        }
+
         var classes = Freeze(merged);
         var fixtures = Freeze(mergedFixtures);
         int[] ambient = [.. ambientIds];
 
         var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
         var commit = git.Head(request.RepoRoot);
+        var paths = new FileReadPaths(request.RepoRoot, git.TrackedFiles(request.RepoRoot));
         LogRecorded(request.TestProject.Path, classes.Count, fixtures.Count, methods.Count);
 
         var header = new CoverageMapHeader(
@@ -794,8 +812,116 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // Linked in some process and unlinked in none: one path the probes do not see is enough to stay run-once.
             LinkedInitialization = [.. initialization.Where(id => linked.Contains(id) && !unlinked.Contains(id))],
             BuiltValues = new CoverageHits(Freeze(builtClasses), Freeze(builtFixtures), [.. builtAmbient]),
-            FileReads = reads.Seen ? reads.Resolve(new FileReadPaths(request.RepoRoot, git.TrackedFiles(request.RepoRoot))) : null,
+            FileReads = reads.Seen ? reads.Resolve(paths) : null,
+            OutputUses = uses.Seen ? uses.With(reads.BuildOutputs(paths)) : null,
         };
+    }
+
+    /// <summary>File name prefix of the lines the startup hook writes, one file per shard.</summary>
+    private const string ProcessStartsPrefix = "process-starts-";
+
+    /// <summary>
+    /// The <c>outputUses</c> of every process's results and the processes the startup hook reported,
+    /// as names (docs/design/runtime-file-reads.md).
+    /// </summary>
+    private sealed class RawOutputUses
+    {
+        private readonly Dictionary<string, HashSet<string>> _classes = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> _fixtures = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _ambient = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _initialization = new(StringComparer.Ordinal);
+
+        /// <summary>True once some process wrote <c>outputUses</c>: a tracker that records them ran.</summary>
+        public bool Seen { get; private set; }
+
+        /// <summary>Adds one process's uses.</summary>
+        /// <param name="root">The process's results.</param>
+        public void Add(JsonElement root)
+        {
+            if (!root.TryGetProperty("outputUses", out var uses))
+            {
+                return;
+            }
+
+            Seen = true;
+            foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, HashSet<string>>)>)[("classes", _classes), ("fixtures", _fixtures)])
+            {
+                foreach (var bucket in uses.GetProperty(name).EnumerateObject())
+                {
+                    Bucket(buckets, bucket.Name).UnionWith(bucket.Value.EnumerateArray().Select(static p => p.GetString()!));
+                }
+            }
+
+            _ambient.UnionWith(uses.GetProperty("ambient").EnumerateArray().Select(static p => p.GetString()!));
+            _initialization.UnionWith(uses.GetProperty("initialization").EnumerateArray().Select(static p => p.GetString()!));
+        }
+
+        /// <summary>
+        /// Adds the processes the startup hook reported: per line the bucket current when the process
+        /// started (<c>c|class</c>, <c>f|fixture</c>, <c>a|</c>), its entry assembly and its command line.
+        /// </summary>
+        /// <param name="path">A file of lines the hook wrote.</param>
+        public void AddProcessStarts(string path)
+        {
+            foreach (var line in File.ReadLines(path))
+            {
+                var fields = line.Split('\t');
+                if (fields.Length < 2 || fields[0].Length < 2 || fields[0][1] != '|')
+                {
+                    continue;
+                }
+
+                var name = fields[0][2..];
+                var names = fields[0][0] switch
+                {
+                    'c' when name.Length > 0 => Bucket(_classes, name),
+                    'f' when name.Length > 0 => Bucket(_fixtures, name),
+                    _ => _ambient,
+                };
+                foreach (var field in fields.Skip(1))
+                {
+                    TestDettaTracker.AddNames(names, field);
+                }
+            }
+        }
+
+        /// <summary>The uses, with the names of build outputs the tests read added to the readers' (see <see cref="RawFileReads.BuildOutputs"/>).</summary>
+        /// <param name="outputs">Names of untracked build outputs read, by bucket, shaped like the uses.</param>
+        public FileReads With(FileReads outputs)
+        {
+            foreach (var (name, values) in outputs.Classes)
+            {
+                Bucket(_classes, name).UnionWith(values);
+            }
+
+            foreach (var (name, values) in outputs.Fixtures)
+            {
+                Bucket(_fixtures, name).UnionWith(values);
+            }
+
+            _ambient.UnionWith(outputs.Ambient);
+            _initialization.UnionWith(outputs.Initialization);
+            return new FileReads(Sorted(_classes), Sorted(_fixtures), [.. _ambient.Order(StringComparer.Ordinal)], [.. _initialization.Order(StringComparer.Ordinal)]);
+        }
+
+        /// <summary>The set of <paramref name="name"/>, added when missing.</summary>
+        /// <param name="buckets">Sets by bucket.</param>
+        /// <param name="name">Bucket name.</param>
+        private static HashSet<string> Bucket(Dictionary<string, HashSet<string>> buckets, string name)
+        {
+            if (!buckets.TryGetValue(name, out var set))
+            {
+                buckets[name] = set = new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            return set;
+        }
+
+        /// <summary>Sorted lists of the non-empty sets.</summary>
+        /// <param name="buckets">Sets by bucket.</param>
+        private static Dictionary<string, IReadOnlyList<string>> Sorted(Dictionary<string, HashSet<string>> buckets) =>
+            buckets.Where(static b => b.Value.Count > 0)
+                .ToDictionary(static b => b.Key, static b => (IReadOnlyList<string>)[.. b.Value.Order(StringComparer.Ordinal)], StringComparer.Ordinal);
     }
 
     /// <summary>The <c>fileReads</c> of every process's results, as full paths, until they are resolved.</summary>
@@ -834,6 +960,33 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
             _ambient.UnionWith(reads.GetProperty("ambient").EnumerateArray().Select(static p => p.GetString()!));
             _initialization.UnionWith(reads.GetProperty("initialization").EnumerateArray().Select(static p => p.GetString()!));
+        }
+
+        /// <summary>
+        /// The names (see <see cref="TestDettaTracker.OutputUsed"/>) of the files read under a <c>bin</c> or
+        /// <c>obj</c> folder of the repository that stand for no tracked file: a build wrote them, so they
+        /// may be the output of a project referenced without compiling against it.
+        /// </summary>
+        /// <param name="paths">Resolves full paths.</param>
+        public FileReads BuildOutputs(FileReadPaths paths)
+        {
+            return new FileReads(Names(_classes), Names(_fixtures), Of(_ambient), Of(_initialization));
+
+            Dictionary<string, IReadOnlyList<string>> Names(Dictionary<string, HashSet<string>> buckets) =>
+                buckets.Select(b => (b.Key, Names: Of(b.Value)))
+                    .Where(static b => b.Names.Count > 0)
+                    .ToDictionary(static b => b.Key, static b => b.Names, StringComparer.Ordinal);
+
+            IReadOnlyList<string> Of(HashSet<string> fulls)
+            {
+                var names = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var full in fulls.Where(f => !f.EndsWith('/') && paths.IsUntrackedBuildOutput(f)))
+                {
+                    TestDettaTracker.AddNames(names, full);
+                }
+
+                return [.. names.Order(StringComparer.Ordinal)];
+            }
         }
 
         /// <summary>The reads as repository paths; classes and fixtures left with none are left out.</summary>
@@ -920,7 +1073,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// Adds the named id arrays of <paramref name="element"/> to <paramref name="buckets"/>. A fixture
     /// can appear in several shards, so ids are unioned.
     /// </summary>
-    /// <param name="element">JSON object written by <see cref="TestDettaTracker.WriteResults"/>.</param>
+    /// <param name="element">JSON object written by <see cref="TestDettaTracker.WriteResults()"/>.</param>
     /// <param name="buckets">Merged buckets; updated in place.</param>
     /// <param name="built">Per bucket, methods it depends on through values it read; updated in place.</param>
     /// <param name="fieldReads">Tracked fields of these results.</param>
@@ -968,7 +1121,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     }
 
     /// <summary>Parses one shard's results.</summary>
-    /// <param name="file">Results file written by <see cref="TestDettaTracker.WriteResults"/>.</param>
+    /// <param name="file">Results file written by <see cref="TestDettaTracker.WriteResults()"/>.</param>
     /// <exception cref="InvalidOperationException">The file is empty or not JSON: its test host ended while writing.</exception>
     private static JsonDocument ReadResults(string file)
     {

@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TestDetta.Core\TestDetta.Core.csproj" />
     <ProjectReference Include="..\TestDetta.Coverage.Runtime\TestDetta.Coverage.Runtime.csproj" />
+    <ProjectReference Include="..\TestDetta.Coverage.StartupHook\TestDetta.Coverage.StartupHook.csproj" />
   </ItemGroup>
 
   <ItemGroup>

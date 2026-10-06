@@ -1,4 +1,4 @@
-<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: 3f75041f2001 -->
+<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: 0d84001c0b8f -->
 <h1>Einschränkungen</h1>
 <p class="lead">Wo {{name}} etwas nicht sehen kann, wählt es mehr aus. Diese Seite listet diese Stellen auf, damit Sie wissen, wann eine Auswahl breiter ist als nötig, sowie die wenigen Fälle, in denen ein handgeschriebenes Muster einen Test verbergen kann.</p>
 
@@ -29,6 +29,7 @@
 <ul>
   <li><strong>Externe Dienste und Datenbanken.</strong> Eine Änderung in einem anderen System, etwa eine anderswo angewendete Schemamigration oder eine API, die Ihre Tests aufrufen, wählt hier nichts aus.</li>
   <li><strong>Dateien, die zur Laufzeit von Code eines Drittanbieters außerhalb der Projektordner gelesen werden</strong>, etwa die Dateien einer Snapshot-Bibliothek im Stammverzeichnis des Repositorys. Lesezugriffe Ihres eigenen Codes werden aufgezeichnet; siehe <a href="/docs/what-runs-everything/#ignored">Dateien außerhalb aller Projekte</a>.</li>
+  <li><strong>Programme, die Code eines Drittanbieters startet und die kein .NET (Core) sind</strong>, etwa eine native oder .NET-Framework-Anwendung Ihres Repositorys, die eine Prozessbibliothek startet. .NET-Prozesse werden aufgezeichnet, gleich wer sie startet, ebenso Starts durch Ihren eigenen Code.</li>
   <li><strong>Umgebung</strong>: Variablen, Rechnereinstellungen und installierte Tools, die sich zwischen Läufen unterscheiden.</li>
 </ul>
 <p>Änderungen an Paketversionen werden erkannt: Eine <code>PackageVersion</code>-Änderung in <code>Directory.Packages.props</code> führt die Projekte aus, die das Paket referenzieren, und eine <code>PackageReference</code>-Änderung ist eine Änderung an der Projektdatei.</p>

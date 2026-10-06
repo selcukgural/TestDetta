@@ -28,6 +28,20 @@ public static class TestDettaTracker
     public const string MethodCountVariable = "TESTDETTA_METHOD_COUNT";
 
     /// <summary>
+    /// Environment variable with the path of the startup hook assembly, set by <c>td record</c>. The
+    /// tracker adds it to <c>DOTNET_STARTUP_HOOKS</c> of the test host, so every .NET process a test
+    /// starts reports itself (see <see cref="BucketVariable"/>).
+    /// </summary>
+    public const string StartupHookVariable = "TESTDETTA_STARTUP_HOOK";
+
+    /// <summary>
+    /// Environment variable that holds the bucket entered last, which processes started from now on
+    /// inherit: <c>c|name</c> for a test class, <c>f|name</c> for a fixture, <c>a|</c> outside every test.
+    /// The startup hook writes it next to what the process runs.
+    /// </summary>
+    public const string BucketVariable = "TESTDETTA_BUCKET";
+
+    /// <summary>
     /// Environment variable with the number of tracked fields, set by <c>td record</c>. Field
     /// <c>i</c> has the bit <c>method count + i</c> in every bucket.
     /// </summary>
@@ -163,6 +177,18 @@ public static class TestDettaTracker
     /// </summary>
     private static readonly HashSet<string> InitializationFiles = new(StringComparer.Ordinal);
 
+    /// <summary>Names of processes started and assemblies loaded inside an initialization scope; see <see cref="OutputUsed"/>.</summary>
+    private static readonly HashSet<string> InitializationOutputs = new(StringComparer.Ordinal);
+
+    /// <summary>Extensions dropped from a used name, so a file, an assembly and a project compare by name.</summary>
+    private static readonly string[] OutputExtensions = [".dll", ".exe", ".csproj", ".fsproj", ".vbproj"];
+
+    /// <summary>Value of <see cref="BucketVariable"/> last set; null until the hook was installed. Declared before <see cref="HookInstalled"/>.</summary>
+    private static string? _bucketVariable;
+
+    /// <summary>True when processes the tests start report themselves; set up once, when the tracker starts.</summary>
+    private static readonly bool HookInstalled = InstallStartupHook();
+
     /// <summary>Methods that ran inside an initialization scope whose result left through a path no probe sees (unlinked).</summary>
     private static readonly ulong[] UnlinkedBits = new ulong[Words];
 
@@ -254,6 +280,163 @@ public static class TestDettaTracker
     /// <summary>Records that the current bucket listed (or checked) the directory at <paramref name="path"/>; see <see cref="FileRead"/>.</summary>
     /// <param name="path">The path the code passes.</param>
     public static void DirectoryListed(string? path) => NoteFile(path, directory: true);
+
+    /// <summary>
+    /// Records that the current bucket started a process or loaded an assembly by a file or name.
+    /// Called before such a call of instrumented code with its first two arguments (the object first,
+    /// for an instance method): paths and names (<c>Process.Start(file, arguments)</c>,
+    /// <c>Assembly.LoadFrom</c>), a <see cref="ProcessStartInfo"/>, the <see cref="Process"/> to start, an
+    /// <see cref="System.Reflection.AssemblyName"/> or the arguments of a process. Every path and name
+    /// among them is kept by its last segment without an assembly or project extension, so a change to
+    /// the project that builds it can find the classes that used it (docs/design/runtime-file-reads.md).
+    /// </summary>
+    /// <param name="first">The call's first argument.</param>
+    /// <param name="second">Its second argument, or null.</param>
+    public static void OutputUsed(object? first, object? second)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            AddUsed(names, first);
+            AddUsed(names, second);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or ArgumentException)
+        {
+            // A disposed process or an odd argument: the call itself reports the problem.
+        }
+
+        if (names.Count == 0)
+        {
+            return;
+        }
+
+        lock (Gate)
+        {
+            (_typeInitializerDepth != 0 || _cacheDepth != 0 ? InitializationOutputs : BucketForHit().Outputs).UnionWith(names);
+        }
+    }
+
+    /// <summary>Adds the names one argument of a start or load stands for; see <see cref="OutputUsed"/>.</summary>
+    /// <param name="names">Names found so far.</param>
+    /// <param name="argument">The argument.</param>
+    private static void AddUsed(HashSet<string> names, object? argument)
+    {
+        switch (argument)
+        {
+            case string text:
+                AddNames(names, text);
+                break;
+            case ProcessStartInfo info:
+                AddNames(names, info.FileName);
+                AddNames(names, info.Arguments);
+                AddNames(names, info.WorkingDirectory);
+                foreach (var item in info.ArgumentList)
+                {
+                    AddNames(names, item);
+                }
+
+                break;
+            case Process process:
+                AddUsed(names, process.StartInfo);
+                break;
+            case System.Reflection.AssemblyName name:
+                AddNames(names, name.Name);
+                break;
+            case IEnumerable<string> items:
+                foreach (var item in items)
+                {
+                    AddNames(names, item);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Adds the names in <paramref name="text"/>: the whole text and each part separated by spaces or
+    /// quotes, each by its last path segment, before a comma (an assembly's display name), without an
+    /// assembly or project extension.
+    /// </summary>
+    /// <param name="names">Names found so far.</param>
+    /// <param name="text">A path, an assembly name or a command line.</param>
+    internal static void AddNames(HashSet<string> names, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        AddName(names, text);
+        foreach (var part in text.Split([' ', '"', '\'', '='], StringSplitOptions.RemoveEmptyEntries))
+        {
+            AddName(names, part);
+        }
+
+        static void AddName(HashSet<string> names, string value)
+        {
+            var name = value.Trim().TrimEnd('/', '\\');
+            name = name[(name.LastIndexOfAny(['/', '\\']) + 1)..];
+            if (name.IndexOf(',', StringComparison.Ordinal) is var comma and >= 0)
+            {
+                name = name[..comma];
+            }
+
+            foreach (var extension in OutputExtensions)
+            {
+                if (name.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                {
+                    name = name[..^extension.Length];
+                    break;
+                }
+            }
+
+            if (name.Length > 0)
+            {
+                names.Add(name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds the startup hook named by <see cref="StartupHookVariable"/> to this process's
+    /// <c>DOTNET_STARTUP_HOOKS</c>, after any the tests set, so the .NET processes the tests start
+    /// report themselves; and starts <see cref="BucketVariable"/> outside every test.
+    /// </summary>
+    private static bool InstallStartupHook()
+    {
+        var hook = Environment.GetEnvironmentVariable(StartupHookVariable);
+        if (string.IsNullOrEmpty(hook) || !File.Exists(hook))
+        {
+            return false;
+        }
+
+        const string Hooks = "DOTNET_STARTUP_HOOKS";
+        var existing = Environment.GetEnvironmentVariable(Hooks);
+        Environment.SetEnvironmentVariable(Hooks, string.IsNullOrEmpty(existing) ? hook : existing + Path.PathSeparator + hook);
+        _bucketVariable = "a|";
+        Environment.SetEnvironmentVariable(BucketVariable, _bucketVariable);
+        return true;
+    }
+
+    /// <summary>
+    /// Sets <see cref="BucketVariable"/> for the processes started from now on. With tests running in
+    /// parallel the bucket of a start is unknown, so it stays outside every test.
+    /// </summary>
+    /// <param name="bucket">The bucket entered; <see cref="Startup"/> for code outside every test.</param>
+    private static void SetBucketVariable(Bucket bucket)
+    {
+        if (!HookInstalled || ParallelFlows)
+        {
+            return;
+        }
+
+        var value = ReferenceEquals(bucket, Startup) ? "a|" : (bucket.IsFixture ? "f|" : "c|") + bucket.Name;
+        if (!string.Equals(value, _bucketVariable, StringComparison.Ordinal))
+        {
+            _bucketVariable = value;
+            Environment.SetEnvironmentVariable(BucketVariable, value);
+        }
+    }
 
     /// <summary>Adds a full path, a directory with a trailing <c>/</c>, to the bucket a hit would go to.</summary>
     /// <param name="path">The path the code passes.</param>
@@ -987,6 +1170,7 @@ public static class TestDettaTracker
         _typeInitializerDepth = 0;
         AbandonScopes();
         Current.Value = Startup;
+        SetBucketVariable(Startup);
     }
 
     /// <summary>
@@ -1073,6 +1257,7 @@ public static class TestDettaTracker
 
                 json.WriteEndObject();
                 WriteFileReads(json);
+                WriteOutputUses(json);
                 WriteSeconds(json, "classSeconds", Classes);
                 WriteSeconds(json, "fixtureSeconds", Fixtures);
                 json.WriteNumber("startupSeconds", _startupSeconds);
@@ -1104,6 +1289,9 @@ public static class TestDettaTracker
         /// <summary>Full paths of the files read and directories listed (ending in <c>/</c>); see <see cref="FileRead"/>.</summary>
         public HashSet<string> Files { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>Names of the processes started and assemblies loaded; see <see cref="OutputUsed"/>.</summary>
+        public HashSet<string> Outputs { get; } = new(StringComparer.Ordinal);
+
         /// <summary>
         /// <see cref="Stopwatch"/> ticks during which this was the bucket entered last. Because
         /// recording runs one test at a time, that is the time its tests (or its setup) took.
@@ -1128,6 +1316,7 @@ public static class TestDettaTracker
             && string.Equals(current.Name, name, StringComparison.Ordinal) && (_testsStarted || data))
         {
             TakeBetweenTests(current);
+            SetBucketVariable(current);
             return;
         }
 
@@ -1163,6 +1352,7 @@ public static class TestDettaTracker
 
         TakeBetweenTests(bucket);
         Current.Value = bucket;
+        SetBucketVariable(bucket);
     }
 
     /// <summary>
@@ -1259,6 +1449,41 @@ public static class TestDettaTracker
             foreach (var path in paths.Order(StringComparer.Ordinal))
             {
                 json.WriteStringValue(path);
+            }
+
+            json.WriteEndArray();
+        }
+    }
+
+    /// <summary>
+    /// Writes <c>outputUses</c>, shaped like <c>fileReads</c>: the names of the processes each class and
+    /// fixture started and the assemblies it loaded (see <see cref="OutputUsed"/>).
+    /// </summary>
+    /// <param name="json">Writer positioned inside the results object.</param>
+    private static void WriteOutputUses(Utf8JsonWriter json)
+    {
+        json.WriteStartObject("outputUses");
+        foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, Bucket>)>)[("classes", Classes), ("fixtures", Fixtures)])
+        {
+            json.WriteStartObject(name);
+            foreach (var bucket in buckets.Values.Where(static b => b.Outputs.Count > 0))
+            {
+                WriteNames(json, bucket.Name, bucket.Outputs);
+            }
+
+            json.WriteEndObject();
+        }
+
+        WriteNames(json, "ambient", Startup.Outputs);
+        WriteNames(json, "initialization", InitializationOutputs);
+        json.WriteEndObject();
+
+        static void WriteNames(Utf8JsonWriter json, string name, HashSet<string> names)
+        {
+            json.WriteStartArray(name);
+            foreach (var value in names.Order(StringComparer.Ordinal))
+            {
+                json.WriteStringValue(value);
             }
 
             json.WriteEndArray();

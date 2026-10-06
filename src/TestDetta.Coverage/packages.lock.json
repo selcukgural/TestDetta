@@ -45,6 +45,9 @@
       "testdetta.coverage.runtime": {
         "type": "Project"
       },
+      "testdetta.coverage.startuphook": {
+        "type": "Project"
+      },
       "Microsoft.CodeAnalysis.CSharp": {
         "type": "CentralTransitive",
         "requested": "[5.9.0, )",

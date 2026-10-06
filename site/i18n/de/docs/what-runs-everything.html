@@ -1,4 +1,4 @@
-<!-- title: Was alle Tests auslöst; layout: docs; description: Die Änderungen, bei denen {{name}} ein ganzes Testprojekt oder alle Projekte unterhalb eines Ordners ausführt, und die Dateien, die es ignoriert.; source: e791b07bb110 -->
+<!-- title: Was alle Tests auslöst; layout: docs; description: Die Änderungen, bei denen {{name}} ein ganzes Testprojekt oder alle Projekte unterhalb eines Ordners ausführt, und die Dateien, die es ignoriert.; source: 866a48c1bcd9 -->
 <h1>Was alle Tests auslöst</h1>
 <p class="lead">Die meisten Änderungen wählen wenige Testklassen aus. Manche lassen sich nicht sicher eingrenzen, deshalb führt {{name}} dann ein ganzes Testprojekt aus oder alle Projekte unterhalb eines Ordners. Diese Seite listet sie alle auf, damit eine breite Auswahl nie überrascht.</p>
 
@@ -12,7 +12,7 @@
     <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Jedes Testprojekt darunter</td></tr>
     <tr><td><code>Directory.Packages.props</code>, nur <code>PackageVersion</code>-Elemente geändert</td><td>Nur die Testprojekte, die ein geändertes Paket referenzieren, und die, die von ihnen abhängen</td></tr>
     <tr><td>Ein geänderter Source Generator für ein Testprojekt, das keine Coverage-Map hat, ohne portables PDB gebaut wird oder mit <code>-f</code> für nur eines von mehreren Frameworks aufgezeichnet wurde</td><td>Was er erzeugt, wird aus einem Build verglichen, und hier gibt es nichts zu vergleichen. Sonst zählt nur der erzeugte Code, der sich geändert hat.</td></tr>
-    <tr><td>Ein Projekt, das mit <code>ReferenceOutputAssembly="false"</code> referenziert wird</td><td>Die Tests führen es womöglich als eigenen Prozess aus, den die Coverage nicht sieht.</td></tr>
+    <tr><td>Ein geändertes Projekt, das mit <code>ReferenceOutputAssembly="false"</code> referenziert wird, wenn der Build des referenzierenden Projekts aus seiner Ausgabe Code macht, den er kompiliert, oder die Map des Testprojekts nicht festhält, welche Tests es starten oder laden</td><td>Sonst laufen nur die Testklassen, die es beim Aufzeichnen der Map als Prozess gestartet oder geladen haben, und eine Referenz nur für die Build-Reihenfolge führt nichts aus.</td></tr>
   </tbody>
 </table>
 

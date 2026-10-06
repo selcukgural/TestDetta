@@ -61,7 +61,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
           --focus <what>         Quick check: keep only the sampled changes in a source generator
-                                 (generator) or the data files (data-files) of the usual sample, so
+                                 (generator), the data files (data-files) or a project referenced
+                                 without compiling against it (output) of the usual sample, so
                                  stored outcomes are reused; all (default) keeps every change
           --max-mutants <n>      Evaluate at most n changes, in sample order after --focus
           --data-files <n>       Also empty n data files outside every project, one change each, to check that

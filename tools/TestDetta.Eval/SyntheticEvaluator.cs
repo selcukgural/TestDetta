@@ -39,6 +39,18 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <summary>The built assemblies of each generator mutant's generators in the clone, which its consumers' compilers load.</summary>
     private readonly Dictionary<SyntheticTarget, List<string>> _generatorAssemblies = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>
+    /// True when a file of <paramref name="target"/> is compiled by a project that another project
+    /// references without compiling against it, not as a source generator (<see cref="EvalFocus.Output"/>).
+    /// </summary>
+    /// <param name="graph">Projects of the clone.</param>
+    /// <param name="target">A sampled change.</param>
+    private static bool ReferencedForOutput(ProjectGraph graph, SyntheticTarget target) =>
+        target.Edits
+            .SelectMany(e => graph.ResolveFile(Paths.Normalize(e.Path)))
+            .Where(static o => o.Role == FileRole.Source)
+            .Any(o => graph.OpaqueConsumersOf(o.Project.Path).Any(c => !c.GeneratorReferences.Contains(o.Project.Path)));
+
     /// <summary>Evaluates sampled changes at <paramref name="sha"/>; a build failure is reported, not thrown.</summary>
     /// <param name="sha">Commit to change.</param>
     /// <param name="request">How many members to change.</param>
@@ -116,6 +128,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                     {
                         EvalFocus.Generator => _generatorTests.ContainsKey(t),
                         EvalFocus.DataFiles => t.Kind == MutantKind.EmptyFile,
+                        EvalFocus.Output => ReferencedForOutput(graph, t),
                         _ => true,
                     })
                     .Take(settings.MaxMutants ?? int.MaxValue)];

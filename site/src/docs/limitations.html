@@ -29,6 +29,7 @@
 <ul>
   <li><strong>External services and databases.</strong> A change in another system, such as a schema migration applied elsewhere or an API your tests call, selects nothing here.</li>
   <li><strong>Files read at run time by third-party code</strong> from outside the project folders, such as a snapshot library's files at the repository root. Reads by your own code are recorded; see <a href="/docs/what-runs-everything/#ignored">files outside every project</a>.</li>
+  <li><strong>Programs started by third-party code that are not .NET (Core)</strong>, such as a native or .NET Framework executable of your repository that a process library starts. .NET processes are recorded whoever starts them, and so are starts by your own code.</li>
   <li><strong>Environment</strong>: variables, machine settings and installed tools that differ between runs.</li>
 </ul>
 <p>Package version changes are seen: a <code>PackageVersion</code> change in <code>Directory.Packages.props</code> runs the projects that reference the package, and a <code>PackageReference</code> change is a change to the project file.</p>

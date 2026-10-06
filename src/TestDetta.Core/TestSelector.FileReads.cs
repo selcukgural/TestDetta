@@ -8,6 +8,12 @@ namespace TestDetta.Core;
 /// <param name="Classes">Reading classes, each with its evidence.</param>
 internal sealed record FileReaders(ProjectNode Project, string? WholeProject, SortedDictionary<string, string> Classes);
 
+/// <summary>A project that references another without compiling against it (not as a source generator).</summary>
+/// <param name="Consumer">The referencing project.</param>
+/// <param name="Referenced">The affected project it references.</param>
+/// <param name="BuildUse">How the consumer's build uses the output (<see cref="BuildOutputUse"/>), or null when it does not.</param>
+internal sealed record OutputUse(ProjectNode Consumer, ProjectNode Referenced, string? BuildUse);
+
 public sealed partial class TestSelector
 {
     /// <summary>
@@ -179,6 +185,144 @@ public sealed partial class TestSelector
             Decisions = [.. decisions.Values.OrderBy(static d => d.TestClass, StringComparer.Ordinal)],
         };
     }
+
+    /// <summary>
+    /// The tests that may use the output of a project referenced without compiling against it
+    /// (docs/design/runtime-file-reads.md): in every test project at or below the consumer, the classes
+    /// whose map recorded starting, loading or reading a file named after the referenced project. When
+    /// the consumer's build uses the output, the test project is built first and what the build fed the
+    /// consumer's compiler from outside git is compared with its map: only an equal set leaves the
+    /// output a file to run. A use outside the tests, while initializing or in a fixture's setup runs
+    /// the whole project, and so does a test project whose map does not record uses or that has no map.
+    /// They join the readers of changed files.
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="uses">Consumers and the affected projects they reference this way.</param>
+    /// <param name="projectLevel">Projects that run completely; updated in place.</param>
+    /// <param name="readers">Readers per test project; updated in place.</param>
+    private void AddOutputUsers(TestSelectionRequest request, List<OutputUse> uses, Dictionary<string, string> projectLevel, Dictionary<string, FileReaders> readers)
+    {
+        foreach (var (consumer, referenced, buildUse) in uses)
+        {
+            var output = Path.GetFileName(referenced.Path);
+            string[] names = [referenced.AssemblyName, Path.GetFileNameWithoutExtension(referenced.Path)];
+            foreach (var path in request.Graph.WithDependents([consumer.Path]))
+            {
+                if (request.Graph.Find(path) is not { IsTestProject: true } project || projectLevel.ContainsKey(path))
+                {
+                    continue;
+                }
+
+                if (!request.CoverageMaps.TryGetValue(path, out var map) || map.OutputUses is not { } recorded)
+                {
+                    AddFallback(projectLevel, path, $"it may start or load the output of {output}, which is affected, and no map says which classes do");
+                    continue;
+                }
+
+                if (buildUse is not null && BuildInputsDiffer(request, project, map, consumer) is { } differ)
+                {
+                    AddFallback(projectLevel, path, $"{Path.GetFileName(consumer.Path)} uses {output}, which is affected, in its build ({buildUse}), and {differ}");
+                    continue;
+                }
+
+                var commit = map.Commit[..Math.Min(12, map.Commit.Length)];
+                string? whole = null;
+                foreach (var (place, used) in (ReadOnlySpan<(string, IReadOnlyList<string>)>)[
+                    ("outside its tests", recorded.Ambient),
+                    ("while initializing what its tests share", recorded.Initialization),
+                    .. recorded.Fixtures.Select(static f => ($"in the setup of {f.Key}", f.Value))])
+                {
+                    if (Uses(used, names))
+                    {
+                        whole = $"it started or loaded the output of {output} {place} (map {commit})";
+                        break;
+                    }
+                }
+
+                var classes = new SortedDictionary<string, string>(StringComparer.Ordinal);
+                foreach (var (testClass, used) in recorded.Classes)
+                {
+                    if (Uses(used, names))
+                    {
+                        classes[testClass] = $"started or loaded the output of {output}, which is affected (map {commit})";
+                    }
+                }
+
+                LogOutputUsers(path, output, classes.Count, whole ?? "-");
+                if (whole is null && classes.Count == 0)
+                {
+                    continue;
+                }
+
+                readers[path] = readers.TryGetValue(path, out var existing)
+                    ? existing with
+                    {
+                        WholeProject = existing.WholeProject ?? whole,
+                        Classes = new SortedDictionary<string, string>(existing.Classes.Concat(classes.Where(c => !existing.Classes.ContainsKey(c.Key))).ToDictionary(), StringComparer.Ordinal),
+                    }
+                    : new FileReaders(project, whole, classes);
+            }
+        }
+
+        static bool Uses(IReadOnlyList<string> used, string[] names) =>
+            used.Any(u => names.Any(n => string.Equals(u, n, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// Why the build of <paramref name="consumer"/> in <paramref name="testProject"/>'s output may differ
+    /// from its recording, or null when what the build fed its compiler from outside git is the same
+    /// now: a current build of the test project is read as for a changed generator. A build that fails
+    /// ends the analysis, since <c>dotnet test</c> would fail the same way.
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="testProject">Test project at or below the consumer.</param>
+    /// <param name="map">Its coverage map.</param>
+    /// <param name="consumer">The project whose build uses the output.</param>
+    private string? BuildInputsDiffer(TestSelectionRequest request, ProjectNode testProject, CoverageMap map, ProjectNode consumer)
+    {
+        var key = Path.GetRelativePath(request.RepoRoot, consumer.Path).Replace('\\', '/');
+        if (map.BuildInputs?.GetValueOrDefault(key) is not { } before)
+        {
+            return "its map does not record what that build fed the compiler";
+        }
+
+        if (map.Framework is not null || testProject.SymbolSets.Count > 1)
+        {
+            return "the test project targets several frameworks, whose builds are not compared";
+        }
+
+        if (request.GeneratedCode is not { } reader)
+        {
+            return "nothing builds it here to compare";
+        }
+
+        LogComparingBuildInputs(testProject.Path, consumer.Path);
+        var read = reader.Read(request.Graph, request.RepoRoot, testProject, framework: null);
+        if (read.BuildErrors is { } errors)
+        {
+            throw new GeneratedCodeBuildException(
+                $"Building {Path.GetFileName(testProject.Path)} to see what its build feeds {Path.GetFileName(consumer.Path)} failed; dotnet test would fail the same way:{Environment.NewLine}{errors}");
+        }
+
+        if (read.BuildInputs?.GetValueOrDefault(key) is not { } now)
+        {
+            return read.Unavailable ?? "its current build could not be read";
+        }
+
+        var differing = before.Keys.Union(now.Keys, StringComparer.Ordinal)
+            .Where(k => !string.Equals(before.GetValueOrDefault(k), now.GetValueOrDefault(k), StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        return differing.Count == 0
+            ? null
+            : $"what the build fed its compiler changed: {string.Join(", ", differing.Take(5))}{(differing.Count > 5 ? ", ..." : string.Empty)}";
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{TestProject}: building it to compare what the build feeds {Consumer}'s compiler from outside git with its map")]
+    private partial void LogComparingBuildInputs(string testProject, string consumer);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{TestProject}: {Classes} test class(es) started or loaded the output of {Output}; whole project: {WholeProject}")]
+    private partial void LogOutputUsers(string testProject, string output, int classes, string wholeProject);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{TestProject}: {Classes} test class(es) read a changed file that no project owns; whole project: {WholeProject}")]
     private partial void LogFileReaders(string testProject, int classes, string wholeProject);

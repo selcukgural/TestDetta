@@ -49,6 +49,25 @@ internal sealed class FileReadPaths(string repoRoot, IReadOnlyList<string> track
     public IReadOnlyList<string> ResolveAll(IEnumerable<string> fulls) =>
         [.. fulls.SelectMany(Resolve).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
 
+    /// <summary>
+    /// True for a file under a <c>bin</c> or <c>obj</c> folder of the repository that stands for no
+    /// tracked file: a build wrote it, or it was looked for (docs/design/runtime-file-reads.md).
+    /// </summary>
+    /// <param name="full">Full path with '/' separators.</param>
+    public bool IsUntrackedBuildOutput(string full)
+    {
+        var path = Paths.ResolveLinks(full);
+        if (!Paths.IsUnder(path, _root.Value))
+        {
+            return false;
+        }
+
+        var relative = Path.GetRelativePath(_root.Value, path).Replace('\\', '/');
+        return !relative.StartsWith("../", StringComparison.Ordinal)
+               && relative.Split('/').Any(static s => s is "bin" or "obj")
+               && Resolve(full).Count == 0;
+    }
+
     /// <summary>See <see cref="Resolve"/>.</summary>
     /// <param name="full">Full path.</param>
     private List<string> Compute(string full)

@@ -26,6 +26,9 @@ public interface IGeneratedCodeReader
 /// <param name="BuildErrors">The compiler's errors when the build failed; null otherwise.</param>
 public sealed record GeneratedCodeRead(IReadOnlyList<GeneratedSource>? Sources, string? Unavailable, string? BuildErrors)
 {
+    /// <summary>What the build fed each project's compiler from outside git, as <see cref="CoverageMap.BuildInputs"/>; null when not read.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? BuildInputs { get; init; }
+
     /// <summary>The generated files of a build.</summary>
     /// <param name="sources">Files read from the PDBs.</param>
     public static GeneratedCodeRead Read(IReadOnlyList<GeneratedSource> sources) => new(sources, null, null);

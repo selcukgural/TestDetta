@@ -86,13 +86,19 @@ internal enum EvalFocus
 
     /// <summary>Emptied data files (<c>--data-files</c>; docs/design/runtime-file-reads.md).</summary>
     DataFiles,
+
+    /// <summary>
+    /// Changes in a project another project references without compiling against it, not as a source
+    /// generator (<c>ReferenceOutputAssembly="false"</c>; docs/design/runtime-file-reads.md).
+    /// </summary>
+    Output,
 }
 
 /// <summary>Names of <see cref="EvalFocus"/> on the command line and in logs.</summary>
 internal static class EvalFocusNames
 {
     /// <summary>The names, for messages.</summary>
-    public const string All = "all, generator or data-files";
+    public const string All = "all, generator, data-files or output";
 
     /// <summary>The name of <paramref name="focus"/>.</summary>
     /// <param name="focus">The focus.</param>
@@ -100,6 +106,7 @@ internal static class EvalFocusNames
     {
         EvalFocus.Generator => "generator",
         EvalFocus.DataFiles => "data-files",
+        EvalFocus.Output => "output",
         _ => "all",
     };
 
@@ -113,6 +120,7 @@ internal static class EvalFocusNames
             "all" => EvalFocus.All,
             "generator" => EvalFocus.Generator,
             "data-files" => EvalFocus.DataFiles,
+            "output" => EvalFocus.Output,
             _ => (EvalFocus)(-1),
         };
         return Enum.IsDefined(focus);

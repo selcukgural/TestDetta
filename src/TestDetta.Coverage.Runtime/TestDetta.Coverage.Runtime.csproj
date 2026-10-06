@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TestDetta.Tests" />
+    <InternalsVisibleTo Include="TestDetta.Coverage" />
   </ItemGroup>
 
 </Project>

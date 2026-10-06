@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Loaded through DOTNET_STARTUP_HOOKS into every .NET process a recorded test starts, whatever
+    runtime that process targets, so it targets netstandard2.0 and uses nothing but the base library
+    (docs/design/runtime-file-reads.md).
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- The runtime looks for a type named StartupHook outside any namespace. -->
+    <NoWarn>$(NoWarn);CA1050</NoWarn>
+  </PropertyGroup>
+
+</Project>

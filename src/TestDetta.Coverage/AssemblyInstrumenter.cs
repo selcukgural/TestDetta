@@ -270,8 +270,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             }
         }
 
-        // Files the tests read by a path, whichever of the module's code reads them (docs/design/runtime-file-reads.md).
-        FileReadCalls.Wrap(module, Probe(tracker, nameof(TestDettaTracker.FileRead)), Probe(tracker, nameof(TestDettaTracker.DirectoryListed)));
+        // Files the tests read by a path, processes they start and assemblies they load, whichever of the
+        // module's code does it (docs/design/runtime-file-reads.md).
+        FileReadCalls.Wrap(
+            module,
+            Probe(tracker, nameof(TestDettaTracker.FileRead)),
+            Probe(tracker, nameof(TestDettaTracker.DirectoryListed)),
+            Probe(tracker, nameof(TestDettaTracker.OutputUsed)));
         module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
     }
 

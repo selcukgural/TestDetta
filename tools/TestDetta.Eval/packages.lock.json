@@ -46,10 +46,14 @@
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
           "Mono.Cecil": "[0.11.6, )",
           "TestDetta.Core": "[1.0.0, )",
-          "TestDetta.Coverage.Runtime": "[1.0.0, )"
+          "TestDetta.Coverage.Runtime": "[1.0.0, )",
+          "TestDetta.Coverage.StartupHook": "[1.0.0, )"
         }
       },
       "testdetta.coverage.runtime": {
+        "type": "Project"
+      },
+      "testdetta.coverage.startuphook": {
         "type": "Project"
       },
       "Microsoft.CodeAnalysis.CSharp": {

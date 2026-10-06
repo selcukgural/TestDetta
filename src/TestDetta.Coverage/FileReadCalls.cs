@@ -6,8 +6,9 @@ using TestDetta.Coverage.Runtime;
 namespace TestDetta.Coverage;
 
 /// <summary>
-/// Sends the calls of an instrumented module that read a file or list a directory by a path through a
-/// wrapper that tells the tracker the path first (docs/design/runtime-file-reads.md). Each wrapper is a
+/// Sends the calls of an instrumented module that read a file or list a directory by a path, start a
+/// process or load an assembly through a wrapper that tells the tracker the path first
+/// (docs/design/runtime-file-reads.md). Each wrapper is a
 /// static method of a type added to the module, with the call's own arguments and result: it reports
 /// the path argument, then makes the original call. The call instruction becomes a call of the wrapper,
 /// which takes and leaves the same stack, so nothing around it moves.
@@ -54,12 +55,31 @@ internal static class FileReadCalls
         ["System.IO.DirectoryInfo::.ctor"] = true,
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    /// <summary>Wraps every file-reading call in the bodies of <paramref name="module"/>.</summary>
+    /// <summary>
+    /// Methods that start a process or load an assembly, by declaring type and name, every overload:
+    /// their first two arguments (the object first, for an instance method) go to
+    /// <see cref="TestDettaTracker.OutputUsed"/>, which finds the paths and names among them.
+    /// </summary>
+    private static readonly FrozenSet<string> Starters = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "System.Diagnostics.Process::Start",
+        "System.Reflection.Assembly::LoadFrom",
+        "System.Reflection.Assembly::UnsafeLoadFrom",
+        "System.Reflection.Assembly::LoadFile",
+        "System.Reflection.Assembly::Load",
+        "System.Runtime.Loader.AssemblyLoadContext::LoadFromAssemblyPath",
+        "System.Runtime.Loader.AssemblyLoadContext::LoadFromAssemblyName",
+        "System.Runtime.Loader.AssemblyLoadContext::LoadFromNativeImagePath",
+        "System.AppDomain::ExecuteAssembly",
+        "System.AppDomain::ExecuteAssemblyByName");
+
+    /// <summary>Wraps every file-reading, process-starting and assembly-loading call in the bodies of <paramref name="module"/>.</summary>
     /// <param name="module">Module being instrumented.</param>
     /// <param name="fileRead">Reference to <see cref="TestDettaTracker.FileRead"/> in the module.</param>
     /// <param name="directoryListed">Reference to <see cref="TestDettaTracker.DirectoryListed"/> in the module.</param>
+    /// <param name="outputUsed">Reference to <see cref="TestDettaTracker.OutputUsed"/> in the module.</param>
     /// <returns>The number of calls wrapped.</returns>
-    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed)
+    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed, MethodReference outputUsed)
     {
         TypeDefinition? holder = null;
         var wrappers = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
@@ -70,8 +90,13 @@ internal static class FileReadCalls
             {
                 if (instruction.OpCode.Code is not (Code.Call or Code.Callvirt or Code.Newobj)
                     || instruction.Operand is not MethodReference target
-                    || Directory(target) is not { } directory
                     || instruction.Previous?.OpCode.OpCodeType == OpCodeType.Prefix)
+                {
+                    continue;
+                }
+
+                var starter = IsStarter(target);
+                if (!starter && Directory(target) is null)
                 {
                     continue;
                 }
@@ -80,7 +105,9 @@ internal static class FileReadCalls
                 if (!wrappers.TryGetValue(key, out var wrapper))
                 {
                     holder ??= AddHolder(module);
-                    wrapper = Wrapper(module, holder, target, instruction.OpCode, directory ? directoryListed : fileRead, wrappers.Count);
+                    wrapper = starter
+                        ? Wrapper(module, holder, target, instruction.OpCode, outputUsed, wrappers.Count, arguments: 2)
+                        : Wrapper(module, holder, target, instruction.OpCode, Directory(target) == true ? directoryListed : fileRead, wrappers.Count, arguments: 1);
                     wrappers[key] = wrapper;
                 }
 
@@ -104,6 +131,13 @@ internal static class FileReadCalls
             ? directory
             : null;
 
+    /// <summary>True for a call that starts a process or loads an assembly; see <see cref="Starters"/>.</summary>
+    /// <param name="target">The called method.</param>
+    private static bool IsStarter(MethodReference target) =>
+        target is not GenericInstanceMethod
+        && target.DeclaringType is not GenericInstanceType
+        && Starters.Contains($"{target.DeclaringType.FullName}::{target.Name}");
+
     /// <summary>Adds the internal static type that holds the wrappers.</summary>
     /// <param name="module">Module being instrumented.</param>
     private static TypeDefinition AddHolder(ModuleDefinition module)
@@ -121,6 +155,7 @@ internal static class FileReadCalls
     /// A static method with the arguments of <paramref name="target"/> (the object first, for an
     /// instance method) and its result (the new object, for a constructor) that reports the path
     /// argument through <paramref name="probe"/> and then makes the call as <paramref name="opCode"/> did.
+    /// A probe of two arguments gets the first two (boxed, null when there is no second).
     /// </summary>
     /// <param name="module">Module being instrumented.</param>
     /// <param name="holder">Type that holds the wrappers.</param>
@@ -128,7 +163,8 @@ internal static class FileReadCalls
     /// <param name="opCode">The original call instruction's opcode.</param>
     /// <param name="probe">Tracker method that takes the path.</param>
     /// <param name="number">A number that makes the wrapper's name unique.</param>
-    private static MethodDefinition Wrapper(ModuleDefinition module, TypeDefinition holder, MethodReference target, OpCode opCode, MethodReference probe, int number)
+    /// <param name="arguments">How many arguments <paramref name="probe"/> takes: the path, or the first two as objects.</param>
+    private static MethodDefinition Wrapper(ModuleDefinition module, TypeDefinition holder, MethodReference target, OpCode opCode, MethodReference probe, int number, int arguments)
     {
         var constructor = opCode.Code == Code.Newobj;
         var returnType = constructor ? target.DeclaringType : target.ReturnType;
@@ -147,7 +183,29 @@ internal static class FileReadCalls
         }
 
         var il = wrapper.Body.GetILProcessor();
-        il.Emit(OpCodes.Ldarg, wrapper.Parameters[target.HasThis && !constructor ? 1 : 0]);
+        if (arguments == 1)
+        {
+            il.Emit(OpCodes.Ldarg, wrapper.Parameters[target.HasThis && !constructor ? 1 : 0]);
+        }
+        else
+        {
+            for (var i = 0; i < arguments; i++)
+            {
+                if (i >= wrapper.Parameters.Count)
+                {
+                    il.Emit(OpCodes.Ldnull);
+                    continue;
+                }
+
+                var parameter = wrapper.Parameters[i];
+                il.Emit(OpCodes.Ldarg, parameter);
+                if (parameter.ParameterType.IsValueType || parameter.ParameterType.IsGenericParameter)
+                {
+                    il.Emit(OpCodes.Box, parameter.ParameterType);
+                }
+            }
+        }
+
         il.Emit(OpCodes.Call, probe);
         foreach (var parameter in wrapper.Parameters)
         {
