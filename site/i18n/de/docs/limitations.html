@@ -1,4 +1,4 @@
-<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: 49bd4127675b -->
+<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: 3087df798b38 -->
 <h1>Einschränkungen</h1>
 <p class="lead">Wo {{name}} etwas nicht sehen kann, wählt es mehr aus. Diese Seite listet diese Stellen auf, damit Sie wissen, wann eine Auswahl breiter ist als nötig, sowie die wenigen Fälle, in denen ein handgeschriebenes Muster einen Test verbergen kann.</p>
 
@@ -12,7 +12,7 @@
 <p>Wenn Tests fehlschlagen und kein TRX-Bericht angibt, welche (NUnit unter Microsoft.Testing.Platform ohne <code>Microsoft.Testing.Extensions.TrxReport</code>), wird die Map nicht verwendet und die Auswahl fällt auf Namen zurück.</p>
 
 <h2>Code, der einmal pro Prozess läuft</h2>
-<p>Caches, Lazy-Singletons und der Aufbau von EF-Modellen laufen einmal pro Testprozess und werden der ersten Testklasse zugerechnet, die sie auslöst. Änderungen an Code, der in einem statischen Konstruktor oder einem Cache-befüllenden Aufruf lief (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>), sowie an Konstruktoren und statischen Membern, die pro Aufzeichnungsprozess nur eine Testklasse ausgeführt hat, werden stattdessen anhand des Namens verfolgt.</p>
+<p>Caches, Lazy-Singletons und der Aufbau von EF-Modellen laufen einmal pro Testprozess und werden der ersten Testklasse zugerechnet, die sie auslöst. Änderungen an Code, der in einem statischen Konstruktor oder einem Cache-befüllenden Aufruf lief (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>), werden stattdessen anhand des Namens verfolgt. Ein in einem Feld gehaltener Wert, etwa ein Lazy-Singleton (<code>_x ??= new X()</code>), wird jeder Testklasse zugerechnet, die das Feld liest.</p>
 <div class="callout"><p>Ein von Hand geschriebener Cache, etwa ein mit <code>TryGetValue</code> abgefragtes <code>Dictionary</code>, kann seine Nutzer weiterhin verbergen. Führen Sie die vollständige Testsuite weiterhin auf dem Standard-Branch aus; die Aufzeichnung tut genau das.</p></div>
 
 <h2>Projektdateien</h2>

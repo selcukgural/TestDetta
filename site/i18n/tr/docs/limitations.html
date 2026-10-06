@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 49bd4127675b -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 3087df798b38 -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -12,7 +12,7 @@
 <p>Testler başarısız olduğunda ve hangilerinin başarısız olduğunu söyleyen bir TRX raporu bulunmadığında (<code>Microsoft.Testing.Extensions.TrxReport</code> olmadan Microsoft.Testing.Platform altında NUnit), harita kullanılmaz ve seçim isimlere geri döner.</p>
 
 <h2>Süreç başına bir kez çalışan kod</h2>
-<p>Önbellekler, lazy singleton'lar ve EF model oluşturma, test süreci başına bir kez çalışır ve onları tetikleyen ilk test sınıfına yazılır. Static constructor içinde ya da önbellek dolduran bir çağrıda (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>) çalışmış koddaki değişiklikler ve her kayıt sürecinde yalnızca tek bir test sınıfının çalıştırdığı constructor'lar ile static üyelerdeki değişiklikler bunun yerine isimle izlenir.</p>
+<p>Önbellekler, lazy singleton'lar ve EF model oluşturma, test süreci başına bir kez çalışır ve onları tetikleyen ilk test sınıfına yazılır. Static constructor içinde ya da önbellek dolduran bir çağrıda (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>) çalışmış koddaki değişiklikler bunun yerine isimle izlenir. Bir alanda tutulan değer, örneğin lazy bir singleton (<code>_x ??= new X()</code>), alanı okuyan her test sınıfına yazılır.</p>
 <div class="callout"><p><code>TryGetValue</code> ile kontrol edilen bir <code>Dictionary</code> gibi elle yazılmış bir önbellek, kullanıcılarını yine de gizleyebilir. Varsayılan branch'te tüm test paketini çalıştırmaya devam edin; kayıt bunu zaten yapar.</p></div>
 
 <h2>Proje dosyaları</h2>

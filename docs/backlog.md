@@ -27,9 +27,8 @@ that report numbers (value reporting) only once the numbers are proven right.
 - ~~**A test that loads a project's assembly by its path missed changes it sees through reflection**~~
   (done 2026-10-06, AspNetCoreOData `PublicApiTest`, a static field value changed): such classes are now
   selected for any change to that project, and an initializer change counts as a change of its
-  constructor (docs/design/runtime-file-reads.md, last section). Open: F# `let` values; the site's
-  limitations page still describes the removed single-bucket rule ("constructors and static members that
-  only one test class per recording process ran").
+  constructor (docs/design/runtime-file-reads.md, last section). Open: F# `let` values. The site's
+  limitations page described the removed single-bucket rule until the same day; it now says what replaced it.
 - ~~**The user's own `--filter` broke every narrowed run**~~ (done 2026-10-06): `td test -- --filter
   "Category!=Integration"` added a second `--filter` next to TestDetta's class filter, and `dotnet test`
   stops with "Option '--filter' expects a single argument but 2 were provided" (exit 1): a CI that keeps

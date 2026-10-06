@@ -1,4 +1,4 @@
-<!-- title: 制限事項; layout: docs; description: {{name}} が対応している範囲と、多めにテストを実行する側にフォールバックするケースを説明します。; source: 49bd4127675b -->
+<!-- title: 制限事項; layout: docs; description: {{name}} が対応している範囲と、多めにテストを実行する側にフォールバックするケースを説明します。; source: 3087df798b38 -->
 <h1>制限事項</h1>
 <p class="lead">{{name}} は、把握できないものがある場合は多めに選択します。このページではそのようなケースを一覧にしています。選択が必要以上に広くなるのはどのような場合か、また手書きのパターンによってテストが隠れてしまう数少ないケースを確認できます。</p>
 
@@ -12,7 +12,7 @@
 <p>テストが失敗し、どれが失敗したかを示す TRX レポートがない場合（<code>Microsoft.Testing.Extensions.TrxReport</code> なしで Microsoft.Testing.Platform 上の NUnit を使う場合）は、マップは使用されず、選択は名前によるものにフォールバックします。</p>
 
 <h2>プロセスごとに 1 回だけ実行されるコード</h2>
-<p>キャッシュ、遅延初期化されるシングルトン、EF のモデル構築は、テストプロセスごとに 1 回だけ実行され、それを最初に引き起こしたテストクラスに記録されます。静的コンストラクターやキャッシュを埋める呼び出し（<code>ConcurrentDictionary.GetOrAdd</code>、<code>Lazy&lt;T&gt;.Value</code>、<code>LazyInitializer</code>、<code>ConditionalWeakTable</code>、<code>IMemoryCache.GetOrCreate</code>）の中で実行されたコードへの変更や、記録プロセスごとに 1 つのテストクラスしか実行しなかったコンストラクターや静的メンバーへの変更は、代わりに名前でたどります。</p>
+<p>キャッシュ、遅延初期化されるシングルトン、EF のモデル構築は、テストプロセスごとに 1 回だけ実行され、それを最初に引き起こしたテストクラスに記録されます。静的コンストラクターやキャッシュを埋める呼び出し（<code>ConcurrentDictionary.GetOrAdd</code>、<code>Lazy&lt;T&gt;.Value</code>、<code>LazyInitializer</code>、<code>ConditionalWeakTable</code>、<code>IMemoryCache.GetOrCreate</code>）の中で実行されたコードへの変更は、代わりに名前でたどります。フィールドに保持される値（<code>_x ??= new X()</code> のような遅延シングルトンなど）は、そのフィールドを読むすべてのテストクラスに記録されます。</p>
 <div class="callout"><p><code>TryGetValue</code> で確認する <code>Dictionary</code> のような手書きのキャッシュでは、その利用者が隠れてしまう可能性が残ります。既定のブランチでは引き続き完全なテストスイートを実行してください。記録がそれを行います。</p></div>
 
 <h2>プロジェクトファイル</h2>
