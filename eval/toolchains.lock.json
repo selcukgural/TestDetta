@@ -32,6 +32,22 @@
     "sdk/10.0.401/osx-x64": {
       "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-osx-x64.tar.gz",
       "sha512": "33401b4a2da8554e3306db6072ea8569d9fcc608509c271e0aa4b39e7cc432da3631f14e7e1e2445d67d72550d18ce44a8bbd2382a756867ad2edab6b1c963c0"
+    },
+    "sdk/11.0.100-rc.1.26425.128/linux-arm64": {
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-arm64.tar.gz",
+      "sha512": "59e3c8c1937f12219f437a05ffae6febad7e88155eac83c2bc97bdb590a70929dfdd0b585898e023cd3883ff44865bfb8cde9e9d265d3e4f1ba49db7720c95e7"
+    },
+    "sdk/11.0.100-rc.1.26425.128/linux-x64": {
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-x64.tar.gz",
+      "sha512": "608518577aab9db33db92ebd74f0fc9bfbcc7b3d473619f4731aca2edba80af6c571a38d5be6994862fc4679f6f3d13db767712fcb6f70a7683974a18824a0cc"
+    },
+    "sdk/11.0.100-rc.1.26425.128/osx-arm64": {
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-osx-arm64.tar.gz",
+      "sha512": "969b6f38a0ebe853dd632dc9ef07dd0690cc96bfe51d6379d09d7a405f471602ab5e5e09c505f937836fa9ee9717a0807a8c828599c87865528fd952c8c6958b"
+    },
+    "sdk/11.0.100-rc.1.26425.128/osx-x64": {
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-osx-x64.tar.gz",
+      "sha512": "9da8770b12bdb78c30e70fe9e30a8747a06beb3a8ef9b4db452957716eefd0746d6fc084e6506bbd7ea2a1e889f6662db8578db7ecabb25428747602e0d0741b"
     }
   }
 }
