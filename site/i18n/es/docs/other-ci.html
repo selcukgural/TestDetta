@@ -1,4 +1,4 @@
-<!-- title: Otros sistemas de CI; layout: docs; description: Ejecuta {{name}} en GitLab CI, Jenkins, Azure DevOps, Bitbucket y CI on-premises con una carpeta de mapas de cobertura.; source: b5076b20f4bb -->
+<!-- title: Otros sistemas de CI; layout: docs; description: Ejecuta {{name}} en GitLab CI, Jenkins, Azure DevOps, Bitbucket y CI on-premises con una carpeta de mapas de cobertura.; source: eb01d770f653 -->
 <h1>Otros sistemas de CI</h1>
 <p class="lead">{{name}} funciona en cualquier CI que ejecute .NET y git. Fuera de GitHub Actions, bastan dos comandos y una carpeta.</p>
 
@@ -17,7 +17,7 @@
 <ul>
   <li><strong>El historial de git completo.</strong> {{name}} compara con la merge base y recorre el historial para encontrar mapas. Los clones superficiales (shallow) no permiten ninguna de las dos cosas.</li>
   <li><strong>La rama de destino descargada</strong>, para que exista <code>origin/&lt;target&gt;</code>. Descárgala con un refspec explícito, <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code>. Los clones de CI suelen limitar los refspecs del remoto a la propia rama del pipeline (los de GitLab y Bitbucket lo hacen), y entonces <code>git fetch origin &lt;target&gt;</code> por sí solo actualiza únicamente <code>FETCH_HEAD</code>, y <code>origin/&lt;target&gt;</code> sigue sin existir.</li>
-  <li><strong>La licencia</strong> en <code>TESTDETTA_LICENSE</code> (una variable enmascarada o secreta) o en un archivo indicado por <code>TESTDETTA_LICENSE_FILE</code>. Los repositorios públicos no la necesitan en GitLab CI ni en GitHub Actions; Jenkins, Azure DevOps y Bitbucket no indican si un repositorio es público, así que allí todos los repositorios la necesitan. Sin una licencia válida se ejecutan todas las pruebas, y la compilación nunca falla por ello. Consulta <a href="/docs/license/">Licencia</a>.</li>
+  <li><strong>La licencia</strong> en <code>TESTDETTA_LICENSE</code> (una variable enmascarada o secreta) o en un archivo indicado por <code>TESTDETTA_LICENSE_FILE</code>. Los repositorios públicos no la necesitan en GitLab CI ni en GitHub Actions; Jenkins, Azure DevOps y Bitbucket no indican si un repositorio es público, así que allí todos los repositorios la necesitan. Hasta que el licenciamiento se active en el lanzamiento, no se necesita ninguna; después, sin una licencia válida se ejecutan todas las pruebas, y la compilación nunca falla por ello. Consulta <a href="/docs/license/">Licencia</a>.</li>
   <li><strong>Códigos de salida:</strong> <code>0</code> éxito, <code>1</code> el análisis falló, <code>2</code> línea de comandos no válida, <code>3</code> fallaron pruebas.</li>
   <li><strong>Limpieza:</strong> los mapas de commits antiguos solo se necesitan durante 50 commits. Elimina las carpetas más antiguas con un job programado o una regla de ciclo de vida del almacenamiento.</li>
 </ul>

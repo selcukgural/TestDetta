@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 260b35447e5c -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 5ff58cb3a6b3 -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -157,7 +157,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
 <pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
 
 <h2 id="license-commands"><code>td license</code></h2>
-<p><code>td license status</code> comprueba la licencia igual que lo haría <code>td test</code> y muestra lo que cubre: licenciatario, puestos, committers activos en los últimos 30 días, la lista de bots, los ámbitos y la fecha de fin. Cuenta los committers en tu máquina y no envía nombres ni direcciones de correo electrónico; como <code>td test</code>, puede hacer la renovación diaria de la licencia, que envía la propia licencia. <code>td license install &lt;license|file&gt;</code> guarda una licencia en <code>~/.testdetta/license</code>, para máquinas donde ningún secreto de CI puede contenerla. Consulta <a href="/docs/license/">Licencia</a>.</p>
+<p><code>td license status</code> comprueba la licencia igual que lo haría <code>td test</code> y muestra lo que cubre: licenciatario, puestos, committers activos en los últimos 30 días, la lista de bots, los ámbitos y la fecha de fin. Cuenta los committers en tu máquina y no envía nombres ni direcciones de correo electrónico; como <code>td test</code>, puede hacer la renovación diaria de la licencia, que envía la propia licencia. <code>td license install &lt;license|file&gt;</code> guarda una licencia en <code>~/.testdetta/license</code>, para máquinas donde ningún secreto de CI puede contenerla. Hasta el lanzamiento ninguna licencia se verifica, así que <code>install</code> rechaza todas las licencias, y <code>status</code> dice "Not enforced yet": las pruebas se siguen seleccionando. Consulta <a href="/docs/license/">Licencia</a>.</p>
 
 <h2 id="environment">Variables de entorno</h2>
 <table>
@@ -176,8 +176,8 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
   <thead><tr><th>Código</th><th>Significado</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Éxito, incluido "no se necesitan pruebas".</td></tr>
-    <tr><td><code>1</code></td><td>El análisis falló: git, el sistema de archivos o un archivo de proyecto; con <code>audit</code>, también cuando no pudo ejecutarse o se canceló.</td></tr>
+    <tr><td><code>1</code></td><td>El análisis falló: git, el sistema de archivos o un archivo de proyecto; con <code>audit</code>, también cuando no pudo ejecutarse o se canceló; con <code>test --shadow</code>, cuando se canceló antes de ejecutar las pruebas; con <code>license install</code>, cuando la licencia no es válida.</td></tr>
     <tr><td><code>2</code></td><td>Línea de comandos no válida.</td></tr>
-    <tr><td><code>3</code></td><td>Fallaron pruebas (<code>test</code> y <code>record</code>); un fallo no detectado (<code>audit</code>).</td></tr>
+    <tr><td><code>3</code></td><td>Fallaron pruebas (<code>test</code>, la ejecución completa de <code>test --shadow</code> y <code>record</code>); un fallo no detectado (<code>audit</code>).</td></tr>
   </tbody>
 </table>

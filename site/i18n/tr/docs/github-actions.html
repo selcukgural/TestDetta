@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: 0dbcc8a61252 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: ea42ce35898c -->
 <h1>GitHub Actions</h1>
 <p class="lead">Varsayılan branch'teki her commit için bir harita kaydedin ve pull request'lerin yalnızca değişikliklerinin etkilediği testleri çalıştırmasını sağlayın. Action, <code>tool.lock</code> içinde sabitlediği {{name}} paketini nuget.org'dan indirir, çalıştırmadan önce SHA-512'sini kontrol eder ve haritaları Actions önbelleğinde tutar.</p>
 
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit modu: bu süreden sonra yeni bir değişikliğe başlamaz (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; sınırsız için <code>none</code>); o sırada hâlâ çalışan bir değişiklik tamamlanır, bu yüzden denetim bütçeden sonra bitebilir ve rapor ne kadar aştığını söyler. Job'un <code>timeout-minutes</code> değerinin altında bu payı bırakın.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit modu: aynı anda test edilen değişiklikler, her biri kendi kopyasında; bellek kullanımı bununla artar.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test, shadow ve audit modları: en yeni haritayı bulmak için Actions önbelleklerini listeler (<code>actions: read</code> gerektirir).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test modu: <code>TESTDETTA_LICENSE</code> gibi bir depo ya da organizasyon secret'ından gelen lisans dizesi. Açık depolar lisansa ihtiyaç duymaz. Geçerli bir lisans olmadan tüm testler çalışır; job bu yüzden asla başarısız olmaz. Shadow ve audit modları onu hiç okumaz.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test modu: <code>TESTDETTA_LICENSE</code> gibi bir depo ya da organizasyon secret'ından gelen lisans dizesi. Açık depolar lisansa ihtiyaç duymaz. Lisanslama lansmanda açılana kadar hiçbir depo duymaz; sonrasında geçerli bir lisans olmadan tüm testler çalışır. Job bu yüzden asla başarısız olmaz. Shadow ve audit modları onu hiç okumaz.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Analiz edilecek, depo içindeki herhangi bir dizin.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>{{name}}'nın üzerinde çalıştığı .NET 10 SDK'yı kurar. Job'da zaten varsa <code>false</code> yapın.</td></tr>
   </tbody>

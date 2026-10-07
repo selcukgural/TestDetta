@@ -1,4 +1,4 @@
-<!-- title: Andere CI-Systeme; layout: docs; description: Führen Sie {{name}} auf GitLab CI, Jenkins, Azure DevOps, Bitbucket und On-Premises-CI mit einem Ordner von Coverage-Maps aus.; source: b5076b20f4bb -->
+<!-- title: Andere CI-Systeme; layout: docs; description: Führen Sie {{name}} auf GitLab CI, Jenkins, Azure DevOps, Bitbucket und On-Premises-CI mit einem Ordner von Coverage-Maps aus.; source: eb01d770f653 -->
 <h1>Andere CI-Systeme</h1>
 <p class="lead">{{name}} funktioniert auf jeder CI, die .NET und Git ausführt. Außerhalb von GitHub Actions genügen zwei Befehle und ein Ordner.</p>
 
@@ -17,7 +17,7 @@
 <ul>
   <li><strong>Vollständige Git-Historie.</strong> {{name}} vergleicht mit der Merge-Base und durchläuft die Historie, um Maps zu finden. Shallow Clones können beides nicht.</li>
   <li><strong>Der Ziel-Branch ist abgerufen</strong>, sodass <code>origin/&lt;target&gt;</code> existiert. Rufen Sie ihn mit einer expliziten Refspec ab: <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code>. CI-Klone beschränken die Refspecs des Remotes oft auf den eigenen Branch der Pipeline (die von GitLab und Bitbucket tun das), und dann aktualisiert <code>git fetch origin &lt;target&gt;</code> allein nur <code>FETCH_HEAD</code>, und <code>origin/&lt;target&gt;</code> fehlt weiterhin.</li>
-  <li><strong>Die Lizenz</strong> in <code>TESTDETTA_LICENSE</code> (einer maskierten oder geheimen Variable) oder in einer Datei, die <code>TESTDETTA_LICENSE_FILE</code> benennt. Öffentliche Repositorys benötigen auf GitLab CI und GitHub Actions keine; Jenkins, Azure DevOps und Bitbucket geben nicht an, ob ein Repository öffentlich ist, daher benötigt dort jedes Repository eine. Ohne gültige Lizenz laufen alle Tests, und der Build schlägt deswegen nie fehl. Siehe <a href="/docs/license/">Lizenz</a>.</li>
+  <li><strong>Die Lizenz</strong> in <code>TESTDETTA_LICENSE</code> (einer maskierten oder geheimen Variable) oder in einer Datei, die <code>TESTDETTA_LICENSE_FILE</code> benennt. Öffentliche Repositorys benötigen auf GitLab CI und GitHub Actions keine; Jenkins, Azure DevOps und Bitbucket geben nicht an, ob ein Repository öffentlich ist, daher benötigt dort jedes Repository eine. Bis die Lizenzierung zum Start eingeschaltet wird, ist keine nötig; danach laufen ohne gültige Lizenz alle Tests, und der Build schlägt deswegen nie fehl. Siehe <a href="/docs/license/">Lizenz</a>.</li>
   <li><strong>Exitcodes:</strong> <code>0</code> Erfolg, <code>1</code> Analyse fehlgeschlagen, <code>2</code> ungültige Befehlszeile, <code>3</code> Tests fehlgeschlagen.</li>
   <li><strong>Aufräumen:</strong> Maps alter Commits werden nur für 50 Commits benötigt. Löschen Sie ältere Ordner mit einem geplanten Job oder einer Lifecycle-Regel des Speichers.</li>
 </ul>

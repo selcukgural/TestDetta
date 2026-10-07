@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 260b35447e5c -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 5ff58cb3a6b3 -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -157,7 +157,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
 <pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
 
 <h2 id="license-commands"><code>td license</code></h2>
-<p><code>td license status</code>, lisansı <code>td test</code>'in yapacağı şekilde kontrol eder ve neyi kapsadığını yazdırır: lisans sahibi, koltuklar, son 30 gündeki aktif committer'lar, bot listesi, kapsamlar, bitiş tarihi. Committer'ları makinenizde sayar ve hiçbir ad ya da e-posta adresi göndermez; <code>td test</code> gibi, lisansın kendisini gönderen günlük lisans yenilemesini yapabilir. <code>td license install &lt;license|file&gt;</code>, hiçbir CI secret'ının tutamayacağı makineler için lisansı <code>~/.testdetta/license</code> dosyasına kaydeder. Bkz. <a href="/docs/license/">Lisans</a>.</p>
+<p><code>td license status</code>, lisansı <code>td test</code>'in yapacağı şekilde kontrol eder ve neyi kapsadığını yazdırır: lisans sahibi, koltuklar, son 30 gündeki aktif committer'lar, bot listesi, kapsamlar, bitiş tarihi. Committer'ları makinenizde sayar ve hiçbir ad ya da e-posta adresi göndermez; <code>td test</code> gibi, lisansın kendisini gönderen günlük lisans yenilemesini yapabilir. <code>td license install &lt;license|file&gt;</code>, hiçbir CI secret'ının tutamayacağı makineler için lisansı <code>~/.testdetta/license</code> dosyasına kaydeder. Lansmana kadar hiçbir lisans doğrulanmaz; bu yüzden <code>install</code> her lisansı reddeder, <code>status</code> ise "Not enforced yet" der: testler yine seçilir. Bkz. <a href="/docs/license/">Lisans</a>.</p>
 
 <h2 id="environment">Ortam değişkenleri</h2>
 <table>
@@ -176,8 +176,8 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
   <thead><tr><th>Kod</th><th>Anlamı</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Başarılı; "test gerekmiyor" durumu dahil.</td></tr>
-    <tr><td><code>1</code></td><td>Analiz başarısız oldu: git, dosya sistemi ya da bir proje dosyası; <code>audit</code> için ayrıca çalışamadığında ya da iptal edildiğinde.</td></tr>
+    <tr><td><code>1</code></td><td>Analiz başarısız oldu: git, dosya sistemi ya da bir proje dosyası; <code>audit</code> için ayrıca çalışamadığında ya da iptal edildiğinde; <code>test --shadow</code> için testler çalışmadan önce iptal edildiğinde; <code>license install</code> için lisans geçerli olmadığında.</td></tr>
     <tr><td><code>2</code></td><td>Geçersiz komut satırı.</td></tr>
-    <tr><td><code>3</code></td><td>Testler başarısız oldu (<code>test</code> ve <code>record</code>); bir kaçırma (<code>audit</code>).</td></tr>
+    <tr><td><code>3</code></td><td>Testler başarısız oldu (<code>test</code>, <code>test --shadow</code>'un tam çalıştırması ve <code>record</code>); bir kaçırma (<code>audit</code>).</td></tr>
   </tbody>
 </table>

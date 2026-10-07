@@ -1,4 +1,4 @@
-<!-- title: Erste Schritte; layout: docs; description: Richten Sie {{name}} in der CI ein und führen Sie nur die .NET-Tests aus, die eine Änderung betreffen kann.; source: 236167938ec7 -->
+<!-- title: Erste Schritte; layout: docs; description: Richten Sie {{name}} in der CI ein und führen Sie nur die .NET-Tests aus, die eine Änderung betreffen kann.; source: 92ddac6ece11 -->
 <h1>Erste Schritte</h1>
 <p class="lead">{{name}} vergleicht Ihren Branch mit seiner Basis, ermittelt, welche Testprojekte und welche Testklassen die Änderung bemerken können, und führt nur diese aus. Ist es sich nicht sicher, führt es mehr aus, nie weniger; was es nicht sehen kann, ist unter <a href="/docs/limitations/">Einschränkungen</a> aufgeführt.</p>
 
@@ -48,9 +48,11 @@ td record</code></pre>
 <table>
   <thead><tr><th>Befehl</th><th>Funktion</th></tr></thead>
   <tbody>
-    <tr><td><code>td affected [--format text|json|paths|commands]</code></td><td>Gibt aus, was eine Änderung betrifft und warum. <code>--tests-only</code> listet nur die betroffenen Testprojekte auf.</td></tr>
+    <tr><td><code>td affected [--format text|json|paths|commands] [--tests-only] [--build]</code></td><td>Gibt aus, was eine Änderung betrifft und warum. <code>--tests-only</code> listet nur die betroffenen Testprojekte auf; <code>--build</code> baut die Testprojekte, die einen geänderten Source Generator verwenden, um zu vergleichen, was er erzeugt.</td></tr>
     <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Führt nur die betroffenen Tests aus. <code>--summary-file</code> hängt eine Markdown-Zusammenfassung an, zum Beispiel an <code>$GITHUB_STEP_SUMMARY</code>. Argumente nach <code>--</code> gehen an jeden <code>dotnet test</code>-Aufruf, zum Beispiel <code>-- -c Release</code>.</td></tr>
+    <tr><td><code>td test --shadow [--shadow-no-classify] [--shadow-report &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Shadow-Modus: Führt jeden Test aus, den Ihre eigenen <code>dotnet test</code>-Argumente ausführen, und meldet, was die Auswahl ausgelassen hätte; jede fehlgeschlagene Klasse, die sie ausgelassen hätte, läuft erneut, um ein Verfehlen von einem instabilen oder schon vorher bestehenden Fehlschlag zu unterscheiden. Braucht keine Lizenz; der Exitcode ist der des vollständigen Laufs. Projekte auf der Testing Platform müssen zuerst gebaut werden und brauchen <code>--no-build</code>. Siehe <a href="/docs/cli/#shadow"><code>--shadow</code></a>.</td></tr>
     <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Führt alle Tests mit Coverage aus und schreibt eine Map pro Testprojekt nach <code>.testdetta/coverage</code>. <code>--parallel</code> verteilt die Testklassen jedes Projekts auf n Testprozesse; <code>--no-build</code> zeichnet die Ausgabe eines früheren Builds mit derselben Konfiguration auf.</td></tr>
+    <tr><td><code>td audit [--target-broken &lt;n&gt;] [--max-mutants &lt;n&gt;] [--budget &lt;time&gt;] [--parallel &lt;n&gt;] [--member &lt;Type.Member&gt;]... [-- &lt;dotnet test args&gt;]</code></td><td>Prüft die Auswahl an Ihrem eigenen Code: Bricht Member einzeln in einer Kopie des Arbeitsverzeichnisses, führt jeden Test aus, der die jeweilige Änderung sehen kann, und meldet jede fehlgeschlagene Klasse, die die Auswahl ausgelassen hat. Braucht keine Lizenz. Siehe <a href="/docs/cli/#audit"><code>td audit</code></a>.</td></tr>
     <tr><td><code>td license status</code></td><td>Prüft die Lizenz und zeigt, was sie abdeckt.</td></tr>
     <tr><td><code>td license install &lt;license|file&gt;</code></td><td>Speichert eine Lizenz in <code>~/.testdetta/license</code>, für Rechner, auf denen kein CI-Secret sie aufnehmen kann.</td></tr>
   </tbody>
@@ -76,8 +78,8 @@ td record</code></pre>
   <thead><tr><th>Code</th><th>Bedeutung</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Erfolg.</td></tr>
-    <tr><td><code>1</code></td><td>Die Analyse ist fehlgeschlagen.</td></tr>
+    <tr><td><code>1</code></td><td>Die Analyse ist fehlgeschlagen (<code>td audit</code>: es konnte nicht laufen oder wurde abgebrochen; <code>td test --shadow</code>: es wurde vor den Tests abgebrochen; <code>td license install</code>: die Lizenz ist nicht gültig).</td></tr>
     <tr><td><code>2</code></td><td>Ungültige Befehlszeile.</td></tr>
-    <tr><td><code>3</code></td><td>Tests sind fehlgeschlagen.</td></tr>
+    <tr><td><code>3</code></td><td>Tests sind fehlgeschlagen (<code>td test</code>, der vollständige Lauf von <code>td test --shadow</code>, <code>td record</code>); ein Verfehlen (<code>td audit</code>).</td></tr>
   </tbody>
 </table>

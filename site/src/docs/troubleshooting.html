@@ -34,7 +34,7 @@
 <p>Maps are recorded for commits on the default branch, and a pull request finds the newest one at or before its merge base. A squash merge or rebase creates new commits on the default branch; the next push records a map for them, and until then pull requests use the previous map through the drift bridge. A force push to a pull request branch changes nothing: the merge base is computed again.</p>
 
 <h2 id="forks">Pull requests from forks</h2>
-<p>CI systems do not pass secrets to pull requests from forks. Public repositories need no license, so nothing changes for them. For a private repository, a run without a license runs every test, as it would without {{name}}.</p>
+<p>CI systems do not pass secrets to pull requests from forks. Public repositories need no license, so nothing changes for them. For a private repository, once licensing is switched on at launch, a run without a license runs every test, as it would without {{name}}; until then, it selects tests as usual.</p>
 
 <h2 id="faq">Questions</h2>
 <h3>Is the code coverage of a selected run complete?</h3>

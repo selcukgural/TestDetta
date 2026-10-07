@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: 0dbcc8a61252 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: ea42ce35898c -->
 <h1>GitHub Actions</h1>
 <p class="lead">既定のブランチのコミットごとにマップを記録し、プルリクエストでは変更が影響するテストだけを実行します。アクションは <code>tool.lock</code> で固定した {{name}} のパッケージを nuget.org から取得し、実行前にその SHA-512 を確認して、マップを Actions のキャッシュに保持します。</p>
 
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>audit モード：この時間の経過後は新しい変更を始めません（<code>90s</code>、<code>15m</code>、<code>1h30m</code>。制限なしは <code>none</code>）。その時点で実行中の変更は最後まで実行されるため、監査は予算を過ぎて終わることがあり、どれだけ超過したかがレポートに記載されます。ジョブの <code>timeout-minutes</code> の下にその余裕を残してください。</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>audit モード：同時にテストする変更の数。それぞれが専用のコピーで実行され、メモリ使用量はこの数とともに増えます。</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>test、shadow、audit モード：最新のマップを探すために Actions のキャッシュを一覧表示します（<code>actions: read</code> が必要）。</td></tr>
-    <tr><td><code>license</code></td><td></td><td>test モード：ライセンス文字列。<code>TESTDETTA_LICENSE</code> のようなリポジトリまたは組織のシークレットから渡します。パブリックリポジトリでは不要です。有効なライセンスがない場合はすべてのテストを実行し、それが原因でジョブが失敗することはありません。shadow モードと audit モードはこれを読み取りません。</td></tr>
+    <tr><td><code>license</code></td><td></td><td>test モード：ライセンス文字列。<code>TESTDETTA_LICENSE</code> のようなリポジトリまたは組織のシークレットから渡します。パブリックリポジトリでは不要です。正式リリースでライセンスの適用が始まるまでは、どのリポジトリでも不要です。適用後は、有効なライセンスがない場合はすべてのテストを実行します。それが原因でジョブが失敗することはありません。shadow モードと audit モードはこれを読み取りません。</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>分析するリポジトリ内の任意のディレクトリ。</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>{{name}} の実行に必要な .NET 10 SDK をインストールします。ジョブにすでにインストールされている場合は <code>false</code> に設定してください。</td></tr>
   </tbody>

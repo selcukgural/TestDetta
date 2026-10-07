@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Zeichnen Sie mit der {{name}}-Action Coverage-Maps auf dem Standard-Branch auf und führen Sie in Pull Requests nur die betroffenen Tests aus.; source: 0dbcc8a61252 -->
+<!-- title: GitHub Actions; layout: docs; description: Zeichnen Sie mit der {{name}}-Action Coverage-Maps auf dem Standard-Branch auf und führen Sie in Pull Requests nur die betroffenen Tests aus.; source: ea42ce35898c -->
 <h1>GitHub Actions</h1>
 <p class="lead">Zeichnen Sie für jeden Commit auf dem Standard-Branch eine Map auf, und lassen Sie Pull Requests nur die Tests ausführen, die ihre Änderungen betreffen. Die Action lädt das {{name}}-Paket, das sie in <code>tool.lock</code> festschreibt, von nuget.org herunter, prüft seinen SHA-512, bevor sie es ausführt, und legt die Maps im Actions-Cache ab.</p>
 
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit-Modus: Nach dieser Zeit beginnt keine Änderung mehr (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> für keine Grenze); eine dann noch laufende Änderung läuft zu Ende, das Audit kann also nach dem Budget enden, und der Bericht sagt, um wie viel. Lassen Sie diesen Spielraum unter dem <code>timeout-minutes</code> des Jobs.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit-Modus: gleichzeitig getestete Änderungen, jede in ihrer eigenen Kopie; der Speicherbedarf wächst damit.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test-, Shadow- und Audit-Modus: listet die Actions-Caches auf, um die neueste Map zu finden (erfordert <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test-Modus: der Lizenzstring, aus einem Repository- oder Organisations-Secret wie <code>TESTDETTA_LICENSE</code>. Öffentliche Repositorys benötigen keinen. Ohne gültige Lizenz laufen alle Tests; der Job schlägt deswegen nie fehl. Shadow- und Audit-Modus lesen sie nie.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test-Modus: der Lizenzstring, aus einem Repository- oder Organisations-Secret wie <code>TESTDETTA_LICENSE</code>. Öffentliche Repositorys benötigen keinen. Bis die Lizenzierung zum Start eingeschaltet wird, benötigt ihn kein Repository; danach laufen ohne gültige Lizenz alle Tests. Der Job schlägt deswegen nie fehl. Shadow- und Audit-Modus lesen sie nie.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Ein beliebiges Verzeichnis innerhalb des zu analysierenden Repositorys.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Installiert das .NET 10 SDK, auf dem {{name}} läuft. Setzen Sie den Wert auf <code>false</code>, wenn der Job es bereits hat.</td></tr>
   </tbody>

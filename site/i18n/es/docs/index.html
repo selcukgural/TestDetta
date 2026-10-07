@@ -1,4 +1,4 @@
-<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: 236167938ec7 -->
+<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: 92ddac6ece11 -->
 <h1>Primeros pasos</h1>
 <p class="lead">{{name}} compara tu rama con su base, determina qué proyectos de pruebas y qué clases de prueba pueden observar el cambio, y ejecuta solo esos. Cuando no puede estar seguro, ejecuta más, nunca menos; lo que no puede ver se enumera en <a href="/docs/limitations/">Limitaciones</a>.</p>
 
@@ -48,9 +48,11 @@ td record</code></pre>
 <table>
   <thead><tr><th>Comando</th><th>Qué hace</th></tr></thead>
   <tbody>
-    <tr><td><code>td affected [--format text|json|paths|commands]</code></td><td>Muestra qué afecta un cambio y por qué. <code>--tests-only</code> lista solo los proyectos de pruebas afectados.</td></tr>
+    <tr><td><code>td affected [--format text|json|paths|commands] [--tests-only] [--build]</code></td><td>Muestra qué afecta un cambio y por qué. <code>--tests-only</code> lista solo los proyectos de pruebas afectados; <code>--build</code> compila los proyectos de pruebas que usan un generador de código fuente modificado, para comparar lo que genera.</td></tr>
     <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Ejecuta solo las pruebas afectadas. <code>--summary-file</code> añade un resumen en Markdown, por ejemplo a <code>$GITHUB_STEP_SUMMARY</code>. Los argumentos después de <code>--</code> se pasan a cada <code>dotnet test</code>, por ejemplo <code>-- -c Release</code>.</td></tr>
+    <tr><td><code>td test --shadow [--shadow-no-classify] [--shadow-report &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Modo sombra: ejecuta todas las pruebas que ejecutan tus propios argumentos de <code>dotnet test</code> e informa de lo que la selección habría dejado fuera; cada clase fallida que habría dejado fuera se vuelve a ejecutar para distinguir un fallo no detectado de un fallo inestable o ya existente. No necesita licencia; el código de salida es el de la ejecución completa. Los proyectos de Testing Platform necesitan una compilación previa y <code>--no-build</code>. Consulta <a href="/docs/cli/#shadow"><code>--shadow</code></a>.</td></tr>
     <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Ejecuta todas las pruebas con cobertura y escribe un mapa por proyecto de pruebas en <code>.testdetta/coverage</code>. <code>--parallel</code> reparte las clases de prueba de cada proyecto entre n procesos de prueba; <code>--no-build</code> registra la salida de una compilación anterior con la misma configuración.</td></tr>
+    <tr><td><code>td audit [--target-broken &lt;n&gt;] [--max-mutants &lt;n&gt;] [--budget &lt;time&gt;] [--parallel &lt;n&gt;] [--member &lt;Type.Member&gt;]... [-- &lt;dotnet test args&gt;]</code></td><td>Comprueba la selección en tu propio código: rompe miembros uno a uno en una copia del árbol de trabajo, ejecuta todas las pruebas que pueden ver cada cambio e informa de cada clase fallida que la selección dejó fuera. No necesita licencia. Consulta <a href="/docs/cli/#audit"><code>td audit</code></a>.</td></tr>
     <tr><td><code>td license status</code></td><td>Comprueba la licencia y muestra lo que cubre.</td></tr>
     <tr><td><code>td license install &lt;license|file&gt;</code></td><td>Guarda una licencia en <code>~/.testdetta/license</code>, para máquinas donde ningún secreto de CI puede contenerla.</td></tr>
   </tbody>
@@ -76,8 +78,8 @@ td record</code></pre>
   <thead><tr><th>Código</th><th>Significado</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Éxito.</td></tr>
-    <tr><td><code>1</code></td><td>El análisis falló.</td></tr>
+    <tr><td><code>1</code></td><td>El análisis falló (<code>td audit</code>: no pudo ejecutarse o se canceló; <code>td test --shadow</code>: se canceló antes de ejecutar las pruebas; <code>td license install</code>: la licencia no es válida).</td></tr>
     <tr><td><code>2</code></td><td>Línea de comandos no válida.</td></tr>
-    <tr><td><code>3</code></td><td>Fallaron pruebas.</td></tr>
+    <tr><td><code>3</code></td><td>Fallaron pruebas (<code>td test</code>, la ejecución completa de <code>td test --shadow</code>, <code>td record</code>); un fallo no detectado (<code>td audit</code>).</td></tr>
   </tbody>
 </table>

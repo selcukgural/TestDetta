@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 0dbcc8a61252 -->
+<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: ea42ce35898c -->
 <h1>GitHub Actions</h1>
 <p class="lead">Registra un mapa por cada commit de la rama predeterminada y deja que las pull requests ejecuten solo las pruebas que sus cambios afectan. La acción obtiene de nuget.org el paquete de {{name}} que fija en <code>tool.lock</code>, comprueba su SHA-512 antes de ejecutarlo y guarda los mapas en la caché de Actions.</p>
 
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Modo audit: no empieza ningún cambio pasado este tiempo (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> para sin límite); un cambio que aún se ejecuta termina entonces, así que el audit puede terminar después del presupuesto, y el informe dice por cuánto. Deja ese margen por debajo del <code>timeout-minutes</code> del job.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Modo audit: cambios probados a la vez, cada uno en su propia copia; la memoria crece con ello.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Modos test, shadow y audit: lista las cachés de Actions para encontrar el mapa más reciente (necesita <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello. Los modos sombra y audit nunca la leen.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Hasta que el licenciamiento se active en el lanzamiento, ningún repositorio la necesita; después, sin una licencia válida se ejecutan todas las pruebas. El job nunca falla por ello. Los modos sombra y audit nunca la leen.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Cualquier directorio dentro del repositorio que se vaya a analizar.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Instala el SDK de .NET 10 sobre el que se ejecuta {{name}}. Ponlo en <code>false</code> si el job ya lo tiene.</td></tr>
   </tbody>

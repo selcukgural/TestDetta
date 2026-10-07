@@ -48,9 +48,11 @@ td record</code></pre>
 <table>
   <thead><tr><th>Command</th><th>What it does</th></tr></thead>
   <tbody>
-    <tr><td><code>td affected [--format text|json|paths|commands]</code></td><td>Print what a change affects and why. <code>--tests-only</code> lists only affected test projects.</td></tr>
+    <tr><td><code>td affected [--format text|json|paths|commands] [--tests-only] [--build]</code></td><td>Print what a change affects and why. <code>--tests-only</code> lists only affected test projects; <code>--build</code> builds the test projects that use a changed source generator, to compare what it generates.</td></tr>
     <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Run only the affected tests. <code>--summary-file</code> appends a Markdown summary, for example to <code>$GITHUB_STEP_SUMMARY</code>. Arguments after <code>--</code> go to every <code>dotnet test</code>, for example <code>-- -c Release</code>.</td></tr>
+    <tr><td><code>td test --shadow [--shadow-no-classify] [--shadow-report &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Shadow mode: run every test your own <code>dotnet test</code> arguments run, and report what the selection would have left out, rerunning each failed class it would have left out to tell a miss from a flaky or pre-existing failure. Needs no license; the exit code is the full run's. Testing-platform projects need a build first and <code>--no-build</code>. See <a href="/docs/cli/#shadow"><code>--shadow</code></a>.</td></tr>
     <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Run all tests with coverage and write one map per test project to <code>.testdetta/coverage</code>. <code>--parallel</code> spreads each project's test classes over n test processes; <code>--no-build</code> records the output of an earlier build with the same configuration.</td></tr>
+    <tr><td><code>td audit [--target-broken &lt;n&gt;] [--max-mutants &lt;n&gt;] [--budget &lt;time&gt;] [--parallel &lt;n&gt;] [--member &lt;Type.Member&gt;]... [-- &lt;dotnet test args&gt;]</code></td><td>Check the selection on your own code: break members one at a time in a copy of the working tree, run every test that can see each change, and report every failing class the selection left out. Needs no license. See <a href="/docs/cli/#audit"><code>td audit</code></a>.</td></tr>
     <tr><td><code>td license status</code></td><td>Check the license and show what it covers.</td></tr>
     <tr><td><code>td license install &lt;license|file&gt;</code></td><td>Store a license in <code>~/.testdetta/license</code>, for machines where no CI secret can hold it.</td></tr>
   </tbody>
@@ -76,8 +78,8 @@ td record</code></pre>
   <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Success.</td></tr>
-    <tr><td><code>1</code></td><td>The analysis failed.</td></tr>
+    <tr><td><code>1</code></td><td>The analysis failed (<code>td audit</code>: it could not run or was cancelled; <code>td test --shadow</code>: it was cancelled before the tests ran; <code>td license install</code>: the license is not valid).</td></tr>
     <tr><td><code>2</code></td><td>Invalid command line.</td></tr>
-    <tr><td><code>3</code></td><td>Tests failed.</td></tr>
+    <tr><td><code>3</code></td><td>Tests failed (<code>td test</code>, the full run of <code>td test --shadow</code>, <code>td record</code>); a miss (<code>td audit</code>).</td></tr>
   </tbody>
 </table>

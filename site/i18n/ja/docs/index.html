@@ -1,4 +1,4 @@
-<!-- title: はじめに; layout: docs; description: {{name}} を CI に導入し、変更が影響しうる .NET のテストだけを実行します。; source: 236167938ec7 -->
+<!-- title: はじめに; layout: docs; description: {{name}} を CI に導入し、変更が影響しうる .NET のテストだけを実行します。; source: 92ddac6ece11 -->
 <h1>はじめに</h1>
 <p class="lead">{{name}} はブランチをそのベースと比較し、変更を検出できるテストプロジェクトとテストクラスを割り出して、それらだけを実行します。確信が持てないときは、少なくではなく多めに実行します。見えないものは<a href="/docs/limitations/">制限事項</a>に一覧があります。</p>
 
@@ -48,9 +48,11 @@ td record</code></pre>
 <table>
   <thead><tr><th>コマンド</th><th>動作</th></tr></thead>
   <tbody>
-    <tr><td><code>td affected [--format text|json|paths|commands]</code></td><td>変更が何に影響するか、その理由とともに出力します。<code>--tests-only</code> を指定すると、影響を受けるテストプロジェクトだけを一覧表示します。</td></tr>
+    <tr><td><code>td affected [--format text|json|paths|commands] [--tests-only] [--build]</code></td><td>変更が何に影響するか、その理由とともに出力します。<code>--tests-only</code> を指定すると、影響を受けるテストプロジェクトだけを一覧表示します。<code>--build</code> は、変更されたソースジェネレーターを使うテストプロジェクトをビルドし、生成される内容を比較します。</td></tr>
     <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>影響を受けるテストだけを実行します。<code>--summary-file</code> は Markdown のサマリーを、たとえば <code>$GITHUB_STEP_SUMMARY</code> に追記します。<code>--</code> の後の引数はすべての <code>dotnet test</code> に渡されます（例：<code>-- -c Release</code>）。</td></tr>
+    <tr><td><code>td test --shadow [--shadow-no-classify] [--shadow-report &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>シャドウモード：あなた自身の <code>dotnet test</code> 引数で実行されるすべてのテストを実行し、選択が除外したはずのものを報告します。除外したはずの失敗したクラスはそれぞれ再実行し、見逃しを、不安定な失敗や以前からある失敗と区別します。ライセンスは不要で、終了コードは完全実行のものです。Testing Platform のプロジェクトは、先にビルドして <code>--no-build</code> を渡す必要があります。<a href="/docs/cli/#shadow"><code>--shadow</code></a> を参照してください。</td></tr>
     <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>すべてのテストをカバレッジ付きで実行し、テストプロジェクトごとに 1 つのマップを <code>.testdetta/coverage</code> に書き込みます。<code>--parallel</code> は各プロジェクトのテストクラスを n 個のテストプロセスに分散し、<code>--no-build</code> は同じ構成で事前に行ったビルドの出力を記録します。</td></tr>
+    <tr><td><code>td audit [--target-broken &lt;n&gt;] [--max-mutants &lt;n&gt;] [--budget &lt;time&gt;] [--parallel &lt;n&gt;] [--member &lt;Type.Member&gt;]... [-- &lt;dotnet test args&gt;]</code></td><td>あなた自身のコードで選択を検証します。作業ツリーのコピーの中でメンバーを 1 つずつ壊し、各変更を読み込めるすべてのテストを実行し、選択が除外した失敗クラスをすべて報告します。ライセンスは不要です。<a href="/docs/cli/#audit"><code>td audit</code></a> を参照してください。</td></tr>
     <tr><td><code>td license status</code></td><td>ライセンスを確認し、その対象範囲を表示します。</td></tr>
     <tr><td><code>td license install &lt;license|file&gt;</code></td><td>ライセンスを <code>~/.testdetta/license</code> に保存します。CI のシークレットにライセンスを保持できないマシン向けです。</td></tr>
   </tbody>
@@ -76,8 +78,8 @@ td record</code></pre>
   <thead><tr><th>コード</th><th>意味</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>成功。</td></tr>
-    <tr><td><code>1</code></td><td>分析に失敗しました。</td></tr>
+    <tr><td><code>1</code></td><td>分析に失敗しました（<code>td audit</code>：実行できなかった、または中断された。<code>td test --shadow</code>：テストの実行前に中断された。<code>td license install</code>：ライセンスが有効でない）。</td></tr>
     <tr><td><code>2</code></td><td>コマンドラインが無効です。</td></tr>
-    <tr><td><code>3</code></td><td>テストが失敗しました。</td></tr>
+    <tr><td><code>3</code></td><td>テストが失敗しました（<code>td test</code>、<code>td test --shadow</code> の完全実行、<code>td record</code>）。見逃しがありました（<code>td audit</code>）。</td></tr>
   </tbody>
 </table>

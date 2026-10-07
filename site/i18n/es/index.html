@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} lee tu git diff y ejecuta solo las clases de prueba de .NET que un cambio puede afectar. Cuando no puede estar seguro, ejecuta más, nunca menos.; source: 6b56b8bbf63f -->
+<!-- title: {{name}}; description: {{name}} lee tu git diff y ejecuta solo las clases de prueba de .NET que un cambio puede afectar. Cuando no puede estar seguro, ejecuta más, nunca menos.; source: ed820b6a86f2 -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -175,7 +175,7 @@
     </div>
     <dl class="promise-list" data-reveal>
       <div><dt>0</dt><dd><strong>líneas de tu código salen de tu CI</strong>El análisis, los mapas de cobertura y los resultados de las pruebas se quedan en tus máquinas.</dd></div>
-      <div><dt>0</dt><dd><strong>compilaciones fallidas por un problema de licencia</strong>Sin una licencia válida se ejecutan todas las pruebas, como antes.</dd></div>
+      <div><dt>0</dt><dd><strong>compilaciones fallidas por un problema de licencia</strong>No se necesita licencia hasta que el licenciamiento se active en el lanzamiento; después, sin una licencia válida se ejecutan todas las pruebas, como antes.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>frameworks de pruebas y runners</strong>xUnit v2 y v3, NUnit, MSTest y TUnit, con VSTest y Microsoft.Testing.Platform.</dd></div>
       <div><dt>1</dt><dd><strong>tipo de llamada de red, opcional</strong>Una renovación de la licencia que envía la licencia y nada más, como máximo una vez al día por máquina (una vez por job en los runners que empiezan desde cero).</dd></div>
     </dl>
@@ -211,7 +211,7 @@
           <span class="gha-event">en cada pull request</span>
           <h3>Ejecutar lo que afecta el cambio</h3>
           <p>Se restaura el mapa más reciente dentro de los 50 commits anteriores a la merge base, se ejecutan solo las clases de prueba afectadas y el job summary explica por qué se ejecutó cada una.</p>
-          <p class="gha-summary"><span class="badge-ok">Correcto</span> 8 de 274 clases · 93 % del tiempo de pruebas ahorrado</p>
+          <p class="gha-summary"><span class="badge-ok">Correcto</span> 8 de 274 clases · 93 % menos tiempo de pruebas registrado</p>
         </li>
       </ol>
       <figure class="editor">

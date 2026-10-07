@@ -1,4 +1,4 @@
-<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: 236167938ec7 -->
+<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: 92ddac6ece11 -->
 <h1>Başlarken</h1>
 <p class="lead">{{name}} branch'inizi base'iyle karşılaştırır, hangi test projelerinin ve hangi test sınıflarının değişikliği gözlemleyebileceğini belirler ve yalnızca onları çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil; göremedikleri <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -48,9 +48,11 @@ td record</code></pre>
 <table>
   <thead><tr><th>Komut</th><th>Ne yapar</th></tr></thead>
   <tbody>
-    <tr><td><code>td affected [--format text|json|paths|commands]</code></td><td>Bir değişikliğin neleri etkilediğini ve nedenini yazdırır. <code>--tests-only</code> yalnızca etkilenen test projelerini listeler.</td></tr>
+    <tr><td><code>td affected [--format text|json|paths|commands] [--tests-only] [--build]</code></td><td>Bir değişikliğin neleri etkilediğini ve nedenini yazdırır. <code>--tests-only</code> yalnızca etkilenen test projelerini listeler; <code>--build</code>, değişen bir source generator'ı kullanan test projelerini, ürettiği kodu karşılaştırmak için derler.</td></tr>
     <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Yalnızca etkilenen testleri çalıştırır. <code>--summary-file</code> bir Markdown özeti ekler, örneğin <code>$GITHUB_STEP_SUMMARY</code> dosyasına. <code>--</code> sonrasındaki argümanlar her <code>dotnet test</code> çağrısına iletilir, örneğin <code>-- -c Release</code>.</td></tr>
+    <tr><td><code>td test --shadow [--shadow-no-classify] [--shadow-report &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Shadow mode: kendi <code>dotnet test</code> argümanlarınızın çalıştırdığı her testi çalıştırır ve seçimin neleri dışarıda bırakacağını raporlar; dışarıda bırakacağı her başarısız sınıfı, bir kaçırmayı kararsız ya da önceden var olan bir başarısızlıktan ayırmak için yeniden çalıştırır. Lisans gerektirmez; çıkış kodu tam çalıştırmanınkidir. Testing platform projeleri önce derlenmeli ve <code>--no-build</code> verilmelidir. Bkz. <a href="/docs/cli/#shadow"><code>--shadow</code></a>.</td></tr>
     <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> altına bir harita yazar. <code>--parallel</code> her projenin test sınıflarını n test sürecine dağıtır; <code>--no-build</code> aynı yapılandırmayla yapılmış önceki bir derlemenin çıktısını kaydeder.</td></tr>
+    <tr><td><code>td audit [--target-broken &lt;n&gt;] [--max-mutants &lt;n&gt;] [--budget &lt;time&gt;] [--parallel &lt;n&gt;] [--member &lt;Type.Member&gt;]... [-- &lt;dotnet test args&gt;]</code></td><td>Seçimi kendi kodunuzda kontrol eder: çalışma ağacının bir kopyasında üyeleri birer birer bozar, her değişikliği görebilen her testi çalıştırır ve seçimin dışarıda bıraktığı her başarısız sınıfı raporlar. Lisans gerektirmez. Bkz. <a href="/docs/cli/#audit"><code>td audit</code></a>.</td></tr>
     <tr><td><code>td license status</code></td><td>Lisansı kontrol eder ve neyi kapsadığını gösterir.</td></tr>
     <tr><td><code>td license install &lt;license|file&gt;</code></td><td>Hiçbir CI secret'ının tutamayacağı makineler için lisansı <code>~/.testdetta/license</code> dosyasına kaydeder.</td></tr>
   </tbody>
@@ -76,8 +78,8 @@ td record</code></pre>
   <thead><tr><th>Kod</th><th>Anlamı</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Başarılı.</td></tr>
-    <tr><td><code>1</code></td><td>Analiz başarısız oldu.</td></tr>
+    <tr><td><code>1</code></td><td>Analiz başarısız oldu (<code>td audit</code>: çalışamadı ya da iptal edildi; <code>td test --shadow</code>: testler çalışmadan önce iptal edildi; <code>td license install</code>: lisans geçerli değil).</td></tr>
     <tr><td><code>2</code></td><td>Geçersiz komut satırı.</td></tr>
-    <tr><td><code>3</code></td><td>Testler başarısız oldu.</td></tr>
+    <tr><td><code>3</code></td><td>Testler başarısız oldu (<code>td test</code>, <code>td test --shadow</code>'un tam çalıştırması, <code>td record</code>); bir kaçırma (<code>td audit</code>).</td></tr>
   </tbody>
 </table>

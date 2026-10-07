@@ -1,4 +1,4 @@
-<!-- title: Solución de problemas; layout: docs; description: Qué hacer cuando {{name}} selecciona más de lo esperado, no encuentra ningún mapa de cobertura o no encuentra el commit base.; source: 469ec3d17ce3 -->
+<!-- title: Solución de problemas; layout: docs; description: Qué hacer cuando {{name}} selecciona más de lo esperado, no encuentra ningún mapa de cobertura o no encuentra el commit base.; source: 61a70f19f50c -->
 <h1>Solución de problemas</h1>
 <p class="lead">Cada entrada parte de lo que ves. En todos los casos, <code>-v</code> escribe cada decisión y su motivo en stderr; ese registro responde a la mayoría de las preguntas y es lo que debes enviarnos.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
@@ -34,7 +34,7 @@
 <p>Los mapas se registran para los commits de la rama predeterminada, y una pull request encuentra el más reciente en su merge base o antes. Un squash merge o un rebase crea commits nuevos en la rama predeterminada; el siguiente push registra un mapa para ellos y, hasta entonces, las pull requests usan el mapa anterior a través del drift bridge. Un force push a la rama de una pull request no cambia nada: la merge base se vuelve a calcular.</p>
 
 <h2 id="forks">Pull requests desde forks</h2>
-<p>Los sistemas de CI no pasan secretos a las pull requests desde forks. Los repositorios públicos no necesitan licencia, así que para ellos no cambia nada. En un repositorio privado, una ejecución sin licencia ejecuta todas las pruebas, como lo haría sin {{name}}.</p>
+<p>Los sistemas de CI no pasan secretos a las pull requests desde forks. Los repositorios públicos no necesitan licencia, así que para ellos no cambia nada. En un repositorio privado, una vez que el licenciamiento se activa en el lanzamiento, una ejecución sin licencia ejecuta todas las pruebas, como lo haría sin {{name}}; hasta entonces, selecciona pruebas como siempre.</p>
 
 <h2 id="faq">Preguntas</h2>
 <h3>¿Es completa la cobertura de código de una ejecución seleccionada?</h3>

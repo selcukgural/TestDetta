@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 260b35447e5c -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 5ff58cb3a6b3 -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -157,7 +157,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
 <pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
 
 <h2 id="license-commands"><code>td license</code></h2>
-<p><code>td license status</code> prüft die Lizenz so, wie <code>td test</code> es tun würde, und gibt aus, was sie abdeckt: Lizenznehmer, Seats, aktive Committer der letzten 30 Tage, die Bot-Liste, Scopes und das Enddatum. Es zählt die Committer auf Ihrem Rechner und sendet keine Namen oder E-Mail-Adressen; wie <code>td test</code> kann es die tägliche Lizenzaktualisierung vornehmen, die die Lizenz selbst sendet. <code>td license install &lt;license|file&gt;</code> speichert eine Lizenz in <code>~/.testdetta/license</code>, für Rechner, auf denen kein CI-Secret sie aufnehmen kann. Siehe <a href="/docs/license/">Lizenz</a>.</p>
+<p><code>td license status</code> prüft die Lizenz so, wie <code>td test</code> es tun würde, und gibt aus, was sie abdeckt: Lizenznehmer, Seats, aktive Committer der letzten 30 Tage, die Bot-Liste, Scopes und das Enddatum. Es zählt die Committer auf Ihrem Rechner und sendet keine Namen oder E-Mail-Adressen; wie <code>td test</code> kann es die tägliche Lizenzaktualisierung vornehmen, die die Lizenz selbst sendet. <code>td license install &lt;license|file&gt;</code> speichert eine Lizenz in <code>~/.testdetta/license</code>, für Rechner, auf denen kein CI-Secret sie aufnehmen kann. Bis zum Start lässt sich keine Lizenz verifizieren, daher weist <code>install</code> jede Lizenz ab, und <code>status</code> meldet "Not enforced yet": Tests werden weiterhin ausgewählt. Siehe <a href="/docs/license/">Lizenz</a>.</p>
 
 <h2 id="environment">Umgebungsvariablen</h2>
 <table>
@@ -176,8 +176,8 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
   <thead><tr><th>Code</th><th>Bedeutung</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Erfolg, auch wenn keine Tests nötig sind.</td></tr>
-    <tr><td><code>1</code></td><td>Die Analyse ist fehlgeschlagen: Git, das Dateisystem oder eine Projektdatei; bei <code>audit</code> auch, wenn es nicht laufen konnte oder abgebrochen wurde.</td></tr>
+    <tr><td><code>1</code></td><td>Die Analyse ist fehlgeschlagen: Git, das Dateisystem oder eine Projektdatei; bei <code>audit</code> auch, wenn es nicht laufen konnte oder abgebrochen wurde; bei <code>test --shadow</code>, wenn es vor den Tests abgebrochen wurde; bei <code>license install</code>, wenn die Lizenz nicht gültig ist.</td></tr>
     <tr><td><code>2</code></td><td>Ungültige Befehlszeile.</td></tr>
-    <tr><td><code>3</code></td><td>Tests sind fehlgeschlagen (<code>test</code> und <code>record</code>); ein Verfehlen (<code>audit</code>).</td></tr>
+    <tr><td><code>3</code></td><td>Tests sind fehlgeschlagen (<code>test</code>, der vollständige Lauf von <code>test --shadow</code> und <code>record</code>); ein Verfehlen (<code>audit</code>).</td></tr>
   </tbody>
 </table>
