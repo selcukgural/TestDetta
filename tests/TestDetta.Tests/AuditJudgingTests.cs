@@ -79,6 +79,17 @@ public sealed class AuditJudgingTests : IDisposable
     }
 
     [Fact]
+    public void With_a_miss_the_failures_of_classes_the_selection_ran_are_listed_unconfirmed_and_cost_no_runs()
+    {
+        var mutant = Judge(Filtered("T.A"), (label, with) => with && label is "m1-full" ? Ok("T.A", "T.B") : with && label == "m1-alone" ? Ok("T.B") : Ok());
+
+        Assert.Equal(AuditOutcome.Missed, mutant.Outcome);
+        Assert.Equal("T.B", Assert.Single(mutant.Broken).Name);
+        Assert.Equal("not confirmed: the change is missed anyway", Assert.Single(mutant.NotCounted, static c => c.Name == "T.A").Note);
+        Assert.DoesNotContain(_calls, static c => c.Label.StartsWith("m1-selected", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_selected_class_that_fails_alone_without_the_change_too_is_not_counted()
     {
         var mutant = Judge(Filtered("T.A"), (label, _) => label == "m1-full" || label.StartsWith("m1-selected", StringComparison.Ordinal) ? Ok("T.A") : Ok());

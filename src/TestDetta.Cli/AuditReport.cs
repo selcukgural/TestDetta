@@ -32,7 +32,7 @@ internal static class AuditReport
 
     /// <summary>
     /// The verdict line: "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2
-    /// inconclusive, 0 stopped (worst case, counting them as misses: 95% upper bound 5.8%, n = 105)", then why the audit
+    /// inconclusive, 0 stopped (worst case, counting them as misses: 95% upper bound 5.9%, n = 105)", then why the audit
     /// stopped, and whether the target was reached. Bounds are rounded up, so the line never states less than the bound.
     /// </summary>
     /// <param name="result">The result.</param>

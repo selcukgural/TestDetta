@@ -234,15 +234,20 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
             }
         }
 
-        // Classes the selection ran count only once confirmed; with a miss the change is missed anyway.
-        if (!verdict.Missed)
+        // Classes the selection ran count only once confirmed; with a miss the change is missed anyway, and they are
+        // listed unconfirmed.
+        foreach (var (project, decision, classes) in pending)
         {
-            foreach (var (project, decision, classes) in pending)
+            var scope = new Scope(worker, mutant.Index, project, decision, mutation, verdict);
+            if (verdict.Missed)
             {
-                if (ConfirmSelected(new Scope(worker, mutant.Index, project, decision, mutation, verdict), classes) is { } stop)
-                {
-                    return verdict.Stopped(mutant, stop);
-                }
+                verdict.NotCounted.AddRange(classes.Select(c => Class(scope, c, true) with { Note = "not confirmed: the change is missed anyway" }));
+                continue;
+            }
+
+            if (ConfirmSelected(scope, classes) is { } stop)
+            {
+                return verdict.Stopped(mutant, stop);
             }
         }
 
@@ -966,7 +971,7 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
         /// <param name="mutant">The change so far.</param>
         /// <param name="reason">What stopped it.</param>
         public AuditMutant Stopped(AuditMutant mutant, string reason) => Missed
-            ? Final(mutant) with { Note = $"the miss was confirmed before the change was {(reason == "cancelled" ? "cancelled" : "stopped: " + reason)}" }
+            ? Final(mutant) with { Note = reason == "cancelled" ? "the miss was confirmed before the change was cancelled" : $"the miss was confirmed before the change was cut short ({reason})" }
             : mutant with { Outcome = AuditOutcome.Stopped, Note = reason, Broken = [.. Broken], NotCounted = [.. NotCounted] };
     }
 }
