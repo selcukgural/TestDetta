@@ -436,6 +436,19 @@ public sealed class ShadowRunTests : IDisposable
         Assert.True(git.DiscardWorktree(_root, path));
         Assert.False(Directory.Exists(path));
         Assert.False(Directory.Exists(Path.Combine(_repo.Root, ".git", "worktrees")) && Directory.EnumerateFileSystemEntries(Path.Combine(_repo.Root, ".git", "worktrees")).Any());
+
+        // Stopped before git wrote where the worktree lives: locked as "initializing", unknown to remove and prune.
+        var registration = Path.Combine(_repo.Root, ".git", "worktrees", Path.GetFileName(path));
+        Directory.CreateDirectory(registration);
+        File.WriteAllText(Path.Combine(registration, "locked"), "initializing");
+        var other = Path.Combine(_repo.Root, ".git", "worktrees", "someone-elses");
+        Directory.CreateDirectory(other);
+        File.WriteAllText(Path.Combine(other, "gitdir"), "/elsewhere/.git");
+        File.WriteAllText(Path.Combine(other, "locked"), "on a removable disk");
+
+        Assert.True(git.DiscardWorktree(_root, path));
+        Assert.False(Directory.Exists(registration));
+        Assert.True(Directory.Exists(other));
     }
 
     [Fact]

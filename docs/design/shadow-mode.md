@@ -329,7 +329,7 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   rerun) or `git worktree add` is killed with its children, the remaining candidates are unclassified ("the
   run was cancelled"), the report is written, and the temp folder and the base worktree are removed
   (`GitClient.DiscardWorktree`: `git worktree remove --force --force`, which also removes a checkout stopped
-  half way, else the folder and `git worktree prune`). Cancelled before the tests ran, `td` runs nothing and
+  half way, else the folder, `git worktree prune`, and a registration git left before it was complete). Cancelled before the tests ran, `td` runs nothing and
   returns 1.
 - **Times**: `run.wallSeconds` (and `totals.wallSeconds`) is the measured time of the whole full run, from
   its start to its end, build included: the number to compare with the team's usual job time, shown in the

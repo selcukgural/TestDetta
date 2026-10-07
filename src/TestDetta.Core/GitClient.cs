@@ -119,6 +119,40 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
     /// <exception cref="InvalidOperationException">git failed.</exception>
     public void PruneWorktrees(string repoRoot) => Run(repoRoot, "worktree", "prune");
 
+    /// <summary>
+    /// Deletes the registration git made for <paramref name="path"/> under <c>.git/worktrees</c> when the checkout was
+    /// stopped before it was complete: an entry named after the folder (git adds a number when the name is taken)
+    /// that has no <c>gitdir</c> file yet, or one that points to <paramref name="path"/>. Nothing else is touched.
+    /// </summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="path">Directory of the worktree.</param>
+    private void RemoveHalfMadeRegistration(string repoRoot, string path)
+    {
+        var common = Path.GetFullPath(Run(repoRoot, "rev-parse", "--git-common-dir").Single(), repoRoot);
+        var registrations = Path.Combine(common, "worktrees");
+        if (!Directory.Exists(registrations))
+        {
+            return;
+        }
+
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        var target = Paths.ResolveLinks(Path.Combine(path, ".git"));
+        foreach (var entry in Directory.EnumerateDirectories(registrations).ToList())
+        {
+            var entryName = Path.GetFileName(entry);
+            if (!entryName.StartsWith(name, StringComparison.Ordinal) || !entryName[name.Length..].All(char.IsAsciiDigit))
+            {
+                continue;
+            }
+
+            var gitdir = Path.Combine(entry, "gitdir");
+            if (!File.Exists(gitdir) || Paths.ResolveLinks(File.ReadAllText(gitdir).Trim()) == target)
+            {
+                Directory.Delete(entry, recursive: true);
+            }
+        }
+    }
+
     /// <summary>Kills a process with its children; one that has already exited is left alone.</summary>
     /// <param name="process">The process.</param>
     private static void Kill(Process process)
@@ -143,9 +177,10 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
     public void RemoveWorktree(string repoRoot, string path) => Run(repoRoot, "worktree", "remove", "--force", "--force", path);
 
     /// <summary>
-    /// Removes a worktree whatever state it is in: <see cref="RemoveWorktree"/>, and when git cannot, its folder and
-    /// then every registration under <c>.git/worktrees</c> whose folder is gone (<see cref="PruneWorktrees"/>). Never
-    /// throws; true when nothing is left.
+    /// Removes a worktree whatever state it is in: <see cref="RemoveWorktree"/>, and when git cannot, its folder,
+    /// every registration under <c>.git/worktrees</c> whose folder is gone (<see cref="PruneWorktrees"/>), and its own
+    /// registration if git stopped before it was complete (no <c>gitdir</c> yet, so neither remove nor prune knows it,
+    /// and locked as "initializing"). Never throws; true when nothing is left.
     /// </summary>
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="path">Directory of the worktree.</param>
@@ -170,6 +205,7 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
             }
 
             PruneWorktrees(repoRoot);
+            RemoveHalfMadeRegistration(repoRoot, path);
             return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
