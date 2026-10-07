@@ -242,8 +242,9 @@ public sealed class ShadowModeTests : IDisposable
         // One dotnet test for the full run; the reruns that follow are TestDetta's own, one project at a time.
         Assert.Single(log.Lines, static l => l.Contains("TestRunner: Running dotnet test", StringComparison.Ordinal));
 
-        // VSTest's own results folders keep the run's reports; nothing was redirected or moved.
-        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_repo.Root, "tests", "Shop.Tests", "TestResults"), "*.trx"));
+        // Nothing was redirected or moved; the reports only TestDetta's logger asked for were read, then deleted.
+        Assert.True(Directory.Exists(Path.Combine(_repo.Root, "tests", "Shop.Tests", "TestResults")));
+        Assert.Empty(Directory.GetFiles(Path.Combine(_repo.Root, "tests", "Shop.Tests", "TestResults"), "*.trx"));
 
         var projects = report.GetProperty("projects").EnumerateArray().ToDictionary(static p => p.GetProperty("path").GetString()!);
         var shop = projects["tests/Shop.Tests/Shop.Tests.csproj"];
@@ -410,8 +411,8 @@ public sealed class ShadowModeTests : IDisposable
         Assert.Equal("caught", classes["Shop.Tests.TaxTests"].GetProperty("verdict").GetString());
         Assert.Equal("unclassified", classes["Shop.Tests.BrokenTests"].GetProperty("verdict").GetString());
 
-        // The reports stay where the team's run wrote them, beside its build output: TestDetta only copied them.
-        Assert.NotEmpty(Directory.GetFiles(_repo.Root, "*.trx", SearchOption.AllDirectories));
+        // The team asked for no report: the ones TestDetta's report option wrote beside the build output are read, then deleted.
+        Assert.Empty(Directory.GetFiles(_repo.Root, "*.trx", SearchOption.AllDirectories));
     }
 
     /// <summary>A line from the analysis's log or the plan: anything that tells what the selection decided.</summary>

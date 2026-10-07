@@ -27,8 +27,9 @@ reported.
    solution or project in the working directory), TestDetta runs exactly that one command in the same
    directory, adding only what it needs for a test report per project: VSTest `--logger trx` (nothing when the
    team names a TRX logger), the testing platform its report option (nothing when the team asks for a TRX
-   report). The team's results directory, loggers and files stay as they are: nothing there is redirected,
-   moved or deleted; TestDetta reads the reports where the run wrote them and copies them. Otherwise (the
+   report). The team's results directory, loggers and files stay as they are: nothing of theirs is redirected,
+   moved or deleted; TestDetta reads the reports where the run wrote them and copies them, and deletes only the
+   reports its own added report option made (none when the team asks for a TRX report). Otherwise (the
    command names test assemblies, no single solution is there to run, a legacy project needs the full
    MSBuild, two test projects build assemblies of the same name, or testing-platform projects need different
    report options) each test project the command runs runs on its own, one after another, from the same
@@ -237,9 +238,14 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   `TestMethod/@codeBase`), by assembly name, and by folder when two projects build the same name; a report
   that matches no single project is listed in `run.unmappedReports` and not compared. Several reports of one
   project (target frameworks) are read together. Every report is read in place and copied into TestDetta's
-  temp folder: nothing in the team's results location is moved, redirected or deleted, the reports TestDetta
-  asked for included, so a later step that uploads test results or coverage finds everything the team's run
-  wrote, plus TestDetta's TRX reports when the team asked for none. Checked on the SDK here (10.0.105):
+  temp folder: nothing of the team's in its results location is moved, redirected or deleted, so a later step
+  that uploads test results or coverage finds everything the team's run wrote. The reports TestDetta asked for
+  itself are deleted once read (`ShadowRun.IsOwnReport`, `DeleteOwnReports`, after review 2026-10-07): when
+  TestDetta added its report option (the team has no TRX logger or report option of its own), every `.trx` file
+  that did not exist before the run and lies directly in the user's results directory or in a `TestResults`
+  folder (VSTest's beside the project, the testing platform's in the build output) is TestDetta's; with the
+  team's own logger nothing is added and nothing deleted. Folders, other loggers' files, attachments, older
+  reports and a `.trx` a test writes anywhere else stay. Checked on the SDK here (10.0.105):
   VSTest over a `.slnx` with two projects, one of them multi-targeted, writes one TRX per project and
   framework with distinct names; `dotnet test --solution` in testing-platform mode with xUnit v3 projects
   writes one per project under `bin/…/TestResults`; a solution mixing xUnit v3 and MSTest (TRX extension)
@@ -272,7 +278,8 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   when the user gives no `--settings`, which it would replace), and none when the user already asks for a TRX
   report (theirs are read) or nothing fits (its failures are then "unexplained"). A project's reports are the
   `.trx` files its run wrote or rewrote (under the repository and the user's results directory) whose
-  assembly is its own, copied as above.
+  assembly is its own, copied as above; those its added VSTest logger made are deleted as above (a
+  testing-platform report goes into TestDetta's temp folder).
 - **Exit code**: the full run's: the verbatim command's own, or 1 when any project failed in per-project
   runs; `td` returns 0 or 3, and 1 only when cancelled before the tests ran. In a verbatim run a project's
   `exitCode` comes from its reports (1 when a test failed or the run's outcome is Failed, Error, Aborted or

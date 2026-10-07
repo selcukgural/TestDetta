@@ -31,7 +31,8 @@ internal sealed class ShadowHooks
 /// and the run is compared with what the selection would have run. The full run is the team's own <c>dotnet test</c>
 /// command as given, with only a report option added, whenever its reports can be matched to test projects; otherwise
 /// one <c>dotnet test</c> per test project that command runs, and the report says why. Reports are read where the run
-/// wrote them and copied; nothing in the team's results location is moved, redirected or deleted. A failed class the
+/// wrote them and copied; nothing of the team's in its results location is moved, redirected or deleted, and the reports
+/// only TestDetta's added report option made are deleted once read. A failed class the
 /// selection left out is rerun before it is called a miss: alone with the change, then in its project's full-run
 /// context, then on the base commit in a separate worktree. The exit code is the full run's alone: any TestDetta error
 /// before that run leaves the team's plain command to run, and any error after it only costs the comparison. No
@@ -537,9 +538,16 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var testProjects = plan.Graph.Projects.Where(static p => p.IsTestProject).OrderBy(static p => p.Path, StringComparer.Ordinal).ToList();
         var facts = new Dictionary<ProjectNode, List<TrxFileFacts>>();
         var unmapped = new SortedSet<string>(StringComparer.Ordinal);
+        var own = new List<string>();
         foreach (var file in Changed(before, ReportTimes(searched)))
         {
-            if (Try(() => TrxReport.Facts(file)) is not { Assemblies.Count: > 0 } report)
+            var parsed = Try(() => TrxReport.Facts(file));
+            if (verbatim.Report.Count > 0 && parsed is not null && IsOwnReport(file, before, verbatim.UserResults))
+            {
+                own.Add(file);
+            }
+
+            if (parsed is not { Assemblies.Count: > 0 } report)
             {
                 continue;
             }
@@ -550,7 +558,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
                 continue;
             }
 
-            // Read in place and copied: the team's reports, and those TestDetta asked for, stay where the run put them.
+            // Read in place and copied: the team's reports stay where the run put them; TestDetta's own are deleted below.
             var folder = Path.Combine(state.Work, "project-" + testProjects.IndexOf(owner));
             if (TryDo(() =>
                 {
@@ -586,9 +594,46 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             });
         }
 
+        DeleteOwnReports(own);
         info = info with { UnmappedReports = [.. unmapped] };
         state.Info = info;
         return new FullRunOutcome(runs, info);
+    }
+
+    /// <summary>
+    /// True for a report the run wrote only because TestDetta asked for one (<see cref="DeleteOwnReports"/>): the caller
+    /// added its own report option, the file did not exist before the run, and it lies where that option puts a report,
+    /// directly in the user's results directory or in a <c>TestResults</c> folder (VSTest's beside the project, the testing
+    /// platform's in the build output). A file the team's tests write elsewhere is never taken for one.
+    /// </summary>
+    /// <param name="file">A <c>.trx</c> file the run wrote, already read as a TRX report.</param>
+    /// <param name="before">Report times before the run: a file listed there is not new.</param>
+    /// <param name="userResults">The user's results directory, or null.</param>
+    internal static bool IsOwnReport(string file, IReadOnlyDictionary<string, DateTime> before, string? userResults)
+    {
+        if (before.ContainsKey(file) || Path.GetDirectoryName(file) is not { } folder)
+        {
+            return false;
+        }
+
+        return string.Equals(Path.GetFileName(folder), "TestResults", StringComparison.OrdinalIgnoreCase)
+               || userResults is not null && Paths.Comparer.Equals(Paths.Normalize(folder), Paths.Normalize(userResults));
+    }
+
+    /// <summary>
+    /// Deletes the reports TestDetta asked the team's run for, once they are read and copied: when the team has no TRX
+    /// report of its own, every new one from the report option TestDetta added is TestDetta's, and leaving them would
+    /// fill the team's results folders with files they did not ask for. With the team's own TRX logger or report option
+    /// TestDetta adds none, and nothing is deleted. Nothing else is touched: the folders, other loggers' files and
+    /// attachments stay. A file that cannot be deleted is left.
+    /// </summary>
+    /// <param name="files">The reports that <see cref="IsOwnReport"/> found to be TestDetta's.</param>
+    private void DeleteOwnReports(IEnumerable<string> files)
+    {
+        foreach (var file in files)
+        {
+            TryDo(() => File.Delete(file));
+        }
     }
 
     /// <summary>
@@ -735,20 +780,39 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
 
         var elapsed = stopwatch.Elapsed.TotalSeconds;
 
-        // Read in place and copied: the reports stay where the run wrote them. False for "read" means an error.
+        // Read in place and copied: the team's reports stay where the run wrote them, TestDetta's own are deleted once
+        // copied. False for "read" means an error.
+        var own = new List<string>();
         var (outcome, read) = Try(() =>
         {
             foreach (var file in Changed(before, ReportTimes(searched)))
             {
-                if (Try(() => TrxReport.Facts(file)) is { Assemblies.Count: > 0 } facts && Owner(facts.Assemblies, [project]) is not null)
+                if (Try(() => TrxReport.Facts(file)) is not { } facts)
+                {
+                    continue;
+                }
+
+                var ours = report.Count > 0 && IsOwnReport(file, before, userResults);
+                if (facts.Assemblies.Count > 0 && Owner(facts.Assemblies, [project]) is not null)
                 {
                     Directory.CreateDirectory(results);
                     File.Copy(file, Path.Combine(results, Guid.NewGuid().ToString("N") + ".trx"));
+                }
+                else if (ours && facts.Assemblies.Count > 0)
+                {
+                    // Another project's report, not read here: not ours to delete either.
+                    continue;
+                }
+
+                if (ours)
+                {
+                    own.Add(file);
                 }
             }
 
             return (TrxReport.Read(results), true);
         });
+        DeleteOwnReports(own);
         return new FullRun(project, mode, exitCode, elapsed, outcome, outputDirectory)
         {
             Legacy = legacy,

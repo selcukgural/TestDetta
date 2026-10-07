@@ -54,7 +54,7 @@ public sealed class ShadowRunTests : IDisposable
     }
 
     [Fact]
-    public void Reports_are_read_where_the_teams_run_wrote_them_and_nothing_there_is_moved()
+    public void Reports_are_read_where_the_teams_run_wrote_them_and_only_the_report_TestDetta_asked_for_is_deleted()
     {
         _dotnet.Fails = static (_, c, _) => c == "Shop.Tests.DiscountTests";
         _dotnet.After = static (_, results) =>
@@ -72,11 +72,48 @@ public sealed class ShadowRunTests : IDisposable
         Assert.Equal("dotnet test tests/Shop.Tests/Shop.Tests.csproj --logger trx", run.GetProperty("command").GetString());
         Assert.DoesNotContain("--results-directory", string.Join(' ', _dotnet.Calls.Single().Arguments), StringComparison.Ordinal);
 
-        // VSTest's own results folder keeps everything the run wrote.
+        // VSTest's own results folder keeps everything else the run wrote; the report TestDetta's logger made is read and deleted.
         var results = Path.Combine(_repo.Root, "tests", "Shop.Tests", "TestResults");
-        Assert.Single(Directory.GetFiles(results, "*.trx"));
+        Assert.Empty(Directory.GetFiles(results, "*.trx"));
         Assert.True(File.Exists(Path.Combine(results, "attachments", "coverage.cobertura.xml")));
+        Assert.True(Class(report, "tests/Shop.Tests/Shop.Tests.csproj", "Shop.Tests.DiscountTests").GetProperty("failed").GetBoolean());
         Assert.Equal("unclassified", Class(report, "tests/Shop.Tests/Shop.Tests.csproj", "Shop.Tests.DiscountTests").GetProperty("verdict").GetString());
+    }
+
+    [Fact]
+    public void Only_new_reports_of_TestDettas_logger_are_deleted_and_older_reports_or_reports_a_test_writes_elsewhere_stay()
+    {
+        // Each project runs on its own into the team's results directory, which already holds a report of an earlier run.
+        var res = Path.Combine(_repo.Root, "res");
+        Directory.CreateDirectory(res);
+        FakeDotnet.WriteTrx(Path.Combine(res, "earlier.trx"), Path.Combine(_repo.Root, "tests", "Shop.Tests", "bin", "Debug", "net10.0", "Shop.Tests.dll"), [("Shop.Tests.TaxTests", "Taxes", false)]);
+        File.WriteAllText(Path.Combine(res, "results.junit.xml"), "<testsuites />");
+        _dotnet.After = (call, _) =>
+            // A test of the team's that writes a TRX file of its own somewhere else in the tree.
+            FakeDotnet.WriteTrx(Path.Combine(_repo.Root, "out", $"fixture-{call.Index}.trx"), Path.Combine(_repo.Root, "x.dll"), [("X.Tests", "T", false)]);
+        Directory.CreateDirectory(Path.Combine(_repo.Root, "out"));
+        _dotnet.Fails = static (_, c, _) => c == "Shop.Tests.DiscountTests";
+
+        var (exit, report, stdout) = Run(["--results-directory", "res"], LeftOut("Shop.Tests.DiscountTests"), "--shadow-no-classify");
+
+        Assert.True(exit == 3, stdout);
+        Assert.Equal("per-project", report.GetProperty("run").GetProperty("kind").GetString());
+        Assert.True(Class(report, "tests/Shop.Tests/Shop.Tests.csproj", "Shop.Tests.DiscountTests").GetProperty("failed").GetBoolean());
+        Assert.Equal(["earlier.trx", "results.junit.xml"], Directory.GetFiles(res).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(_repo.Root, "out"), "*.trx").Length);
+    }
+
+    [Fact]
+    public void A_report_is_TestDettas_own_only_when_it_is_new_and_lies_where_its_report_option_puts_one()
+    {
+        var before = new Dictionary<string, DateTime>(StringComparer.Ordinal) { ["/r/t/TestResults/old.trx"] = DateTime.UnixEpoch };
+
+        Assert.True(ShadowRun.IsOwnReport("/r/t/TestResults/new.trx", before, null));
+        Assert.True(ShadowRun.IsOwnReport("/r/t/bin/Debug/net10.0/TestResults/new.trx", before, null));
+        Assert.True(ShadowRun.IsOwnReport("/r/res/new.trx", before, "/r/res"));
+        Assert.False(ShadowRun.IsOwnReport("/r/t/TestResults/old.trx", before, null));
+        Assert.False(ShadowRun.IsOwnReport("/r/res/sub/new.trx", before, "/r/res"));
+        Assert.False(ShadowRun.IsOwnReport("/r/t/fixtures/new.trx", before, null));
     }
 
     [Fact]
