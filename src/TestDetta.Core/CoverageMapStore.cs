@@ -174,6 +174,17 @@ public static class CoverageMapStore
             json.WriteString("platform"u8, platform);
         }
 
+        if (map.InstrumentedProjects is { } instrumented)
+        {
+            json.WriteStartArray("instrumentedProjects"u8);
+            foreach (var project in instrumented)
+            {
+                json.WriteStringValue(project);
+            }
+
+            json.WriteEndArray();
+        }
+
         if (map.ClassLocations is { } locations)
         {
             WriteLocations(json, locations);
@@ -270,6 +281,9 @@ public static class CoverageMapStore
                     ? skipped.EnumerateArray().Select(static n => n.GetString()!).ToHashSet(StringComparer.Ordinal)
                     : null,
                 Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
+                InstrumentedProjects = root.TryGetProperty("instrumentedProjects", out var instrumented)
+                    ? [.. instrumented.EnumerateArray().Select(static p => p.GetString()!)]
+                    : null,
                 Framework = root.TryGetProperty("framework", out var framework) ? framework.GetString() : null,
                 GeneratedFrameworks = root.TryGetProperty("generatedFrameworks", out var generatedFrameworks)
                     ? [.. generatedFrameworks.EnumerateArray().Select(static f => f.GetString()!)]

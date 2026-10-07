@@ -124,6 +124,39 @@ public sealed class CoverageRecorderTests : IDisposable
     }
 
     [Fact]
+    public void A_test_project_whose_assembly_TestDetta_does_not_instrument_is_not_recorded_with_that_reason()
+    {
+        // The output file is named otherwise than the assembly, so no project owns it: without B1 its map listed every
+        // class as failed (meziantou-analyzer, round runs-full-1006).
+        _repo.Write("tests/Renamed.Tests/Renamed.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><TargetName>Elsewhere</TargetName></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+                <ProjectReference Include="../../src/Calc/Calc.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Renamed.Tests/Tests.cs", "namespace Renamed.Tests; public class AddTests { [Xunit.Fact] public void Adds() => Xunit.Assert.Equal(3, new Calc.Calculator().Add(1, 2)); }");
+        _repo.Commit("renamed test project");
+        var root = new GitClient(NullLogger<GitClient>.Instance).TopLevel(_repo.Root);
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        var exit = CliApp.Run(["record", "--repo", _repo.Root], stdout, stderr);
+
+        Assert.True(exit == 0, $"{stdout}\n{stderr}");
+        Assert.False(File.Exists(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Renamed.Tests/Renamed.Tests.csproj"))));
+        Assert.Contains("not recorded  tests/Renamed.Tests/Renamed.Tests.csproj: its test assembly Elsewhere.dll is not among the repository assemblies TestDetta instruments", stdout.ToString());
+
+        // The map of the project that was recorded says what its recording instrumented.
+        var map = CoverageMapStore.Read(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Calc.Tests/Calc.Tests.csproj")))!;
+        Assert.Equal(["src/Calc/Calc.csproj", "tests/Calc.Tests/Calc.Tests.csproj"], map.InstrumentedProjects);
+    }
+
+    [Fact]
     public void A_multi_targeted_test_project_keeps_the_generated_code_of_every_framework()
     {
         // The first framework is recorded; the build without -f makes the others too, and a generator
