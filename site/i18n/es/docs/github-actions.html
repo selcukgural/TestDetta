@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 589b8cc513f4 -->
+<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 02633ab62c78 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Registra un mapa por cada commit de la rama predeterminada y deja que las pull requests ejecuten solo las pruebas que sus cambios afectan. La acción compila {{name}} por sí misma y guarda los mapas en la caché de Actions.</p>
 
@@ -66,17 +66,21 @@ jobs:
 <table>
   <thead><tr><th>Entrada</th><th>Predeterminado</th><th>Descripción</th></tr></thead>
   <tbody>
-    <tr><td><code>mode</code></td><td></td><td><code>test</code> en las pull requests (ejecutar las pruebas afectadas), <code>shadow</code> en las pull requests mientras evalúa {{name}} (ejecutar todas las pruebas e informar de lo que la selección habría dejado fuera; sin licencia), <code>record</code> en la rama predeterminada (registrar mapas de cobertura). Obligatoria.</td></tr>
+    <tr><td><code>mode</code></td><td></td><td><code>test</code> en las pull requests (ejecutar las pruebas afectadas), <code>shadow</code> en las pull requests mientras evalúa {{name}} (ejecutar todas las pruebas e informar de lo que la selección habría dejado fuera; sin licencia), <code>record</code> en la rama predeterminada (registrar mapas de cobertura), <code>audit</code> de forma programada (romper tu código cambio a cambio en una copia y comprobar que la selección ejecutó cada prueba que falló; sin licencia). Obligatoria.</td></tr>
     <tr><td><code>base</code></td><td>la rama base de la PR</td><td>Rama con la que comparar en el modo test. Fuera de las pull requests, defínela.</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Configuración de compilación para compilar y ejecutar las pruebas.</td></tr>
     <tr><td><code>projects</code></td><td>todos los proyectos de pruebas</td><td>Modo record: rutas de <code>.csproj</code>, una por línea.</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>Modo record: procesos host de prueba por proyecto de pruebas; cada uno sigue ejecutando sus pruebas de una en una. El conjunto de pruebas debe tolerar varios procesos de prueba a la vez.</td></tr>
     <tr><td><code>no-build</code></td><td><code>false</code></td><td>Modo record: <code>true</code> para registrar la compilación que hizo un paso anterior con la misma <code>configuration</code>.</td></tr>
-    <tr><td><code>dotnet-test-args</code></td><td></td><td>Modos test y shadow: argumentos adicionales de <code>dotnet test</code>, separados por espacios. En modo sombra, nombre aquí su solución para ejecutarla como un solo comando.</td></tr>
-    <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Modo test: cuántos commits puede estar un mapa por detrás de la merge base; los cambios intermedios se salvan con el drift bridge. <code>0</code> usa solo un mapa exacto.</td></tr>
-    <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Modo test: cuando los cambios desde un mapa más antiguo incluyen un archivo de compilación, configuración o un global using, <code>all</code> ejecuta completos los proyectos de pruebas afectados; <code>name</code> decide por nombre (más rápido, pero ciego a las llamadas hechas mediante configuración o reflexión).</td></tr>
-    <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Modo test: lista las cachés de Actions para encontrar el mapa más reciente (necesita <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello. El modo sombra nunca la lee.</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>Modos test, shadow y audit: argumentos adicionales de <code>dotnet test</code>, separados por espacios. En modo sombra, nombre aquí su solución para ejecutarla como un solo comando.</td></tr>
+    <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Modos test, shadow y audit: cuántos commits puede estar un mapa por detrás de la merge base; los cambios intermedios se salvan con el drift bridge. <code>0</code> usa solo un mapa exacto.</td></tr>
+    <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Modos test, shadow y audit: cuando los cambios desde un mapa más antiguo incluyen un archivo de compilación, configuración o un global using, <code>all</code> ejecuta completos los proyectos de pruebas afectados; <code>name</code> decide por nombre (más rápido, pero ciego a las llamadas hechas mediante configuración o reflexión).</td></tr>
+    <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>Modo audit: se detiene en cuanto este número de cambios rompió pruebas.</td></tr>
+    <tr><td><code>audit-max-mutants</code></td><td>sin límite</td><td>Modo audit: se detiene después de que este número de cambios ejecutara pruebas.</td></tr>
+    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Modo audit: no empieza ningún cambio pasado este tiempo (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> para sin límite). Mantenlo por debajo del <code>timeout-minutes</code> del job.</td></tr>
+    <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Modo audit: cambios probados a la vez, cada uno en su propia copia; la memoria crece con ello.</td></tr>
+    <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Modos test, shadow y audit: lista las cachés de Actions para encontrar el mapa más reciente (necesita <code>actions: read</code>).</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello. Los modos sombra y audit nunca la leen.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Cualquier directorio dentro del repositorio que se vaya a analizar.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Instala el SDK de .NET 10 sobre el que se ejecuta {{name}}. Ponlo en <code>false</code> si el job ya lo tiene.</td></tr>
   </tbody>
@@ -89,6 +93,39 @@ jobs:
         with:
           mode: shadow
           dotnet-test-args: Shop.slnx</code></pre>
+
+<h2 id="audit">Audit programado</h2>
+<p>Para comprobar la selección en tu propio código, usa <code>mode: audit</code> de forma programada, por ejemplo cada semana en la rama que registra el modo record. Rompe miembros de tu código cambio a cambio en una copia del árbol de trabajo, ejecuta cada prueba que puede ver cada cambio y comprueba que la selección ejecutó cada clase de prueba que falló; consulta <a href="/docs/cli/#audit"><code>td audit</code></a>. Tu checkout y su salida de compilación solo se leen. El resumen del job muestra el veredicto y cada fallo no detectado con su cadena de decisiones; el artefacto <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> guarda el informe JSON durante 90 días. Usa el mapa más reciente dentro de <code>max-map-age</code> del commit en que se ejecuta. No necesita licencia y no hace ninguna llamada de red, así que no se le pasa el secreto de la licencia. Se ejecuta durante horas en tus runners: dale al job un <code>timeout-minutes</code> mayor que <code>audit-budget</code>.</p>
+<pre><code>on:
+  schedule:
+    - cron: '0 3 * * 1' # Mondays, 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      actions: read # finds the newest coverage map in the Actions cache
+    steps:
+      - uses: actions/checkout@v7 # pin to a commit SHA
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6 # pin to a commit SHA
+        with:
+          global-json-file: global.json
+
+      - uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: audit
+          audit-budget: 4h</code></pre>
+<p>Una ejecución con al menos 100 cambios que rompieron pruebas y ningún fallo no detectado deja el límite superior del 95 % de la tasa de fallos no detectados por debajo del 3 %.</p>
 
 <h2>Job summary</h2>
 <p>En el modo test, {{name}} escribe su selección en el job summary: los archivos modificados y la base con la que comparó, cada proyecto de pruebas indicando si se ejecutó filtrado, completo o no se ejecutó y por qué, los resultados de las pruebas y el estado de la licencia cuando importa. Las rutas, los nombres de clase y los motivos procedentes del repositorio se escriben como código, para que los nombres de archivo de una pull request no puedan inyectar enlaces ni menciones en la página.</p>

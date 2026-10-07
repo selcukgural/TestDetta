@@ -45,7 +45,9 @@ audit could not run or was cancelled (the reason is in the report when one could
   `ls-files`, the first-parent history for the map age). Nothing is changed in the repository's files or in git:
   no source edit, no commit, stash or worktree.
 - **Writes** a work folder `td-audit-<pid>-<random>` under `--work-dir` (a copy of the working tree, backups of
-  rewritten assemblies, test reports and logs), deleted at the end; the JSON report; the summary when asked.
+  rewritten assemblies, test reports and logs), deleted at the end; the JSON report; the summary when asked. In
+  the repository only TestDetta's own `.testdetta/`: the project-graph cache every `td` command keeps
+  (`.testdetta/cache`), the report by default, and with `--maps-dir` the restored maps, as `td test` does.
 - **Executes** `cp` (the copy), `dotnet test` and `dotnet msbuild -getProperty` in the copy, `git` read-only.
 - **No license and no network call.** Owner decision 2026-10-07: shadow mode needs no license because it skips
   nothing; the audit skips nothing either (every test that could see a change runs, with and without it), so it
@@ -167,4 +169,115 @@ audit asks the sampler for its uniform order.
 
 ## As built (2026-10-07)
 
-See the end of this file, filled in with the implementation.
+- **Code**: `CliApp.Audit` (dispatched before the license refresh, with SIGINT and SIGTERM registered through
+  `PosixSignalRegistration` so the process lives on to clean up), `AuditRun` (checks, sample, baseline, report),
+  `AuditWorkspace` (work folder, owner file, stale sweep, copies, free-space check), `AuditTestRun` (one `dotnet
+  test` of a project in a copy, with a report, read and deleted at once; output folders from `dotnet msbuild
+  -getProperty:TargetPath`, one per target framework), `AuditProcess` (dotnet with a limit and the cancellation
+  token, killing the whole tree; no MSBuild node, build server or compiler server outlives a command), `AuditSelector`
+  (the overlay pipeline), `AuditTrial` (one change), `AuditLoop` (the walk and the stop conditions), `AuditReport`
+  and `AuditResult`. The report-argument helpers of shadow mode moved to `TestRunArguments` for both. The shared
+  library is `src/TestDetta.Mutants` (`MutantKind`, `MutationInjector`, `TargetSampler` with
+  `SampleRequest.Uniform`, `RepositoryAssemblies`, `TreeCopy`, `Selections`, `MissRate`); the evaluator forwards to
+  it and its tests are unchanged but for a `using`. The recording fingerprint did not change (TestDetta.Coverage
+  and TestDetta.Core only gained an `InternalsVisibleTo`; `AnalysisOptions`, `AnalysisPipeline` and
+  `CodeChangeReader`, which gained the overlay, are not reached by the recorder).
+- **Dirty tree**: `GitClient.ChangedFiles(root, "HEAD")` without `.testdetta/`, the same files `td test --base HEAD`
+  would add; any refuses the audit (exit 1, with a report naming up to five).
+- **Baseline**: per test project in the copy, `dotnet test <project> <args>` with a report (VSTest TRX, the testing
+  platform's own report option, NUnit's XML), building there unless `--no-build` is among the arguments; a
+  testing-platform project is built first, since its report option is read from its build output. Not audited, with
+  the reason in the report: a legacy project (full MSBuild), one that does not build, one that writes no report,
+  crashes or times out, one in whose report no test ran. Its time is the baseline's wall time, build included.
+- **Rewriting**: `MutationInjector.Inject` on the repository's assemblies in the audited outputs of the worker's
+  copy (`RepositoryAssemblies.Find`, which leaves copies that came from a NuGet package alone), backups under the
+  work folder, restored by `Mutation.Dispose` in a `using`. A member whose mutant changes no compiled code (a
+  `flip-branch` on a member without a two-way branch, a `return-default` on a by-reference return), or whose
+  assembly only unaudited projects hold, is **not reached**: listed, not counted. A member Cecil cannot rewrite is
+  not reached too, with the error; a file error while rewriting or restoring stops the audit (`stopReason: error`).
+- **Time limits**: a change's run may take `max(2 min, 5 × baseline × workers)`, cut to what is left of the budget
+  (`ShadowBudget.For`); a run killed at a cut that was the budget's makes the change **stopped**. No idle limit: a
+  hung test host is killed at its time limit.
+- **Judging** as designed. A left-out class that fails alone with the change and whose run without it does not
+  complete stays a miss ("the run without it: …"). A class filter that cannot be joined with the user's own filter
+  (`TestFilter.WithinUserFilter`), or a crash outside the selection under a user filter, makes the change
+  inconclusive. `notCounted` lists the classes that failed only next to other tests or fail alone anyway.
+- **Parallel**: worker k > 1 gets a copy of the first copy made after the baseline (same binaries) and, with more
+  than one worker, its own `TMPDIR` under the work folder. One analysis at a time (`AuditSelector` holds a lock).
+- **Not done in v1**: generator and analyzer projects (left out of the sample, counted as `generatorMembers`),
+  legacy projects, data-file mutants (`empty-file`), the evaluator's schema (every mutant is written in alone; the
+  copy makes that cheap and the result the same). The owner may want a `td audit` path for generator code later.
+- **Measured**: the fixture repository of the tests (4 members, 1 test project) audits in about 8 s on this machine,
+  copy and baseline included; one change costs a full run of the projects that load it plus an analysis.
+
+### `testdetta-audit.json` (schema 1)
+
+```jsonc
+{
+  "schema": 1,
+  "verdict": "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); target of 100 reached.",
+  "stopReason": "target",             // target | max-mutants | budget | sample | cancelled | error
+  "error": "…",                       // only with an error
+  "license": "No license is needed and none was read: … TestDetta made no network call.",
+  "totals": {
+    "changes": 112,                   // changes that ran tests to a judgement (caught + missed + didNotBreak + inconclusive)
+    "broke": 103,                     // n: caught + missed
+    "caught": 103, "missed": 0, "didNotBreak": 7, "inconclusive": 2, "notReached": 31, "stopped": 0,
+    "brokeUncovered": 4,              // broke although no map said a test ran the member
+    "upperBound95": 0.028666,         // MissRate.UpperBound(missed, broke); null with broke = 0
+    "targetBroken": 100, "targetReached": true
+  },
+  "run": {
+    "wallSeconds": 9120.4, "baselineSeconds": 312.0, "parallelism": 1,
+    "budgetSeconds": 14400,           // null: no limit
+    "maxMutants": null,
+    "workFolder": "/tmp/td-audit-4242-1a2b3c4d", "workFolderRemoved": true,
+    "dotnetTestArguments": ["-c", "Release"]
+  },
+  "sample": {
+    "seed": 1, "kinds": "all",
+    "order": "uniform over every candidate by a stable hash of the member and the seed; coverage not used",
+    "candidates": 4210, "coveredCandidates": 2950, "generatorMembers": 12,
+    "members": []                     // the --member filter
+  },
+  "projects": [{
+    "path": "tests/Shop.Tests/Shop.Tests.csproj", "audited": true,
+    "reason": "…",                    // only when not audited
+    "classes": 212, "baselineSeconds": 41.2, "baselineFailed": [], "mapCommit": "9f3c…"
+  }],
+  "mutants": [{
+    "index": 7, "member": "Shop.Discount.Apply", "kind": "return-default", "file": "src/Shop/Calc.cs",
+    "covered": true, "outcome": "missed",   // caught | missed | did-not-break | not-reached | inconclusive | stopped
+    "note": "…",                      // why not reached, inconclusive or stopped
+    "mutatedMethods": 1, "seconds": 38.5,
+    "selectedShare": 0.12, "caughtByCrash": false,   // these four only when a project was reached
+    "reached": ["tests/Shop.Tests/Shop.Tests.csproj"],
+    "seen": ["Shop.Discount.Apply(decimal) modified"],
+    "broken": [{
+      "project": "tests/Shop.Tests/Shop.Tests.csproj", "class": "Shop.Tests.DiscountTests", "selected": false,
+      "chain": { "projectMode": "Filtered", "projectReason": "…", "decision": "Skipped", "evidence": "…", "mapCommit": "9f3c…" },
+      "note": "fails alone with the change and passes alone without it"
+    }],
+    "notCounted": [],                 // failed only next to other tests, or fails alone anyway
+    "edits": [{ "file": "src/Shop/Calc.cs", "line": 3, "column": 58, "replaces": 0, "insert": "(" }],   // misses only
+    "reproduce": "td audit --member Shop.Discount.Apply --kinds return-default --max-map-age 50 --drift-fallback all"
+  }],
+  "reproduction": {
+    "testDettaVersion": "…", "testDettaSha256": "…", "head": "…",
+    "maps": [{ "testProject": "…", "commit": "…", "sha256": "…" }],
+    "options": ["--seed 1", "--kinds all", "--max-map-age 50", "--drift-fallback all", "-- -c Release"],
+    "command": "td audit --seed 1 --kinds all --max-map-age 50 --drift-fallback all -- -c Release"
+  }
+}
+```
+
+### For the owner
+
+- **No license, no network** (as decided for shadow mode): the audit reveals decisions only for classes that ran
+  and failed with a change, never a selection for a pull request. Someone could still learn from it which test
+  classes cover which member; that is what a coverage map already says, on their own machine.
+- **Cost**: a change runs every test project that loads the member's assembly, completely; on a large suite with
+  one big test project that is the whole suite per change. 100 breaking changes with about 30% of changes not
+  breaking anything means 130 or more full runs; the budget (4 h) and the target bound it. Teams with long suites
+  will need `--parallel` (memory permitting) or a longer budget; the report says when the target was not reached.
+  Open: combining several runs into one bound (a roll-up like `td shadow report`), which needs disjoint samples.

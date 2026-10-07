@@ -55,7 +55,7 @@ const CH_OVERVIEW = {
     {
       title: "td record her test projesini kaydeder", nodes: ["cimain", "rec"], edges: ["run"],
       who: "<code>CliApp.RecordCoverage</code> → her test projesi için <code>CoverageRecorder.Record</code>",
-      file: "src/TestDetta.Cli/CliApp.cs:290",
+      file: "src/TestDetta.Cli/CliApp.cs:318",
       input: "<code>dotnet TestDetta.Cli.dll record -c &lt;cfg&gt; --parallel n [--no-build] [--project …]</code>",
       output: "Proje başına <code>(CoverageMap Map, bool TestsPassed)</code>; çıkış kodu 0, 1 (hiç harita yazılmadı) ya da 3 (bir test başarısız)",
       purpose: "Her test sınıfının hangi metotları çalıştırdığını ölçmek. Ayrıntılar Bölüm 2'de.",
@@ -124,6 +124,7 @@ foreach (var project in SelectTestProjects(graph, root, projects))
         "Koltuk hesabı: son 30 günün bot olmayan commit yazarları; izin = koltuk + max(1, ⌈koltuk × 0,2⌉).",
         "<b>Bugün:</b> <code>LicenseKeys.Enforced = false</code>, yani kontrol raporlanır ama seçimi kapatmaz.",
         "<b>Shadow mode</b> (<code>td test --shadow</code>) bu adıma hiç gelmez: <code>CliApp.Run</code> onu yenileme başlamadan <code>CliApp.Shadow</code>'a gönderir; lisans okunmaz, yenilenmez, ağ çağrısı yoktur.",
+        "<b>td audit</b> de gelmez: <code>CliApp.Run</code> onu da yenilemeden önce <code>CliApp.Audit</code>'e gönderir (SIGINT/SIGTERM iptal belirtecine bağlanır); lisans okunmaz, ağ çağrısı yoktur (docs/design/audit.md).",
       ]),
     },
     {
@@ -214,7 +215,7 @@ const CH_RECORD = {
     {
       title: "Komut, projeleri ve seçenekleri toplar", nodes: ["cli", "graph"], edges: ["load"],
       who: "<code>CliApp.RecordCoverage</code>",
-      file: "src/TestDetta.Cli/CliApp.cs:290",
+      file: "src/TestDetta.Cli/CliApp.cs:318",
       input: "<code>RecordSettings(Configuration, Projects, Parallelism, Framework) { NoBuild }</code>",
       output: "<code>ProjectGraph</code> ve kaydedilecek test projelerinin listesi",
       purpose: "Hangi projelerin test projesi olduğunu (MSBuild değerlendirmesi ya da <code>*.Tests</code> adı) bulmak.",

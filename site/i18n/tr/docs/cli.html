@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 00b7ae1baea4 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 53893031e441 -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -6,10 +6,11 @@
 td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
-td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
 
 <h2 id="shared">Tüm analizler için seçenekler</h2>
-<p>Bunlar <code>affected</code>, <code>test</code> ve <code>record</code> ile çalışır.</p>
+<p>Bunlar <code>affected</code>, <code>test</code>, <code>record</code> ve <code>audit</code> ile çalışır; <code>audit</code> her zaman <code>HEAD</code> ile karşılaştırır, bu yüzden <code>--base</code> onda geçerli değildir.</p>
 
 <h3 id="base"><code>--base &lt;ref&gt;</code></h3>
 <p>Karşılaştırılacak git ref'i. {{name}} çalışma ağacınızı <code>HEAD</code> ile bu ref'in <em>merge base</em>'iyle karşılaştırır; böylece siz branch'i ayırdıktan sonra base branch'e gelen commit'ler sizin değişiklikleriniz sayılmaz. Varsayılan: <code>origin/main</code>.</p>
@@ -120,6 +121,33 @@ td test -- --filter "Category!=Integration"</code></pre>
 <pre><code>dotnet build -c Release
 td record -c Release --no-build</code></pre>
 
+<h2 id="audit"><code>td audit</code></h2>
+<p>{{name}}'nın seçimini kendi kodunuzda, bizim açık kaynak depolarda test ettiğimiz yöntemle test eder. Kodunuzun üyelerini IL mutantlarıyla birer birer bozar (bir metot hata fırlatır, varsayılan bir değer döndürür, diğer dala gider ya da bir alan başka bir değerle başlar), değişikliği yükleyebilen her test projesini eksiksiz çalıştırır ve {{name}}'nın o değişiklik için kapsam haritalarınızdan, tam olarak <code>td test</code> gibi yaptığı seçimin başarısız olan her test sınıfını içerdiğini denetler. Seçimin dışarıda bıraktığı bir sınıf, <strong>kaçırma</strong> sayılmadan önce değişiklikle tek başına ve değişiklik olmadan tek başına yeniden çalıştırılır. Lisans gerektirmez ve hiçbir ağ çağrısı yapmaz: shadow mode gibi hiçbir şeyi atlamaz.</p>
+<p>Kaynak kodunuza ve derleme çıktınıza hiçbir zaman yazılmaz. {{name}} çalışma ağacını bir çalışma klasörüne kopyalar (dosya sistemi destekliyorsa copy-on-write klon olarak), derlemeyi ve testleri orada yapar ve sonunda klasörü siler; Ctrl+C, bir zaman aşımı ya da bir hatadan sonra da. Öldürülen bir çalıştırmanın bıraktığı klasörü bir sonraki çalıştırma siler. Her değişiklik <code>HEAD</code> ile karşılaştırıldığı için çalışma ağacında commit edilmemiş değişiklik olmamalıdır. Üyeler, üye ve tohum değerinin özetinden gelen sabit bir sırayla, tüm üyeler arasında eşit şekilde alınır: bir haritanın bir üyeyi bir testin çalıştırdığını söyleyip söylememesi seçimde hiçbir rol oynamaz.</p>
+<p>Sonuç, kaçırma oranının %95 üst sınırını ve dayandığı değişiklik sayısını verir:</p>
+<pre><code>On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); target of 100 reached.</code></pre>
+<p>Rapor (<code>.testdetta/testdetta-audit.json</code> ve <code>--summary-file</code> ile iş özeti) her değişikliği ve sonucunu listeler. Bir kaçırma için sınıfı, onu dışarıda bırakan karar zincirini ({{name}}'nın neyin değiştiğini gördüğünü, test projesi ve sınıf için nasıl ve neden karar verildiğini, haritanın commit'ini), aynı kararı görmek için elle yapılacak düzenlemeyi ve o değişikliği tek başına tekrarlayan komutu verir. Bir kaçırma olduğunda çıkış kodu <code>3</code>'tür.</p>
+<pre><code>td audit --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="target-broken"><code>--target-broken &lt;n&gt;</code></h3>
+<p><em>n</em> değişiklik testleri bozduğunda durur. Varsayılan: <code>100</code>; hiç kaçırma yoksa bu, %95 üst sınırını %3'ün altına indirir.</p>
+
+<h3 id="max-mutants"><code>--max-mutants &lt;n&gt;</code></h3>
+<p><em>n</em> değişiklik testleri çalıştırdıktan sonra durur. Varsayılan: sınır yok.</p>
+
+<h3 id="budget"><code>--budget &lt;time&gt;</code></h3>
+<p>Bu süre geçtikten sonra yeni bir değişikliğe başlamaz; hâlâ çalışan bir değişiklik durdurulur ve sayılmaz. Shadow sınırlarıyla aynı <code>&lt;time&gt;</code> sözdizimi. Varsayılan: <code>4h</code>.</p>
+
+<h3 id="audit-parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>Aynı anda test edilen değişiklik sayısı; her biri çalışma ağacının kendi kopyasında. Her biri test host'ları çalıştırır, bu yüzden bellek kullanımı <em>n</em> ile artar. Varsayılan: <code>1</code>.</p>
+
+<h3 id="seed"><code>--seed &lt;n&gt;</code>, <code>--kinds &lt;list&gt;</code>, <code>--member &lt;Type.Member&gt;</code></h3>
+<p>Sıranın tohum değeri (varsayılan <code>1</code>); değişiklik türleri: <code>throw</code>, <code>return-default</code>, <code>flip-branch</code>, <code>field-value</code> ya da <code>all</code> (varsayılan); ve bir rapordaki değişikliği tekrarlamak için bozduğu üye (birkaçı için seçeneği tekrarlayın).</p>
+
+<h3 id="work-dir"><code>--report &lt;path&gt;</code>, <code>--work-dir &lt;dir&gt;</code></h3>
+<p>JSON raporunun nereye yazılacağı (varsayılan: <code>.testdetta/testdetta-audit.json</code>) ve kopyayı içeren çalışma klasörünün nereye konacağı (varsayılan: <code>/tmp</code>, Windows'ta geçici klasör). Kopyanın klon olabilmesi için çalışma klasörünü deponun bulunduğu diskte tutun.</p>
+<pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
+
 <h2 id="license-commands"><code>td license</code></h2>
 <p><code>td license status</code>, lisansı <code>td test</code>'in yapacağı şekilde kontrol eder ve neyi kapsadığını yazdırır: lisans sahibi, koltuklar, son 30 gündeki aktif committer'lar, bot listesi, kapsamlar, bitiş tarihi. Hiçbir yere kişisel veri göndermez. <code>td license install &lt;license|file&gt;</code>, hiçbir CI secret'ının tutamayacağı makineler için lisansı <code>~/.testdetta/license</code> dosyasına kaydeder. Bkz. <a href="/docs/license/">Lisans</a>.</p>
 
@@ -140,8 +168,8 @@ td record -c Release --no-build</code></pre>
   <thead><tr><th>Kod</th><th>Anlamı</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Başarılı; "test gerekmiyor" durumu dahil.</td></tr>
-    <tr><td><code>1</code></td><td>Analiz başarısız oldu: git, dosya sistemi ya da bir proje dosyası.</td></tr>
+    <tr><td><code>1</code></td><td>Analiz başarısız oldu: git, dosya sistemi ya da bir proje dosyası; <code>audit</code> için ayrıca çalışamadığında ya da iptal edildiğinde.</td></tr>
     <tr><td><code>2</code></td><td>Geçersiz komut satırı.</td></tr>
-    <tr><td><code>3</code></td><td>Testler başarısız oldu (<code>test</code> ve <code>record</code>).</td></tr>
+    <tr><td><code>3</code></td><td>Testler başarısız oldu (<code>test</code> ve <code>record</code>); bir kaçırma (<code>audit</code>).</td></tr>
   </tbody>
 </table>

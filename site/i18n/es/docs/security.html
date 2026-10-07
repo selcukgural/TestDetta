@@ -1,4 +1,4 @@
-<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: 8f6001ba2123 -->
+<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: b04314c0bd20 -->
 <h1>Seguridad y datos</h1>
 <p class="lead">{{name}} se ejecuta en tu CI y en tus máquinas. Tu código fuente, tus mapas de cobertura y los resultados de tus pruebas nunca salen de ellos. Esta página enumera todo lo que guarda y cada llamada de red que hace.</p>
 
@@ -8,6 +8,7 @@
   <li>Los mapas de cobertura: qué clase de prueba ejecutó qué método y cuánto tardó cada clase. Nombran tus tipos, métodos y clases de prueba, así que trátalos como artefactos de compilación.</li>
   <li>Las ejecuciones de pruebas y sus resultados.</li>
   <li>El recuento de committers activos. Para contarlos se leen los correos de los autores del historial de git, en tu máquina; no se envían nombres ni correos a ninguna parte.</li>
+  <li><code>td audit</code> reescribe ensamblados solo en su propia copia del árbol de trabajo; tus fuentes y tu salida de compilación solo se leen, y la copia se borra al final.</li>
 </ul>
 
 <h2 id="files">Dónde guarda los archivos</h2>
@@ -20,6 +21,8 @@
     <tr><td><code>~/.testdetta/license</code></td><td>Una licencia instalada con <code>td license install</code> o renovada automáticamente</td></tr>
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>Cuándo se intentó la última renovación</td></tr>
     <tr><td>Carpeta de <code>--maps-dir</code></td><td>Mapas de commits anteriores, una carpeta por commit, guardados donde tú elijas</td></tr>
+    <tr><td><code>.testdetta/testdetta-audit.json</code></td><td>El informe de <code>td audit</code> (o <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> es el del modo sombra</td></tr>
+    <tr><td><code>td-audit-*</code> en <code>--work-dir</code> (<code>/tmp</code>)</td><td>Mientras se ejecuta <code>td audit</code>: una copia del árbol de trabajo donde se rompe el código a propósito y se prueba. Se borra al final, o la borra el siguiente audit tras un fallo</td></tr>
   </tbody>
 </table>
 <p>En GitHub Actions, los mapas se guardan en la caché de Actions de tu repositorio. <code>.testdetta/coverage/</code> y <code>.testdetta/cache/</code> se generan; mantenlos fuera del control de versiones.</p>
@@ -32,7 +35,7 @@
   <li>Se respeta <code>HTTPS_PROXY</code>.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> la desactiva. Las licencias sin conexión y de empresa nunca se conectan con nosotros.</li>
 </ul>
-<p>Los repositorios públicos no necesitan licencia y no hacen ninguna llamada. Tampoco el modo sombra (<code>td test --shadow</code>), que no lee ninguna licencia.</p>
+<p>Los repositorios públicos no necesitan licencia y no hacen ninguna llamada. Tampoco el modo sombra (<code>td test --shadow</code>) ni el audit (<code>td audit</code>), que no leen ninguna licencia.</p>
 
 <h2 id="license-check">Cómo se comprueba la licencia</h2>
 <p>Una licencia es una cadena firmada que se verifica en tu máquina con una clave pública incluida en {{name}}. Indica los repositorios que cubre, que se comparan con el remoto <code>origin</code> después de eliminar cualquier credencial. Un problema de licencia nunca hace fallar una compilación: en su lugar se ejecutan todas las pruebas, como antes de {{name}}. <a href="/docs/license/">Más sobre las licencias</a>.</p>

@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: 589b8cc513f4 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: 02633ab62c78 -->
 <h1>GitHub Actions</h1>
 <p class="lead">既定のブランチのコミットごとにマップを記録し、プルリクエストでは変更が影響するテストだけを実行します。アクションが {{name}} 自体をビルドし、マップを Actions のキャッシュに保持します。</p>
 
@@ -66,17 +66,21 @@ jobs:
 <table>
   <thead><tr><th>入力</th><th>既定値</th><th>説明</th></tr></thead>
   <tbody>
-    <tr><td><code>mode</code></td><td></td><td>プルリクエストでは <code>test</code>（影響を受けるテストを実行）、{{name}} を評価している間のプルリクエストでは <code>shadow</code>（すべてのテストを実行し、選択が除外したはずのものを報告。ライセンス不要）、既定のブランチでは <code>record</code>（カバレッジマップを記録）。必須です。</td></tr>
+    <tr><td><code>mode</code></td><td></td><td>プルリクエストでは <code>test</code>（影響を受けるテストを実行）、{{name}} を評価している間のプルリクエストでは <code>shadow</code>（すべてのテストを実行し、選択が除外したはずのものを報告。ライセンス不要）、既定のブランチでは <code>record</code>（カバレッジマップを記録）、スケジュール実行では <code>audit</code>（コピーの中でコードを 1 変更ずつ壊し、失敗したすべてのテストを選択が実行したかを確認。ライセンス不要）。必須です。</td></tr>
     <tr><td><code>base</code></td><td>PR のベースブランチ</td><td>test モードで比較するブランチ。プルリクエスト以外で使う場合は指定してください。</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>テストのビルドと実行に使うビルド構成。</td></tr>
     <tr><td><code>projects</code></td><td>すべてのテストプロジェクト</td><td>record モード：<code>.csproj</code> のパスを 1 行に 1 つずつ指定します。</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>record モード：テストプロジェクトごとのテストホストプロセス数。各プロセスはテストを 1 つずつ実行します。テストスイートが複数のテストプロセスの同時実行に耐えられる必要があります。</td></tr>
     <tr><td><code>no-build</code></td><td><code>false</code></td><td>record モード：<code>true</code> にすると、前のステップで同じ <code>configuration</code> によって作成されたビルドを記録します。</td></tr>
-    <tr><td><code>dotnet-test-args</code></td><td></td><td>test モードと shadow モード：<code>dotnet test</code> に渡す追加の引数（スペース区切り）。shadow モードでは、ここにソリューションを指定すると 1 つのコマンドとして実行されます。</td></tr>
-    <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>test モード：マップがマージベースより何コミット遅れていてよいか。その間の変更は橋渡しされます。<code>0</code> を指定すると完全に一致するマップだけを使用します。</td></tr>
-    <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>test モード：古いマップ以降の変更にビルドファイル、構成、グローバル using が含まれる場合、<code>all</code> は影響を受けるテストプロジェクトを丸ごと実行し、<code>name</code> は名前で判断します（高速ですが、構成やリフレクションを介した呼び出しは捉えられません）。</td></tr>
-    <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>test モード：最新のマップを探すために Actions のキャッシュを一覧表示します（<code>actions: read</code> が必要）。</td></tr>
-    <tr><td><code>license</code></td><td></td><td>test モード：ライセンス文字列。<code>TESTDETTA_LICENSE</code> のようなリポジトリまたは組織のシークレットから渡します。パブリックリポジトリでは不要です。有効なライセンスがない場合はすべてのテストを実行し、それが原因でジョブが失敗することはありません。shadow モードはこれを読み取りません。</td></tr>
+    <tr><td><code>dotnet-test-args</code></td><td></td><td>test、shadow、audit モード：<code>dotnet test</code> に渡す追加の引数（スペース区切り）。shadow モードでは、ここにソリューションを指定すると 1 つのコマンドとして実行されます。</td></tr>
+    <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>test、shadow、audit モード：マップがマージベースより何コミット遅れていてよいか。その間の変更は橋渡しされます。<code>0</code> を指定すると完全に一致するマップだけを使用します。</td></tr>
+    <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>test、shadow、audit モード：古いマップ以降の変更にビルドファイル、構成、グローバル using が含まれる場合、<code>all</code> は影響を受けるテストプロジェクトを丸ごと実行し、<code>name</code> は名前で判断します（高速ですが、構成やリフレクションを介した呼び出しは捉えられません）。</td></tr>
+    <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>audit モード：この数の変更がテストを壊した時点で停止します。</td></tr>
+    <tr><td><code>audit-max-mutants</code></td><td>制限なし</td><td>audit モード：この数の変更がテストを実行した後に停止します。</td></tr>
+    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>audit モード：この時間の経過後は新しい変更を始めません（<code>90s</code>、<code>15m</code>、<code>1h30m</code>。制限なしは <code>none</code>）。ジョブの <code>timeout-minutes</code> より短くしてください。</td></tr>
+    <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>audit モード：同時にテストする変更の数。それぞれが専用のコピーで実行され、メモリ使用量はこの数とともに増えます。</td></tr>
+    <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>test、shadow、audit モード：最新のマップを探すために Actions のキャッシュを一覧表示します（<code>actions: read</code> が必要）。</td></tr>
+    <tr><td><code>license</code></td><td></td><td>test モード：ライセンス文字列。<code>TESTDETTA_LICENSE</code> のようなリポジトリまたは組織のシークレットから渡します。パブリックリポジトリでは不要です。有効なライセンスがない場合はすべてのテストを実行し、それが原因でジョブが失敗することはありません。shadow モードと audit モードはこれを読み取りません。</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>分析するリポジトリ内の任意のディレクトリ。</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>{{name}} の実行に必要な .NET 10 SDK をインストールします。ジョブにすでにインストールされている場合は <code>false</code> に設定してください。</td></tr>
   </tbody>
@@ -89,6 +93,39 @@ jobs:
         with:
           mode: shadow
           dotnet-test-args: Shop.slnx</code></pre>
+
+<h2 id="audit">スケジュール実行の audit</h2>
+<p>あなた自身のコードで選択を検証するには、<code>mode: audit</code> をスケジュール実行で使います。たとえば record モードが記録するブランチで週に 1 回です。作業ツリーのコピーの中でコードのメンバーを 1 変更ずつ壊し、各変更を検出できるすべてのテストを実行し、失敗したすべてのテストクラスを選択が実行したかを確認します。<a href="/docs/cli/#audit"><code>td audit</code></a> を参照してください。チェックアウトとそのビルド出力は読み取られるだけです。ジョブサマリーには判定と、判断の流れを含むすべての見逃しが表示され、アーティファクト <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> が JSON レポートを 90 日間保存します。実行するコミットから <code>max-map-age</code> 以内で最新のマップを使用します。ライセンスは不要でネットワーク呼び出しも行わないため、ライセンスのシークレットは渡されません。ランナー上で何時間も実行されるため、ジョブには <code>audit-budget</code> より長い <code>timeout-minutes</code> を設定してください。</p>
+<pre><code>on:
+  schedule:
+    - cron: '0 3 * * 1' # Mondays, 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      actions: read # finds the newest coverage map in the Actions cache
+    steps:
+      - uses: actions/checkout@v7 # pin to a commit SHA
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6 # pin to a commit SHA
+        with:
+          global-json-file: global.json
+
+      - uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        with:
+          mode: audit
+          audit-budget: 4h</code></pre>
+<p>テストを壊した変更が 100 個以上あり、見逃しが 1 つもない実行が 1 回あれば、見逃し率の 95% 上限は 3% 未満になります。</p>
 
 <h2>ジョブサマリー</h2>
 <p>test モードでは、{{name}} は選択内容をジョブサマリーに書き込みます。変更されたファイルと比較したベース、各テストプロジェクトがフィルター付きで実行されたか、丸ごと実行されたか、まったく実行されなかったかとその理由、テスト結果、そして関係がある場合はライセンスの状態です。リポジトリ由来のパス、クラス名、理由はコードとして書き込まれるため、プルリクエスト内のファイル名によってページにリンクやメンションが挿入されることはありません。</p>

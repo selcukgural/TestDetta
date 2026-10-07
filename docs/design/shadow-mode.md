@@ -117,7 +117,7 @@ tests the full way, and checks that TestDetta's selection contains every class t
 "On your code: 160 changes, 104 broke tests, 0 missed (95% upper bound 2.8%)". This is the strongest
 evidence we can give, because it does not wait for real failures to happen. It runs on the team's
 runners, so it costs their CI minutes: off by default, with a cap. It is part of v1 (owner, 2026-10-07),
-because the graduation criteria need one run of it; it is built after shadow mode. Design and as built:
+because the graduation criteria need one run of it. Built 2026-10-07 (`td audit`, Action `mode: audit`); design and as built:
 docs/design/audit.md (the team's build output is never written: every mutant lives in a copy of the working
 tree; the selection per change is `td test`'s own, from the team's maps; the sample is uniform, not weighted
 toward covered members; no license and no network call).
@@ -149,7 +149,7 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
 4. Documentation pages in five languages.
 5. Shadow mode on TestDetta itself and on corpus repositories' real pull request histories (replaying
    merged pull requests) before any partner sees it.
-6. `td audit` (v1, needed for graduation); later: run-first mode.
+6. `td audit` (v1, needed for graduation): built 2026-10-07, docs/design/audit.md. Later: run-first mode.
 
 ## As built (steps 1 and 2, 2026-10-07)
 

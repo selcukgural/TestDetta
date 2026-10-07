@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 00b7ae1baea4 -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 53893031e441 -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -6,10 +6,11 @@
 td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
-td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
 
 <h2 id="shared">すべての分析に共通のオプション</h2>
-<p>これらは <code>affected</code>、<code>test</code>、<code>record</code> で使用できます。</p>
+<p>これらは <code>affected</code>、<code>test</code>、<code>record</code>、<code>audit</code> で使用できます。<code>audit</code> は常に <code>HEAD</code> と比較するため、<code>--base</code> は使えません。</p>
 
 <h3 id="base"><code>--base &lt;ref&gt;</code></h3>
 <p>比較対象の git ref です。{{name}} は作業ツリーを、<code>HEAD</code> とこの ref の<em>マージベース</em>と比較します。そのため、ブランチを作成した後にベースブランチに取り込まれたコミットは、ご自身の変更としては数えられません。既定値：<code>origin/main</code>。</p>
@@ -120,6 +121,33 @@ td test -- --filter "Category!=Integration"</code></pre>
 <pre><code>dotnet build -c Release
 td record -c Release --no-build</code></pre>
 
+<h2 id="audit"><code>td audit</code></h2>
+<p>私たちがオープンソースのリポジトリで行っているのと同じ方法で、あなた自身のコードで {{name}} の選択を検証します。IL ミュータント（メソッドが例外を投げる、既定値を返す、もう一方の分岐に進む、フィールドが別の値で始まる）を使ってコードのメンバーを 1 つずつ壊し、その変更を読み込めるすべてのテストプロジェクトを完全に実行し、{{name}} がその変更に対してカバレッジマップから（<code>td test</code> とまったく同じように）行う選択に、失敗したすべてのテストクラスが含まれているかを確認します。選択から除外されたクラスは、<strong>見逃し</strong>と数える前に、変更ありで単独実行し、さらに変更なしで単独実行します。ライセンスは不要で、ネットワーク呼び出しも一切行いません。シャドウモードと同じく、何もスキップしないからです。</p>
+<p>ソースとビルド出力には一切書き込みません。{{name}} は作業ツリーを作業フォルダーにコピーし（ファイルシステムが対応していればコピーオンライトのクローンとして）、そこでビルドとテストを行い、最後にフォルダーを削除します。Ctrl+C、タイムアウト、エラーの後も同様です。強制終了された実行が残したフォルダーは次回の実行が削除します。すべての変更は <code>HEAD</code> と比較されるため、作業ツリーにコミットされていない変更があってはいけません。メンバーは、メンバーとシード値のハッシュから決まる固定の順序で、すべてのメンバーから等しく選ばれます。マップがそのメンバーをどれかのテストが実行したと示しているかどうかは、選び方に一切関係しません。</p>
+<p>結果には、見逃し率の 95% 上限と、その根拠となる変更の数が示されます。</p>
+<pre><code>On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); target of 100 reached.</code></pre>
+<p>レポート（<code>.testdetta/testdetta-audit.json</code>、および <code>--summary-file</code> を指定した場合はジョブサマリー）には、すべての変更とその結果が記載されます。見逃しについては、クラス、それを除外した判断の流れ（{{name}} が何の変更を検出したか、テストプロジェクトとクラスがどのように、なぜ判断されたか、マップのコミット）、同じ判断を確認するために手で行う編集、その変更だけを再実行するコマンドが示されます。見逃しがあると終了コードは <code>3</code> です。</p>
+<pre><code>td audit --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="target-broken"><code>--target-broken &lt;n&gt;</code></h3>
+<p><em>n</em> 個の変更がテストを壊した時点で停止します。既定値：<code>100</code>。見逃しがなければ、95% 上限が 3% 未満になります。</p>
+
+<h3 id="max-mutants"><code>--max-mutants &lt;n&gt;</code></h3>
+<p><em>n</em> 個の変更がテストを実行した後に停止します。既定値：制限なし。</p>
+
+<h3 id="budget"><code>--budget &lt;time&gt;</code></h3>
+<p>この時間が経過した後は新しい変更を始めません。実行中の変更は停止され、数えられません。<code>&lt;time&gt;</code> の書式はシャドウの制限と同じです。既定値：<code>4h</code>。</p>
+
+<h3 id="audit-parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>同時にテストする変更の数です。それぞれが作業ツリーの専用コピーで実行されます。それぞれがテストホストを実行するため、メモリ使用量は <em>n</em> とともに増えます。既定値：<code>1</code>。</p>
+
+<h3 id="seed"><code>--seed &lt;n&gt;</code>, <code>--kinds &lt;list&gt;</code>, <code>--member &lt;Type.Member&gt;</code></h3>
+<p>順序のシード値（既定値 <code>1</code>）、変更の種類（<code>throw</code>、<code>return-default</code>、<code>flip-branch</code>、<code>field-value</code>、または既定値の <code>all</code>）、そしてレポートの変更を再現するための、その変更が壊したメンバー（複数の場合はオプションを繰り返します）。</p>
+
+<h3 id="work-dir"><code>--report &lt;path&gt;</code>, <code>--work-dir &lt;dir&gt;</code></h3>
+<p>JSON レポートの出力先（既定値：<code>.testdetta/testdetta-audit.json</code>）と、コピーを置く作業フォルダーの場所（既定値：<code>/tmp</code>、Windows では一時フォルダー）です。コピーをクローンにできるよう、作業フォルダーはリポジトリと同じディスクに置いてください。</p>
+<pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
+
 <h2 id="license-commands"><code>td license</code></h2>
 <p><code>td license status</code> は、<code>td test</code> と同じ方法でライセンスを確認し、ライセンシー、シート数、過去 30 日間のアクティブなコミッター、ボットの一覧、スコープ、終了日といった対象範囲を出力します。個人データをどこかに送信することはありません。<code>td license install &lt;license|file&gt;</code> はライセンスを <code>~/.testdetta/license</code> に保存します。CI のシークレットにライセンスを保持できないマシン向けです。<a href="/docs/license/">ライセンス</a>を参照してください。</p>
 
@@ -140,8 +168,8 @@ td record -c Release --no-build</code></pre>
   <thead><tr><th>コード</th><th>意味</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>成功（「テスト不要」の場合を含む）。</td></tr>
-    <tr><td><code>1</code></td><td>分析に失敗しました（git、ファイルシステム、またはプロジェクトファイル）。</td></tr>
+    <tr><td><code>1</code></td><td>分析に失敗しました（git、ファイルシステム、またはプロジェクトファイル）。<code>audit</code> では、実行できなかった場合や中断された場合も含みます。</td></tr>
     <tr><td><code>2</code></td><td>コマンドラインが無効です。</td></tr>
-    <tr><td><code>3</code></td><td>テストが失敗しました（<code>test</code> と <code>record</code>）。</td></tr>
+    <tr><td><code>3</code></td><td>テストが失敗しました（<code>test</code> と <code>record</code>）。見逃しがありました（<code>audit</code>）。</td></tr>
   </tbody>
 </table>

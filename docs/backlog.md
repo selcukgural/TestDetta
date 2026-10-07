@@ -287,8 +287,16 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    customer's repository (docs/design/shadow-mode.md, "`td audit`"): IL mutants of the team's members, the
    tests run the full way, and the selection checked against every class that failed. Graduation needs one
    run with at least 100 changes that broke tests and 0 missed (95% upper bound below 3%), because real
-   failing pull requests in 30 days are too few for a meaningful bound (about 3/n for n of them). Not built
-   yet; it comes after shadow mode.
+   failing pull requests in 30 days are too few for a meaningful bound (about 3/n for n of them). Status
+   2026-10-07: built (docs/design/audit.md): `td audit` and the Action's `mode: audit` (for a schedule, the
+   report as an artifact for 90 days), no license and no network call; every mutant lives in a copy of the
+   working tree, so the team's sources and build output are only read (tested byte for byte after a normal run,
+   a cancellation, a timeout and an exception); the selection per change is `td test --base HEAD` with the
+   evaluator's edit given in memory (`AnalysisOptions.WorkingTreeOverlay`); the sample is uniform over every
+   member, coverage not used; stop at `--target-broken` (100), `--max-mutants`, `--budget` (4h); JSON schema 1.
+   The mutant code is shared with the evaluator through `src/TestDetta.Mutants`. Open: a first run on a real
+   team repository (and on TestDetta itself) to see the time per change; generator and legacy projects are
+   not audited yet; combining several runs into one bound.
 
 Until v1 only misses are fixed. Parked until after v1: narrowing the run-once rules, Microsoft
 code coverage next to recording, per-call third-party callbacks, the precision round (3),

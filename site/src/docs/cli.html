@@ -6,10 +6,11 @@
 td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
-td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
 
 <h2 id="shared">Options for every analysis</h2>
-<p>These work with <code>affected</code>, <code>test</code> and <code>record</code>.</p>
+<p>These work with <code>affected</code>, <code>test</code>, <code>record</code> and <code>audit</code>; <code>audit</code> always compares with <code>HEAD</code>, so <code>--base</code> does not apply to it.</p>
 
 <h3 id="base"><code>--base &lt;ref&gt;</code></h3>
 <p>The git ref to compare with. {{name}} compares your working tree with the <em>merge base</em> of <code>HEAD</code> and this ref, so commits that landed on the base branch after you branched off are not counted as your changes. Default: <code>origin/main</code>.</p>
@@ -120,6 +121,33 @@ td test -- --filter "Category!=Integration"</code></pre>
 <pre><code>dotnet build -c Release
 td record -c Release --no-build</code></pre>
 
+<h2 id="audit"><code>td audit</code></h2>
+<p>Tests {{name}}'s selection on your own code, the way we test it on open-source repositories. It breaks members of your code one at a time with IL mutants (a method throws, returns a default value, takes the other branch, or a field starts with another value), runs every test project that can load the change completely, and checks that the selection {{name}} makes for that change, from your coverage maps exactly as <code>td test</code> makes it, contains every test class that failed. A class the selection left out runs again alone with the change and alone without it before it counts as a <strong>miss</strong>. It needs no license and makes no network call: like shadow mode, it skips nothing.</p>
+<p>Your sources and build output are never written. {{name}} copies the working tree into a work folder (a copy-on-write clone where the file system has one), builds and tests there, and deletes the folder at the end, also after Ctrl+C, a timeout or an error; a folder left by a run that was killed is deleted by the next one. The working tree must have no uncommitted changes, because every change is compared with <code>HEAD</code>. Members are taken in a fixed order, from a hash of the member and the seed, over all members alike: whether a map says some test ran a member plays no part in the choice.</p>
+<p>The result gives the 95% upper bound of the miss rate and the number of changes it rests on:</p>
+<pre><code>On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); target of 100 reached.</code></pre>
+<p>The report (<code>.testdetta/testdetta-audit.json</code>, and the job summary with <code>--summary-file</code>) lists every change and its outcome. For a miss it gives the class, the decision chain that left it out (what {{name}} saw change, how the test project and the class were decided and why, the map's commit), the edit to make by hand to see the same decision, and the command that repeats that change alone. Exit code <code>3</code> when there is a miss.</p>
+<pre><code>td audit --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="target-broken"><code>--target-broken &lt;n&gt;</code></h3>
+<p>Stop once <em>n</em> changes broke tests. Default: <code>100</code>; with no miss, that puts the 95% upper bound below 3%.</p>
+
+<h3 id="max-mutants"><code>--max-mutants &lt;n&gt;</code></h3>
+<p>Stop after <em>n</em> changes ran tests. Default: no limit.</p>
+
+<h3 id="budget"><code>--budget &lt;time&gt;</code></h3>
+<p>Start no change after this long; a change still running is stopped and not counted. The <code>&lt;time&gt;</code> syntax of the shadow limits. Default: <code>4h</code>.</p>
+
+<h3 id="audit-parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>Changes tested at once, each in its own copy of the working tree. Each one runs test hosts, so memory use grows with <em>n</em>. Default: <code>1</code>.</p>
+
+<h3 id="seed"><code>--seed &lt;n&gt;</code>, <code>--kinds &lt;list&gt;</code>, <code>--member &lt;Type.Member&gt;</code></h3>
+<p>The seed of the order (default <code>1</code>); the kinds of change, <code>throw</code>, <code>return-default</code>, <code>flip-branch</code>, <code>field-value</code> or <code>all</code> (the default); and, to repeat a change from a report, the member it broke (repeat the option for several).</p>
+
+<h3 id="work-dir"><code>--report &lt;path&gt;</code>, <code>--work-dir &lt;dir&gt;</code></h3>
+<p>Where the JSON report goes (default: <code>.testdetta/testdetta-audit.json</code>) and where the work folder with the copy goes (default: <code>/tmp</code>, the temp folder on Windows). Keep the work folder on the repository's disk, so the copy can be a clone.</p>
+<pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
+
 <h2 id="license-commands"><code>td license</code></h2>
 <p><code>td license status</code> checks the license the way <code>td test</code> would and prints what it covers: licensee, seats, active committers over the last 30 days, the bot list, scopes, the end date. It sends no personal data anywhere. <code>td license install &lt;license|file&gt;</code> stores a license in <code>~/.testdetta/license</code>, for machines where no CI secret can hold it. See <a href="/docs/license/">License</a>.</p>
 
@@ -140,8 +168,8 @@ td record -c Release --no-build</code></pre>
   <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Success, including "no tests needed".</td></tr>
-    <tr><td><code>1</code></td><td>The analysis failed: git, the file system or a project file.</td></tr>
+    <tr><td><code>1</code></td><td>The analysis failed: git, the file system or a project file; for <code>audit</code> also when it could not run or was cancelled.</td></tr>
     <tr><td><code>2</code></td><td>Invalid command line.</td></tr>
-    <tr><td><code>3</code></td><td>Tests failed (<code>test</code> and <code>record</code>).</td></tr>
+    <tr><td><code>3</code></td><td>Tests failed (<code>test</code> and <code>record</code>); a miss (<code>audit</code>).</td></tr>
   </tbody>
 </table>

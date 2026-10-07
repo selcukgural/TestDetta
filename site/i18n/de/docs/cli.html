@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 00b7ae1baea4 -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 53893031e441 -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -6,10 +6,11 @@
 td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
-td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
 
 <h2 id="shared">Optionen für jede Analyse</h2>
-<p>Diese funktionieren mit <code>affected</code>, <code>test</code> und <code>record</code>.</p>
+<p>Diese funktionieren mit <code>affected</code>, <code>test</code>, <code>record</code> und <code>audit</code>; <code>audit</code> vergleicht immer mit <code>HEAD</code>, daher gilt <code>--base</code> dort nicht.</p>
 
 <h3 id="base"><code>--base &lt;ref&gt;</code></h3>
 <p>Die Git-Ref, mit der verglichen wird. {{name}} vergleicht Ihr Arbeitsverzeichnis mit der <em>Merge-Base</em> von <code>HEAD</code> und dieser Ref, sodass Commits, die nach Ihrer Abzweigung auf dem Basis-Branch gelandet sind, nicht als Ihre Änderungen zählen. Standard: <code>origin/main</code>.</p>
@@ -120,6 +121,33 @@ td test -- --filter "Category!=Integration"</code></pre>
 <pre><code>dotnet build -c Release
 td record -c Release --no-build</code></pre>
 
+<h2 id="audit"><code>td audit</code></h2>
+<p>Prüft die Auswahl von {{name}} an Ihrem eigenen Code, so wie wir sie an Open-Source-Repositories prüfen. Es bricht Member Ihres Codes einzeln mit IL-Mutanten (eine Methode wirft, gibt einen Standardwert zurück, nimmt den anderen Zweig, oder ein Feld beginnt mit einem anderen Wert), führt jedes Testprojekt, das die Änderung laden kann, vollständig aus und prüft, dass die Auswahl, die {{name}} für diese Änderung aus Ihren Coverage-Maps trifft, genau wie <code>td test</code> sie trifft, jede fehlgeschlagene Testklasse enthält. Eine Klasse, die die Auswahl ausgelassen hat, läuft erneut allein mit der Änderung und allein ohne sie, bevor sie als <strong>Verfehlen</strong> zählt. Es braucht keine Lizenz und macht keinen Netzwerkaufruf: Wie der Shadow-Modus lässt es nichts aus.</p>
+<p>Ihre Quellen und Ihre Build-Ausgabe werden nie geschrieben. {{name}} kopiert den Arbeitsbaum in einen Arbeitsordner (als Copy-on-Write-Klon, wo das Dateisystem das kann), baut und testet dort und löscht den Ordner am Ende, auch nach Strg+C, einem Timeout oder einem Fehler; einen Ordner, den ein abgebrochener Lauf hinterlassen hat, löscht der nächste. Der Arbeitsbaum darf keine nicht committeten Änderungen haben, weil jede Änderung mit <code>HEAD</code> verglichen wird. Die Member werden in einer festen Reihenfolge genommen, aus einem Hash von Member und Seed, über alle Member gleich: Ob eine Map sagt, dass ein Test einen Member ausgeführt hat, spielt bei der Wahl keine Rolle.</p>
+<p>Das Ergebnis nennt die obere 95-%-Schranke der Verfehlensrate und die Zahl der Änderungen, auf der sie beruht:</p>
+<pre><code>On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); target of 100 reached.</code></pre>
+<p>Der Bericht (<code>.testdetta/testdetta-audit.json</code> und mit <code>--summary-file</code> die Job-Zusammenfassung) listet jede Änderung mit ihrem Ergebnis. Für ein Verfehlen nennt er die Klasse, die Entscheidungskette, die sie ausgelassen hat (was {{name}} als geändert erkannt hat, wie und warum über das Testprojekt und die Klasse entschieden wurde, den Commit der Map), die Bearbeitung, die Sie von Hand vornehmen, um dieselbe Entscheidung zu sehen, und den Befehl, der diese Änderung allein wiederholt. Exit-Code <code>3</code>, wenn es ein Verfehlen gibt.</p>
+<pre><code>td audit --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="target-broken"><code>--target-broken &lt;n&gt;</code></h3>
+<p>Hält an, sobald <em>n</em> Änderungen Tests gebrochen haben. Standard: <code>100</code>; ohne Verfehlen liegt die obere 95-%-Schranke damit unter 3 %.</p>
+
+<h3 id="max-mutants"><code>--max-mutants &lt;n&gt;</code></h3>
+<p>Hält an, nachdem <em>n</em> Änderungen Tests ausgeführt haben. Standard: keine Grenze.</p>
+
+<h3 id="budget"><code>--budget &lt;time&gt;</code></h3>
+<p>Nach dieser Zeit beginnt keine Änderung mehr; eine noch laufende Änderung wird gestoppt und nicht gezählt. Die <code>&lt;time&gt;</code>-Syntax der Shadow-Grenzen. Standard: <code>4h</code>.</p>
+
+<h3 id="audit-parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>Gleichzeitig getestete Änderungen, jede in ihrer eigenen Kopie des Arbeitsbaums. Jede führt Test-Hosts aus, daher wächst der Speicherbedarf mit <em>n</em>. Standard: <code>1</code>.</p>
+
+<h3 id="seed"><code>--seed &lt;n&gt;</code>, <code>--kinds &lt;list&gt;</code>, <code>--member &lt;Type.Member&gt;</code></h3>
+<p>Der Seed der Reihenfolge (Standard <code>1</code>); die Arten der Änderung, <code>throw</code>, <code>return-default</code>, <code>flip-branch</code>, <code>field-value</code> oder <code>all</code> (Standard); und, um eine Änderung aus einem Bericht zu wiederholen, der Member, den sie gebrochen hat (für mehrere die Option wiederholen).</p>
+
+<h3 id="work-dir"><code>--report &lt;path&gt;</code>, <code>--work-dir &lt;dir&gt;</code></h3>
+<p>Wohin der JSON-Bericht geht (Standard: <code>.testdetta/testdetta-audit.json</code>) und wohin der Arbeitsordner mit der Kopie kommt (Standard: <code>/tmp</code>, unter Windows der Temp-Ordner). Legen Sie den Arbeitsordner auf die Festplatte des Repositorys, damit die Kopie ein Klon sein kann.</p>
+<pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
+
 <h2 id="license-commands"><code>td license</code></h2>
 <p><code>td license status</code> prüft die Lizenz so, wie <code>td test</code> es tun würde, und gibt aus, was sie abdeckt: Lizenznehmer, Seats, aktive Committer der letzten 30 Tage, die Bot-Liste, Scopes und das Enddatum. Es sendet keine personenbezogenen Daten irgendwohin. <code>td license install &lt;license|file&gt;</code> speichert eine Lizenz in <code>~/.testdetta/license</code>, für Rechner, auf denen kein CI-Secret sie aufnehmen kann. Siehe <a href="/docs/license/">Lizenz</a>.</p>
 
@@ -140,8 +168,8 @@ td record -c Release --no-build</code></pre>
   <thead><tr><th>Code</th><th>Bedeutung</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Erfolg, auch wenn keine Tests nötig sind.</td></tr>
-    <tr><td><code>1</code></td><td>Die Analyse ist fehlgeschlagen: Git, das Dateisystem oder eine Projektdatei.</td></tr>
+    <tr><td><code>1</code></td><td>Die Analyse ist fehlgeschlagen: Git, das Dateisystem oder eine Projektdatei; bei <code>audit</code> auch, wenn es nicht laufen konnte oder abgebrochen wurde.</td></tr>
     <tr><td><code>2</code></td><td>Ungültige Befehlszeile.</td></tr>
-    <tr><td><code>3</code></td><td>Tests sind fehlgeschlagen (<code>test</code> und <code>record</code>).</td></tr>
+    <tr><td><code>3</code></td><td>Tests sind fehlgeschlagen (<code>test</code> und <code>record</code>); ein Verfehlen (<code>audit</code>).</td></tr>
   </tbody>
 </table>

@@ -1,4 +1,4 @@
-<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 8f6001ba2123 -->
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: b04314c0bd20 -->
 <h1>Güvenlik ve veri</h1>
 <p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz, kapsam haritalarınız ve test sonuçlarınız oradan hiç çıkmaz. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
 
@@ -8,6 +8,7 @@
   <li>Kapsam haritaları: hangi test sınıfının hangi metodu çalıştırdığı ve her sınıfın ne kadar sürdüğü. Tiplerinizi, metotlarınızı ve test sınıflarınızı adlandırırlar; bu yüzden onlara derleme artifact'ları gibi davranın.</li>
   <li>Test koşuları ve sonuçları.</li>
   <li>Aktif committer sayısı. Sayım için yazar e-postaları git geçmişinden sizin makinenizde okunur; hiçbir isim ya da e-posta bir yere gönderilmez.</li>
+  <li><code>td audit</code> assembly'leri yalnızca çalışma ağacının kendi kopyasında yeniden yazar; kaynak kodunuz ve derleme çıktınız yalnızca okunur ve kopya sonunda silinir.</li>
 </ul>
 
 <h2 id="files">Dosyaları nerede tutar</h2>
@@ -20,6 +21,8 @@
     <tr><td><code>~/.testdetta/license</code></td><td><code>td license install</code> ile kurulmuş ya da otomatik olarak yenilenmiş bir lisans</td></tr>
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>Son yenilemenin ne zaman denendiği</td></tr>
     <tr><td><code>--maps-dir</code> klasörü</td><td>Önceki commit'lerin haritaları, commit başına bir klasör, sizin seçtiğiniz yerde tutulur</td></tr>
+    <tr><td><code>.testdetta/testdetta-audit.json</code></td><td><code>td audit</code> raporu (ya da <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> shadow mode'unki</td></tr>
+    <tr><td><code>--work-dir</code> (<code>/tmp</code>) altında <code>td-audit-*</code></td><td><code>td audit</code> çalışırken: kodun bilerek bozulup test edildiği, çalışma ağacının bir kopyası. Sonunda ya da bir çökmeden sonra bir sonraki audit tarafından silinir</td></tr>
   </tbody>
 </table>
 <p>GitHub Actions'ta haritalar deponuzun Actions önbelleğinde saklanır. <code>.testdetta/coverage/</code> ve <code>.testdetta/cache/</code> otomatik üretilir; bunları sürüm kontrolünün dışında tutun.</p>
@@ -32,7 +35,7 @@
   <li><code>HTTPS_PROXY</code> dikkate alınır.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> bu çağrıyı kapatır. Çevrimdışı ve kurumsal lisanslar hiçbir zaman dışarıya çağrı yapmaz.</li>
 </ul>
-<p>Açık depolar lisansa ihtiyaç duymaz ve hiçbir çağrı yapmaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) da çağrı yapmaz.</p>
+<p>Açık depolar lisansa ihtiyaç duymaz ve hiçbir çağrı yapmaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) ve audit (<code>td audit</code>) da çağrı yapmaz.</p>
 
 <h2 id="license-check">Lisans nasıl kontrol edilir</h2>
 <p>Lisans imzalı bir dizedir ve {{name}}'ya gömülü bir açık anahtarla sizin makinenizde doğrulanır. Kapsadığı depoları adlandırır; bunlar, içindeki kimlik bilgileri önce çıkarılarak <code>origin</code> remote'uyla eşleştirilir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: bunun yerine, tıpkı {{name}}'dan önceki gibi tüm testler çalışır. <a href="/docs/license/">Lisanslar hakkında daha fazlası</a>.</p>

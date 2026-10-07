@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 00b7ae1baea4 -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 53893031e441 -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -6,10 +6,11 @@
 td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
-td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license</code></pre>
+td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
 
 <h2 id="shared">Opciones para cualquier análisis</h2>
-<p>Funcionan con <code>affected</code>, <code>test</code> y <code>record</code>.</p>
+<p>Funcionan con <code>affected</code>, <code>test</code>, <code>record</code> y <code>audit</code>; <code>audit</code> siempre compara con <code>HEAD</code>, así que <code>--base</code> no se aplica a él.</p>
 
 <h3 id="base"><code>--base &lt;ref&gt;</code></h3>
 <p>La ref de git con la que comparar. {{name}} compara tu árbol de trabajo con la <em>merge base</em> de <code>HEAD</code> y esta ref, así que los commits que llegaron a la rama base después de que crearas tu rama no cuentan como cambios tuyos. Predeterminado: <code>origin/main</code>.</p>
@@ -120,6 +121,33 @@ td test -- --filter "Category!=Integration"</code></pre>
 <pre><code>dotnet build -c Release
 td record -c Release --no-build</code></pre>
 
+<h2 id="audit"><code>td audit</code></h2>
+<p>Comprueba la selección de {{name}} en tu propio código, del mismo modo que la comprobamos en repositorios de código abierto. Rompe miembros de tu código uno a uno con mutantes IL (un método lanza una excepción, devuelve un valor predeterminado, toma la otra rama, o un campo empieza con otro valor), ejecuta completo cada proyecto de prueba que puede cargar el cambio y comprueba que la selección que {{name}} hace para ese cambio, a partir de tus mapas de cobertura y exactamente como la hace <code>td test</code>, contiene cada clase de prueba que falló. Una clase que la selección dejó fuera se vuelve a ejecutar sola con el cambio y sola sin él antes de contar como <strong>fallo no detectado</strong>. No necesita licencia y no hace ninguna llamada de red: como el modo sombra, no omite nada.</p>
+<p>Nunca se escribe en tus fuentes ni en tu salida de compilación. {{name}} copia el árbol de trabajo en una carpeta de trabajo (un clon copy-on-write donde el sistema de archivos lo permite), compila y prueba allí, y borra la carpeta al final, también tras Ctrl+C, un tiempo de espera agotado o un error; la siguiente ejecución borra la carpeta que dejó una ejecución interrumpida. El árbol de trabajo no debe tener cambios sin confirmar, porque cada cambio se compara con <code>HEAD</code>. Los miembros se toman en un orden fijo, a partir de un hash del miembro y la semilla, entre todos los miembros por igual: que un mapa diga que alguna prueba ejecutó un miembro no influye en la elección.</p>
+<p>El resultado da el límite superior del 95 % de la tasa de fallos no detectados y el número de cambios en que se basa:</p>
+<pre><code>On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); target of 100 reached.</code></pre>
+<p>El informe (<code>.testdetta/testdetta-audit.json</code> y, con <code>--summary-file</code>, el resumen del trabajo) enumera cada cambio y su resultado. Para un fallo no detectado da la clase, la cadena de decisiones que la dejó fuera (qué vio cambiar {{name}}, cómo y por qué se decidieron el proyecto de prueba y la clase, el commit del mapa), la edición que hay que hacer a mano para ver la misma decisión y el comando que repite ese cambio solo. Código de salida <code>3</code> cuando hay un fallo no detectado.</p>
+<pre><code>td audit --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
+
+<h3 id="target-broken"><code>--target-broken &lt;n&gt;</code></h3>
+<p>Se detiene en cuanto <em>n</em> cambios rompieron pruebas. Predeterminado: <code>100</code>; sin fallos no detectados, eso deja el límite superior del 95 % por debajo del 3 %.</p>
+
+<h3 id="max-mutants"><code>--max-mutants &lt;n&gt;</code></h3>
+<p>Se detiene después de que <em>n</em> cambios ejecutaran pruebas. Predeterminado: sin límite.</p>
+
+<h3 id="budget"><code>--budget &lt;time&gt;</code></h3>
+<p>No empieza ningún cambio pasado este tiempo; un cambio que aún se ejecuta se detiene y no cuenta. La sintaxis de <code>&lt;time&gt;</code> de los límites del modo sombra. Predeterminado: <code>4h</code>.</p>
+
+<h3 id="audit-parallel"><code>--parallel &lt;n&gt;</code></h3>
+<p>Cambios probados a la vez, cada uno en su propia copia del árbol de trabajo. Cada uno ejecuta hosts de prueba, así que el uso de memoria crece con <em>n</em>. Predeterminado: <code>1</code>.</p>
+
+<h3 id="seed"><code>--seed &lt;n&gt;</code>, <code>--kinds &lt;list&gt;</code>, <code>--member &lt;Type.Member&gt;</code></h3>
+<p>La semilla del orden (predeterminado <code>1</code>); los tipos de cambio, <code>throw</code>, <code>return-default</code>, <code>flip-branch</code>, <code>field-value</code> o <code>all</code> (el predeterminado); y, para repetir un cambio de un informe, el miembro que rompió (repite la opción para varios).</p>
+
+<h3 id="work-dir"><code>--report &lt;path&gt;</code>, <code>--work-dir &lt;dir&gt;</code></h3>
+<p>Dónde va el informe JSON (predeterminado: <code>.testdetta/testdetta-audit.json</code>) y dónde va la carpeta de trabajo con la copia (predeterminado: <code>/tmp</code>; en Windows, la carpeta temporal). Mantén la carpeta de trabajo en el disco del repositorio para que la copia pueda ser un clon.</p>
+<pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
+
 <h2 id="license-commands"><code>td license</code></h2>
 <p><code>td license status</code> comprueba la licencia igual que lo haría <code>td test</code> y muestra lo que cubre: licenciatario, puestos, committers activos en los últimos 30 días, la lista de bots, los ámbitos y la fecha de fin. No envía datos personales a ninguna parte. <code>td license install &lt;license|file&gt;</code> guarda una licencia en <code>~/.testdetta/license</code>, para máquinas donde ningún secreto de CI puede contenerla. Consulta <a href="/docs/license/">Licencia</a>.</p>
 
@@ -140,8 +168,8 @@ td record -c Release --no-build</code></pre>
   <thead><tr><th>Código</th><th>Significado</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Éxito, incluido "no se necesitan pruebas".</td></tr>
-    <tr><td><code>1</code></td><td>El análisis falló: git, el sistema de archivos o un archivo de proyecto.</td></tr>
+    <tr><td><code>1</code></td><td>El análisis falló: git, el sistema de archivos o un archivo de proyecto; con <code>audit</code>, también cuando no pudo ejecutarse o se canceló.</td></tr>
     <tr><td><code>2</code></td><td>Línea de comandos no válida.</td></tr>
-    <tr><td><code>3</code></td><td>Fallaron pruebas (<code>test</code> y <code>record</code>).</td></tr>
+    <tr><td><code>3</code></td><td>Fallaron pruebas (<code>test</code> y <code>record</code>); un fallo no detectado (<code>audit</code>).</td></tr>
   </tbody>
 </table>
