@@ -22,8 +22,8 @@
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>When the last renewal was attempted</td></tr>
     <tr><td><code>--maps-dir</code> folder</td><td>Maps of earlier commits, one folder per commit, kept where you choose</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td><code>td audit</code>'s report (or <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> is shadow mode's</td></tr>
-    <tr><td><code>td-audit-*</code> under <code>--work-dir</code> (<code>/tmp</code>)</td><td>While <code>td audit</code> runs: a copy of the working tree where code is broken on purpose and tested. Deleted at the end, or by the next audit after a crash</td></tr>
-    <tr><td><code>testdetta-shadow-*</code> in the temporary folder</td><td>While <code>td test --shadow</code> runs: copies of the test reports, the reruns' results and a checkout of the base commit (a git worktree). Deleted at the end, also after Ctrl+C or a cancelled job. Your results directory is left as it is; the TRX reports shadow mode asks for stay there next to your own</td></tr>
+    <tr><td><code>td-audit-*</code> under <code>--work-dir</code> (<code>/tmp</code>)</td><td>While <code>td audit</code> runs: a copy of the working tree, readable only by your user, where code is broken on purpose and tested. Deleted at the end, or by the next audit after a crash</td></tr>
+    <tr><td><code>testdetta-shadow-*</code> in the temporary folder</td><td>While <code>td test --shadow</code> runs: copies of the test reports, the reruns' results and a checkout of the base commit (a git worktree). Deleted at the end, also after Ctrl+C or a cancelled job. Your results directory and your own reports are left as they are; the TRX reports shadow mode asks for itself are deleted once read</td></tr>
   </tbody>
 </table>
 <p>On GitHub Actions, maps are stored in your repository's Actions cache. <code>.testdetta/coverage/</code> and <code>.testdetta/cache/</code> are generated; keep them out of version control.</p>

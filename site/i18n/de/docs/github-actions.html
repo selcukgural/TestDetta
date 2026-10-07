@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Zeichnen Sie mit der {{name}}-Action Coverage-Maps auf dem Standard-Branch auf und führen Sie in Pull Requests nur die betroffenen Tests aus.; source: 5a2fd740fcf0 -->
+<!-- title: GitHub Actions; layout: docs; description: Zeichnen Sie mit der {{name}}-Action Coverage-Maps auf dem Standard-Branch auf und führen Sie in Pull Requests nur die betroffenen Tests aus.; source: 6829c3ff1f17 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Zeichnen Sie für jeden Commit auf dem Standard-Branch eine Map auf, und lassen Sie Pull Requests nur die Tests ausführen, die ihre Änderungen betreffen. Die Action baut {{name}} selbst und legt die Maps im Actions-Cache ab.</p>
 
@@ -78,7 +78,7 @@ jobs:
     <tr><td><code>shadow-artifact-suffix</code></td><td></td><td>Shadow-Modus: wird an den Namen des Bericht-Artefakts angehängt, zum Beispiel Ihre Matrix-Werte, um die Einträge einer Matrix auf einen Blick zu unterscheiden. Der Name ist auch ohne ihn eindeutig.</td></tr>
     <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>Audit-Modus: hält an, sobald so viele Änderungen Tests gebrochen haben.</td></tr>
     <tr><td><code>audit-max-mutants</code></td><td>keine Grenze</td><td>Audit-Modus: hält an, nachdem so viele Änderungen Tests ausgeführt haben.</td></tr>
-    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit-Modus: Nach dieser Zeit beginnt keine Änderung mehr (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> für keine Grenze). Halten Sie es unter dem <code>timeout-minutes</code> des Jobs.</td></tr>
+    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit-Modus: Nach dieser Zeit beginnt keine Änderung mehr (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> für keine Grenze); eine dann noch laufende Änderung läuft zu Ende. Halten Sie es deutlich unter dem <code>timeout-minutes</code> des Jobs.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit-Modus: gleichzeitig getestete Änderungen, jede in ihrer eigenen Kopie; der Speicherbedarf wächst damit.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test-, Shadow- und Audit-Modus: listet die Actions-Caches auf, um die neueste Map zu finden (erfordert <code>actions: read</code>).</td></tr>
     <tr><td><code>license</code></td><td></td><td>Test-Modus: der Lizenzstring, aus einem Repository- oder Organisations-Secret wie <code>TESTDETTA_LICENSE</code>. Öffentliche Repositorys benötigen keinen. Ohne gültige Lizenz laufen alle Tests; der Job schlägt deswegen nie fehl. Shadow- und Audit-Modus lesen sie nie.</td></tr>
@@ -97,7 +97,7 @@ jobs:
           dotnet-test-args: Shop.slnx</code></pre>
 
 <h2 id="audit">Audit nach Zeitplan</h2>
-<p>Um die Auswahl an Ihrem eigenen Code zu prüfen, verwenden Sie <code>mode: audit</code> nach Zeitplan, etwa wöchentlich auf dem Branch, den der Record-Modus aufzeichnet. Es bricht Member Ihres Codes Änderung für Änderung in einer Kopie des Arbeitsbaums, führt jeden Test aus, der eine Änderung sehen kann, und prüft, dass die Auswahl jede fehlgeschlagene Testklasse ausgeführt hat; siehe <a href="/docs/cli/#audit"><code>td audit</code></a>. Ihr Checkout und seine Build-Ausgabe werden nur gelesen. Die Job-Zusammenfassung zeigt das Ergebnis und jedes Verfehlen mit seiner Entscheidungskette; das Artefakt <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> bewahrt den JSON-Bericht 90 Tage auf. Es verwendet die neueste Map innerhalb von <code>max-map-age</code> des Commits, auf dem es läuft. Es braucht keine Lizenz und macht keinen Netzwerkaufruf, daher wird ihm das Lizenz-Secret nicht übergeben. Es läuft stundenlang auf Ihren Runnern: Geben Sie dem Job ein <code>timeout-minutes</code> über <code>audit-budget</code>.</p>
+<p>Um die Auswahl an Ihrem eigenen Code zu prüfen, verwenden Sie <code>mode: audit</code> nach Zeitplan, etwa wöchentlich auf dem Branch, den der Record-Modus aufzeichnet. Es bricht Member Ihres Codes Änderung für Änderung in einer Kopie des Arbeitsbaums, führt jeden Test aus, der eine Änderung sehen kann, und prüft, dass die Auswahl jede fehlgeschlagene Testklasse ausgeführt hat; siehe <a href="/docs/cli/#audit"><code>td audit</code></a>. Ihr Checkout und seine Build-Ausgabe werden nur gelesen. Die Job-Zusammenfassung zeigt das Ergebnis und jedes Verfehlen mit seiner Entscheidungskette; das Artefakt <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> bewahrt den JSON-Bericht 90 Tage auf. Es verwendet die neueste Map innerhalb von <code>max-map-age</code> des Commits, auf dem es läuft. Es braucht keine Lizenz und macht keinen Netzwerkaufruf, daher wird ihm das Lizenz-Secret nicht übergeben. Es läuft stundenlang auf Ihren Runnern: Geben Sie dem Job ein <code>timeout-minutes</code> deutlich über <code>audit-budget</code>, denn eine Änderung, die beim Ende des Budgets noch läuft, läuft erst zu Ende.</p>
 <pre><code>on:
   schedule:
     - cron: '0 3 * * 1' # Mondays, 03:00 UTC
@@ -127,7 +127,7 @@ jobs:
         with:
           mode: audit
           audit-budget: 4h</code></pre>
-<p>Ein Lauf mit mindestens 100 Änderungen, die Tests gebrochen haben, und keinem Verfehlen bringt die obere 95-%-Schranke der Verfehlensrate unter 3 %.</p>
+<p>Ein Lauf mit mindestens 100 Änderungen, die Tests gebrochen haben, und keinem Verfehlen bringt die obere 95-%-Schranke der Verfehlensrate auf höchstens 3,0 % (die Schranke wird aufgerundet angezeigt).</p>
 
 <h2>Job Summary</h2>
 <p>Im Test-Modus schreibt {{name}} seine Auswahl in die Job Summary: die geänderten Dateien und die Basis, mit der verglichen wurde, jedes Testprojekt mit der Angabe, ob es gefiltert, vollständig oder gar nicht lief und warum, die Testergebnisse sowie den Lizenzstatus, wenn er relevant ist. Pfade, Klassennamen und Gründe aus dem Repository werden als Code geschrieben, sodass Dateinamen in einem Pull Request keine Links oder Erwähnungen in die Seite einschleusen können.</p>

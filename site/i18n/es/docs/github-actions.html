@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 5a2fd740fcf0 -->
+<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: 6829c3ff1f17 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Registra un mapa por cada commit de la rama predeterminada y deja que las pull requests ejecuten solo las pruebas que sus cambios afectan. La acción compila {{name}} por sí misma y guarda los mapas en la caché de Actions.</p>
 
@@ -78,7 +78,7 @@ jobs:
     <tr><td><code>shadow-artifact-suffix</code></td><td></td><td>Modo shadow: se añade al nombre del artefacto del informe, por ejemplo los valores de su matriz, para distinguir de un vistazo las partes de una matriz. El nombre es único sin él.</td></tr>
     <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>Modo audit: se detiene en cuanto este número de cambios rompió pruebas.</td></tr>
     <tr><td><code>audit-max-mutants</code></td><td>sin límite</td><td>Modo audit: se detiene después de que este número de cambios ejecutara pruebas.</td></tr>
-    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Modo audit: no empieza ningún cambio pasado este tiempo (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> para sin límite). Mantenlo por debajo del <code>timeout-minutes</code> del job.</td></tr>
+    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Modo audit: no empieza ningún cambio pasado este tiempo (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> para sin límite); un cambio que aún se ejecuta termina entonces. Mantenlo bastante por debajo del <code>timeout-minutes</code> del job.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Modo audit: cambios probados a la vez, cada uno en su propia copia; la memoria crece con ello.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Modos test, shadow y audit: lista las cachés de Actions para encontrar el mapa más reciente (necesita <code>actions: read</code>).</td></tr>
     <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello. Los modos sombra y audit nunca la leen.</td></tr>
@@ -97,7 +97,7 @@ jobs:
           dotnet-test-args: Shop.slnx</code></pre>
 
 <h2 id="audit">Audit programado</h2>
-<p>Para comprobar la selección en tu propio código, usa <code>mode: audit</code> de forma programada, por ejemplo cada semana en la rama que registra el modo record. Rompe miembros de tu código cambio a cambio en una copia del árbol de trabajo, ejecuta cada prueba que puede ver cada cambio y comprueba que la selección ejecutó cada clase de prueba que falló; consulta <a href="/docs/cli/#audit"><code>td audit</code></a>. Tu checkout y su salida de compilación solo se leen. El resumen del job muestra el veredicto y cada fallo no detectado con su cadena de decisiones; el artefacto <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> guarda el informe JSON durante 90 días. Usa el mapa más reciente dentro de <code>max-map-age</code> del commit en que se ejecuta. No necesita licencia y no hace ninguna llamada de red, así que no se le pasa el secreto de la licencia. Se ejecuta durante horas en tus runners: dale al job un <code>timeout-minutes</code> mayor que <code>audit-budget</code>.</p>
+<p>Para comprobar la selección en tu propio código, usa <code>mode: audit</code> de forma programada, por ejemplo cada semana en la rama que registra el modo record. Rompe miembros de tu código cambio a cambio en una copia del árbol de trabajo, ejecuta cada prueba que puede ver cada cambio y comprueba que la selección ejecutó cada clase de prueba que falló; consulta <a href="/docs/cli/#audit"><code>td audit</code></a>. Tu checkout y su salida de compilación solo se leen. El resumen del job muestra el veredicto y cada fallo no detectado con su cadena de decisiones; el artefacto <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> guarda el informe JSON durante 90 días. Usa el mapa más reciente dentro de <code>max-map-age</code> del commit en que se ejecuta. No necesita licencia y no hace ninguna llamada de red, así que no se le pasa el secreto de la licencia. Se ejecuta durante horas en tus runners: dale al job un <code>timeout-minutes</code> bastante mayor que <code>audit-budget</code>, porque un cambio que aún se ejecuta cuando se agota el presupuesto termina primero.</p>
 <pre><code>on:
   schedule:
     - cron: '0 3 * * 1' # Mondays, 03:00 UTC
@@ -127,7 +127,7 @@ jobs:
         with:
           mode: audit
           audit-budget: 4h</code></pre>
-<p>Una ejecución con al menos 100 cambios que rompieron pruebas y ningún fallo no detectado deja el límite superior del 95 % de la tasa de fallos no detectados por debajo del 3 %.</p>
+<p>Una ejecución con al menos 100 cambios que rompieron pruebas y ningún fallo no detectado deja el límite superior del 95 % de la tasa de fallos no detectados en el 3,0 % o menos (el límite se muestra redondeado hacia arriba).</p>
 
 <h2>Job summary</h2>
 <p>En el modo test, {{name}} escribe su selección en el job summary: los archivos modificados y la base con la que comparó, cada proyecto de pruebas indicando si se ejecutó filtrado, completo o no se ejecutó y por qué, los resultados de las pruebas y el estado de la licencia cuando importa. Las rutas, los nombres de clase y los motivos procedentes del repositorio se escriben como código, para que los nombres de archivo de una pull request no puedan inyectar enlaces ni menciones en la página.</p>

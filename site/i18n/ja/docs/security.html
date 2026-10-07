@@ -1,4 +1,4 @@
-<!-- title: セキュリティとデータ; layout: docs; description: {{name}} が保存するもの、その保存場所、そして唯一のネットワーク通信について説明します。; source: 88b8db75b638 -->
+<!-- title: セキュリティとデータ; layout: docs; description: {{name}} が保存するもの、その保存場所、そして唯一のネットワーク通信について説明します。; source: fa32d74d5a04 -->
 <h1>セキュリティとデータ</h1>
 <p class="lead">{{name}} はお使いの CI とマシンの上で動作します。ソースコード、カバレッジマップ、テスト結果がそこから外に出ることはありません。このページでは、{{name}} が保存するものと、行うネットワーク通信をすべて示します。</p>
 
@@ -22,8 +22,8 @@
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>最後に更新を試みた日時</td></tr>
     <tr><td><code>--maps-dir</code> のフォルダー</td><td>過去のコミットのマップ（コミットごとに 1 フォルダー）。保存場所は任意に選べます</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td><code>td audit</code> のレポート（または <code>--report</code>）。<code>.testdetta/testdetta-shadow.json</code> はシャドウモードのレポート</td></tr>
-    <tr><td><code>--work-dir</code>（<code>/tmp</code>）の下の <code>td-audit-*</code></td><td><code>td audit</code> の実行中のみ：コードを意図的に壊してテストする、作業ツリーのコピー。最後に削除されます。クラッシュした場合は次回の audit が削除します</td></tr>
-    <tr><td>一時フォルダー内の <code>testdetta-shadow-*</code></td><td><code>td test --shadow</code> の実行中のみ：テストレポートのコピー、再実行の結果、ベースコミットのチェックアウト（git worktree）。最後に削除されます。Ctrl+C やジョブのキャンセルの後も削除されます。結果ディレクトリはそのまま残ります。シャドウモードが要求する TRX レポートは、あなた自身のレポートと並んでそこに残ります</td></tr>
+    <tr><td><code>--work-dir</code>（<code>/tmp</code>）の下の <code>td-audit-*</code></td><td><code>td audit</code> の実行中のみ：コードを意図的に壊してテストする、作業ツリーのコピー（あなたのユーザーだけが読み取れます）。最後に削除されます。クラッシュした場合は次回の audit が削除します</td></tr>
+    <tr><td>一時フォルダー内の <code>testdetta-shadow-*</code></td><td><code>td test --shadow</code> の実行中のみ：テストレポートのコピー、再実行の結果、ベースコミットのチェックアウト（git worktree）。最後に削除されます。Ctrl+C やジョブのキャンセルの後も削除されます。結果ディレクトリとあなた自身のレポートはそのまま残ります。シャドウモード自身が要求した TRX レポートは、読み取った後に削除されます</td></tr>
   </tbody>
 </table>
 <p>GitHub Actions では、マップはリポジトリの Actions のキャッシュに保存されます。<code>.testdetta/coverage/</code> と <code>.testdetta/cache/</code> は生成物なので、バージョン管理の対象外にしてください。</p>

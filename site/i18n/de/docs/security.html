@@ -1,4 +1,4 @@
-<!-- title: Sicherheit und Daten; layout: docs; description: Was {{name}} speichert, wo es die Daten ablegt und welchen einen Netzwerkaufruf es macht.; source: 88b8db75b638 -->
+<!-- title: Sicherheit und Daten; layout: docs; description: Was {{name}} speichert, wo es die Daten ablegt und welchen einen Netzwerkaufruf es macht.; source: fa32d74d5a04 -->
 <h1>Sicherheit und Daten</h1>
 <p class="lead">{{name}} läuft in Ihrer CI und auf Ihren Rechnern. Ihr Quellcode, Ihre Coverage-Maps und Testergebnisse verlassen diese nie. Diese Seite listet alles auf, was es speichert, und jeden Netzwerkaufruf, den es macht.</p>
 
@@ -22,8 +22,8 @@
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>Wann die letzte Erneuerung versucht wurde</td></tr>
     <tr><td>Ordner von <code>--maps-dir</code></td><td>Maps früherer Commits, ein Ordner pro Commit, an einem Ort Ihrer Wahl</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td>Der Bericht von <code>td audit</code> (oder <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> ist der des Shadow-Modus</td></tr>
-    <tr><td><code>td-audit-*</code> unter <code>--work-dir</code> (<code>/tmp</code>)</td><td>Während <code>td audit</code> läuft: eine Kopie des Arbeitsbaums, in der Code absichtlich gebrochen und getestet wird. Am Ende gelöscht, oder nach einem Absturz vom nächsten Audit</td></tr>
-    <tr><td><code>testdetta-shadow-*</code> im temporären Ordner</td><td>Während <code>td test --shadow</code> läuft: Kopien der Testberichte, die Ergebnisse der erneuten Läufe und ein Checkout des Basis-Commits (ein Git-Worktree). Am Ende gelöscht, auch nach Strg+C oder einem abgebrochenen Job. Ihr Ergebnisverzeichnis bleibt, wie es ist; die TRX-Berichte, die der Shadow-Modus anfordert, bleiben dort neben Ihren eigenen</td></tr>
+    <tr><td><code>td-audit-*</code> unter <code>--work-dir</code> (<code>/tmp</code>)</td><td>Während <code>td audit</code> läuft: eine Kopie des Arbeitsbaums, nur für Ihren Benutzer lesbar, in der Code absichtlich gebrochen und getestet wird. Am Ende gelöscht, oder nach einem Absturz vom nächsten Audit</td></tr>
+    <tr><td><code>testdetta-shadow-*</code> im temporären Ordner</td><td>Während <code>td test --shadow</code> läuft: Kopien der Testberichte, die Ergebnisse der erneuten Läufe und ein Checkout des Basis-Commits (ein Git-Worktree). Am Ende gelöscht, auch nach Strg+C oder einem abgebrochenen Job. Ihr Ergebnisverzeichnis und Ihre eigenen Berichte bleiben, wie sie sind; die TRX-Berichte, die der Shadow-Modus selbst anfordert, werden gelöscht, sobald sie gelesen sind</td></tr>
   </tbody>
 </table>
 <p>Unter GitHub Actions werden Maps im Actions-Cache Ihres Repositorys gespeichert. <code>.testdetta/coverage/</code> und <code>.testdetta/cache/</code> werden generiert; halten Sie sie aus der Versionsverwaltung heraus.</p>

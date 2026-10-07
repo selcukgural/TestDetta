@@ -1,4 +1,4 @@
-<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: 88b8db75b638 -->
+<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: fa32d74d5a04 -->
 <h1>Seguridad y datos</h1>
 <p class="lead">{{name}} se ejecuta en tu CI y en tus máquinas. Tu código fuente, tus mapas de cobertura y los resultados de tus pruebas nunca salen de ellos. Esta página enumera todo lo que guarda y cada llamada de red que hace.</p>
 
@@ -22,8 +22,8 @@
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>Cuándo se intentó la última renovación</td></tr>
     <tr><td>Carpeta de <code>--maps-dir</code></td><td>Mapas de commits anteriores, una carpeta por commit, guardados donde tú elijas</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td>El informe de <code>td audit</code> (o <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> es el del modo sombra</td></tr>
-    <tr><td><code>td-audit-*</code> en <code>--work-dir</code> (<code>/tmp</code>)</td><td>Mientras se ejecuta <code>td audit</code>: una copia del árbol de trabajo donde se rompe el código a propósito y se prueba. Se borra al final, o la borra el siguiente audit tras un fallo</td></tr>
-    <tr><td><code>testdetta-shadow-*</code> en la carpeta temporal</td><td>Mientras se ejecuta <code>td test --shadow</code>: copias de los informes de pruebas, los resultados de las nuevas ejecuciones y una copia del commit base (un git worktree). Se borra al final, también tras Ctrl+C o un job cancelado. Tu directorio de resultados se deja como está; los informes TRX que pide el modo sombra se quedan ahí junto a los tuyos</td></tr>
+    <tr><td><code>td-audit-*</code> en <code>--work-dir</code> (<code>/tmp</code>)</td><td>Mientras se ejecuta <code>td audit</code>: una copia del árbol de trabajo, que solo puede leer tu usuario, donde se rompe el código a propósito y se prueba. Se borra al final, o la borra el siguiente audit tras un fallo</td></tr>
+    <tr><td><code>testdetta-shadow-*</code> en la carpeta temporal</td><td>Mientras se ejecuta <code>td test --shadow</code>: copias de los informes de pruebas, los resultados de las nuevas ejecuciones y una copia del commit base (un git worktree). Se borra al final, también tras Ctrl+C o un job cancelado. Tu directorio de resultados y tus propios informes se dejan como están; los informes TRX que pide el propio modo sombra se borran una vez leídos</td></tr>
   </tbody>
 </table>
 <p>En GitHub Actions, los mapas se guardan en la caché de Actions de tu repositorio. <code>.testdetta/coverage/</code> y <code>.testdetta/cache/</code> se generan; mantenlos fuera del control de versiones.</p>

@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: 5a2fd740fcf0 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: 6829c3ff1f17 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Varsayılan branch'teki her commit için bir harita kaydedin ve pull request'lerin yalnızca değişikliklerinin etkilediği testleri çalıştırmasını sağlayın. Action {{name}}'yı kendisi derler ve haritaları Actions önbelleğinde tutar.</p>
 
@@ -78,7 +78,7 @@ jobs:
     <tr><td><code>shadow-artifact-suffix</code></td><td></td><td>Shadow mode: bir matrix'in kollarını bir bakışta ayırt etmek için rapor artifact'inin adına eklenir, örneğin matrix değerleriniz. Ad, bu olmadan da benzersizdir.</td></tr>
     <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>Audit modu: bu kadar değişiklik testleri bozduğunda durur.</td></tr>
     <tr><td><code>audit-max-mutants</code></td><td>sınır yok</td><td>Audit modu: bu kadar değişiklik testleri çalıştırdıktan sonra durur.</td></tr>
-    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit modu: bu süreden sonra yeni bir değişikliğe başlamaz (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; sınırsız için <code>none</code>). Job'un <code>timeout-minutes</code> değerinin altında tutun.</td></tr>
+    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit modu: bu süreden sonra yeni bir değişikliğe başlamaz (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; sınırsız için <code>none</code>); o sırada hâlâ çalışan bir değişiklik tamamlanır. Job'un <code>timeout-minutes</code> değerinin epey altında tutun.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit modu: aynı anda test edilen değişiklikler, her biri kendi kopyasında; bellek kullanımı bununla artar.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test, shadow ve audit modları: en yeni haritayı bulmak için Actions önbelleklerini listeler (<code>actions: read</code> gerektirir).</td></tr>
     <tr><td><code>license</code></td><td></td><td>Test modu: <code>TESTDETTA_LICENSE</code> gibi bir depo ya da organizasyon secret'ından gelen lisans dizesi. Açık depolar lisansa ihtiyaç duymaz. Geçerli bir lisans olmadan tüm testler çalışır; job bu yüzden asla başarısız olmaz. Shadow ve audit modları onu hiç okumaz.</td></tr>
@@ -97,7 +97,7 @@ jobs:
           dotnet-test-args: Shop.slnx</code></pre>
 
 <h2 id="audit">Zamanlanmış audit</h2>
-<p>Seçimi kendi kodunuzda denetlemek için <code>mode: audit</code>'i zamanlanmış olarak kullanın, örneğin haftada bir, record modunun kaydettiği branch'te. Kodunuzun üyelerini çalışma ağacının bir kopyasında değişiklik değişiklik bozar, her değişikliği görebilen her testi çalıştırır ve seçimin başarısız olan her test sınıfını çalıştırdığını denetler; bkz. <a href="/docs/cli/#audit"><code>td audit</code></a>. Checkout'unuz ve derleme çıktısı yalnızca okunur. Job özeti sonucu ve her kaçırmayı karar zinciriyle gösterir; <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> artifact'i JSON raporunu 90 gün saklar. Çalıştığı commit'in <code>max-map-age</code> sınırı içindeki en yeni haritayı kullanır. Lisans gerektirmez ve hiçbir ağ çağrısı yapmaz, bu yüzden lisans secret'ı ona verilmez. Runner'larınızda saatlerce çalışır: job'a <code>audit-budget</code> değerinin üstünde bir <code>timeout-minutes</code> verin.</p>
+<p>Seçimi kendi kodunuzda denetlemek için <code>mode: audit</code>'i zamanlanmış olarak kullanın, örneğin haftada bir, record modunun kaydettiği branch'te. Kodunuzun üyelerini çalışma ağacının bir kopyasında değişiklik değişiklik bozar, her değişikliği görebilen her testi çalıştırır ve seçimin başarısız olan her test sınıfını çalıştırdığını denetler; bkz. <a href="/docs/cli/#audit"><code>td audit</code></a>. Checkout'unuz ve derleme çıktısı yalnızca okunur. Job özeti sonucu ve her kaçırmayı karar zinciriyle gösterir; <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> artifact'i JSON raporunu 90 gün saklar. Çalıştığı commit'in <code>max-map-age</code> sınırı içindeki en yeni haritayı kullanır. Lisans gerektirmez ve hiçbir ağ çağrısı yapmaz, bu yüzden lisans secret'ı ona verilmez. Runner'larınızda saatlerce çalışır: job'a <code>audit-budget</code> değerinin epey üstünde bir <code>timeout-minutes</code> verin, çünkü bütçe dolduğunda hâlâ çalışan bir değişiklik önce tamamlanır.</p>
 <pre><code>on:
   schedule:
     - cron: '0 3 * * 1' # Mondays, 03:00 UTC
@@ -127,7 +127,7 @@ jobs:
         with:
           mode: audit
           audit-budget: 4h</code></pre>
-<p>Testleri bozan en az 100 değişiklik içeren ve hiçbirini kaçırmayan tek bir çalıştırma, kaçırma oranının %95 üst sınırını %3'ün altına indirir.</p>
+<p>Testleri bozan en az 100 değişiklik içeren ve hiçbirini kaçırmayan tek bir çalıştırma, kaçırma oranının %95 üst sınırını %3,0 ya da altına indirir (sınır yukarı yuvarlanarak gösterilir).</p>
 
 <h2>Job summary</h2>
 <p>Test modunda {{name}} seçimini job summary'ye yazar: değişen dosyalar ve karşılaştırdığı base, her test projesinin filtreli mi, tamamen mi yoksa hiç mi çalıştığı ve nedeni, test sonuçları ve önemli olduğunda lisans durumu. Depodan gelen yollar, sınıf adları ve gerekçeler kod olarak yazılır; böylece bir pull request'teki dosya adları sayfaya link ya da mention enjekte edemez.</p>

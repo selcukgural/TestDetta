@@ -1,4 +1,4 @@
-<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 88b8db75b638 -->
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: fa32d74d5a04 -->
 <h1>Güvenlik ve veri</h1>
 <p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz, kapsam haritalarınız ve test sonuçlarınız oradan hiç çıkmaz. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
 
@@ -22,8 +22,8 @@
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>Son yenilemenin ne zaman denendiği</td></tr>
     <tr><td><code>--maps-dir</code> klasörü</td><td>Önceki commit'lerin haritaları, commit başına bir klasör, sizin seçtiğiniz yerde tutulur</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td><code>td audit</code> raporu (ya da <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> shadow mode'unki</td></tr>
-    <tr><td><code>--work-dir</code> (<code>/tmp</code>) altında <code>td-audit-*</code></td><td><code>td audit</code> çalışırken: kodun bilerek bozulup test edildiği, çalışma ağacının bir kopyası. Sonunda ya da bir çökmeden sonra bir sonraki audit tarafından silinir</td></tr>
-    <tr><td>geçici klasörde <code>testdetta-shadow-*</code></td><td><code>td test --shadow</code> çalışırken: test raporlarının kopyaları, yeniden çalıştırmaların sonuçları ve base commit'in bir checkout'u (bir git worktree). Sonunda silinir, Ctrl+C ya da iptal edilen bir job'dan sonra da. Sonuç dizininiz olduğu gibi bırakılır; shadow mode'un istediği TRX raporları orada, sizinkilerin yanında kalır</td></tr>
+    <tr><td><code>--work-dir</code> (<code>/tmp</code>) altında <code>td-audit-*</code></td><td><code>td audit</code> çalışırken: kodun bilerek bozulup test edildiği, yalnızca sizin kullanıcınızın okuyabildiği, çalışma ağacının bir kopyası. Sonunda ya da bir çökmeden sonra bir sonraki audit tarafından silinir</td></tr>
+    <tr><td>geçici klasörde <code>testdetta-shadow-*</code></td><td><code>td test --shadow</code> çalışırken: test raporlarının kopyaları, yeniden çalıştırmaların sonuçları ve base commit'in bir checkout'u (bir git worktree). Sonunda silinir, Ctrl+C ya da iptal edilen bir job'dan sonra da. Sonuç dizininiz ve kendi raporlarınız olduğu gibi bırakılır; shadow mode'un kendisinin istediği TRX raporları okunduktan sonra silinir</td></tr>
   </tbody>
 </table>
 <p>GitHub Actions'ta haritalar deponuzun Actions önbelleğinde saklanır. <code>.testdetta/coverage/</code> ve <code>.testdetta/cache/</code> otomatik üretilir; bunları sürüm kontrolünün dışında tutun.</p>

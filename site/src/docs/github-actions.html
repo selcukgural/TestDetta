@@ -78,7 +78,7 @@ jobs:
     <tr><td><code>shadow-artifact-suffix</code></td><td></td><td>Shadow mode: added to the report artifact's name, for example your matrix values, to tell the legs of a matrix apart at a glance. The name is unique without it.</td></tr>
     <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>Audit mode: stop once this many changes broke tests.</td></tr>
     <tr><td><code>audit-max-mutants</code></td><td>no limit</td><td>Audit mode: stop after this many changes ran tests.</td></tr>
-    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit mode: start no change after this long (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> for no limit). Keep it below the job's <code>timeout-minutes</code>.</td></tr>
+    <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit mode: start no change after this long (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> for no limit); a change still running then finishes. Keep it well below the job's <code>timeout-minutes</code>.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit mode: changes tested at once, each in its own copy; memory use grows with it.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test, shadow and audit modes: lists the Actions caches to find the newest map (needs <code>actions: read</code>).</td></tr>
     <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>TESTDETTA_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it. Shadow and audit modes never read it.</td></tr>
@@ -97,7 +97,7 @@ jobs:
           dotnet-test-args: Shop.slnx</code></pre>
 
 <h2 id="audit">Audit on a schedule</h2>
-<p>To check the selection on your own code, use <code>mode: audit</code> on a schedule, for example weekly on the branch record mode records. It breaks members of your code one change at a time in a copy of the working tree, runs every test that can see each change, and checks that the selection ran every test class that failed; see <a href="/docs/cli/#audit"><code>td audit</code></a>. Your checkout and its build output are only read. The job summary shows the verdict and every miss with its decision chain; the artifact <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> keeps the JSON report for 90 days. It uses the newest map within <code>max-map-age</code> of the commit it runs on. It needs no license and makes no network call, so the license secret is not passed to it. It runs for hours on your runners: give the job a <code>timeout-minutes</code> above <code>audit-budget</code>.</p>
+<p>To check the selection on your own code, use <code>mode: audit</code> on a schedule, for example weekly on the branch record mode records. It breaks members of your code one change at a time in a copy of the working tree, runs every test that can see each change, and checks that the selection ran every test class that failed; see <a href="/docs/cli/#audit"><code>td audit</code></a>. Your checkout and its build output are only read. The job summary shows the verdict and every miss with its decision chain; the artifact <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> keeps the JSON report for 90 days. It uses the newest map within <code>max-map-age</code> of the commit it runs on. It needs no license and makes no network call, so the license secret is not passed to it. It runs for hours on your runners: give the job a <code>timeout-minutes</code> well above <code>audit-budget</code>, since a change still running when the budget ends finishes first.</p>
 <pre><code>on:
   schedule:
     - cron: '0 3 * * 1' # Mondays, 03:00 UTC
@@ -127,7 +127,7 @@ jobs:
         with:
           mode: audit
           audit-budget: 4h</code></pre>
-<p>One run with at least 100 changes that broke tests and none missed puts the 95% upper bound of the miss rate below 3%.</p>
+<p>One run with at least 100 changes that broke tests and none missed puts the 95% upper bound of the miss rate at 3.0% or below (the bound is shown rounded up).</p>
 
 <h2>Job summary</h2>
 <p>In test mode, {{name}} writes its selection to the job summary: the changed files and the base it compared with, each test project with whether it ran filtered, completely or not at all and why, the test results, and the license state when it matters. Paths, class names and reasons from the repository are written as code, so file names in a pull request cannot inject links or mentions into the page.</p>
