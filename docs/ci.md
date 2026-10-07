@@ -27,7 +27,8 @@ TestDetta itself never uses the network for maps.
   `TESTDETTA_LICENSE_FILE`.
   - Public repositories need none on GitLab CI (`CI_PROJECT_VISIBILITY`) and GitHub Actions. Jenkins,
     Azure DevOps and Bitbucket do not tell TestDetta, so there every repository needs one.
-  - Without a valid license every test runs, and the build never fails because of it.
+  - Until licensing is switched on at launch, none is needed: tests are selected with or without one.
+    After that, without a valid license every test runs, and the build never fails because of it.
   - On a network that cannot reach the license service, set `TESTDETTA_LICENSE_REFRESH=off` and renew the
     license string yourself (docs/design/licensing.md).
 - **Exit codes:**

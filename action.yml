@@ -89,7 +89,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   license:
-    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none, and shadow and audit modes never read it. Without a valid license every test runs; the job never fails because of it."
+    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none, and shadow and audit modes never read it. Until licensing is switched on at launch, no repository needs one; after that, without a valid license every test runs. The job never fails because of it."
     required: false
     default: ''
   working-directory:

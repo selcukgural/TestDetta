@@ -313,7 +313,7 @@ internal static partial class CliApp
 
         stdout.WriteLine(status.AllowsSelection
             ? "  Tests are selected."
-            : TestDetta.Core.Licensing.LicenseKeys.Enforced ? "  Every test runs until this is fixed." : "  Not enforced yet: tests are still selected.");
+            : TestDetta.Core.Licensing.LicenseKeys.Enforced ? "  Every test runs until this is fixed." : "  Not enforced yet: tests are still selected. What the line above says about running every test applies once licensing is switched on at launch.");
         return Success;
     }
 

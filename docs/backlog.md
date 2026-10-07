@@ -267,7 +267,8 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
 4. A simple "what you saved" report: the existing per-class decisions and time estimate in the job
    summary, checked on a real run (item 4 below goes further after v1). Status: checked on Markdig
    2026-10-04 (16 of 177 classes, 93% of the recorded time saved, a reason per class).
-5. A product name before any public launch (see Later).
+5. The name before any public launch: TestDetta is in use (see Later); open: the trademark search and
+   reserving the NuGet ID prefix.
 6. **Shadow mode as the way in** (owner, 2026-10-07: "work on it seriously"): cautious organisations
    see TestDetta select on their own pull requests while everything still runs, with every claim
    measured, explained and reproducible, misses told apart from flaky and pre-existing failures, a
@@ -476,5 +477,7 @@ repositories a change touches; the full corpus runs at milestones.
 
 - Windows: build, record and select on Windows; path and process differences.
 - CI in practice: map cache hit rates and end-to-end times in a real pipeline.
-- Product name before any public launch (TestDetta is taken on the Marketplace and NuGet).
+- Name: TestDetta is in use (testdetta.com, the social accounts, the GitHub organisation); the nuget.org
+  package id `testdetta` and the Marketplace slug `testdetta` are free (both 404 on 2026-10-07). Open:
+  a trademark search (owner: TÜRKPATENT, WIPO) and reserving the `TestDetta` ID prefix on nuget.org.
 - Paid tier: hosted map store and ROI history.

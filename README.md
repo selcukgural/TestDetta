@@ -139,9 +139,10 @@ is public; on other CI systems and on developer machines every repository counts
 ones pass the license string in `TESTDETTA_LICENSE` (or a file named by `TESTDETTA_LICENSE_FILE`); in GitHub
 Actions, through the `license` input from a secret. Only `affected`, `test` (not `test --shadow`) and
 `license status` read the license; `record`, `test --shadow` and `audit` run every test anyway. Until
-launch the license is checked and reported but not enforced: tests are selected whatever it says.
-`td license status` shows what a license covers. Without a valid license every test runs and the
-build never fails because of it. Machines that cannot reach the license service set
+launch the license is checked and reported but not enforced: tests are selected whatever it says,
+and no license verifies or can be installed yet. `td license status` shows what a license covers.
+Once licensing is switched on at launch, without a valid license every test runs; the build never
+fails because of it. Machines that cannot reach the license service set
 `TESTDETTA_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).
 
 ## Other CI systems
