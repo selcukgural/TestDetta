@@ -261,6 +261,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     {
         var root = file.Root;
         var usingStatic = UsingStaticTargets(root);
+        var aliases = UsingAliases(root);
         foreach (var declaration in DeclarationWalker.Collect(root).Values)
         {
             var node = (MemberDeclarationSyntax)declaration.Node;
@@ -290,9 +291,9 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                 declaration.MemberName is null || MayBeCalledImplicitly(declaration),
                 declaration.MemberName is not null && IsPrivateToType(node),
                 declaration.MemberName is not null && IsStaticAccess(node),
-                CollectReferences(declaration.Node, declaration.Descend, usingStatic))
+                CollectReferences(declaration.Node, declaration.Descend, usingStatic, aliases))
             {
-                MetadataReferences = CollectMetadataReferences(declaration.Node, declaration.Descend),
+                MetadataReferences = CollectMetadataReferences(declaration.Node, declaration.Descend, aliases),
             });
         }
 
@@ -348,18 +349,74 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <summary>
     /// Simple identifiers mentioned inside a declaration, excluding nested declarations, plus the
     /// file's <c>using static</c> targets: those let the code reach static members without naming the type.
+    /// A name that is one of the file's using aliases stands for every name its target holds
+    /// (<see cref="UsingAliases"/>).
     /// </summary>
     /// <param name="node">Declaration node.</param>
     /// <param name="descend">Which child nodes belong to the declaration.</param>
     /// <param name="usingStatic">Simple names of the types imported with <c>using static</c> in the file.</param>
+    /// <param name="aliases">The file's using aliases and the names their targets hold.</param>
     private static FrozenSet<string> CollectReferences(
         SyntaxNode node,
         Func<SyntaxNode, SyntaxNode, bool> descend,
-        List<string> usingStatic)
+        List<string> usingStatic,
+        Dictionary<string, List<string>> aliases)
     {
         var references = new HashSet<string>(usingStatic, StringComparer.Ordinal);
         AddReferences(node, descend, references);
+        AddAliasTargets(references, aliases);
         return references.ToFrozenSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>Adds the names an alias stands for, for every alias among <paramref name="references"/>.</summary>
+    /// <param name="references">Names a declaration mentions; updated in place.</param>
+    /// <param name="aliases">The file's using aliases and the names their targets hold.</param>
+    private static void AddAliasTargets(HashSet<string> references, Dictionary<string, List<string>> aliases)
+    {
+        foreach (var (alias, targets) in aliases)
+        {
+            if (references.Contains(alias))
+            {
+                references.UnionWith(targets);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The file's using aliases (<c>using Verifier = CodeFixTest&lt;MyAnalyzer, MyFixer&gt;;</c>, also inside a
+    /// namespace) and every simple name in each target: the alias, not the type, is what the code names, so a test
+    /// class that only names <c>Verifier</c> uses the analyzer all the same (meziantou's tests). A <c>global using</c>
+    /// alias is left out: global usings apply to the whole project, and a change to one runs the project completely.
+    /// </summary>
+    /// <param name="root">Compilation unit.</param>
+    private static Dictionary<string, List<string>> UsingAliases(CompilationUnitSyntax root)
+    {
+        var aliases = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var directive in root.DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
+                     .OfType<UsingDirectiveSyntax>())
+        {
+            if (directive.Alias is not { } alias || directive.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword) || directive.NamespaceOrType is not { } target)
+            {
+                continue;
+            }
+
+            var names = target.DescendantNodesAndSelf().OfType<SimpleNameSyntax>()
+                .Where(n => NamesType(n, target))
+                .Select(static n => n.Identifier.ValueText)
+                .ToHashSet(StringComparer.Ordinal);
+            var name = alias.Name.Identifier.ValueText;
+            if (aliases.TryGetValue(name, out var known))
+            {
+                // Conditional code may declare the same alias twice; either target may be the one compiled.
+                known.AddRange(names.Where(n => !known.Contains(n)));
+            }
+            else
+            {
+                aliases[name] = [.. names];
+            }
+        }
+
+        return aliases;
     }
 
     /// <summary>Simple names of the types named in the file's <c>using static</c> directives, including those inside namespaces.</summary>
@@ -378,6 +435,30 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         }
 
         return targets;
+    }
+
+    /// <summary>
+    /// True when <paramref name="name"/> in an alias target names a type: the last part of a qualified name or a type
+    /// argument, not a namespace or outer part before a dot (<c>Harness</c> in <c>Test.Harness.CodeFixTest&lt;A&gt;</c>).
+    /// </summary>
+    /// <param name="name">A simple name in the target.</param>
+    /// <param name="target">The alias target.</param>
+    private static bool NamesType(SimpleNameSyntax name, SyntaxNode target)
+    {
+        SyntaxNode child = name;
+        for (var parent = name.Parent; parent is not null && child != target; child = parent, parent = parent.Parent)
+        {
+            switch (parent)
+            {
+                case TypeArgumentListSyntax:
+                    return true;
+                case QualifiedNameSyntax qualified when qualified.Left == child:
+                case AliasQualifiedNameSyntax aliased when aliased.Alias == child:
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -419,7 +500,8 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// </summary>
     /// <param name="node">Declaration node.</param>
     /// <param name="descend">Which child nodes belong to the declaration.</param>
-    private static FrozenSet<string> CollectMetadataReferences(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend)
+    /// <param name="aliases">The file's using aliases and the names their targets hold.</param>
+    private static FrozenSet<string> CollectMetadataReferences(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend, Dictionary<string, List<string>> aliases)
     {
         HashSet<string>? references = null;
         foreach (var metadata in DeclarationWalker.MetadataNodes(node, descend))
@@ -428,7 +510,13 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
             AddReferences(metadata, DeclarationWalker.DescendAll, references);
         }
 
-        return references?.ToFrozenSet(StringComparer.Ordinal) ?? [];
+        if (references is null)
+        {
+            return [];
+        }
+
+        AddAliasTargets(references, aliases);
+        return references.ToFrozenSet(StringComparer.Ordinal);
     }
 
     /// <summary>Every simple name below <paramref name="node"/>, as <see cref="AddReferences"/> collects them.</summary>

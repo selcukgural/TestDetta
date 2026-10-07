@@ -27,6 +27,7 @@ internal static class VisualBasicIndexer
             .Select(static c => Rightmost(c.Name))
             .OfType<string>()
             .ToList();
+        var aliases = ImportAliases((CompilationUnitSyntax)root);
         foreach (var declaration in VisualBasicLanguage.Instance.Collect(root, owner.RootNamespace).Values)
         {
             var node = declaration.Node;
@@ -57,7 +58,7 @@ internal static class VisualBasicIndexer
                 declaration.MemberName is null || MayBeCalledImplicitly(declaration),
                 declaration.MemberName is not null && IsPrivateToType(node),
                 declaration.MemberName is not null && IsStaticAccess(node),
-                References(node, declaration.Descend, imported))
+                References(node, declaration.Descend, imported, aliases))
             {
                 MetadataReferences = References(VisualBasicLanguage.Instance.MetadataNodes(node, declaration.Descend), []),
                 IgnoreCase = true,
@@ -69,11 +70,67 @@ internal static class VisualBasicIndexer
     /// <param name="node">Declaration node.</param>
     /// <param name="descend">Which child nodes belong to the declaration.</param>
     /// <param name="extra">Names every member of the file may reach.</param>
-    private static FrozenSet<string> References(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend, List<string> extra)
+    /// <param name="aliases">The file's import aliases and the type names their targets hold (<see cref="ImportAliases"/>).</param>
+    private static FrozenSet<string> References(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend, List<string> extra, Dictionary<string, List<string>> aliases)
     {
         var references = new HashSet<string>(extra, StringComparer.OrdinalIgnoreCase);
         Add(node.DescendantNodes(n => descend(n, node)), references);
+        foreach (var (alias, targets) in aliases)
+        {
+            if (references.Contains(alias))
+            {
+                references.UnionWith(targets);
+            }
+        }
+
         return references.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The file's import aliases (<c>Imports Verifier = CodeFixTest(Of MyAnalyzer, MyFixer)</c>) and the type names in
+    /// each target (the last part of a qualified name, and type arguments): a declaration that names the alias uses
+    /// them, as with C#'s using aliases. Project-level imports are not in the file and are left as before.
+    /// </summary>
+    /// <param name="root">Compilation unit.</param>
+    private static Dictionary<string, List<string>> ImportAliases(CompilationUnitSyntax root)
+    {
+        var aliases = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var clause in root.Imports.SelectMany(static i => i.ImportsClauses.OfType<SimpleImportsClauseSyntax>()))
+        {
+            if (clause.Alias is not { } alias)
+            {
+                continue;
+            }
+
+            var names = clause.Name.DescendantNodesAndSelf().OfType<SimpleNameSyntax>()
+                .Where(n => NamesType(n, clause.Name))
+                .Select(static n => n.Identifier.ValueText)
+                .ToList();
+            var name = alias.Identifier.ValueText;
+            aliases[name] = aliases.TryGetValue(name, out var known) ? [.. known.Union(names, StringComparer.OrdinalIgnoreCase)] : names;
+        }
+
+        return aliases;
+    }
+
+    /// <summary>True when <paramref name="name"/> in an import target names a type: not a namespace or outer part before a dot.</summary>
+    /// <param name="name">A simple name in the target.</param>
+    /// <param name="target">The import target.</param>
+    private static bool NamesType(SimpleNameSyntax name, SyntaxNode target)
+    {
+        SyntaxNode child = name;
+        for (var parent = name.Parent; parent is not null && child != target; child = parent, parent = parent.Parent)
+        {
+            switch (parent)
+            {
+                case TypeArgumentListSyntax:
+                    return true;
+                case QualifiedNameSyntax qualified when qualified.Left == child:
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Names mentioned below <paramref name="nodes"/>.</summary>
