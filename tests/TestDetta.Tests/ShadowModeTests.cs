@@ -231,7 +231,7 @@ public sealed class ShadowModeTests : IDisposable
 
         Assert.True(exit == 3, log.Text);
         var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"))).RootElement;
-        Assert.Equal(3, report.GetProperty("schema").GetInt32());
+        Assert.Equal(4, report.GetProperty("schema").GetInt32());
         var run = report.GetProperty("run");
         Assert.Equal("verbatim", run.GetProperty("kind").GetString());
         Assert.Equal("dotnet test --logger trx", run.GetProperty("command").GetString());
@@ -413,6 +413,44 @@ public sealed class ShadowModeTests : IDisposable
 
         // The team asked for no report: the ones TestDetta's report option wrote beside the build output are read, then deleted.
         Assert.Empty(Directory.GetFiles(_repo.Root, "*.trx", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void Under_the_testing_platform_a_project_not_built_before_the_run_is_named_with_why_it_has_no_report()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        _repo.Write("tests/Shop.Tests/Shop.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="xunit.v3" Version="4.0.1" />
+                <ProjectReference Include="../../src/Shop/Shop.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("Shop.slnx", """<Solution><Project Path="src/Shop/Shop.csproj" /><Project Path="tests/Shop.Tests/Shop.Tests.csproj" /></Solution>""");
+        _repo.Write(".testdetta/flaky-marker", "ran");
+        _repo.Commit("testing platform");
+        _repo.Replace("src/Shop/Calc.cs", "net * 0.2m", "net * 0.3m");
+        var summary = Path.Combine(_repo.Root, ".testdetta", "summary.md");
+        var stdout = new StringWriter();
+
+        // A fresh checkout: nothing is built, so the report option cannot be read from the build output and is not guessed.
+        var exit = CliApp.Run(["test", "--shadow", "--shadow-no-classify", "--repo", _repo.Root, "--base", "HEAD", "--summary-file", summary, "--", "--solution", "Shop.slnx"], stdout, new StringWriter());
+
+        Assert.True(exit != 0, stdout.ToString());
+        var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"))).RootElement;
+        Assert.Equal("per-project", report.GetProperty("run").GetProperty("kind").GetString());
+        Assert.Contains("has no build output yet", report.GetProperty("run").GetProperty("fallbackReason").GetString(), StringComparison.Ordinal);
+        var project = report.GetProperty("projects").EnumerateArray().Single();
+        Assert.True(project.GetProperty("notBuilt").GetBoolean());
+        Assert.False(project.GetProperty("reported").GetBoolean());
+        Assert.StartsWith("no test report: the project was not built before the run (tests/Shop.Tests/bin/Debug/net10.0 did not exist)", project.GetProperty("reason").GetString(), StringComparison.Ordinal);
+        Assert.EndsWith("build first and run dotnet test --no-build", project.GetProperty("reason").GetString(), StringComparison.Ordinal);
+        Assert.Equal(1, report.GetProperty("totals").GetProperty("notBuiltProjects").GetInt32());
+        Assert.Contains("1 testing-platform project(s) were not built before the run", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
+        Assert.Contains("tests/Shop.Tests/Shop.Tests.csproj: not shown, no test report: the project was not built before the run", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Contains("- `tests/Shop.Tests/Shop.Tests.csproj`: no test report: the project was not built before the run", File.ReadAllText(summary), StringComparison.Ordinal);
     }
 
     /// <summary>A line from the analysis's log or the plan: anything that tells what the selection decided.</summary>

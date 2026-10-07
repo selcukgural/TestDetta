@@ -98,6 +98,20 @@ internal sealed record ShadowProject(string Path, string Mode, string Reason, in
     public bool MissingReport { get; init; }
 
     /// <summary>
+    /// True for a testing-platform project that was not built before the run: its build output did not exist, so
+    /// TestDetta could not tell which report option it takes (options are never guessed: one the project does not know
+    /// fails its run), it ran without a report, and its results cannot be compared with the selection.
+    /// <see cref="Reason"/> then says so (<see cref="NotBuiltReason"/>).
+    /// </summary>
+    public bool NotBuilt { get; init; }
+
+    /// <summary>What the report says of a project that was not built before the run (<see cref="NotBuilt"/>).</summary>
+    /// <param name="output">Its build output folder that did not exist, relative to the repository root.</param>
+    public static string NotBuiltReason(string output) =>
+        $"no test report: the project was not built before the run ({output} did not exist), so TestDetta could not tell which report option " +
+        "it takes and its failures cannot be compared with the selection; build first and run dotnet test --no-build";
+
+    /// <summary>
     /// The part of <see cref="WallSeconds"/> the selection would have spent: all of it for a project that runs
     /// completely, none for one left out, and for a filtered one the time outside its test classes (build,
     /// start-up, discovery) plus the measured time of the selected classes.
@@ -288,6 +302,12 @@ internal sealed record ShadowResult(bool Compared, string? NoResultReason, IRead
             scope += $"; {notRun} class(es) the selection knows did not run in this job and are not compared";
         }
 
+        if (Projects.Count(static p => p.NotBuilt) is > 0 and var notBuilt)
+        {
+            scope += $"; {notBuilt} testing-platform project(s) were not built before the run, so they wrote no test report and are not compared " +
+                     "(build first and run dotnet test --no-build)";
+        }
+
         var misses = With(ShadowVerdict.Miss).Count();
         var unclassified = With(ShadowVerdict.Unclassified).Count();
         var unexplained = Unexplained.Count();
@@ -315,9 +335,10 @@ internal static class ShadowReport
     /// compare failing tests (<c>failedTests</c>), <c>flaky</c> needs a pass in the full-run context too and an
     /// order-dependent failure is a miss or pre-existing; a project with <c>notRun</c> classes is <c>partial</c>, its
     /// mode and reason derived from the classes that ran; <c>missingReport</c>; <c>run.scopeKnown</c> and
-    /// <c>run.scope</c>; <c>analysisTimeoutSeconds</c>.
+    /// <c>run.scope</c>; <c>analysisTimeoutSeconds</c>. 4 (2026-10-07): a project's <c>notBuilt</c> and
+    /// <c>totals.notBuiltProjects</c> (a testing-platform project not built before the run, which wrote no report).
     /// </summary>
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     /// <summary>Writes the JSON report.</summary>
     /// <param name="result">What to write.</param>
@@ -407,6 +428,7 @@ internal static class ShadowReport
         }
 
         json.WriteNumber("unexplainedProjects"u8, result.Unexplained.Count());
+        json.WriteNumber("notBuiltProjects"u8, result.Projects.Count(static p => p.NotBuilt));
         json.WriteBoolean("unexplainedRun"u8, result.UnexplainedRun);
         json.WriteEndObject();
 
@@ -478,6 +500,7 @@ internal static class ShadowReport
         json.WriteBoolean("reported"u8, project.Reported);
         json.WriteBoolean("partial"u8, project.Partial);
         json.WriteBoolean("missingReport"u8, project.MissingReport);
+        json.WriteBoolean("notBuilt"u8, project.NotBuilt);
         json.WriteStartArray("classes"u8);
         foreach (var testClass in project.Classes)
         {
@@ -576,7 +599,12 @@ internal static class ShadowReport
             writer.WriteLine();
         }
 
-        foreach (var project in result.Unexplained)
+        foreach (var project in result.Projects.Where(static p => p.NotBuilt))
+        {
+            writer.WriteLine($"- {code(project.Path)}: {project.Reason}{(project.ExitCode is { } exit and not 0 ? $" (it failed with exit code {exit})" : string.Empty)}.");
+        }
+
+        foreach (var project in result.Unexplained.Where(static p => !p.NotBuilt))
         {
             writer.WriteLine(project.MissingReport
                 ? $"- {code(project.Path)} wrote no test report while your command failed (exit code {result.Run?.ExitCode}): the selection cannot be checked there."
@@ -652,7 +680,8 @@ internal static class ShadowReport
             }
         }
 
-        foreach (var project in result.Unexplained)
+        // A project not built before the run is named with its reason in the list of projects above.
+        foreach (var project in result.Unexplained.Where(static p => !p.NotBuilt))
         {
             stdout.WriteLine(project.MissingReport
                 ? $"  no test report while your command failed: {project.Path}"

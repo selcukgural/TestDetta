@@ -274,9 +274,15 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   command. The testing platform's report option is read from the build output (`dotnet msbuild
   -getProperty:TargetPath`, at most 2 minutes per lookup during the run), because an option a test project
   does not know fails it; a fresh checkout therefore has none to read, and a job should build first (as one
-  that runs `dotnet test --no-build` does). Open: per project, such a project gets no report either, so its
-  failures are unexplained; choosing the option from package references would avoid the build but a wrong
-  guess would fail the team's run. Legacy projects run through `TestRunner` as `td test` runs them. VSTest
+  that runs `dotnet test --no-build` does). **Limit, stated in every report** (2026-10-07): per project such a
+  project gets no report either, so its results cannot be compared; the project's entry says "no test report:
+  the project was not built before the run (<its build output> did not exist), so TestDetta could not tell which
+  report option it takes and its failures cannot be compared with the selection; build first and run dotnet test
+  --no-build" (`ShadowProject.NotBuilt`, JSON `notBuilt`, `totals.notBuiltProjects`), the verdict counts such
+  projects with the same advice, and the summary lists each. Its failures still count as unexplained. Report
+  options are never chosen from package references: a wrong guess would fail the team's run. The setup that
+  avoids it, in the Action: a `dotnet build` step before TestDetta's, and `dotnet-test-args: MySolution.sln
+  --no-build`. Legacy projects run through `TestRunner` as `td test` runs them. VSTest
   gets `--logger trx` unless the user names a TRX logger; a testing-platform project gets the report option
   its build output supports (xUnit v3's own, the TRX extension; NUnit's result XML through run settings only
   when the user gives no `--settings`, which it would replace), and none when the user already asks for a TRX
@@ -372,7 +378,7 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   same name; the upload has `continue-on-error`. It passes `-c <configuration>` and `dotnet-test-args` after
   `--`; naming the solution there makes it one command.
 
-### `testdetta-shadow.json` (schema 3)
+### `testdetta-shadow.json` (schema 4)
 
 Schema 2 (2026-10-07) against 1: decisions only for classes in the job's reports (`notRun` lists the rest
 by name), the project mode `not-shown`, a project `exitCode` that may be null, estimates only for projects
@@ -388,9 +394,12 @@ failed command runs that wrote no report is `missingReport: true` and counts in 
 `run.scopeKnown` and `run.scope`; `analysisTimeoutSeconds`; `run.command` no longer holds a results directory
 TestDetta added.
 
+Schema 4 (2026-10-07) against 3: a project's `notBuilt` (a testing-platform project whose build output did not
+exist when its run started, so no report could be asked for; its `reason` says so) and `totals.notBuiltProjects`.
+
 ```jsonc
 {
-  "schema": 3,
+  "schema": 4,
   "verdict": "Would have run 14 of 212 test classes (6.6%), 1 m 10 s of 18 m 30 s of test time; the whole test run took 9 m 40 s; …",
   "compared": true,                 // false: no selection, see noResultReason
   "noResultReason": "…",            // only when compared is false (the analysis failed or ran past its limit, a TestDetta error, a cancellation)
@@ -416,7 +425,7 @@ TestDetta added.
     "projects": 3, "failedProjects": 1, "classes": 212, "selectedClasses": 14, "notRunClasses": 0,
     "fullSeconds": 1110.0, "selectedSeconds": 70.0, "wallSeconds": 580.2,
     "estimatedFullSeconds": 900.0, "estimatedSelectedSeconds": 55.0,   // when maps have timings
-    "caught": 1, "misses": 0, "flaky": 0, "preExisting": 0, "unclassified": 0, "unexplainedProjects": 0,
+    "caught": 1, "misses": 0, "flaky": 0, "preExisting": 0, "unclassified": 0, "unexplainedProjects": 0, "notBuiltProjects": 0,
     "unexplainedRun": false
   },
   "projects": [{
@@ -429,6 +438,7 @@ TestDetta added.
     "reported": true,               // false: no test report, failures per class unknown
     "partial": false,               // true: some known classes did not run; mode and reason come from those that ran
     "missingReport": false,         // true: the command failed and this project, which it runs, wrote no report
+    "notBuilt": false,              // true: testing platform, not built before the run, so no report could be asked for
     "classes": [{                   // only classes in this job's reports
       "name": "Shop.Tests.TaxTests", "selected": true,
       "decision": "Coverage",       // ClassDecisionKind, or not-affected / unknown

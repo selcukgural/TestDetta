@@ -29,7 +29,7 @@ inputs:
     required: false
     default: 'false'
   dotnet-test-args:
-    description: "Test, shadow and audit modes. Extra arguments for every dotnet test, separated by spaces. In shadow mode, name your solution here (for example 'MySolution.sln') to have it run as one dotnet test command, as your own job runs it; without one, the one solution or project in working-directory runs, and with none there each test project runs on its own."
+    description: "Test, shadow and audit modes. Extra arguments for every dotnet test, separated by spaces. In shadow mode, name your solution here (for example 'MySolution.sln') to have it run as one dotnet test command, as your own job runs it; without one, the one solution or project in working-directory runs, and with none there each test project runs on its own. Testing-platform (Microsoft.Testing.Platform) projects: build first in a step before this one, with the same configuration, and add --no-build here; TestDetta reads the report option a project takes from its build output, so a project not built before the run writes no report and its failures cannot be compared."
     required: false
     default: ''
   max-map-age:

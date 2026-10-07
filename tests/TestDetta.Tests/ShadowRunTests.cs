@@ -296,7 +296,7 @@ public sealed class ShadowRunTests : IDisposable
         Assert.Contains("Shop.Tests.DiscountTests.New passes alone on the base commit", discount.GetProperty("note").GetString(), StringComparison.Ordinal);
         Assert.Equal(["Shop.Tests.DiscountTests.New", "Shop.Tests.DiscountTests.Old"], discount.GetProperty("failedTests").EnumerateArray().Select(static t => t.GetString()));
         Assert.Single(_dotnet.OnBase);
-        Assert.Equal(3, report.GetProperty("schema").GetInt32());
+        Assert.Equal(4, report.GetProperty("schema").GetInt32());
     }
 
     [Fact]

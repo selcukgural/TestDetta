@@ -503,6 +503,13 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
 
         /// <summary>Why its report could not be read, or null.</summary>
         public string? ReadError { get; init; }
+
+        /// <summary>
+        /// Under the testing platform, the build output folder that did not exist when the project's run started, or
+        /// null: the report option a project takes is read from its build output, so a project not built before the
+        /// run (a fresh checkout without a build step) runs without a report and its failures cannot be compared.
+        /// </summary>
+        public string? NotBuiltOutput { get; init; }
     }
 
     /// <summary>The full run of every test project and the run as a whole.</summary>
@@ -728,6 +735,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var options = BeforeRunSettings(userArguments);
         var userResults = ValueOf(options, "--results-directory") is { } given ? Path.GetFullPath(given, plan.Directory) : null;
         string? outputDirectory = null;
+        string? notBuilt = null;
         var report = Try<List<string>>(() =>
         {
             if (mode == DotnetTestMode.VSTest)
@@ -738,6 +746,14 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             outputDirectory = OutputDirectory(project.Path, plan.Directory, userArguments, QueryLimit).Directory;
             if (outputDirectory is null || HasPlatformReport(options))
             {
+                return [];
+            }
+
+            // Which report option it takes is known only from its build output; report options are never guessed from
+            // package references, since an option the project does not know fails its run.
+            if (!Directory.Exists(outputDirectory))
+            {
+                notBuilt = outputDirectory;
                 return [];
             }
 
@@ -817,6 +833,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         {
             Legacy = legacy,
             ReadError = read ? null : "its test report could not be read",
+            NotBuiltOutput = notBuilt,
         };
     }
 
@@ -841,7 +858,8 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var reported = run.Outcome?.ReportedClasses ?? new HashSet<string>(StringComparer.Ordinal);
         if (reported.Count == 0)
         {
-            var why = run.Outcome is not null ? "no test of it ran in this job"
+            var why = run.NotBuiltOutput is { } output ? ShadowProject.NotBuiltReason(Path.GetRelativePath(root, output).Replace('\\', '/'))
+                : run.Outcome is not null ? "no test of it ran in this job"
                 : run.ReadError is { } error ? error
                 : run.ExitCode is not null ? "it wrote no test report that could be read"
                 : run.InScope ? "it wrote no test report in this run"
@@ -850,6 +868,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             {
                 NotRun = [.. decisions.Keys.Order(StringComparer.Ordinal)],
                 MissingReport = run.ExitCode is null && run.InScope && commandExitCode != 0,
+                NotBuilt = run.NotBuiltOutput is not null,
             };
         }
 
