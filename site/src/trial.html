@@ -1,7 +1,8 @@
 <!-- title: Free trial; description: Try {{name}} on your private repositories for {{trialDays}} days, without a card. -->
 <div class="wrap legal prose trial">
-<h1>Try {{name}} for {{trialDays}} days</h1>
+<h1>Try {{name}} on your private repositories for {{trialDays}} days</h1>
 <p class="lead">No card and no sales call. Tell us where the license should go and which repositories it covers; it arrives by email within a minute.</p>
+<div class="callout"><p><strong>Public repository?</strong> You need neither a trial nor a license. On GitHub Actions and GitLab CI, {{name}} sees that the repository is public and runs with every feature, for free. <a href="/docs/">Get started</a>.</p></div>
 
 <form class="trial-form" data-trial data-endpoint="{{trialEndpoint}}" data-open="{{trialsOpen}}" novalidate
   data-msg-working="Preparing your request…"
@@ -32,7 +33,6 @@
   <li>One trial per organization and per email address in 12 months.</li>
   <li>One reminder email 3 days before the trial ends, unless you have subscribed by then.</li>
   <li>When it ends, {{name}} runs every test again, as it did before. Nothing in your pipeline breaks.</li>
-  <li>Public repositories never need a license.</li>
 </ul>
 <p>To keep going after the trial, <a href="/pricing/">subscribe</a> and put the new license in place of the trial one. What we keep about your trial, and for how long, is in the <a href="/legal/privacy/">privacy policy</a>.</p>
 </div>

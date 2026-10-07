@@ -1,7 +1,8 @@
-<!-- title: 無料トライアル; description: {{name}} をプライベートリポジトリで {{trialDays}} 日間、カードなしでお試しください。; source: 9d9961b9d911 -->
+<!-- title: 無料トライアル; description: {{name}} をプライベートリポジトリで {{trialDays}} 日間、カードなしでお試しください。; source: f1b46720afd0 -->
 <div class="wrap legal prose trial">
-<h1>{{name}} を {{trialDays}} 日間お試しください</h1>
+<h1>{{name}} をプライベートリポジトリで {{trialDays}} 日間お試しください</h1>
 <p class="lead">カード不要、営業の電話もありません。ライセンスの送り先と対象のリポジトリを入力すると、1 分以内にメールでライセンスが届きます。</p>
+<div class="callout"><p><strong>パブリックリポジトリですか？</strong> トライアルもライセンスも不要です。GitHub Actions と GitLab CI では、{{name}} がリポジトリの公開を検出し、すべての機能を無料で使えます。<a href="/docs/">始め方</a>をご覧ください。</p></div>
 
 <form class="trial-form" data-trial data-endpoint="{{trialEndpoint}}" data-open="{{trialsOpen}}" novalidate
   data-msg-working="リクエストを準備しています…"
@@ -32,7 +33,6 @@
   <li>トライアルは組織ごと、メールアドレスごとに 12 か月に 1 回です。</li>
   <li>それまでに購読されていない場合、終了の 3 日前に一度だけリマインダーのメールが届きます。</li>
   <li>終了後、{{name}} は以前と同じようにすべてのテストを実行します。パイプラインが壊れることはありません。</li>
-  <li>パブリックリポジトリにはライセンスは不要です。</li>
 </ul>
 <p>トライアル後も続けるには、<a href="/pricing/">購読</a>して、新しいライセンスをトライアルのライセンスと置き換えてください。トライアルについて何をどのくらいの期間保存するかは、<a href="/legal/privacy/">プライバシーポリシー</a>に記載しています。</p>
 </div>
