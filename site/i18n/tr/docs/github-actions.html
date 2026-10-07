@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: 02633ab62c78 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: 5a2fd740fcf0 -->
 <h1>GitHub Actions</h1>
 <p class="lead">Varsayılan branch'teki her commit için bir harita kaydedin ve pull request'lerin yalnızca değişikliklerinin etkilediği testleri çalıştırmasını sağlayın. Action {{name}}'yı kendisi derler ve haritaları Actions önbelleğinde tutar.</p>
 
@@ -67,7 +67,7 @@ jobs:
   <thead><tr><th>Girdi</th><th>Varsayılan</th><th>Açıklama</th></tr></thead>
   <tbody>
     <tr><td><code>mode</code></td><td></td><td>Pull request'lerde <code>test</code> (etkilenen testleri çalıştırır), {{name}}'yı değerlendirirken pull request'lerde <code>shadow</code> (her testi çalıştırır ve seçimin neyi dışarıda bırakacağını raporlar; lisans gerekmez), varsayılan branch'te <code>record</code> (kapsam haritalarını kaydeder), zamanlanmış olarak <code>audit</code> (kodunuzu bir kopyada değişiklik değişiklik bozar ve seçimin başarısız olan her testi çalıştırdığını denetler; lisans gerekmez). Zorunlu.</td></tr>
-    <tr><td><code>base</code></td><td>PR'ın base branch'i</td><td>Test modunda karşılaştırılacak branch. Pull request'ler dışında bunu ayarlayın.</td></tr>
+    <tr><td><code>base</code></td><td>PR'ın base branch'i</td><td>Test ve shadow modlarında karşılaştırılacak branch. Pull request'ler dışında bunu ayarlayın.</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Testleri derlemek ve çalıştırmak için derleme yapılandırması.</td></tr>
     <tr><td><code>projects</code></td><td>tüm test projeleri</td><td>Record modu: her satıra bir tane olmak üzere <code>.csproj</code> yolları.</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>Record modu: test projesi başına test host süreci sayısı; her süreç testlerini yine birer birer çalıştırır. Test paketinin aynı anda birden fazla test sürecini kaldırabilmesi gerekir.</td></tr>
@@ -75,6 +75,7 @@ jobs:
     <tr><td><code>dotnet-test-args</code></td><td></td><td>Test, shadow ve audit modları: boşlukla ayrılmış ek <code>dotnet test</code> argümanları. Shadow mode'da solution'ınızı burada belirtirseniz tek bir komut olarak çalışır.</td></tr>
     <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Test, shadow ve audit modları: bir haritanın merge base'in kaç commit gerisinde olabileceği; aradaki değişiklikler köprülenir. <code>0</code> yalnızca tam eşleşen haritayı kullanır.</td></tr>
     <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Test, shadow ve audit modları: daha eski bir haritadan bu yana yapılan değişiklikler bir derleme dosyası, yapılandırma ya da global using içerdiğinde, <code>all</code> etkilenen test projelerini tamamen çalıştırır; <code>name</code> isimlere göre karar verir (daha hızlıdır, ancak yapılandırma ya da reflection üzerinden yapılan çağrıları göremez).</td></tr>
+    <tr><td><code>shadow-artifact-suffix</code></td><td></td><td>Shadow mode: bir matrix'in kollarını bir bakışta ayırt etmek için rapor artifact'inin adına eklenir, örneğin matrix değerleriniz. Ad, bu olmadan da benzersizdir.</td></tr>
     <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>Audit modu: bu kadar değişiklik testleri bozduğunda durur.</td></tr>
     <tr><td><code>audit-max-mutants</code></td><td>sınır yok</td><td>Audit modu: bu kadar değişiklik testleri çalıştırdıktan sonra durur.</td></tr>
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit modu: bu süreden sonra yeni bir değişikliğe başlamaz (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; sınırsız için <code>none</code>). Job'un <code>timeout-minutes</code> değerinin altında tutun.</td></tr>
@@ -87,7 +88,8 @@ jobs:
 </table>
 
 <h2 id="shadow">Shadow mode</h2>
-<p>{{name}}'yı hiçbir testi atlamadan denemek için pull request'lerde <code>mode: shadow</code> kullanın. Her test çalışır ve job'un sonucu bu çalıştırmanınkidir; job özeti ve <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;</code> artifact'i seçimin neyi çalıştıracağını, ölçülen dakikaları ve dışarıda bırakacağı her başarısız sınıfı gösterir. Lisans gerektirmez ve hiçbir ağ çağrısı yapmaz. Kendi job'unuzun yaptığı gibi tek bir komut olarak çalışması için solution'ınızı <code>dotnet-test-args</code> içinde belirtin; bkz. <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
+<p>{{name}}'yı hiçbir testi atlamadan denemek için pull request'lerde <code>mode: shadow</code> kullanın. Komutunuzun çalıştırdığı her test çalışır ve job'un sonucu bu çalıştırmanınkidir; job özeti ve rapor artifact'i seçimin neyi çalıştıracağını, ölçülen dakikaları ve dışarıda bırakacağı her başarısız sınıfı gösterir. Artifact'in adı <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code> biçimindedir, her job ve matrix kolu için bir tane (<code>shadow-artifact-suffix</code> kendi parçanızı ekler), ve 90 gün saklanır. Kendi job'unuzun yaptığı gibi tek bir komut olarak çalışması için solution'ınızı <code>dotnet-test-args</code> içinde belirtin; bkz. <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
+<p>Lisans gerektirmez, bu yüzden lisans secret'ı ona iletilmez ve {{name}}'nın kendisi shadow mode'da hiçbir ağ çağrısı yapmaz. Action, {{name}} paketini nuget.org'dan indirir (SHA-512'sine karşı doğrulanarak) ve test modunda olduğu gibi Actions önbelleğinizdeki haritaları listeler ve geri yükler. Testlerden önceki hiçbir adım job'u düşürmez: biri kendi işini yapamazsa (shallow bir checkout, indirme, eksik bir base branch, geçersiz bir girdi) ya da {{name}} testlerin bir sonucu olmadan biterse, adım bunun yerine aynı argümanlarla düz <code>dotnet test</code> komutunuzu çalıştırır ve job özeti nedenini söyler. Checksum'ı eşleşmeyen bir paket asla çalıştırılmaz. Raporun yüklenmesinin başarısız olması da job'u asla düşürmez.</p>
 <pre><code>      - if: github.event_name == 'pull_request'
         uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
         with:

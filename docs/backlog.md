@@ -276,13 +276,20 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    the report, and the Action's `mode: shadow` with the artifact, are built (as-built section of the
    design); every classification time limit is an option and an Action input, with defaults, under an
    overall budget (45 min) that never touches the full run. Since the owner's decisions of 2026-10-07:
-   shadow mode needs no license and makes no network call, shows decisions only for the classes the job ran
-   (nothing of the selection before the full run ends), runs the team's own `dotnet test` command as given
-   (a solution, a project, a directory or no argument; otherwise per project, with the reason in the
-   report), reports the whole run's wall time, and the JSON is schema 2. Graduation: within 30 days, 40 pull
-   requests with a shadow result and no unexplained miss, plus one `td audit` run (item 7). Open: the roll-up
-   (`td shadow report`), the shadow-mode and reviewer pages, replaying real pull request histories before a
-   partner sees it.
+   shadow mode needs no license and TestDetta makes no network call in it, shows decisions only for the
+   classes the job ran (nothing of the selection before the full run ends), runs the team's own `dotnet test`
+   command as given (a solution, a project, a directory or no argument; otherwise per project, with the
+   reason in the report), and reports the whole run's wall time. Review fixes (2026-10-07, schema 3): the
+   team's results directory and files are never touched (reports are read in place and copied); fail-open
+   before the run (the team's plain command), after it (its exit code, `compared: false`) and in the Action
+   (a step before the tests that cannot do its part runs plain `dotnet test`; unique, non-failing report
+   artifacts per job and matrix leg); the per-project run keeps to the command's projects; verdicts compare
+   failing tests, and a class that passes alone is checked in its full-run context before it is called
+   flaky; reruns write only into TestDetta's folder and the base rerun builds on its own; an analysis time
+   limit; Ctrl+C and SIGTERM clean up. Graduation: within 30 days, 40 pull requests with a shadow result and
+   no unexplained miss, plus one `td audit` run (item 7). Open: the roll-up (`td shadow report`), the
+   shadow-mode and reviewer pages, replaying real pull request histories before a partner sees it; the base
+   worktree does not see files above the repository root.
 7. **`td audit` on the team's own code** (owner, 2026-10-07: part of v1): the corpus method run on the
    customer's repository (docs/design/shadow-mode.md, "`td audit`"): IL mutants of the team's members, the
    tests run the full way, and the selection checked against every class that failed. Graduation needs one

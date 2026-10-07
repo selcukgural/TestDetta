@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: 02633ab62c78 -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: 5a2fd740fcf0 -->
 <h1>GitHub Actions</h1>
 <p class="lead">既定のブランチのコミットごとにマップを記録し、プルリクエストでは変更が影響するテストだけを実行します。アクションが {{name}} 自体をビルドし、マップを Actions のキャッシュに保持します。</p>
 
@@ -67,7 +67,7 @@ jobs:
   <thead><tr><th>入力</th><th>既定値</th><th>説明</th></tr></thead>
   <tbody>
     <tr><td><code>mode</code></td><td></td><td>プルリクエストでは <code>test</code>（影響を受けるテストを実行）、{{name}} を評価している間のプルリクエストでは <code>shadow</code>（すべてのテストを実行し、選択が除外したはずのものを報告。ライセンス不要）、既定のブランチでは <code>record</code>（カバレッジマップを記録）、スケジュール実行では <code>audit</code>（コピーの中でコードを 1 変更ずつ壊し、失敗したすべてのテストを選択が実行したかを確認。ライセンス不要）。必須です。</td></tr>
-    <tr><td><code>base</code></td><td>PR のベースブランチ</td><td>test モードで比較するブランチ。プルリクエスト以外で使う場合は指定してください。</td></tr>
+    <tr><td><code>base</code></td><td>PR のベースブランチ</td><td>test モードと shadow モードで比較するブランチ。プルリクエスト以外で使う場合は指定してください。</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>テストのビルドと実行に使うビルド構成。</td></tr>
     <tr><td><code>projects</code></td><td>すべてのテストプロジェクト</td><td>record モード：<code>.csproj</code> のパスを 1 行に 1 つずつ指定します。</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>record モード：テストプロジェクトごとのテストホストプロセス数。各プロセスはテストを 1 つずつ実行します。テストスイートが複数のテストプロセスの同時実行に耐えられる必要があります。</td></tr>
@@ -75,6 +75,7 @@ jobs:
     <tr><td><code>dotnet-test-args</code></td><td></td><td>test、shadow、audit モード：<code>dotnet test</code> に渡す追加の引数（スペース区切り）。shadow モードでは、ここにソリューションを指定すると 1 つのコマンドとして実行されます。</td></tr>
     <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>test、shadow、audit モード：マップがマージベースより何コミット遅れていてよいか。その間の変更は橋渡しされます。<code>0</code> を指定すると完全に一致するマップだけを使用します。</td></tr>
     <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>test、shadow、audit モード：古いマップ以降の変更にビルドファイル、構成、グローバル using が含まれる場合、<code>all</code> は影響を受けるテストプロジェクトを丸ごと実行し、<code>name</code> は名前で判断します（高速ですが、構成やリフレクションを介した呼び出しは捉えられません）。</td></tr>
+    <tr><td><code>shadow-artifact-suffix</code></td><td></td><td>shadow モード：レポートのアーティファクト名に追加されます。たとえばマトリックスの値を指定すると、マトリックスの各レッグをひと目で区別できます。指定しなくても名前は一意です。</td></tr>
     <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>audit モード：この数の変更がテストを壊した時点で停止します。</td></tr>
     <tr><td><code>audit-max-mutants</code></td><td>制限なし</td><td>audit モード：この数の変更がテストを実行した後に停止します。</td></tr>
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>audit モード：この時間の経過後は新しい変更を始めません（<code>90s</code>、<code>15m</code>、<code>1h30m</code>。制限なしは <code>none</code>）。ジョブの <code>timeout-minutes</code> より短くしてください。</td></tr>
@@ -87,7 +88,8 @@ jobs:
 </table>
 
 <h2 id="shadow">シャドウモード</h2>
-<p>何もスキップせずに {{name}} を試すには、プルリクエストで <code>mode: shadow</code> を使います。すべてのテストが実行され、ジョブの結果はその実行のものになります。ジョブサマリーとアーティファクト <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;</code> には、選択が実行したはずのテスト、実測の時間、除外したはずの失敗クラスが示されます。ライセンスは不要で、ネットワーク呼び出しも一切行いません。普段のジョブと同じように 1 つのコマンドとして実行するには、<code>dotnet-test-args</code> にソリューションを指定してください。<a href="/docs/cli/#shadow"><code>td test --shadow</code></a> を参照してください。</p>
+<p>何もスキップせずに {{name}} を試すには、プルリクエストで <code>mode: shadow</code> を使います。コマンドで実行されるすべてのテストが実行され、ジョブの結果はその実行のものになります。ジョブサマリーとレポートのアーティファクトには、選択が実行したはずのテスト、実測の時間、除外したはずの失敗クラスが示されます。アーティファクトの名前は <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code> で、ジョブとマトリックスのレッグごとに 1 つ作られ（<code>shadow-artifact-suffix</code> で独自の部分を追加できます）、90 日間保持されます。普段のジョブと同じように 1 つのコマンドとして実行するには、<code>dotnet-test-args</code> にソリューションを指定してください。<a href="/docs/cli/#shadow"><code>td test --shadow</code></a> を参照してください。</p>
+<p>ライセンスは不要なので、ライセンスのシークレットは渡されません。また、shadow モードでは {{name}} 自身はネットワーク呼び出しを一切行いません。アクションは test モードと同じように、nuget.org から {{name}} のパッケージをダウンロードし（SHA-512 で検証）、Actions のキャッシュにあるマップを一覧表示して復元します。テストより前のステップでジョブが失敗することはありません。いずれかのステップが自分の役割を果たせない場合（シャローチェックアウト、ダウンロード、ベースブランチの欠落、無効な入力）、または {{name}} がテストの結果なしで終了した場合、そのステップは代わりに同じ引数で通常の <code>dotnet test</code> を実行し、ジョブサマリーにその理由が記載されます。チェックサムが一致しないパッケージが実行されることはありません。レポートのアップロードに失敗しても、ジョブが失敗することはありません。</p>
 <pre><code>      - if: github.event_name == 'pull_request'
         uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
         with:

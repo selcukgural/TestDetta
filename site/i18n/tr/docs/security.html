@@ -1,4 +1,4 @@
-<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: b04314c0bd20 -->
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 88b8db75b638 -->
 <h1>Güvenlik ve veri</h1>
 <p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz, kapsam haritalarınız ve test sonuçlarınız oradan hiç çıkmaz. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
 
@@ -23,6 +23,7 @@
     <tr><td><code>--maps-dir</code> klasörü</td><td>Önceki commit'lerin haritaları, commit başına bir klasör, sizin seçtiğiniz yerde tutulur</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td><code>td audit</code> raporu (ya da <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> shadow mode'unki</td></tr>
     <tr><td><code>--work-dir</code> (<code>/tmp</code>) altında <code>td-audit-*</code></td><td><code>td audit</code> çalışırken: kodun bilerek bozulup test edildiği, çalışma ağacının bir kopyası. Sonunda ya da bir çökmeden sonra bir sonraki audit tarafından silinir</td></tr>
+    <tr><td>geçici klasörde <code>testdetta-shadow-*</code></td><td><code>td test --shadow</code> çalışırken: test raporlarının kopyaları, yeniden çalıştırmaların sonuçları ve base commit'in bir checkout'u (bir git worktree). Sonunda silinir, Ctrl+C ya da iptal edilen bir job'dan sonra da. Sonuç dizininiz olduğu gibi bırakılır; shadow mode'un istediği TRX raporları orada, sizinkilerin yanında kalır</td></tr>
   </tbody>
 </table>
 <p>GitHub Actions'ta haritalar deponuzun Actions önbelleğinde saklanır. <code>.testdetta/coverage/</code> ve <code>.testdetta/cache/</code> otomatik üretilir; bunları sürüm kontrolünün dışında tutun.</p>
@@ -35,7 +36,7 @@
   <li><code>HTTPS_PROXY</code> dikkate alınır.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> bu çağrıyı kapatır. Çevrimdışı ve kurumsal lisanslar hiçbir zaman dışarıya çağrı yapmaz.</li>
 </ul>
-<p>Açık depolar lisansa ihtiyaç duymaz ve hiçbir çağrı yapmaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) ve audit (<code>td audit</code>) da çağrı yapmaz.</p>
+<p>Açık depolar lisansa ihtiyaç duymaz ve hiçbir çağrı yapmaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) ve audit (<code>td audit</code>) da çağrı yapmaz. Böyle bir job'da ağı kullanan şey {{name}}'nın kendisi değildir: GitHub Action, {{name}} paketini nuget.org'dan indirir ve sabitlediği SHA-512'ye karşı doğrular, kapsam haritalarını da Actions önbelleğinizde listeler ve geri yükler; derlemeleriniz paketleri her zaman olduğu gibi restore eder ve shadow mode'un base commit üzerindeki yeniden çalıştırması o commit'in paketlerini her derleme gibi restore eder.</p>
 
 <h2 id="license-check">Lisans nasıl kontrol edilir</h2>
 <p>Lisans imzalı bir dizedir ve {{name}}'ya gömülü bir açık anahtarla sizin makinenizde doğrulanır. Kapsadığı depoları adlandırır; bunlar, içindeki kimlik bilgileri önce çıkarılarak <code>origin</code> remote'uyla eşleştirilir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: bunun yerine, tıpkı {{name}}'dan önceki gibi tüm testler çalışır. <a href="/docs/license/">Lisanslar hakkında daha fazlası</a>.</p>

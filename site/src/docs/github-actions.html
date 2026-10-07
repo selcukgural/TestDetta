@@ -67,7 +67,7 @@ jobs:
   <thead><tr><th>Input</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>mode</code></td><td></td><td><code>test</code> on pull requests (run affected tests), <code>shadow</code> on pull requests while you evaluate {{name}} (run every test and report what the selection would have left out; no license needed), <code>record</code> on the default branch (record coverage maps), <code>audit</code> on a schedule (break your code one change at a time in a copy and check the selection ran every test that failed; no license needed). Required.</td></tr>
-    <tr><td><code>base</code></td><td>the PR's base branch</td><td>Branch to compare with in test mode. Outside pull requests, set it.</td></tr>
+    <tr><td><code>base</code></td><td>the PR's base branch</td><td>Branch to compare with in test and shadow modes. Outside pull requests, set it.</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Build configuration for building and running the tests.</td></tr>
     <tr><td><code>projects</code></td><td>all test projects</td><td>Record mode: <code>.csproj</code> paths, one per line.</td></tr>
     <tr><td><code>parallel</code></td><td><code>1</code></td><td>Record mode: test host processes per test project; each still runs its tests one at a time. The suite must tolerate several test processes at once.</td></tr>
@@ -75,6 +75,7 @@ jobs:
     <tr><td><code>dotnet-test-args</code></td><td></td><td>Test, shadow and audit modes: extra <code>dotnet test</code> arguments, separated by spaces. In shadow mode, name your solution here to run it as one command.</td></tr>
     <tr><td><code>max-map-age</code></td><td><code>50</code></td><td>Test, shadow and audit modes: commits a map may be behind the merge base; the changes in between are bridged. <code>0</code> uses only an exact map.</td></tr>
     <tr><td><code>drift-fallback</code></td><td><code>all</code></td><td>Test, shadow and audit modes: when the changes since an older map include a build file, configuration or a global using, <code>all</code> runs the affected test projects completely; <code>name</code> decides them by name (faster, blind to calls made through configuration or reflection).</td></tr>
+    <tr><td><code>shadow-artifact-suffix</code></td><td></td><td>Shadow mode: added to the report artifact's name, for example your matrix values, to tell the legs of a matrix apart at a glance. The name is unique without it.</td></tr>
     <tr><td><code>audit-target-broken</code></td><td><code>100</code></td><td>Audit mode: stop once this many changes broke tests.</td></tr>
     <tr><td><code>audit-max-mutants</code></td><td>no limit</td><td>Audit mode: stop after this many changes ran tests.</td></tr>
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit mode: start no change after this long (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> for no limit). Keep it below the job's <code>timeout-minutes</code>.</td></tr>
@@ -87,7 +88,8 @@ jobs:
 </table>
 
 <h2 id="shadow">Shadow mode</h2>
-<p>To try {{name}} without skipping anything, use <code>mode: shadow</code> on pull requests. Every test runs and the job's result is that run's; the job summary and the artifact <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;</code> show what the selection would have run, the measured minutes, and any failing class it would have left out. It needs no license and makes no network call. Name your solution in <code>dotnet-test-args</code> to run it as one command, as your own job does; see <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
+<p>To try {{name}} without skipping anything, use <code>mode: shadow</code> on pull requests. Every test your command runs, runs, and the job's result is that run's; the job summary and the report artifact show what the selection would have run, the measured minutes, and any failing class it would have left out. The artifact is named <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code>, one per job and matrix leg (<code>shadow-artifact-suffix</code> adds your own part), and is kept for 90 days. Name your solution in <code>dotnet-test-args</code> to run it as one command, as your own job does; see <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
+<p>It needs no license, so the license secret is not passed to it, and {{name}} itself makes no network call in shadow mode. The Action downloads the {{name}} package from nuget.org (checked against its SHA-512) and lists and restores the maps in your Actions cache, as in test mode. No step before the tests fails the job: if one cannot do its part (a shallow checkout, the download, a missing base branch, an invalid input), or {{name}} ends without a result of the tests, the step runs your plain <code>dotnet test</code> with the same arguments instead, and the job summary says why. A package that does not match its checksum is never run. A failed upload of the report never fails the job either.</p>
 <pre><code>      - if: github.event_name == 'pull_request'
         uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
         with:
