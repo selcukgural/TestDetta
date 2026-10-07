@@ -1,12 +1,12 @@
 name: TestDetta
-description: Run only the .NET tests a change affects on pull requests, and record coverage maps on the default branch.
+description: Run only the .NET tests a change affects on pull requests, record coverage maps on the default branch, and audit the selection on your own code.
 branding:
   icon: filter
   color: blue
 
 inputs:
   mode:
-    description: "'test' on pull requests (run affected tests), 'shadow' on pull requests while you evaluate TestDetta (run every test, report what the selection would have left out, keep the report as an artifact; needs no license), 'record' on the default branch (record coverage maps)."
+    description: "'test' on pull requests (run affected tests), 'shadow' on pull requests while you evaluate TestDetta (run every test, report what the selection would have left out, keep the report as an artifact; needs no license), 'record' on the default branch (record coverage maps), 'audit' on a schedule (break members of your code one at a time in a copy of the working tree, check the selection ran every test that failed, keep the report as an artifact; needs no license)."
     required: true
   base:
     description: Branch to compare with in test and shadow modes. Defaults to the pull request's base branch.
@@ -29,15 +29,15 @@ inputs:
     required: false
     default: 'false'
   dotnet-test-args:
-    description: "Test and shadow modes only. Extra arguments for every dotnet test, separated by spaces. In shadow mode, name your solution here (for example 'MySolution.sln') to have it run as one dotnet test command, as your own job runs it; without one, the one solution or project in working-directory runs, and with none there each test project runs on its own."
+    description: "Test, shadow and audit modes. Extra arguments for every dotnet test, separated by spaces. In shadow mode, name your solution here (for example 'MySolution.sln') to have it run as one dotnet test command, as your own job runs it; without one, the one solution or project in working-directory runs, and with none there each test project runs on its own."
     required: false
     default: ''
   max-map-age:
-    description: Test and shadow modes only. Use the newest coverage map recorded up to this many first-parent commits before the merge base; the changes in between are bridged. 0 uses only a map recorded at the merge base.
+    description: Test, shadow and audit modes. Use the newest coverage map recorded up to this many first-parent commits before the merge base; the changes in between are bridged. 0 uses only a map recorded at the merge base.
     required: false
     default: '50'
   drift-fallback:
-    description: "Test and shadow modes only. When the changes since an older map include a build file, configuration or a global using: 'all' runs the affected test projects completely (safest), 'name' decides them by name (faster, blind to calls made through configuration or reflection)."
+    description: "Test, shadow and audit modes. When the changes since an older map include a build file, configuration or a global using: 'all' runs the affected test projects completely (safest), 'name' decides them by name (faster, blind to calls made through configuration or reflection)."
     required: false
     default: all
   shadow-rerun-timeout:
@@ -60,12 +60,28 @@ inputs:
     description: "Shadow mode only. Longest all classification reruns and the base checkout may take together; failures not classified by then are reported as not classified. The full run and the job's result are never affected. Same syntax; empty keeps the default (45m)."
     required: false
     default: ''
+  audit-target-broken:
+    description: "Audit mode only. Stop once this many changes broke tests. Empty keeps the default (100: with no miss, the 95% upper bound of the miss rate is below 3%)."
+    required: false
+    default: ''
+  audit-max-mutants:
+    description: "Audit mode only. Stop after this many changes ran tests. Empty keeps the default (no limit)."
+    required: false
+    default: ''
+  audit-budget:
+    description: "Audit mode only. Start no change after this long: 90s, 15m, 4h or 1h30m; a plain number is minutes; 0 or none means no limit. Empty keeps the default (4h). Keep it under the job's timeout-minutes."
+    required: false
+    default: ''
+  audit-parallel:
+    description: "Audit mode only. Changes tested at once, each in its own copy of the working tree. Empty keeps the default (1); every one runs test hosts, so memory grows with it."
+    required: false
+    default: ''
   github-token:
-    description: Test and shadow modes only. Token that lists the repository's Actions caches to find the newest map (needs the actions read permission). Without it only a map at the merge base is found.
+    description: Test, shadow and audit modes. Token that lists the repository's Actions caches to find the newest map (needs the actions read permission). Without it only a map at the merge base is found.
     required: false
     default: ${{ github.token }}
   license:
-    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none, and shadow mode never reads it. Without a valid license every test runs; the job never fails because of it."
+    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none, and shadow and audit modes never read it. Without a valid license every test runs; the job never fails because of it."
     required: false
     default: ''
   working-directory:
@@ -150,16 +166,19 @@ runs:
         echo "merge-base=$(git merge-base "origin/$base" HEAD)" >> "$GITHUB_OUTPUT"
 
     - name: Find newest coverage map
-      if: inputs.mode == 'test' || inputs.mode == 'shadow'
+      if: inputs.mode == 'test' || inputs.mode == 'shadow' || inputs.mode == 'audit'
       id: map
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         GH_REPO: ${{ github.repository }}
+        MODE: ${{ inputs.mode }}
         MERGE_BASE: ${{ steps.base.outputs.merge-base }}
         MAX_MAP_AGE: ${{ inputs.max-map-age }}
       run: |
+        # The audit compares every change with the commit it runs on.
+        if [ "$MODE" = audit ]; then MERGE_BASE=$(git rev-parse HEAD); fi
         if [[ ! "$MAX_MAP_AGE" =~ ^[0-9]{1,4}$ ]]; then
           echo "::error::'max-map-age' must be a number of commits from 0 to 9999."
           exit 1
@@ -184,7 +203,7 @@ runs:
         echo "key=$key" >> "$GITHUB_OUTPUT"
 
     - name: Restore coverage map
-      if: inputs.mode == 'test' || inputs.mode == 'shadow'
+      if: inputs.mode == 'test' || inputs.mode == 'shadow' || inputs.mode == 'audit'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.working-directory }}/.testdetta/coverage
@@ -245,6 +264,44 @@ runs:
       with:
         name: testdetta-shadow-${{ github.run_id }}-${{ github.run_attempt }}
         path: ${{ runner.temp }}/testdetta-shadow/testdetta-shadow.json
+        if-no-files-found: ignore
+        retention-days: 90
+
+    # The audit (docs/design/audit.md): every change is written into a copy of the working tree under RUNNER_TEMP,
+    # tested there and taken out again; the checkout and its build output are only read. No license is read and
+    # nothing is sent, so the license secret is not passed to this step. Meant for a schedule: it runs for hours.
+    - name: Audit the selection on your code
+      if: inputs.mode == 'audit'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TESTDETTA: ${{ runner.temp }}/testdetta/TestDetta.Cli.dll
+        CONFIGURATION: ${{ inputs.configuration }}
+        EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
+        MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
+        DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
+        AUDIT_REPORT: ${{ runner.temp }}/testdetta-audit/testdetta-audit.json
+        AUDIT_TARGET_BROKEN: ${{ inputs.audit-target-broken }}
+        AUDIT_MAX_MUTANTS: ${{ inputs.audit-max-mutants }}
+        AUDIT_BUDGET: ${{ inputs.audit-budget }}
+        AUDIT_PARALLEL: ${{ inputs.audit-parallel }}
+      run: |
+        read -r -a extra <<< "$EXTRA_ARGS"
+        # Only the limits given are passed; td checks their syntax and keeps its defaults for the rest.
+        limits=()
+        if [ -n "$AUDIT_TARGET_BROKEN" ]; then limits+=(--target-broken "$AUDIT_TARGET_BROKEN"); fi
+        if [ -n "$AUDIT_MAX_MUTANTS" ]; then limits+=(--max-mutants "$AUDIT_MAX_MUTANTS"); fi
+        if [ -n "$AUDIT_BUDGET" ]; then limits+=(--budget "$AUDIT_BUDGET"); fi
+        if [ -n "$AUDIT_PARALLEL" ]; then limits+=(--parallel "$AUDIT_PARALLEL"); fi
+        dotnet "$TESTDETTA" audit --report "$AUDIT_REPORT" --work-dir "$RUNNER_TEMP" "${limits[@]}" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+
+    # Kept whatever the result, for the graduation evidence (docs/design/shadow-mode.md).
+    - name: Keep the audit report
+      if: always() && inputs.mode == 'audit'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: testdetta-audit-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/testdetta-audit/testdetta-audit.json
         if-no-files-found: ignore
         retention-days: 90
 
