@@ -60,6 +60,14 @@ inputs:
     description: "Shadow mode only. Longest all classification reruns and the base checkout may take together; failures not classified by then are reported as not classified. The full run and the job's result are never affected. Same syntax; empty keeps the default (45m)."
     required: false
     default: ''
+  shadow-analysis-timeout:
+    description: "Shadow mode only. Longest TestDetta's analysis before the tests may take; past it every test runs without a comparison and the report says why. Same syntax; empty keeps the default (10m)."
+    required: false
+    default: ''
+  shadow-artifact-suffix:
+    description: "Shadow mode only. Added to the report artifact's name, for example the matrix values, to tell the legs of a matrix apart at a glance. The name is unique without it."
+    required: false
+    default: ''
   audit-target-broken:
     description: "Audit mode only. Stop once this many changes broke tests. Empty keeps the default (100: with no miss, the 95% upper bound of the miss rate is below 3%)."
     required: false
@@ -96,77 +104,109 @@ inputs:
 runs:
   using: composite
   steps:
+    # In shadow mode nothing before the tests may fail the job: a step that cannot do its part says why, sets
+    # "skip", and the shadow step then runs the team's plain dotnet test instead of TestDetta.
     - name: Check git history
+      id: history
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        MODE: ${{ inputs.mode }}
       run: |
         if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          if [ "$MODE" = shadow ]; then
+            echo "::warning::TestDetta compares with a base commit and needs the full history (actions/checkout with fetch-depth: 0); shadow mode runs your tests as plain dotnet test instead."
+            echo "skip=the checkout is shallow, and TestDetta needs the full history (actions/checkout with fetch-depth: 0)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "::error::TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0."
           exit 1
         fi
 
     - name: Set up .NET for TestDetta
       if: inputs.setup-dotnet == 'true'
+      id: setup
+      continue-on-error: ${{ inputs.mode == 'shadow' }}
       uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
       with:
         dotnet-version: 10.0.x
 
     # From source where the action has it (this repository's own workflows use it from the checkout);
     # otherwise the TestDetta package that tool.lock pins, checked against its SHA-512 before use.
+    # A package that does not match its SHA-512 is never run, in any mode; shadow mode then runs plain dotnet test.
     - name: Get TestDetta
+      id: tool
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
         TESTDETTA_OUT: ${{ runner.temp }}/testdetta
+        MODE: ${{ inputs.mode }}
       run: |
+        fail() {
+          if [ "$MODE" = shadow ]; then
+            echo "::warning::$1; shadow mode runs your tests as plain dotnet test instead."
+            echo "skip=$1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::$1."
+          exit 1
+        }
         if [ -f src/TestDetta.Cli/TestDetta.Cli.csproj ]; then
-          dotnet build src/TestDetta.Cli/TestDetta.Cli.csproj -c Release -o "$TESTDETTA_OUT" --nologo -v quiet
+          dotnet build src/TestDetta.Cli/TestDetta.Cli.csproj -c Release -o "$TESTDETTA_OUT" --nologo -v quiet || fail "TestDetta could not be built from the action's source"
           exit 0
         fi
         read -r version sha512 < tool.lock
         package="$RUNNER_TEMP/testdetta.$version.nupkg"
-        curl -fsSL --retry 3 "https://api.nuget.org/v3-flatcontainer/testdetta/$version/testdetta.$version.nupkg" -o "$package"
+        curl -fsSL --retry 3 "https://api.nuget.org/v3-flatcontainer/testdetta/$version/testdetta.$version.nupkg" -o "$package" || fail "The TestDetta $version package could not be downloaded"
         if command -v sha512sum > /dev/null; then actual=$(sha512sum "$package" | cut -d' ' -f1); else actual=$(shasum -a 512 "$package" | cut -d' ' -f1); fi
         if [ "$actual" != "$sha512" ]; then
-          echo "::error::The TestDetta $version package does not match the SHA-512 in tool.lock; it was not run."
-          exit 1
+          rm -f "$package"
+          fail "The TestDetta $version package does not match the SHA-512 in tool.lock; it was not run"
         fi
         rm -rf "$RUNNER_TEMP/testdetta-package" && mkdir -p "$TESTDETTA_OUT"
-        unzip -q -o "$package" 'tools/net10.0/any/*' -d "$RUNNER_TEMP/testdetta-package"
+        unzip -q -o "$package" 'tools/net10.0/any/*' -d "$RUNNER_TEMP/testdetta-package" || fail "The TestDetta $version package could not be unpacked"
         cp -R "$RUNNER_TEMP/testdetta-package/tools/net10.0/any/." "$TESTDETTA_OUT/"
 
     - name: Find comparison base
-      if: inputs.mode == 'test' || inputs.mode == 'shadow'
+      if: inputs.mode == 'test' || inputs.mode == 'shadow' && steps.history.outputs.skip == '' && steps.tool.outputs.skip == ''
       id: base
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
         INPUT_BASE: ${{ inputs.base }}
         PR_BASE: ${{ github.base_ref }}
+        MODE: ${{ inputs.mode }}
       run: |
+        fail() {
+          if [ "$MODE" = shadow ]; then
+            echo "::warning::$1; shadow mode runs your tests as plain dotnet test instead."
+            echo "skip=$1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::$1."
+          exit 1
+        }
         base="${INPUT_BASE:-$PR_BASE}"
         if [ -z "$base" ]; then
-          echo "::error::No base branch. Outside pull requests, set the 'base' input."
-          exit 1
+          fail "No base branch: outside pull requests, set the 'base' input"
         fi
         # The name ends up in git arguments and in step outputs: allow plain branch names only.
         if [[ ! "$base" =~ ^[A-Za-z0-9._/][A-Za-z0-9._/-]*$ ]]; then
-          echo "::error::Unsupported base branch name."
-          exit 1
+          fail "Unsupported base branch name"
         fi
         # actions/checkout with fetch-depth: 0 already has every branch. Fetch only when the base is
         # missing: with persist-credentials: false a private repository cannot be fetched again.
         if ! git rev-parse --verify --quiet "refs/remotes/origin/$base^{commit}" > /dev/null; then
           if ! git fetch --no-tags --quiet origin "+refs/heads/$base:refs/remotes/origin/$base"; then
-            echo "::error::Could not fetch the base branch. Check out with fetch-depth: 0, or keep the checkout's credentials."
-            exit 1
+            fail "Could not fetch the base branch: check out with fetch-depth: 0, or keep the checkout's credentials"
           fi
         fi
+        merge_base=$(git merge-base "origin/$base" HEAD) || fail "The base branch shares no history with this commit"
         echo "ref=origin/$base" >> "$GITHUB_OUTPUT"
-        echo "merge-base=$(git merge-base "origin/$base" HEAD)" >> "$GITHUB_OUTPUT"
+        echo "merge-base=$merge_base" >> "$GITHUB_OUTPUT"
 
     - name: Find newest coverage map
-      if: inputs.mode == 'test' || inputs.mode == 'shadow' || inputs.mode == 'audit'
+      if: inputs.mode == 'test' || inputs.mode == 'audit' || inputs.mode == 'shadow' && steps.history.outputs.skip == '' && steps.tool.outputs.skip == '' && steps.base.outputs.skip == ''
       id: map
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -180,6 +220,11 @@ runs:
         # The audit compares every change with the commit it runs on.
         if [ "$MODE" = audit ]; then MERGE_BASE=$(git rev-parse HEAD); fi
         if [[ ! "$MAX_MAP_AGE" =~ ^[0-9]{1,4}$ ]]; then
+          if [ "$MODE" = shadow ]; then
+            echo "::warning::'max-map-age' must be a number of commits from 0 to 9999; shadow mode runs your tests as plain dotnet test instead."
+            echo "skip='max-map-age' is not a number of commits from 0 to 9999" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "::error::'max-map-age' must be a number of commits from 0 to 9999."
           exit 1
         fi
@@ -203,7 +248,8 @@ runs:
         echo "key=$key" >> "$GITHUB_OUTPUT"
 
     - name: Restore coverage map
-      if: inputs.mode == 'test' || inputs.mode == 'shadow' || inputs.mode == 'audit'
+      if: inputs.mode == 'test' || inputs.mode == 'audit' || inputs.mode == 'shadow' && steps.map.outputs.skip == '' && steps.map.outputs.key != ''
+      continue-on-error: ${{ inputs.mode == 'shadow' }}
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.working-directory }}/.testdetta/coverage
@@ -228,7 +274,9 @@ runs:
     # Shadow mode (docs/design/shadow-mode.md): every test runs as without TestDetta and the job's result is
     # that run's; the report says what the selection would have left out. dotnet test runs as given (one command
     # for a solution) when its reports can be matched to test projects, otherwise per project, and the report
-    # says why. No license is read and nothing is sent, so the license secret is not passed to this step.
+    # says why. No license is read and TestDetta sends nothing, so the license secret is not passed to this step.
+    # When a step before could not do its part, or td ends without a result of the tests (a crash, an invalid
+    # option), the team's own dotnet test runs here instead, with the same arguments, and the summary says why.
     - name: Run every test in shadow mode
       if: inputs.mode == 'shadow'
       shell: bash
@@ -246,8 +294,24 @@ runs:
         SHADOW_BASE_TIMEOUT: ${{ inputs.shadow-base-timeout }}
         SHADOW_BASE_IDLE_TIMEOUT: ${{ inputs.shadow-base-idle-timeout }}
         SHADOW_CLASSIFY_BUDGET: ${{ inputs.shadow-classify-budget }}
+        SHADOW_ANALYSIS_TIMEOUT: ${{ inputs.shadow-analysis-timeout }}
+        SKIP_HISTORY: ${{ steps.history.outputs.skip }}
+        SKIP_SETUP: ${{ steps.setup.outcome == 'failure' && 'the .NET SDK TestDetta runs on could not be set up' || '' }}
+        SKIP_TOOL: ${{ steps.tool.outputs.skip }}
+        SKIP_BASE: ${{ steps.base.outputs.skip }}
+        SKIP_MAP: ${{ steps.map.outputs.skip }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
+        plain() {
+          echo "::warning::TestDetta shadow mode did not run ($1); your tests run as plain dotnet test, and this run has no shadow result."
+          { echo "### TestDetta shadow run"; echo; echo "**TestDetta did not run: $1. Your tests ran as plain \`dotnet test\` with the same arguments; the job's result is that run's, and this run has no shadow result.**"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          dotnet test -c "$CONFIGURATION" "${extra[@]}"
+        }
+        reason="${SKIP_HISTORY:-${SKIP_SETUP:-${SKIP_TOOL:-${SKIP_BASE:-$SKIP_MAP}}}}"
+        if [ -n "$reason" ]; then
+          plain "$reason"
+          exit 0
+        fi
         # Only the limits given are passed; td checks their syntax and keeps its defaults for the rest.
         limits=()
         if [ -n "$SHADOW_RERUN_TIMEOUT" ]; then limits+=(--shadow-rerun-timeout "$SHADOW_RERUN_TIMEOUT"); fi
@@ -255,14 +319,39 @@ runs:
         if [ -n "$SHADOW_BASE_TIMEOUT" ]; then limits+=(--shadow-base-timeout "$SHADOW_BASE_TIMEOUT"); fi
         if [ -n "$SHADOW_BASE_IDLE_TIMEOUT" ]; then limits+=(--shadow-base-idle-timeout "$SHADOW_BASE_IDLE_TIMEOUT"); fi
         if [ -n "$SHADOW_CLASSIFY_BUDGET" ]; then limits+=(--shadow-classify-budget "$SHADOW_CLASSIFY_BUDGET"); fi
-        dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" "${limits[@]}" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+        if [ -n "$SHADOW_ANALYSIS_TIMEOUT" ]; then limits+=(--shadow-analysis-timeout "$SHADOW_ANALYSIS_TIMEOUT"); fi
+        status=0
+        dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" "${limits[@]}" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}" || status=$?
+        # 0 and 3 are the tests' own result (passed, failed); anything else means td ended without one.
+        if [ "$status" = 0 ] || [ "$status" = 3 ]; then exit "$status"; fi
+        plain "td ended with exit code $status before it had a result of the tests"
 
-    # Kept whether the tests passed or not: the roll-up over pull requests reads these artifacts.
+    # Unique per job and matrix leg: the job id, a hash of what tells legs apart, and the check run's id (or a
+    # random part where the runner does not give one), so two legs of one run never ask for the same name.
+    - name: Name the shadow report
+      if: always() && inputs.mode == 'shadow'
+      id: artifact
+      shell: bash
+      env:
+        JOB: ${{ github.job }}
+        CHECK_RUN: ${{ job.check_run_id }}
+        LEG: ${{ runner.os }}|${{ runner.arch }}|${{ inputs.working-directory }}|${{ inputs.configuration }}|${{ inputs.dotnet-test-args }}|${{ inputs.shadow-artifact-suffix }}
+        SUFFIX: ${{ inputs.shadow-artifact-suffix }}
+      run: |
+        if command -v sha256sum > /dev/null; then hash=$(printf '%s' "$LEG" | sha256sum | cut -c1-10); else hash=$(printf '%s' "$LEG" | shasum -a 256 | cut -c1-10); fi
+        unique="${CHECK_RUN:-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')}"
+        name="testdetta-shadow-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${JOB}-${hash}-${unique}${SUFFIX:+-$SUFFIX}"
+        # Only characters every artifact name may hold.
+        echo "name=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-200)" >> "$GITHUB_OUTPUT"
+
+    # Kept whether the tests passed or not: the roll-up over pull requests reads these artifacts. An upload that
+    # fails costs the artifact, never the job.
     - name: Keep the shadow report
       if: always() && inputs.mode == 'shadow'
+      continue-on-error: true
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: testdetta-shadow-${{ github.run_id }}-${{ github.run_attempt }}
+        name: ${{ steps.artifact.outputs.name }}
         path: ${{ runner.temp }}/testdetta-shadow/testdetta-shadow.json
         if-no-files-found: ignore
         retention-days: 90
