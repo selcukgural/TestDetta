@@ -121,7 +121,7 @@ foreach (var project in SelectTestProjects(graph, root, projects))
       output: "<code>LicenseStatus</code> (Valid, Warning, PublicRepository, Missing, Invalid, Expired, OverSeats…)",
       purpose: "Geçerli lisans yoksa seçim yapılmaz, bütün testler koşar; iş hiçbir zaman lisans yüzünden başarısız olmaz.",
       body: ul([
-        "Lisans metni <code>testdetta1.&lt;base64url claims&gt;.&lt;imza&gt;</code>; ECDSA P-256 imzası ağ olmadan doğrulanır (<code>License.Verify</code>).",
+        "Lisans metni <code>testdetta1.&lt;base64url claims&gt;.&lt;imza&gt;</code>; ECDSA P-256 imzası ağ olmadan doğrulanır (<code>License.Verify</code>). Okunan her yerde metindeki tüm boşluk ve satır sonları atılır (<code>License.Normalize</code>): lisansta boşluk olmaz, ama e-posta ve terminal kopyalarken uzun metni böler.",
         "Koltuk hesabı: son 30 günün bot olmayan commit yazarları; izin = koltuk + max(1, ⌈koltuk × 0,2⌉).",
         "<b>Bugün:</b> <code>LicenseKeys.Enforced = false</code>, yani kontrol raporlanır ama seçimi kapatmaz.",
         "<b>Shadow mode</b> (<code>td test --shadow</code>) bu adıma hiç gelmez: <code>CliApp.Run</code> onu yenileme başlamadan <code>CliApp.Shadow</code>'a gönderir; lisans okunmaz, yenilenmez, TestDetta'nın kendisi ağ çağrısı yapmaz (ağı kullanan TestDetta değildir: Action aracı nuget.org'dan indirir ve Actions önbelleğini kullanır, base commit'teki yeniden koşu o commit'in paketlerini her derleme gibi geri yükler).",

@@ -40,7 +40,7 @@ public static class LicenseCheck
         {
             if (License.Verify(text, trustedKeys, out var reason) is { } claims)
             {
-                genuine.Add((text.Trim(), claims));
+                genuine.Add((License.Normalize(text), claims));
             }
             else
             {

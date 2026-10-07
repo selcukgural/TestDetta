@@ -32,6 +32,19 @@ public sealed class LicensingTests : IDisposable
     }
 
     [Fact]
+    public void A_license_broken_across_lines_or_indented_when_copied_still_verifies()
+    {
+        var text = License.Sign(Claims(), _key);
+        // As an e-mail client or a secret form may hand it back: wrapped at 76 characters, indented, CRLF.
+        var copied = "  " + string.Join("\r\n    ", text.Chunk(76).Select(static chunk => new string(chunk))) + "\t\n";
+
+        Assert.NotNull(License.Verify(copied, Trusted, out var error));
+        Assert.Null(error);
+        Assert.Equal(text, License.Normalize(copied));
+        Assert.Equal(text, LicenseCheck.Best([copied], Trusted, out _)!.Value.Text);
+    }
+
+    [Fact]
     public void Changed_payload_unknown_key_and_garbage_are_rejected()
     {
         var text = License.Sign(Claims(), _key);
@@ -178,8 +191,8 @@ public sealed class LicensingTests : IDisposable
 
         _repo.Write(".testdetta/license", "from-repo");
         Directory.CreateDirectory(Path.Combine(home, ".testdetta"));
-        File.WriteAllText(LicenseInputs.InstalledPath(home), "installed\n");
-        variables["TESTDETTA_LICENSE"] = " from-variable ";
+        File.WriteAllText(LicenseInputs.InstalledPath(home), "instal\nled\n");
+        variables["TESTDETTA_LICENSE"] = " from-\r\nvariable ";
         Assert.Equal(["from-variable", "installed", "from-repo"], inputs.FindLicenses(_repo.Root));
 
         variables["TESTDETTA_LICENSE_SCOPE"] = "git.acme.corp/scm/pay/app";

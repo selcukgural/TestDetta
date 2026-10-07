@@ -63,6 +63,8 @@ A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into 
    - `TESTDETTA_LICENSE_FILE` (a path);
    - the refreshed copy in `~/.testdetta/license` (see below);
    - `.testdetta/license` in the repository (allowed, though a secret variable is recommended).
+   Every whitespace character is dropped, not only at the ends (`License.Normalize`): a license holds
+   none, and e-mail clients, terminals and secret forms break or indent a long string when it is copied.
    Every CI has a way to pass a secret variable or file: GitHub/GitLab secrets, Jenkins
    credentials, Bitbucket and Azure DevOps secret variables, TeamCity parameters.
 2. **Check the signature** against the embedded key for `kid`.

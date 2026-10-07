@@ -272,7 +272,7 @@ internal static partial class CliApp
         if (options.Command == CliCommand.LicenseInstall)
         {
             var value = options.License.Install!;
-            var text = File.Exists(value) ? File.ReadAllText(value).Trim() : value.Trim();
+            var text = TestDetta.Core.Licensing.License.Normalize(File.Exists(value) ? File.ReadAllText(value) : value);
             if (TestDetta.Core.Licensing.License.Verify(text, TestDetta.Core.Licensing.LicenseKeys.Trusted, out var error) is not { } claims)
             {
                 stderr.WriteLine($"td: the license is not valid: {error}");

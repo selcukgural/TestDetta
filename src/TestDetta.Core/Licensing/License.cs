@@ -17,6 +17,14 @@ public static class License
     public const string Prefix = "testdetta1.";
 
     /// <summary>
+    /// The license string without any whitespace. A license holds none (base64url and dots), but e-mail
+    /// clients, terminals and secret forms break or indent a long string when it is copied, so every place
+    /// that reads one drops all of it rather than only the ends.
+    /// </summary>
+    /// <param name="text">The license string as given.</param>
+    public static string Normalize(string text) => string.Concat(text.Where(static c => !char.IsWhiteSpace(c)));
+
+    /// <summary>
     /// Reads and verifies a license string against <paramref name="trustedKeys"/> (key id to public key,
     /// as SubjectPublicKeyInfo). Null, with the reason, when the string is malformed, its key is unknown
     /// or its signature does not match.
@@ -26,7 +34,7 @@ public static class License
     /// <param name="error">Why it was rejected; null when it was not.</param>
     public static LicenseClaims? Verify(string text, IReadOnlyDictionary<string, byte[]> trustedKeys, out string? error)
     {
-        text = text.Trim();
+        text = Normalize(text);
         var parts = text.Split('.');
         if (parts.Length != 3 || !text.StartsWith(Prefix, StringComparison.Ordinal))
         {

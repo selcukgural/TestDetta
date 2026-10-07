@@ -46,14 +46,14 @@ public sealed class LicenseInputs(GitClient git, Func<string, string?> environme
     public IReadOnlyList<string> FindLicenses(string repoRoot)
     {
         var licenses = new List<string>();
-        if (environment("TESTDETTA_LICENSE") is { Length: > 0 } text && text.Trim() is { Length: > 0 } trimmed)
+        if (environment("TESTDETTA_LICENSE") is { Length: > 0 } text && License.Normalize(text) is { Length: > 0 } normalized)
         {
-            licenses.Add(trimmed);
+            licenses.Add(normalized);
         }
 
         foreach (var file in (string?[])[environment("TESTDETTA_LICENSE_FILE"), InstalledPath(home), Path.Combine(repoRoot, ".testdetta", "license")])
         {
-            if (file is { Length: > 0 } && File.Exists(file) && File.ReadAllText(file).Trim() is { Length: > 0 } content)
+            if (file is { Length: > 0 } && File.Exists(file) && License.Normalize(File.ReadAllText(file)) is { Length: > 0 } content)
             {
                 licenses.Add(content);
             }
