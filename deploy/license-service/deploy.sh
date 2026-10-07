@@ -5,6 +5,9 @@
 #   - the signing key in its own folder, outside TESTDETTA_SECRETS.
 # Client addresses: Cloud Run's front end appends the client to X-Forwarded-For and is the only way in,
 # so one hop is believed from anywhere (TrustedProxies=*, ForwardedHops=1).
+# Public endpoint (owner's decision, 2026-10-07): the organization allows IAM members of its own domain only
+# (iam.allowedPolicyMemberDomains), so instead of granting allUsers the invoker role, the service turns Cloud
+# Run's invoker check off. The service itself answers unproven requests with 404 and rate-limits them.
 set -euo pipefail
 P=testdetta-510908 R=europe-west1
 SA=license-service@$P.iam.gserviceaccount.com
@@ -24,7 +27,7 @@ gcloud run deploy license-service --project $P --region $R --image "$IMAGE" \
   --service-account "$SA" --add-cloudsql-instances "$SQL" \
   --set-secrets "/secrets/db/Licenses__ConnectionString=license-connection-string:latest,/keys/signing.pem=license-signing-key-$KEY_ID:1" \
   --set-env-vars "TESTDETTA_SECRETS=/secrets,Licenses__KeyId=$KEY_ID,Licenses__KeyFile=/keys/signing.pem,Licenses__PublicBaseUrl=https://license.testdetta.com/,Licenses__TrustedProxies=*,Licenses__ForwardedHops=1" \
-  --allow-unauthenticated --ingress all --min-instances 0 --max-instances 2 \
+  --no-invoker-iam-check --ingress all --min-instances 0 --max-instances 2 \
   --cpu 1 --memory 512Mi --concurrency 80 --timeout 30s --execution-environment gen2
 
 # license.testdetta.com: once, after the first deploy. Porkbun then needs the CNAME record this prints
