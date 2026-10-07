@@ -344,7 +344,10 @@ repositories a change touches; the full corpus runs at milestones.
   Old maps answer as before.
 - ~~**B3: using-alias names**~~: done (2026-10-07). Type names in a file's using alias (and a VB `Imports` alias) count
   as named by the declarations of that file that use the alias (meziantou #18, #27); global aliases keep the
-  global-using rules.
+  global-using rules. Side effect, measured in explain mode on meziantou with the fix-owners maps: a type named only
+  in an alias (its analyzers and fixers) was "nothing names it, may be found by reflection" and ran whole projects;
+  now it counts as named and coverage answers for it. Mean share 37% → 6.5% (failing mutants 45% → 8.7%), and all
+  529 failing classes of that round's sample are still selected; the next strict round measures it.
 - **Eval: mutants do not reach MSBuild's bootstrap copy** (2026-10-06): the eval rewrites the
   assemblies in the test output folders; MSBuild tests that run the bootstrapped MSBuild
   (`ExecBootstrapedMSBuild`, about 60 methods, at most ~3% of the suite) load the copy under
