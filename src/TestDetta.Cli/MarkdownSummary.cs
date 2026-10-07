@@ -136,4 +136,11 @@ internal static class MarkdownSummary
         // A space on each side keeps a leading or trailing backtick from merging with the fence.
         return longest == 0 ? $"{fence}{text}{fence}" : $"{fence} {text} {fence}";
     }
+
+    /// <summary>
+    /// <see cref="Code"/> for a table cell: a pipe ends a cell even inside a code span, so each is escaped as
+    /// <c>\|</c>, which GitHub's tables turn back into a pipe inside the span.
+    /// </summary>
+    /// <param name="value">Text from the repository.</param>
+    internal static string TableCode(string value) => Code(value).Replace("|", "\\|", StringComparison.Ordinal);
 }

@@ -7,8 +7,8 @@ using static TestDetta.Cli.TestRunArguments;
 namespace TestDetta.Cli;
 
 /// <summary>TestDetta's analysis for a shadow run, as <see cref="CliApp"/> made it before the full run.</summary>
-/// <param name="Result">The selection, or null when the analysis failed.</param>
-/// <param name="Error">Why the analysis failed, or null.</param>
+/// <param name="Result">The selection, or null when the analysis failed or ran out of time.</param>
+/// <param name="Error">Why there is no selection, or null.</param>
 /// <param name="Seconds">How long the analysis took.</param>
 /// <param name="Log">
 /// What the analysis logged, held back until the full run has finished: its debug lines name the decisions, and
@@ -16,114 +16,250 @@ namespace TestDetta.Cli;
 /// </param>
 internal sealed record ShadowAnalysis(AnalysisResult? Result, string? Error, double Seconds, string Log);
 
+/// <summary>Test hooks of <see cref="ShadowRun"/>.</summary>
+internal sealed class ShadowHooks
+{
+    /// <summary>
+    /// Runs a <c>dotnet test</c> in place of the real process (arguments, working directory; returns the exit code):
+    /// the team's command, a project of the per-project run, or a rerun. With it, no build output is looked up.
+    /// </summary>
+    public Func<IReadOnlyList<string>, string, int>? Dotnet { get; init; }
+}
+
 /// <summary>
-/// <c>td test --shadow</c> (docs/design/shadow-mode.md): every test runs, as without TestDetta, and the run is
-/// compared with what the selection would have run. The full run is the team's own <c>dotnet test</c> command as
-/// given, with only a report option added, whenever its reports can be matched to test projects; otherwise one
-/// <c>dotnet test</c> per test project, and the report says why. A failed class the selection left out is rerun
-/// before it is called a miss: alone with the change (passing there makes it flaky or order-dependent), then alone
-/// on the base commit in a separate worktree (failing there too makes it a failure the change did not cause). The
-/// exit code is the full run's alone, and nothing TestDetta does beyond that run can fail the job. No license is
-/// read and nothing is sent anywhere; in return, decisions are shown only for the classes this job ran.
+/// <c>td test --shadow</c> (docs/design/shadow-mode.md): every test the team's command runs, runs, as without TestDetta,
+/// and the run is compared with what the selection would have run. The full run is the team's own <c>dotnet test</c>
+/// command as given, with only a report option added, whenever its reports can be matched to test projects; otherwise
+/// one <c>dotnet test</c> per test project that command runs, and the report says why. Reports are read where the run
+/// wrote them and copied; nothing in the team's results location is moved, redirected or deleted. A failed class the
+/// selection left out is rerun before it is called a miss: alone with the change, then in its project's full-run
+/// context, then on the base commit in a separate worktree. The exit code is the full run's alone: any TestDetta error
+/// before that run leaves the team's plain command to run, and any error after it only costs the comparison. No
+/// license is read and TestDetta sends nothing anywhere; in return, decisions are shown only for the classes this job ran.
 /// </summary>
 /// <param name="loggerFactory">Creates the loggers.</param>
 /// <param name="stdout">Receives the test output and the report.</param>
 /// <param name="stderr">Receives the analysis's held log once the full run has finished.</param>
-internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr)
+/// <param name="hooks">Test hooks.</param>
+/// <param name="cancel">Ctrl+C or SIGTERM: the running tests are killed, and the temp folder and the base worktree removed.</param>
+internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr, ShadowHooks hooks, CancellationToken cancel)
 {
+    /// <summary>
+    /// Longest one build-output lookup (<c>dotnet msbuild -getProperty</c>) of the per-project run may take, before the
+    /// project it is for runs without a report of TestDetta's: a query that hangs must not keep the tests from running.
+    /// </summary>
+    private static readonly TimeSpan QueryLimit = TimeSpan.FromMinutes(2);
+
     private readonly ILogger _logger = loggerFactory.CreateLogger<ShadowRun>();
     private readonly GitClient _git = new(loggerFactory.CreateLogger<GitClient>());
+    private readonly TestRunner _runner = new(loggerFactory.CreateLogger<TestRunner>());
 
     /// <summary>Runs the full suite, compares, classifies and reports.</summary>
     /// <param name="options">Parsed command line.</param>
     /// <param name="input">The analysis made before the full run.</param>
-    /// <returns>The full run's exit code: 0, or 3 when it failed.</returns>
+    /// <returns>The full run's exit code: 0, or 3 when it failed; 1 when cancelled before the tests ran.</returns>
     public int Run(CliOptions options, ShadowAnalysis input)
     {
-        var analysis = input.Result;
-        var userArguments = options.Test.DotnetTestArguments;
-        var directory = Path.GetFullPath(options.Analysis.RepoPath);
-        var root = analysis?.RepoRoot ?? Try(() => _git.TopLevel(options.Analysis.RepoPath));
-        var graph = analysis?.Graph ?? (root is null ? null : Try(() => new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), new MsBuildProjectEvaluator(loggerFactory)).Load(root)));
-        var runner = new TestRunner(loggerFactory.CreateLogger<TestRunner>());
-        if (root is null || graph is null)
+        if (cancel.IsCancellationRequested)
         {
-            // Nothing is known about the projects: the full run is the plain dotnet test the team would run.
-            stdout.Flush();
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var exitCode = runner.RunCommand(["test", .. userArguments], directory, stdout);
-            ReleaseLog(input, everythingRan: true);
-            var run = new ShadowRunInfo(ShadowRunKind.Plain, "dotnet " + CommandLine(["test", .. userArguments]), null, stopwatch.Elapsed.TotalSeconds, exitCode);
-            var result = new ShadowResult(false, input.Error ?? "the repository's projects could not be read", [], Reproduce(options, root, graph), input.Seconds) { Run = run };
-            Report(options, result, root ?? options.Analysis.RepoPath);
-            return exitCode == 0 ? 0 : 3;
+            stdout.WriteLine("td shadow: cancelled before the tests ran.");
+            return 1;
         }
 
-        var work = Path.Combine(Path.GetTempPath(), "testdetta-shadow-" + Guid.NewGuid().ToString("N"));
-        string? baseTree = null;
+        var directory = Path.GetFullPath(options.Analysis.RepoPath);
+        ShadowPlan? plan = null;
+        string? planError = null;
         try
         {
-            var full = RunEverything(new FullRunRequest(root, graph, userArguments, directory, work), runner);
-            var compared = analysis is not null;
-            var projects = full.Runs.Select(r => Compare(root, analysis, r)).ToList();
+            plan = Plan(options, input, directory);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Before any test ran: whatever failed, the team's own command still runs, as given.
+            LogFailedStep(ex);
+            planError = $"shadow mode could not plan the run ({ex.GetType().Name}: {ex.Message})";
+        }
 
-            // The analysis's log names decisions; it is shown only when this job ran every class it decided about.
-            ReleaseLog(input, everythingRan: !compared || projects.All(static p => p.Shown && p.NotRun.Count == 0));
-            ShadowClassification? classification = null;
-            if (compared && options.Test.ShadowClassify)
+        if (plan is null)
+        {
+            return RunPlain(options, input, directory, input.Error ?? planError ?? "the repository's projects could not be read");
+        }
+
+        var state = new RunState(Path.Combine(Path.GetTempPath(), "testdetta-shadow-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            return RunPlanned(options, input, plan, state);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogFailedStep(ex);
+            var reason = $"shadow mode failed after the tests ran ({ex.GetType().Name}: {ex.Message})";
+            if (state.ExitCode is not { } exitCode)
             {
-                // The budget starts after the full run: it limits what TestDetta adds, never the team's own run.
-                var limits = options.Test.ShadowLimits ?? ShadowLimits.Default;
-                var budget = new ShadowBudget(limits.Budget);
-                var context = new Classification(root, graph, full.RerunArguments, work, Try(() => _git.MergeBase(root, options.Analysis.BaseRef)), limits, budget);
-                for (var i = 0; i < projects.Count; i++)
-                {
-                    projects[i] = Classify(context, full.Runs[i], projects[i], ref baseTree);
-                }
-
-                classification = new ShadowClassification(limits, budget.Spent.TotalSeconds, budget.CutShort);
+                // Nothing of the team's command has run, or not all of it: it runs now, as given.
+                return RunPlain(options, input, directory, $"shadow mode failed before the tests ran ({ex.GetType().Name}: {ex.Message})");
             }
-            else if (compared)
-            {
-                projects = [.. projects.Select(static p => p with
-                {
-                    Classes = [.. p.Classes.Select(static c => c.Verdict == ShadowVerdict.Miss ? c with { Verdict = ShadowVerdict.Unclassified, Note = "classification switched off" } : c)],
-                })];
-            }
 
-            var shadow = new ShadowResult(compared, compared ? null : input.Error, projects, Reproduce(options, root, graph), input.Seconds)
+            ReleaseLog(input, state, everythingRan: input.Result is null);
+            var result = new ShadowResult(false, reason, [], Reproduce(options, plan.Root, plan.Graph), input.Seconds)
             {
-                ClassificationOff = !options.Test.ShadowClassify,
-                Classification = classification,
-                Run = full.Info,
+                Run = state.Info,
+                AnalysisTimeout = (options.Test.ShadowLimits ?? ShadowLimits.Default).Analysis,
             };
-            Report(options, shadow, root);
-            return full.Info.ExitCode == 0 ? 0 : 3;
+            TryDo(() => Report(options, result, plan.Root));
+            return exitCode == 0 ? 0 : 3;
         }
         finally
         {
-            if (baseTree is { } tree)
-            {
-                TryDo(() => _git.RemoveWorktree(root, tree));
-            }
-
-            if (Directory.Exists(work))
-            {
-                TryDo(() => Directory.Delete(work, recursive: true));
-            }
+            CleanUp(plan.Root, state);
         }
     }
 
-    /// <summary>Writes the analysis's held log to stderr, or one line saying why it is not shown.</summary>
-    /// <param name="input">The analysis.</param>
-    /// <param name="everythingRan">True when it can reveal nothing beyond what the report shows.</param>
-    private void ReleaseLog(ShadowAnalysis input, bool everythingRan)
+    /// <summary>What the run has done so far: what a failure or a cancellation has to keep and clean up.</summary>
+    /// <param name="work">TestDetta's own temp folder: the reports it copied and the reruns' results.</param>
+    private sealed class RunState(string work)
     {
-        if (input.Log.Length == 0)
+        /// <summary>TestDetta's own temp folder, deleted at the end.</summary>
+        public string Work { get; } = work;
+
+        /// <summary>True once the first test process of the full run has started.</summary>
+        public bool Started { get; set; }
+
+        /// <summary>The full run's exit code, once all of it has run.</summary>
+        public int? ExitCode { get; set; }
+
+        /// <summary>How the full run was made, once it has run.</summary>
+        public ShadowRunInfo? Info { get; set; }
+
+        /// <summary>The base commit's worktree, from the moment its checkout starts, so even a half-made one is removed.</summary>
+        public string? BaseTree { get; set; }
+
+        /// <summary>Why the base commit could not be checked out; it is then not tried again for the next project.</summary>
+        public string? BaseError { get; set; }
+
+        /// <summary>True once the analysis's log was written or declined, so it is not written twice.</summary>
+        public bool LogDone { get; set; }
+    }
+
+    /// <summary>
+    /// Removes what TestDetta made: the base worktree (and, when git cannot remove it, its folder and its entry under
+    /// <c>.git/worktrees</c>) and the temp folder. Runs after a failure and after Ctrl+C or SIGTERM too.
+    /// </summary>
+    /// <param name="root">Repository root.</param>
+    /// <param name="state">What was made.</param>
+    private void CleanUp(string root, RunState state)
+    {
+        if (state.BaseTree is { } tree)
+        {
+            _git.DiscardWorktree(root, tree);
+        }
+
+        if (Directory.Exists(state.Work))
+        {
+            TryDo(() => Directory.Delete(state.Work, recursive: true));
+        }
+    }
+
+    /// <summary>
+    /// The team's command as given, without any report, when shadow mode cannot plan the run (the projects cannot be
+    /// read, a step before the tests failed): every test runs, the job's result is that run's, and the report says why
+    /// there is no shadow result.
+    /// </summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="input">The analysis.</param>
+    /// <param name="directory">The team's working directory.</param>
+    /// <param name="reason">Why there is no shadow result.</param>
+    private int RunPlain(CliOptions options, ShadowAnalysis input, string directory, string reason)
+    {
+        var userArguments = options.Test.DotnetTestArguments;
+        stdout.Flush();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        int exitCode;
+        try
+        {
+            exitCode = RunTeam(["test", .. userArguments], directory);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // dotnet itself could not start: the team's own step would have failed the same way.
+            stdout.WriteLine($"td shadow: {ex.Message}");
+            exitCode = 1;
+        }
+
+        var root = Try(() => _git.TopLevel(options.Analysis.RepoPath));
+        ReleaseLog(input, new RunState(string.Empty), everythingRan: input.Result is null);
+        var run = new ShadowRunInfo(ShadowRunKind.Plain, "dotnet " + CommandLine(["test", .. userArguments]), null, stopwatch.Elapsed.TotalSeconds, exitCode);
+        var result = new ShadowResult(false, reason, [], Reproduce(options, root, null), input.Seconds)
+        {
+            Run = run,
+            AnalysisTimeout = (options.Test.ShadowLimits ?? ShadowLimits.Default).Analysis,
+        };
+        TryDo(() => Report(options, result, root ?? directory));
+        return exitCode == 0 ? 0 : 3;
+    }
+
+    /// <summary>The full run, the comparison, the classification and the report, once the run could be planned.</summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="input">The analysis.</param>
+    /// <param name="plan">How the full run is made.</param>
+    /// <param name="state">What has been done; read by the caller after a failure.</param>
+    private int RunPlanned(CliOptions options, ShadowAnalysis input, ShadowPlan plan, RunState state)
+    {
+        var analysis = input.Result;
+        var full = plan.Verbatim.Reason is { } reason ? RunPerProject(plan, state, reason) : RunVerbatim(plan, state);
+        var compared = analysis is not null && !cancel.IsCancellationRequested;
+        var projects = full.Runs.Select(r => Compare(plan.Root, analysis, r, full.Info.ExitCode)).ToList();
+
+        // The analysis's log names decisions; it is shown only when this job ran every class it decided about.
+        ReleaseLog(input, state, everythingRan: analysis is null || projects.All(static p => p.Shown && p.NotRun.Count == 0));
+        ShadowClassification? classification = null;
+        if (compared && options.Test.ShadowClassify)
+        {
+            // The budget starts after the full run: it limits what TestDetta adds, never the team's own run.
+            var limits = options.Test.ShadowLimits ?? ShadowLimits.Default;
+            var budget = new ShadowBudget(limits.Budget);
+            var context = new Classification(plan, state, Try(() => _git.MergeBase(plan.Root, options.Analysis.BaseRef)), limits, budget);
+            for (var i = 0; i < projects.Count; i++)
+            {
+                var project = projects[i];
+                projects[i] = Try(() => Classify(context, full.Runs[i], project))
+                              ?? Apply(project, project.Classes.Where(static c => c.Verdict == ShadowVerdict.Miss).ToDictionary(static c => c.Name, static _ => (ShadowVerdict.Unclassified, "its reruns failed in TestDetta"), StringComparer.Ordinal));
+            }
+
+            classification = new ShadowClassification(limits, budget.Spent.TotalSeconds, budget.CutShort);
+        }
+        else if (compared)
+        {
+            projects = [.. projects.Select(static p => p with
+            {
+                Classes = [.. p.Classes.Select(static c => c.Verdict == ShadowVerdict.Miss ? c with { Verdict = ShadowVerdict.Unclassified, Note = "classification switched off" } : c)],
+            })];
+        }
+
+        var noResult = compared ? null : cancel.IsCancellationRequested ? "the run was cancelled" : input.Error;
+        var shadow = new ShadowResult(compared, noResult, projects, Reproduce(options, plan.Root, plan.Graph), input.Seconds)
+        {
+            ClassificationOff = !options.Test.ShadowClassify,
+            Classification = classification,
+            Run = full.Info,
+            AnalysisTimeout = (options.Test.ShadowLimits ?? ShadowLimits.Default).Analysis,
+        };
+        Report(options, shadow, plan.Root);
+        return full.Info.ExitCode == 0 ? 0 : 3;
+    }
+
+    /// <summary>Writes the analysis's held log to stderr, or one line saying why it is not shown; only once.</summary>
+    /// <param name="input">The analysis.</param>
+    /// <param name="state">Records that it was done.</param>
+    /// <param name="everythingRan">True when it can reveal nothing beyond what the report shows.</param>
+    private void ReleaseLog(ShadowAnalysis input, RunState state, bool everythingRan)
+    {
+        if (state.LogDone || input.Log.Length == 0)
         {
             return;
         }
 
+        state.LogDone = true;
         if (everythingRan)
         {
             stderr.Write(input.Log);
@@ -133,50 +269,93 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         stderr.WriteLine("td shadow: the analysis's log is not shown, because it names decisions for tests that did not run in this job.");
     }
 
-    /// <summary>What the full run needs to know.</summary>
+    /// <summary>Runs the team's command, or one <c>dotnet test</c> of the full run, in <paramref name="directory"/>.</summary>
+    /// <param name="command">The arguments for dotnet.</param>
+    /// <param name="directory">Working directory.</param>
+    /// <exception cref="InvalidOperationException">dotnet could not be started.</exception>
+    private int RunTeam(List<string> command, string directory)
+    {
+        stdout.Flush();
+        return hooks.Dotnet is { } fake ? fake(command, directory) : _runner.RunCommand(command, directory, stdout, cancel);
+    }
+
+    /// <summary>The team's working directory, and the runner its <c>global.json</c> selects, relative to a tree's root.</summary>
+    /// <param name="root">Repository root.</param>
+    /// <param name="directory">The team's working directory.</param>
+    /// <exception cref="InvalidDataException">The <c>global.json</c> in effect there is not valid JSON.</exception>
+    private static DotnetTestLocation TeamLocation(string root, string directory)
+    {
+        var relative = Path.GetRelativePath(Paths.ResolveLinks(root), Paths.ResolveLinks(directory)).Replace('\\', '/');
+        var inside = relative != "." && !relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative);
+        return new DotnetTestLocation(inside ? relative : string.Empty, DotnetTestModeDetector.Detect(directory));
+    }
+
+    /// <summary>How the full run is made, decided before any test runs.</summary>
     /// <param name="Root">Repository root.</param>
     /// <param name="Graph">Projects of the repository.</param>
     /// <param name="UserArguments">The user's <c>dotnet test</c> arguments.</param>
-    /// <param name="Directory">Directory the user's command runs in.</param>
-    /// <param name="Work">Folder for the reports.</param>
-    private sealed record FullRunRequest(string Root, ProjectGraph Graph, IReadOnlyList<string> UserArguments, string Directory, string Work);
-
-    /// <summary>One test project in the full run: where it reruns, how its run ended and the report it wrote.</summary>
-    /// <param name="Project">The test project.</param>
-    /// <param name="Location">Where it runs on its own (the reruns), and with which runner.</param>
-    /// <param name="ExitCode">Its exit code, from its own run or its report; null when unknown (no report from one command).</param>
-    /// <param name="WallSeconds">Its time (<see cref="ShadowProject.WallSeconds"/>).</param>
-    /// <param name="Outcome">The report, or null when none could be asked for or found.</param>
-    /// <param name="OutputDirectory">Its build output, when it was looked up (testing platform), to ask the reruns for the same report.</param>
-    private sealed record FullRun(ProjectNode Project, DotnetTestLocation Location, int? ExitCode, double WallSeconds, TrxOutcome? Outcome, string? OutputDirectory);
-
-    /// <summary>The full run of every test project and the run as a whole.</summary>
-    /// <param name="Runs">One entry per test project, in path order.</param>
-    /// <param name="Info">How it was made, its time and exit code.</param>
     /// <param name="RerunArguments">The user's arguments for a run of one project: without the solution or project they named.</param>
-    private sealed record FullRunOutcome(List<FullRun> Runs, ShadowRunInfo Info, IReadOnlyList<string> RerunArguments);
+    /// <param name="Directory">The team's working directory.</param>
+    /// <param name="Team">That directory relative to the root, and its runner: every run TestDetta makes starts there.</param>
+    /// <param name="Scope">The test projects the team's command runs.</param>
+    /// <param name="Verbatim">Whether the command runs as given, and with which report option.</param>
+    private sealed record ShadowPlan(
+        string Root,
+        ProjectGraph Graph,
+        IReadOnlyList<string> UserArguments,
+        IReadOnlyList<string> RerunArguments,
+        string Directory,
+        DotnetTestLocation Team,
+        ShadowScope Scope,
+        VerbatimPlan Verbatim);
+
+    /// <summary>The test projects the team's command runs.</summary>
+    /// <param name="Projects">Those projects, in path order.</param>
+    /// <param name="Known">False when the command's projects could not be told, so every test project under <paramref name="Under"/> counts.</param>
+    /// <param name="Under">The folder whose test projects count when the scope is not known.</param>
+    private sealed record ShadowScope(List<ProjectNode> Projects, bool Known, string Under);
 
     /// <summary>
-    /// Runs every test the team's command runs: that command as given when its reports can be matched to test
-    /// projects (<see cref="Verbatim"/>), otherwise one <c>dotnet test</c> per test project with the reason.
+    /// Plans the full run before any test runs: the repository, its projects, what the team's command names, the
+    /// projects it runs, and whether it can run as given. Any exception here makes the caller run the team's plain
+    /// command instead.
     /// </summary>
-    /// <param name="request">What the full run needs.</param>
-    /// <param name="runner">Runs the commands.</param>
-    private FullRunOutcome RunEverything(FullRunRequest request, TestRunner runner)
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="input">The analysis.</param>
+    /// <param name="directory">The team's working directory.</param>
+    private ShadowPlan? Plan(CliOptions options, ShadowAnalysis input, string directory)
     {
-        var target = ShadowCommand.Target(request.UserArguments, request.Directory);
-        var rerunArguments = target.Without(request.UserArguments);
-        var plan = Verbatim(request, target);
-        return plan.Reason is { } reason
-            ? RunPerProject(request with { UserArguments = rerunArguments }, runner, reason)
-            : RunVerbatim(request, runner, plan) with { RerunArguments = rerunArguments };
+        var analysis = input.Result;
+        var root = analysis?.RepoRoot ?? _git.TopLevel(options.Analysis.RepoPath);
+        var graph = analysis?.Graph ?? new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), new MsBuildProjectEvaluator(loggerFactory)).Load(root);
+        var userArguments = options.Test.DotnetTestArguments;
+        var target = ShadowCommand.Target(userArguments, directory);
+        var scope = Scope(graph, target, directory, root);
+        var team = TeamLocation(root, directory);
+
+        // The lookups of build output before the run share the analysis's time limit, so neither keeps the tests waiting.
+        var limit = (options.Test.ShadowLimits ?? ShadowLimits.Default).Analysis is { } analysisLimit
+            ? analysisLimit - TimeSpan.FromSeconds(input.Seconds)
+            : (TimeSpan?)null;
+        var verbatim = Verbatim(new VerbatimRequest(root, graph, userArguments, directory, team, target, scope), limit);
+        return new ShadowPlan(root, graph, userArguments, target.Without(userArguments), directory, team, scope, verbatim);
     }
+
+    /// <summary>What <see cref="Verbatim"/> decides on.</summary>
+    /// <param name="Root">Repository root.</param>
+    /// <param name="Graph">Projects of the repository.</param>
+    /// <param name="UserArguments">The user's arguments.</param>
+    /// <param name="Directory">The team's working directory.</param>
+    /// <param name="Team">Its location and runner.</param>
+    /// <param name="Target">What the command names.</param>
+    /// <param name="Scope">The test projects it runs.</param>
+    private sealed record VerbatimRequest(string Root, ProjectGraph Graph, IReadOnlyList<string> UserArguments, string Directory, DotnetTestLocation Team, ShadowTarget Target, ShadowScope Scope);
 
     /// <summary>How the team's command can run as given, or why it cannot.</summary>
     /// <param name="Reason">Why it runs per project instead; null when it can run as given.</param>
     /// <param name="Mode">Runner of the command's directory.</param>
     /// <param name="Report">What is added to the command for a report per project.</param>
-    /// <param name="UserResults">The user's own results directory, where VSTest's reports then go.</param>
+    /// <param name="UserResults">The user's own results directory, searched for reports too.</param>
     /// <param name="OutputDirectories">Build output of each testing-platform test project looked up.</param>
     private sealed record VerbatimPlan(string? Reason, DotnetTestMode Mode, IReadOnlyList<string> Report, string? UserResults, Dictionary<string, string> OutputDirectories);
 
@@ -186,13 +365,15 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     /// MSBuild error; the Action passes only options); when a test project it runs needs the full MSBuild (legacy);
     /// when two of its test projects build assemblies of the same name (their reports could not be told apart); or,
     /// under the testing platform, when its test projects do not all take the same report option: one command passes
-    /// the same options to every test project, and an option one of them does not know fails it.
+    /// the same options to every test project, and an option one of them does not know fails it. VSTest gets only
+    /// <c>--logger trx</c>, unless the user names a TRX logger; its results stay where the team's run puts them.
     /// </summary>
-    /// <param name="request">What the full run needs.</param>
-    /// <param name="target">What the command names.</param>
-    private VerbatimPlan Verbatim(FullRunRequest request, ShadowTarget target)
+    /// <param name="request">What the decision needs.</param>
+    /// <param name="limit">Time left for build-output lookups; null for no limit.</param>
+    private VerbatimPlan Verbatim(VerbatimRequest request, TimeSpan? limit)
     {
         static VerbatimPlan Fallback(string reason) => new(reason, DotnetTestMode.VSTest, [], null, []);
+        var target = request.Target;
         if (target.Kind == ShadowTargetKind.Other)
         {
             return Fallback($"your arguments name {target.Describe()}, which shadow mode does not run as one command");
@@ -203,17 +384,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             return Fallback($"there is no single solution or project file in {target.Path} for dotnet test without a project argument to run");
         }
 
-        DotnetTestMode mode;
-        try
-        {
-            mode = DotnetTestModeDetector.Detect(request.Directory);
-        }
-        catch (InvalidDataException ex)
-        {
-            return Fallback(ex.Message);
-        }
-
-        var scope = Scope(request, target);
+        var scope = request.Scope.Projects;
         if (scope.FirstOrDefault(request.Graph.NeedsFullMsBuild) is { } legacy)
         {
             return Fallback($"{Path.GetFileName(legacy.Path)} is a legacy project or references one, which TestDetta builds with the full MSBuild and runs on its own");
@@ -230,14 +401,14 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         var options = BeforeRunSettings(request.UserArguments);
+        var results = ValueOf(options, "--results-directory") is { } given ? Path.GetFullPath(given, request.Directory) : null;
+        var mode = request.Team.Mode;
         if (mode == DotnetTestMode.VSTest)
         {
-            var (report, userResults) = ReportArguments(mode, null, Path.Combine(request.Work, "full"), string.Empty, request.UserArguments, request.Directory);
-            return new VerbatimPlan(null, mode, report ?? [], userResults, []);
+            return new VerbatimPlan(null, mode, HasTrxLogger(options) ? [] : ["--logger", "trx"], results, []);
         }
 
-        var results = ValueOf(options, "--results-directory") is { } given ? Path.GetFullPath(given, request.Directory) : null;
-        if (options.Any(static a => a.StartsWith("--report-trx", StringComparison.Ordinal) || a.StartsWith("--report-xunit-trx", StringComparison.Ordinal)))
+        if (HasPlatformReport(options))
         {
             // The user's own reports are read where they land; nothing is added.
             return new VerbatimPlan(null, mode, [], results, []);
@@ -247,7 +418,12 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var chosen = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var project in scope)
         {
-            var output = OutputDirectory(project.Path, DotnetTestLocation.For(request.Root, project.Path).FullDirectory(request.Root), request.UserArguments);
+            var (output, timedOut) = OutputDirectory(project.Path, request.Directory, request.UserArguments, limit);
+            if (timedOut)
+            {
+                return Fallback($"looking up the build output of {Path.GetFileName(project.Path)} ran past the analysis time limit");
+            }
+
             if (output is null || !Directory.Exists(output))
             {
                 // The report option a project takes is read from its build output, which a fresh checkout does not have yet.
@@ -271,55 +447,97 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         return new VerbatimPlan(null, mode, [.. chosen.Keys], results, outputs);
     }
 
+    /// <summary>True when the arguments already ask the testing platform for a TRX report, in any spelling.</summary>
+    /// <param name="options">The user's arguments before a <c>--</c>.</param>
+    private static bool HasPlatformReport(List<string> options) =>
+        options.Any(static a => a.StartsWith("--report-trx", StringComparison.Ordinal) || a.StartsWith("--report-xunit-trx", StringComparison.Ordinal));
+
     /// <summary>
     /// The test projects the team's command runs: those of the solution or project it names, or of the one it finds
-    /// in its directory; when that cannot be told, every test project under the directory.
+    /// in its directory. When that cannot be told (several candidates, a solution file that cannot be read, a
+    /// traversal project), every test project under the directory; when the command names test assemblies or modules,
+    /// every test project of the repository. Either way the scope is marked unknown and the report says so.
     /// </summary>
-    /// <param name="request">What the full run needs.</param>
+    /// <param name="graph">Projects of the repository.</param>
     /// <param name="target">What the command names.</param>
-    private static List<ProjectNode> Scope(FullRunRequest request, ShadowTarget target)
+    /// <param name="directory">The team's working directory.</param>
+    /// <param name="root">Repository root.</param>
+    private static ShadowScope Scope(ProjectGraph graph, ShadowTarget target, string directory, string root)
     {
-        var testProjects = request.Graph.Projects.Where(static p => p.IsTestProject).OrderBy(static p => p.Path, StringComparer.Ordinal).ToList();
+        var testProjects = graph.Projects.Where(static p => p.IsTestProject).OrderBy(static p => p.Path, StringComparer.Ordinal).ToList();
+        if (target.Kind == ShadowTargetKind.Other)
+        {
+            return new ShadowScope(testProjects, false, root);
+        }
 
         // Resolved, because the graph spells paths as git reports the root (the temp folder on macOS is a link).
         var named = ShadowCommand.Projects(target)?.Select(Paths.ResolveLinks).ToHashSet(Paths.Comparer);
         var inScope = named is null ? [] : testProjects.Where(p => named.Contains(Paths.ResolveLinks(p.Path))).ToList();
         if (inScope.Count > 0 || named is not null && target.Kind != ShadowTargetKind.Project)
         {
-            return inScope;
+            return new ShadowScope(inScope, true, directory);
         }
 
-        // A project that is no test project (a traversal project) or a directory with several candidates.
-        var under = Paths.ResolveLinks(target.Kind == ShadowTargetKind.Project ? Path.GetDirectoryName(target.Path)! : target.Path);
-        return [.. testProjects.Where(p => Paths.IsUnder(Paths.ResolveLinks(p.Path), under))];
+        // A project that is no test project (a traversal project), a solution that cannot be read, or a directory with
+        // several candidates.
+        var under = target.Kind is ShadowTargetKind.Project or ShadowTargetKind.Solution ? Path.GetDirectoryName(target.Path)! : target.Path;
+        var resolved = Paths.ResolveLinks(under);
+        return new ShadowScope([.. testProjects.Where(p => Paths.IsUnder(Paths.ResolveLinks(p.Path), resolved))], false, under);
     }
+
+    /// <summary>One test project in the full run: how its run ended and the report it wrote.</summary>
+    /// <param name="Project">The test project.</param>
+    /// <param name="Mode">The runner it ran with.</param>
+    /// <param name="ExitCode">Its exit code, from its own run or its report; null when unknown (no report from one command).</param>
+    /// <param name="WallSeconds">Its time (<see cref="ShadowProject.WallSeconds"/>).</param>
+    /// <param name="Outcome">The report, or null when none could be asked for, found or read.</param>
+    /// <param name="OutputDirectory">Its build output, when it was looked up (testing platform), to ask the reruns for the same report.</param>
+    private sealed record FullRun(ProjectNode Project, DotnetTestMode Mode, int? ExitCode, double WallSeconds, TrxOutcome? Outcome, string? OutputDirectory)
+    {
+        /// <summary>True when the team's command runs it (<see cref="ShadowScope"/>).</summary>
+        public bool InScope { get; init; } = true;
+
+        /// <summary>True for a legacy project, which ran as <c>td test</c> runs it and is not rerun.</summary>
+        public bool Legacy { get; init; }
+
+        /// <summary>Why its report could not be read, or null.</summary>
+        public string? ReadError { get; init; }
+    }
+
+    /// <summary>The full run of every test project and the run as a whole.</summary>
+    /// <param name="Runs">One entry per test project, in path order.</param>
+    /// <param name="Info">How it was made, its time and exit code.</param>
+    private sealed record FullRunOutcome(List<FullRun> Runs, ShadowRunInfo Info);
 
     /// <summary>
     /// Runs the team's command as given, with only the report option added, then matches each report to its test
-    /// project by the test assembly it names (<see cref="TrxReport.Facts"/>). A report that names no test is skipped;
-    /// one whose assembly matches no single test project is listed as unmapped and not compared.
+    /// project by the test assembly it names (<see cref="TrxReport.Facts"/>). The reports are the <c>.trx</c> files
+    /// the run wrote or rewrote anywhere under the repository or in the user's results directory; they are copied
+    /// into TestDetta's temp folder and left where they are. A report that names no test is skipped; one whose
+    /// assembly matches no single test project is listed as unmapped and not compared.
     /// </summary>
-    /// <param name="request">What the full run needs.</param>
-    /// <param name="runner">Runs the command.</param>
-    /// <param name="plan">The report option and where the reports land.</param>
-    private FullRunOutcome RunVerbatim(FullRunRequest request, TestRunner runner, VerbatimPlan plan)
+    /// <param name="plan">How the full run is made.</param>
+    /// <param name="state">Receives the exit code as soon as the command has run.</param>
+    private FullRunOutcome RunVerbatim(ShadowPlan plan, RunState state)
     {
-        var results = Path.Combine(request.Work, "full");
-        List<string> command = ["test", .. Inserted(request.UserArguments, plan.Report)];
-
-        // VSTest writes every report into one results directory; the testing platform next to each test output
-        // (or where the repository's build or the user says), so the whole repository is searched for new reports.
-        List<string> searched = plan.Mode == DotnetTestMode.VSTest ? [plan.UserResults ?? results] : [request.Root, .. plan.UserResults is { } user ? [user] : Array.Empty<string>()];
+        var verbatim = plan.Verbatim;
+        List<string> command = ["test", .. Inserted(plan.UserArguments, verbatim.Report)];
+        List<string> searched = [plan.Root, .. verbatim.UserResults is { } user ? [user] : Array.Empty<string>()];
         var before = ReportTimes(searched);
-        stdout.Flush();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var exitCode = runner.RunCommand(command, request.Directory, stdout);
-        var elapsed = stopwatch.Elapsed.TotalSeconds;
+        state.Started = true;
+        var exitCode = RunTeam(command, plan.Directory);
+        state.ExitCode = exitCode;
+        var info = new ShadowRunInfo(ShadowRunKind.Verbatim, "dotnet " + CommandLine(command), null, stopwatch.Elapsed.TotalSeconds, exitCode)
+        {
+            Scope = plan.Scope.Known ? null : plan.Scope.Under,
+        };
+        state.Info = info;
 
-        var testProjects = request.Graph.Projects.Where(static p => p.IsTestProject).OrderBy(static p => p.Path, StringComparer.Ordinal).ToList();
+        var testProjects = plan.Graph.Projects.Where(static p => p.IsTestProject).OrderBy(static p => p.Path, StringComparer.Ordinal).ToList();
         var facts = new Dictionary<ProjectNode, List<TrxFileFacts>>();
         var unmapped = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var file in ReportTimes(searched).Where(f => !before.TryGetValue(f.Key, out var time) || time != f.Value).Select(static f => f.Key).Order(StringComparer.Ordinal))
+        foreach (var file in Changed(before, ReportTimes(searched)))
         {
             if (Try(() => TrxReport.Facts(file)) is not { Assemblies.Count: > 0 } report)
             {
@@ -332,51 +550,45 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
                 continue;
             }
 
-            var folder = Path.Combine(request.Work, "project-" + testProjects.IndexOf(owner));
-            Directory.CreateDirectory(folder);
-            var destination = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".trx");
-
-            // A report the run wrote only because TestDetta asked for it is moved out of the tree; the user's own stay.
-            var theirs = plan.UserResults is { } own && Paths.IsUnder(Paths.Normalize(file), Paths.Normalize(own)) || plan.Mode == DotnetTestMode.TestingPlatform && plan.Report.Count == 0;
-            if (!TryDo(() =>
+            // Read in place and copied: the team's reports, and those TestDetta asked for, stay where the run put them.
+            var folder = Path.Combine(state.Work, "project-" + testProjects.IndexOf(owner));
+            if (TryDo(() =>
                 {
-                    if (theirs)
-                    {
-                        File.Copy(file, destination);
-                    }
-                    else
-                    {
-                        File.Move(file, destination);
-                    }
+                    Directory.CreateDirectory(folder);
+                    File.Copy(file, Path.Combine(folder, Guid.NewGuid().ToString("N") + ".trx"));
                 }))
             {
-                continue;
+                (facts.TryGetValue(owner, out var list) ? list : facts[owner] = []).Add(report);
             }
-
-            (facts.TryGetValue(owner, out var list) ? list : facts[owner] = []).Add(report);
         }
 
+        var scope = plan.Scope.Projects.ToHashSet();
         var runs = new List<FullRun>(testProjects.Count);
         for (var i = 0; i < testProjects.Count; i++)
         {
             var project = testProjects[i];
-            var location = DotnetTestLocation.For(request.Root, project.Path);
+            var output = verbatim.OutputDirectories.GetValueOrDefault(project.Path);
             if (!facts.TryGetValue(project, out var reports))
             {
-                runs.Add(new FullRun(project, location, null, 0, null, plan.OutputDirectories.GetValueOrDefault(project.Path)));
+                runs.Add(new FullRun(project, verbatim.Mode, null, 0, null, output) { InScope = scope.Contains(project) });
                 continue;
             }
 
-            var outcome = TrxReport.Read(Path.Combine(request.Work, "project-" + i));
+            var outcome = Try(() => TrxReport.Read(Path.Combine(state.Work, "project-" + i)));
             var failed = reports.Any(static r => r.Failed) || outcome?.FailedClasses.Count > 0;
             var starts = reports.Select(static r => r.Start).OfType<DateTimeOffset>().ToList();
             var finishes = reports.Select(static r => r.Finish).OfType<DateTimeOffset>().ToList();
             var seconds = starts.Count > 0 && finishes.Count > 0 ? Math.Max(0, (finishes.Max() - starts.Min()).TotalSeconds) : 0;
-            runs.Add(new FullRun(project, location, failed ? 1 : 0, seconds, outcome, plan.OutputDirectories.GetValueOrDefault(project.Path)));
+            runs.Add(new FullRun(project, verbatim.Mode, failed ? 1 : 0, seconds, outcome, output)
+            {
+                InScope = scope.Contains(project),
+                ReadError = outcome is null ? "its test report could not be read" : null,
+            });
         }
 
-        var info = new ShadowRunInfo(ShadowRunKind.Verbatim, "dotnet " + CommandLine(command), null, elapsed, exitCode) { UnmappedReports = [.. unmapped] };
-        return new FullRunOutcome(runs, info, request.UserArguments);
+        info = info with { UnmappedReports = [.. unmapped] };
+        state.Info = info;
+        return new FullRunOutcome(runs, info);
     }
 
     /// <summary>
@@ -385,7 +597,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     /// </summary>
     /// <param name="assemblies">Full paths of the report's test assemblies.</param>
     /// <param name="testProjects">The repository's test projects.</param>
-    private static ProjectNode? Owner(IReadOnlySet<string> assemblies, List<ProjectNode> testProjects)
+    private static ProjectNode? Owner(IReadOnlySet<string> assemblies, IReadOnlyList<ProjectNode> testProjects)
     {
         ProjectNode? owner = null;
         foreach (var assembly in assemblies)
@@ -409,86 +621,176 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         return owner;
     }
 
-    /// <summary>Every <c>.trx</c> file under the folders and when it was last written, to tell a run's new reports from older ones.</summary>
-    /// <param name="folders">Folders to search, recursively; links are not followed.</param>
-    private static Dictionary<string, DateTime> ReportTimes(IEnumerable<string> folders)
+    /// <summary>
+    /// Runs each test project the team's command runs on its own, one after another, from the team's working
+    /// directory, with the user's arguments and a report. A step that fails for one project (its location, its report
+    /// option, reading its report) costs only that project's report: its tests still run.
+    /// </summary>
+    /// <param name="plan">How the full run is made.</param>
+    /// <param name="state">Receives the exit code once every project has run.</param>
+    /// <param name="reason">Why the team's command could not run as given.</param>
+    private FullRunOutcome RunPerProject(ShadowPlan plan, RunState state, string reason)
     {
-        var found = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
-        var times = new Dictionary<string, DateTime>(StringComparer.Ordinal);
-        foreach (var folder in folders.Where(Directory.Exists))
+        var runs = new List<FullRun>(plan.Scope.Projects.Count);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        state.Started = true;
+        var index = 0;
+        foreach (var project in plan.Scope.Projects)
         {
-            foreach (var file in Directory.EnumerateFiles(folder, "*.trx", found))
+            if (cancel.IsCancellationRequested)
             {
-                times[file] = File.GetLastWriteTimeUtc(file);
+                break;
+            }
+
+            if (RunOne(plan, state, project, index++) is { } run)
+            {
+                runs.Add(run);
             }
         }
 
-        return times;
+        var userArguments = plan.RerunArguments;
+        var command = $"dotnet test <test project> {CommandLine(userArguments)}".TrimEnd() + ", once per test project";
+        var exitCode = cancel.IsCancellationRequested || runs.Any(static r => r.ExitCode != 0) ? 1 : 0;
+        state.ExitCode = exitCode;
+        var info = new ShadowRunInfo(ShadowRunKind.PerProject, command, reason, stopwatch.Elapsed.TotalSeconds, exitCode)
+        {
+            Scope = plan.Scope.Known ? null : plan.Scope.Under,
+        };
+        state.Info = info;
+        return new FullRunOutcome(runs, info);
     }
 
-    /// <summary>Runs every test project on its own, one after another, with the user's arguments and one report each.</summary>
-    /// <param name="request">What the full run needs; its arguments no longer name a solution or project.</param>
-    /// <param name="runner">Runs the invocations.</param>
-    /// <param name="reason">Why the team's command could not run as given.</param>
-    private FullRunOutcome RunPerProject(FullRunRequest request, TestRunner runner, string reason)
+    /// <summary>One project of the per-project run; null for a project <c>dotnet test</c> says is not a test project.</summary>
+    /// <param name="plan">How the full run is made.</param>
+    /// <param name="state">Holds the temp folder.</param>
+    /// <param name="project">The test project.</param>
+    /// <param name="index">Its position, for its report folder.</param>
+    private FullRun? RunOne(ShadowPlan plan, RunState state, ProjectNode project, int index)
     {
-        var (root, graph, userArguments, _, work) = request;
-        var testProjects = graph.Projects.Where(static p => p.IsTestProject).OrderBy(static p => p.Path, StringComparer.Ordinal).ToList();
-        var selections = testProjects.Select(static p => new TestProjectSelection(p, TestRunMode.All, [], "shadow mode runs every test")).ToList();
-        var runs = new List<FullRun>(selections.Count);
-        var index = 0;
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        foreach (var invocation in TestInvocationBuilder.Build(selections, root, userArguments, graph))
+        var userArguments = plan.RerunArguments;
+        var legacy = plan.Graph.NeedsFullMsBuild(project);
+        var mode = legacy ? DotnetTestMode.VSTest : plan.Team.Mode;
+        var location = plan.Team with { Mode = mode };
+        var selection = new TestProjectSelection(project, TestRunMode.All, [], "shadow mode runs every test");
+
+        // A legacy project is built with the full MSBuild first, as td test does; its location comes from that path.
+        var invocation = (legacy ? Try(() => TestInvocationBuilder.Build([selection], plan.Root, userArguments, plan.Graph).Single()) : null) is { } built
+            ? built with { Location = location }
+            : new TestInvocation(selection, [.. location.TestArguments(plan.Root, project.Path), .. userArguments], location);
+
+        var results = Path.Combine(state.Work, "full-" + index);
+        var reportName = $"testdetta-shadow-{Guid.NewGuid():N}.trx";
+        var options = BeforeRunSettings(userArguments);
+        var userResults = ValueOf(options, "--results-directory") is { } given ? Path.GetFullPath(given, plan.Directory) : null;
+        string? outputDirectory = null;
+        var report = Try<List<string>>(() =>
         {
-            var results = Path.Combine(work, "full-" + index++);
-            var reportName = $"testdetta-shadow-{Guid.NewGuid():N}.trx";
-            var legacy = invocation.LegacyConfiguration is not null;
-            var mode = legacy ? DotnetTestMode.VSTest : invocation.Location.Mode;
-            var outputDirectory = mode == DotnetTestMode.TestingPlatform ? OutputDirectory(invocation.Selection.Project.Path, invocation.Location.FullDirectory(root), userArguments) : null;
-            var (report, userResults) = ReportArguments(mode, outputDirectory, results, reportName, userArguments, invocation.Location.FullDirectory(root));
-            var before = Snapshot(userResults);
-            stdout.Flush();
-            var result = runner.RunAll([invocation with { Arguments = Inserted(invocation.Arguments, report ?? []) }], root, stdout).Single();
-            if (result.NotATestProject)
+            if (mode == DotnetTestMode.VSTest)
             {
-                continue;
+                return HasTrxLogger(options) ? [] : ["--logger", "trx"];
             }
 
-            var outcome = report is null ? null : Collect(mode, root, reportName, results, userResults, before);
-            runs.Add(new FullRun(invocation.Selection.Project, invocation.Location with { Mode = mode }, result.ExitCode, result.Elapsed.TotalSeconds, outcome, outputDirectory));
+            outputDirectory = OutputDirectory(project.Path, plan.Directory, userArguments, QueryLimit).Directory;
+            if (outputDirectory is null || HasPlatformReport(options))
+            {
+                return [];
+            }
+
+            // NUnit's result XML goes through run settings, which would replace the user's own.
+            return TestReports.UsesNUnitXml(mode, outputDirectory) && options.Any(static a => a is "-s" or "--settings" || a.StartsWith("--settings", StringComparison.Ordinal))
+                ? []
+                : TestReports.Arguments(mode, outputDirectory, results, reportName);
+        }) ?? [];
+
+        List<string> searched = [plan.Root, .. userResults is { } user ? [user] : Array.Empty<string>()];
+        var before = Try(() => ReportTimes(searched)) ?? [];
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        int exitCode;
+        try
+        {
+            var arguments = Inserted(invocation.Arguments, report);
+            if (hooks.Dotnet is { } fake)
+            {
+                stdout.Flush();
+                exitCode = fake(arguments, location.FullDirectory(plan.Root));
+            }
+            else
+            {
+                stdout.Flush();
+                var result = _runner.RunAll([invocation with { Arguments = arguments }], plan.Root, stdout, cancel).Single();
+                if (result.NotATestProject)
+                {
+                    return null;
+                }
+
+                exitCode = result.ExitCode;
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // dotnet itself could not start; the team's own step would have failed as well.
+            stdout.WriteLine($"td shadow: {ex.Message}");
+            exitCode = 1;
         }
 
-        var command = $"dotnet test <test project> {CommandLine(userArguments)}".TrimEnd() + ", once per test project";
-        var info = new ShadowRunInfo(ShadowRunKind.PerProject, command, reason, stopwatch.Elapsed.TotalSeconds, runs.Any(static r => r.ExitCode != 0) ? 1 : 0);
-        return new FullRunOutcome(runs, info, userArguments);
+        var elapsed = stopwatch.Elapsed.TotalSeconds;
+
+        // Read in place and copied: the reports stay where the run wrote them. False for "read" means an error.
+        var (outcome, read) = Try(() =>
+        {
+            foreach (var file in Changed(before, ReportTimes(searched)))
+            {
+                if (Try(() => TrxReport.Facts(file)) is { Assemblies.Count: > 0 } facts && Owner(facts.Assemblies, [project]) is not null)
+                {
+                    Directory.CreateDirectory(results);
+                    File.Copy(file, Path.Combine(results, Guid.NewGuid().ToString("N") + ".trx"));
+                }
+            }
+
+            return (TrxReport.Read(results), true);
+        });
+        return new FullRun(project, mode, exitCode, elapsed, outcome, outputDirectory)
+        {
+            Legacy = legacy,
+            ReadError = read ? null : "its test report could not be read",
+        };
     }
 
     /// <summary>
     /// The full run of one project next to the selection's decisions for it. Decisions are given only for the classes
     /// in the project's report: those the selection knows that did not run are listed by name, and a project none of
-    /// whose tests ran shows no decision at all (see <see cref="ShadowResult"/>).
+    /// whose tests ran shows no decision at all (see <see cref="ShadowResult"/>). When some known classes did not run,
+    /// the project's own mode and reason are not shown either (a one-class filter would reveal them for free): what is
+    /// shown is derived from the classes that ran.
     /// </summary>
     /// <param name="root">Repository root.</param>
     /// <param name="analysis">The selection, or null without one.</param>
     /// <param name="run">The project's full run.</param>
-    private static ShadowProject Compare(string root, AnalysisResult? analysis, FullRun run)
+    /// <param name="commandExitCode">The full run's exit code.</param>
+    private static ShadowProject Compare(string root, AnalysisResult? analysis, FullRun run, int commandExitCode)
     {
         var path = Path.GetRelativePath(root, run.Project.Path).Replace('\\', '/');
+
         // The full run's projects come from the analysis's own graph, so their paths match exactly.
         var selection = analysis?.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, run.Project.Path, StringComparison.Ordinal));
         var decisions = selection?.Decisions.ToDictionary(static d => d.TestClass, StringComparer.Ordinal) ?? [];
         var reported = run.Outcome?.ReportedClasses ?? new HashSet<string>(StringComparer.Ordinal);
-        if (analysis is not null && reported.Count == 0)
+        if (reported.Count == 0)
         {
             var why = run.Outcome is not null ? "no test of it ran in this job"
-                : run.ExitCode is null ? "this run has no test report of it (your command does not run it, or it wrote none)"
-                : "it wrote no test report that could be read";
-            return new ShadowProject(path, ShadowProject.NotShown, why, run.ExitCode, run.WallSeconds, run.Outcome is not null, [])
+                : run.ReadError is { } error ? error
+                : run.ExitCode is not null ? "it wrote no test report that could be read"
+                : run.InScope ? "it wrote no test report in this run"
+                : "your command does not run it";
+            return new ShadowProject(path, analysis is null ? "unknown" : ShadowProject.NotShown, why, run.ExitCode, run.WallSeconds, run.Outcome is not null, [])
             {
                 NotRun = [.. decisions.Keys.Order(StringComparer.Ordinal)],
+                MissingReport = run.ExitCode is null && run.InScope && commandExitCode != 0,
             };
         }
 
+        List<string> notRun = [.. decisions.Keys.Where(k => !reported.Contains(k)).Order(StringComparer.Ordinal)];
+        var partial = notRun.Count > 0;
         var mode = (analysis, selection?.Mode) switch
         {
             (null, _) => "unknown",
@@ -498,6 +800,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             _ => "not-affected",
         };
         var reason = analysis is null ? "no selection" : selection?.Reason ?? "the change does not reach this project";
+        const string Withheld = "the project's own decision is not shown, because some of its classes did not run in this job";
         var selectedClasses = new HashSet<string>(selection?.TestClasses ?? [], StringComparer.Ordinal);
         var classes = new List<ShadowClass>(reported.Count);
         foreach (var name in reported.Order(StringComparer.Ordinal))
@@ -505,6 +808,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             var selected = mode == "all" || mode == "filtered" && selectedClasses.Contains(name);
             (string Kind, string Evidence) said = decisions.TryGetValue(name, out var decision)
                 ? (decision.Kind.ToString(), decision.Evidence)
+                : partial ? (selected ? nameof(ClassDecisionKind.WholeProject) : nameof(ClassDecisionKind.Skipped), $"no decision of its own; {Withheld}")
                 : mode switch
                 {
                     "all" => (nameof(ClassDecisionKind.WholeProject), reason),
@@ -514,39 +818,51 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
                 };
             var failed = run.Outcome!.FailedClasses.Contains(name);
             ShadowVerdict? verdict = !failed || analysis is null ? null : selected ? ShadowVerdict.Caught : ShadowVerdict.Miss;
-            classes.Add(new ShadowClass(name, selected, said.Kind, said.Evidence, run.Outcome.ClassSeconds.GetValueOrDefault(name), failed) { Verdict = verdict });
+            classes.Add(new ShadowClass(name, selected, said.Kind, said.Evidence, run.Outcome.ClassSeconds.GetValueOrDefault(name), failed)
+            {
+                Verdict = verdict,
+                FailedTests = [.. run.Outcome.FailedTestsOf(name).Order(StringComparer.Ordinal)],
+            });
         }
 
-        List<string> notRun = [.. decisions.Keys.Where(k => !reported.Contains(k)).Order(StringComparer.Ordinal)];
+        if (partial)
+        {
+            // Derived from the classes that ran, so it says nothing about those that did not.
+            mode = classes.All(static c => c.Selected) ? "all" : classes.Any(static c => c.Selected) ? "filtered" : "skipped";
+            reason = $"shown per class for the classes that ran; {Withheld}";
+        }
+
         return new ShadowProject(path, mode, reason, run.ExitCode, run.WallSeconds, run.Outcome is not null, classes)
         {
             // The estimate covers every class, so it would say something about those that did not run.
-            Estimate = notRun.Count == 0 ? selection?.Estimate : null,
+            Estimate = partial ? null : selection?.Estimate,
             NotRun = notRun,
+            Partial = partial,
         };
     }
 
     /// <summary>What every classification step of one shadow run shares.</summary>
-    /// <param name="Root">Repository root.</param>
-    /// <param name="Graph">Projects of the repository.</param>
-    /// <param name="UserArguments">The user's <c>dotnet test</c> arguments for a run of one project: without the solution or project they name.</param>
-    /// <param name="Work">Folder for the reports and the base commit's worktree.</param>
+    /// <param name="Plan">How the full run was made: the root, the graph, the team's directory and the rerun arguments.</param>
+    /// <param name="State">The temp folder and the base worktree.</param>
     /// <param name="MergeBase">Commit to rerun on, or null when unknown.</param>
     /// <param name="Limits">How long each rerun may take.</param>
     /// <param name="Budget">How long all of them together may take.</param>
-    private sealed record Classification(string Root, ProjectGraph Graph, IReadOnlyList<string> UserArguments, string Work, string? MergeBase, ShadowLimits Limits, ShadowBudget Budget);
+    private sealed record Classification(ShadowPlan Plan, RunState State, string? MergeBase, ShadowLimits Limits, ShadowBudget Budget);
 
     /// <summary>
-    /// Reruns the failed classes of <paramref name="project"/> the selection left out: alone with the change,
-    /// twice for those that pass the first time, and alone on the base commit for those that fail. Until a
-    /// rerun shows otherwise, such a class is a miss; a rerun that cannot run, or that the budget leaves no
-    /// time for, leaves it unclassified.
+    /// Reruns the failed classes of <paramref name="project"/> the selection left out, and compares failing tests, not
+    /// classes. First alone with the change: a class none of whose full-run failures fail again goes on to its project's
+    /// full-run context with the change (the project under the user's own arguments, the classes the full run ran):
+    /// passing there makes it flaky; failing again makes it order-dependent. A class that fails alone, and an
+    /// order-dependent one, then run the same way on the base commit: when every test that fails with the change fails
+    /// there too, the failure is pre-existing; otherwise the tests that fail only with the change make it a miss.
+    /// A step that cannot run, or that the budget or a cancellation leaves no time for, leaves the class unclassified,
+    /// which counts as a miss until checked.
     /// </summary>
     /// <param name="context">What the classification steps share.</param>
     /// <param name="run">The project's full run.</param>
     /// <param name="project">The comparison; candidates carry <see cref="ShadowVerdict.Miss"/>.</param>
-    /// <param name="baseTree">The base commit's worktree, made on first use and shared by every project.</param>
-    private ShadowProject Classify(Classification context, FullRun run, ShadowProject project, ref string? baseTree)
+    private ShadowProject Classify(Classification context, FullRun run, ShadowProject project)
     {
         var candidates = project.Classes.Where(static c => c.Verdict == ShadowVerdict.Miss).Select(static c => c.Name).ToList();
         if (candidates.Count == 0)
@@ -555,194 +871,417 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         var verdicts = new Dictionary<string, (ShadowVerdict Verdict, string Note)>(StringComparer.Ordinal);
-        if (run.Location.Mode == DotnetTestMode.VSTest && context.Graph.NeedsFullMsBuild(run.Project))
+        if (run.Legacy)
         {
             candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, "a legacy project is not rerun class by class"));
             return Apply(project, verdicts);
         }
 
-        if (context.Budget.RanOut)
+        if (Stopped(context) is { } stop)
         {
-            var reason = context.Budget.Exhausted();
-            candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, reason));
+            candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, stop));
             return Apply(project, verdicts);
         }
 
         LogClassifying(project.Path, candidates.Count);
-        var withChange = Rerun(context, run, run.Project.Path, context.Root, candidates, Path.Combine(context.Work, "alone-1-" + project.Path.GetHashCode(StringComparison.Ordinal)));
-        if (withChange.Error is { } error)
+        var full = run.Outcome!;
+        var alone = Rerun(context, new RerunRequest(run, OnBase: false, candidates, "alone with the change"));
+        if (alone.Error is { } error)
         {
-            var note = withChange.OutOfBudget ? context.Budget.Exhausted() : $"the rerun with the change {error}";
+            var note = alone.Stop ?? $"the rerun with the change {error}";
             candidates.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, note));
             return Apply(project, verdicts);
         }
 
-        var passed = candidates.Where(c => withChange.Outcome!.ExecutedClasses.Contains(c) && !withChange.Outcome.FailedClasses.Contains(c)).ToList();
-        var failedAlone = candidates.Where(c => withChange.Outcome!.FailedClasses.Contains(c)).ToList();
-        foreach (var missing in candidates.Except(passed).Except(failedAlone))
+        // Failing tests per class: those of the full run that failed again; a failure under another test name (a
+        // theory whose cases are named differently each run) still counts, which leans towards a miss.
+        var failedAlone = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        var passedAlone = new List<string>();
+        foreach (var name in candidates)
         {
-            verdicts[missing] = (ShadowVerdict.Unclassified, "it did not run when rerun alone with the change");
-        }
-
-        if (passed.Count > 0)
-        {
-            // Passing alone once is already flaky; the second rerun only says more, so the budget may skip it.
-            var again = context.Budget.RanOut
-                ? null
-                : Rerun(context, run, run.Project.Path, context.Root, passed, Path.Combine(context.Work, "alone-2-" + project.Path.GetHashCode(StringComparison.Ordinal)));
-            var cut = again is null || again.OutOfBudget ? $"; {context.Budget.Exhausted()} before the second rerun" : string.Empty;
-            foreach (var name in passed)
+            if (!alone.Outcome!.ExecutedClasses.Contains(name))
             {
-                verdicts[name] = again?.Outcome?.FailedClasses.Contains(name) == true
-                    ? (ShadowVerdict.Flaky, "passed once and failed once when rerun alone with the change")
-                    : (ShadowVerdict.Flaky, again?.Outcome?.ExecutedClasses.Contains(name) == true
-                        ? "passed twice when rerun alone with the change; it failed only next to the other tests"
-                        : "passed when rerun alone with the change" + cut);
+                verdicts[name] = (ShadowVerdict.Unclassified, "it did not run when rerun alone with the change");
+                continue;
+            }
+
+            if (Reproduced(full.FailedTestsOf(name), alone.Outcome.FailedTestsOf(name)) is { Count: > 0 } again)
+            {
+                failedAlone[name] = again;
+            }
+            else
+            {
+                passedAlone.Add(name);
             }
         }
 
-        if (failedAlone.Count > 0)
+        var orderDependent = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        if (passedAlone.Count > 0)
         {
-            foreach (var (name, verdict) in OnBase(context, run, failedAlone, ref baseTree))
+            var inContext = Stopped(context) is { } cut ? new RerunResult(null, cut, cut) : Rerun(context, new RerunRequest(run, OnBase: false, null, "in its full-run context with the change"));
+            foreach (var name in passedAlone)
             {
-                verdicts[name] = verdict;
+                if (inContext.Error is { } failure)
+                {
+                    verdicts[name] = (ShadowVerdict.Unclassified, $"it passed alone with the change; {inContext.Stop ?? $"the rerun in its project's full-run context {failure}"}");
+                    continue;
+                }
+
+                if (!inContext.Outcome!.ExecutedClasses.Contains(name))
+                {
+                    verdicts[name] = (ShadowVerdict.Unclassified, "it passed alone with the change and did not run in its project's full-run context");
+                    continue;
+                }
+
+                if (Reproduced(full.FailedTestsOf(name), inContext.Outcome.FailedTestsOf(name)) is { Count: > 0 } again)
+                {
+                    orderDependent[name] = again;
+                }
+                else
+                {
+                    verdicts[name] = (ShadowVerdict.Flaky, "passed alone and in its project's full-run context with the change; it failed only once");
+                }
             }
+        }
+
+        foreach (var (name, verdict) in OnBase(context, run, failedAlone, inContext: false))
+        {
+            verdicts[name] = verdict;
+        }
+
+        foreach (var (name, verdict) in OnBase(context, run, orderDependent, inContext: true))
+        {
+            verdicts[name] = verdict;
         }
 
         return Apply(project, verdicts);
     }
 
     /// <summary>
-    /// Reruns <paramref name="classes"/> (which failed alone with the change) on the base commit, in a worktree
-    /// beside the working tree: failing there too makes a class pre-existing, passing makes it a miss.
+    /// The tests of <paramref name="rerun"/> that failed in the full run too; when none match by name but some failed,
+    /// all of those, since test names may differ between runs and a failure must not be explained away by a name.
+    /// </summary>
+    /// <param name="full">Failed tests of the class in the full run.</param>
+    /// <param name="rerun">Failed tests of the class in the rerun.</param>
+    private static IReadOnlySet<string> Reproduced(IReadOnlySet<string> full, IReadOnlySet<string> rerun)
+    {
+        var both = rerun.Where(full.Contains).ToHashSet(StringComparer.Ordinal);
+        return both.Count > 0 ? both : rerun;
+    }
+
+    /// <summary>Why the classification cannot go on (cancelled, or the budget is spent), or null.</summary>
+    /// <param name="context">What the classification steps share.</param>
+    private string? Stopped(Classification context) =>
+        cancel.IsCancellationRequested ? "the run was cancelled" : context.Budget.RanOut ? context.Budget.Exhausted() : null;
+
+    /// <summary>
+    /// Reruns <paramref name="classes"/> on the base commit, in a worktree beside the working tree: alone, or for
+    /// order-dependent classes in their project's full-run context. A class all of whose failing tests fail there too
+    /// is pre-existing; any test that fails only with the change makes it a miss.
     /// </summary>
     /// <param name="context">What the classification steps share.</param>
     /// <param name="run">The project's full run.</param>
-    /// <param name="classes">Classes that failed alone with the change.</param>
-    /// <param name="baseTree">The base commit's worktree, made on first use and shared by every project.</param>
-    private Dictionary<string, (ShadowVerdict Verdict, string Note)> OnBase(Classification context, FullRun run, List<string> classes, ref string? baseTree)
+    /// <param name="classes">Classes and the tests that fail with the change.</param>
+    /// <param name="inContext">True for order-dependent classes, which rerun in their full-run context.</param>
+    private Dictionary<string, (ShadowVerdict Verdict, string Note)> OnBase(Classification context, FullRun run, Dictionary<string, IReadOnlySet<string>> classes, bool inContext)
     {
         var verdicts = new Dictionary<string, (ShadowVerdict, string)>(StringComparer.Ordinal);
-        if (context.MergeBase is not { } mergeBase)
+        if (classes.Count == 0)
         {
-            classes.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, "it fails alone with the change; the base commit to rerun it on is unknown"));
             return verdicts;
         }
 
-        if (baseTree is null && !context.Budget.RanOut)
+        var how = inContext ? "it passed alone but failed again in its project's full-run context with the change" : "it fails alone with the change";
+        var where = inContext ? "in that context" : "alone";
+        void All(ShadowVerdict verdict, string note)
         {
-            var path = Path.Combine(context.Work, "base");
-            if (!TryDo(() => _git.AddWorktree(context.Root, path, mergeBase)))
+            foreach (var name in classes.Keys)
             {
-                classes.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, "it fails alone with the change; the base commit could not be checked out"));
-                return verdicts;
+                verdicts[name] = (verdict, note);
             }
+        }
 
-            baseTree = path;
+        if (context.MergeBase is not { } mergeBase)
+        {
+            All(ShadowVerdict.Unclassified, $"{how}; the base commit to rerun it on is unknown");
+            return verdicts;
+        }
+
+        if (Stopped(context) is { } stop)
+        {
+            All(ShadowVerdict.Unclassified, $"{how}; {stop} before the rerun on the base commit");
+            return verdicts;
+        }
+
+        if (BaseTree(context, mergeBase) is not { } baseTree)
+        {
+            All(ShadowVerdict.Unclassified, $"{how}; {context.State.BaseError}");
+            return verdicts;
         }
 
         // Checked again after the checkout, which draws from the budget too.
-        if (context.Budget.RanOut)
+        if (Stopped(context) is { } later)
         {
-            var reason = $"it fails alone with the change; {context.Budget.Exhausted()} before the rerun on the base commit";
-            classes.ForEach(c => verdicts[c] = (ShadowVerdict.Unclassified, reason));
+            All(ShadowVerdict.Unclassified, $"{how}; {later} before the rerun on the base commit");
             return verdicts;
         }
 
-        var project = Path.Combine(baseTree!, Path.GetRelativePath(context.Root, run.Project.Path));
-        if (!File.Exists(project))
+        if (!File.Exists(Path.Combine(baseTree, Path.GetRelativePath(context.Plan.Root, run.Project.Path))))
         {
-            classes.ForEach(c => verdicts[c] = (ShadowVerdict.Miss, "it fails alone with the change; its test project does not exist on the base commit"));
+            All(ShadowVerdict.Miss, $"{how}; its test project does not exist on the base commit");
             return verdicts;
         }
 
         var commit = mergeBase[..Math.Min(12, mergeBase.Length)];
-        var onBase = Rerun(context, run, project, baseTree!, classes, Path.Combine(context.Work, "base-" + run.Project.Path.GetHashCode(StringComparison.Ordinal)));
-        var stopped = onBase.OutOfBudget ? $"it fails alone with the change; {context.Budget.Exhausted()} during the rerun on the base commit {commit}" : null;
-        foreach (var name in classes)
+        var onBase = Rerun(context, new RerunRequest(run, OnBase: true, inContext ? null : [.. classes.Keys], inContext ? "in its full-run context on the base commit" : "alone on the base commit"));
+        foreach (var (name, failing) in classes)
         {
-            verdicts[name] = onBase switch
+            if (onBase.Error is { } error)
             {
-                _ when stopped is not null => (ShadowVerdict.Unclassified, stopped),
-                { Outcome: { } outcome } when outcome.FailedClasses.Contains(name) => (ShadowVerdict.PreExisting, $"it fails alone on the base commit {commit} too"),
-                { Outcome: { } outcome } when outcome.ExecutedClasses.Contains(name) => (ShadowVerdict.Miss, $"it fails alone with the change and passes alone on the base commit {commit}"),
-                { Outcome: not null } or { Error: null } => (ShadowVerdict.Miss, $"it fails alone with the change and has no test on the base commit {commit}"),
-                _ => (ShadowVerdict.Unclassified, $"it fails alone with the change; the rerun on the base commit {commit} {onBase.Error}"),
-            };
+                verdicts[name] = (ShadowVerdict.Unclassified, onBase.Stop is { } budget ? $"{how}; {budget} during the rerun on the base commit {commit}" : $"{how}; the rerun on the base commit {commit} {error}");
+                continue;
+            }
+
+            var outcome = onBase.Outcome!;
+            var failedThere = outcome.FailedTestsOf(name);
+            var onlyWithChange = failing.Where(t => !failedThere.Contains(t)).Order(StringComparer.Ordinal).ToList();
+            verdicts[name] = onlyWithChange.Count == 0 && failedThere.Count > 0
+                ? (ShadowVerdict.PreExisting, $"{how}, and every test of it that fails with the change fails {where} on the base commit {commit} too")
+                : !outcome.ReportedClasses.Contains(name)
+                    ? (ShadowVerdict.Miss, $"{how}, and it has no test {where} on the base commit {commit}")
+                    : (ShadowVerdict.Miss, $"{(inContext ? "order-dependent, caused by the change: " : string.Empty)}{how}, and {Tests(onlyWithChange.Count == 0 ? [.. failing] : onlyWithChange)} pass{(onlyWithChange.Count == 1 ? "es" : string.Empty)} {where} on the base commit {commit}");
         }
 
         return verdicts;
     }
 
+    /// <summary>A short list of test names for a note: the first three, and how many more.</summary>
+    /// <param name="tests">Test names.</param>
+    private static string Tests(List<string> tests) =>
+        tests.Count <= 3 ? string.Join(", ", tests) : $"{string.Join(", ", tests.Take(3))} and {tests.Count - 3} more";
+
+    /// <summary>
+    /// The base commit's worktree, checked out on first use under the temp folder and shared by every project. The
+    /// checkout is cut to what is left of the budget and stops on cancellation; a failed one is not tried again.
+    /// </summary>
+    /// <param name="context">What the classification steps share.</param>
+    /// <param name="mergeBase">The commit.</param>
+    private string? BaseTree(Classification context, string mergeBase)
+    {
+        var state = context.State;
+        if (state.BaseError is not null)
+        {
+            return null;
+        }
+
+        if (state.BaseTree is { } existing)
+        {
+            return existing;
+        }
+
+        var path = Path.Combine(state.Work, "base");
+        state.BaseTree = path;
+        var (limits, capped) = context.Budget.For(null, null);
+        try
+        {
+            _git.AddWorktree(context.Plan.Root, path, mergeBase, limits.Timeout, cancel);
+            return path;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or OperationCanceledException or IOException or UnauthorizedAccessException)
+        {
+            LogFailedStep(ex);
+            state.BaseError = ex switch
+            {
+                OperationCanceledException => "the run was cancelled during the checkout of the base commit",
+                TimeoutException when capped => $"{context.Budget.Exhausted()} during the checkout of the base commit",
+                _ => "the base commit could not be checked out",
+            };
+
+            // Half made: removed now, so a later step does not mistake it for a checkout.
+            _git.DiscardWorktree(context.Plan.Root, path);
+            state.BaseTree = null;
+            return null;
+        }
+    }
+
     /// <summary>What a rerun showed: its report, or why it has none.</summary>
     /// <param name="Outcome">The report.</param>
     /// <param name="Error">Why there is no report (it timed out, did not start, wrote none), or null.</param>
-    /// <param name="OutOfBudget">True when it was stopped because the classification's budget ran out.</param>
-    private sealed record RerunResult(TrxOutcome? Outcome, string? Error, bool OutOfBudget = false);
+    /// <param name="Stop">The budget's or the cancellation's reason when that stopped it, which then replaces the note.</param>
+    private sealed record RerunResult(TrxOutcome? Outcome, string? Error, string? Stop = null);
+
+    /// <summary>One rerun of a project.</summary>
+    /// <param name="Run">The project's full run.</param>
+    /// <param name="OnBase">True to run on the base commit's worktree, built there; false for the working tree, with <c>--no-build</c>.</param>
+    /// <param name="Classes">Classes to run, inside the user's own filter; null for the project's full-run context (the user's arguments alone).</param>
+    /// <param name="Label">How the progress line names it.</param>
+    private sealed record RerunRequest(FullRun Run, bool OnBase, IReadOnlyList<string>? Classes, string Label);
 
     /// <summary>
-    /// Runs only <paramref name="classes"/> of a test project, inside the user's own filter, with the same kind
-    /// of report as the full run. A rerun in the working tree uses the full run's build and the rerun limits;
-    /// one in the base worktree builds there and has the base limits. Either is cut to what is left of the budget.
+    /// Reruns a test project, from the team's working directory in the tree, with the user's arguments and only
+    /// <see cref="RerunRequest.Classes"/> when given. Every rerun writes its report into TestDetta's own folder: the
+    /// user's results directory and TRX logger are replaced for it. A rerun in the working tree uses the full run's
+    /// build and the rerun limits; one on the base commit builds there (without <c>--no-build</c>, <c>--no-restore</c>
+    /// or the user's output paths, which would make it read or overwrite the working tree's build) and has the base
+    /// limits. Either is cut to what is left of the budget, and killed on cancellation.
     /// </summary>
     /// <param name="context">What the classification steps share.</param>
-    /// <param name="run">The project's full run (its runner, project and output).</param>
-    /// <param name="projectPath">The project file to run: the working tree's, or the base worktree's.</param>
-    /// <param name="treeRoot">Root of the tree the project file is in.</param>
-    /// <param name="classes">Runtime class names.</param>
-    /// <param name="results">Folder for the report.</param>
-    private RerunResult Rerun(Classification context, FullRun run, string projectPath, string treeRoot, List<string> classes, string results)
+    /// <param name="request">What to rerun.</param>
+    private RerunResult Rerun(Classification context, RerunRequest request)
     {
-        var noBuild = string.Equals(treeRoot, context.Root, StringComparison.Ordinal);
-        var userArguments = context.UserArguments;
-        var location = DotnetTestLocation.For(treeRoot, projectPath);
-        var syntax = TestFilter.SyntaxFor(run.Project, location.Mode);
-        var arguments = noBuild || !userArguments.Contains("--no-build") ? userArguments : [.. userArguments.Where(static a => a != "--no-build")];
-        if (TestFilter.WithinUserFilter(classes, syntax, arguments) is not var (filter, others))
+        var plan = context.Plan;
+        var run = request.Run;
+        var treeRoot = request.OnBase ? context.State.BaseTree! : plan.Root;
+        var projectPath = request.OnBase ? Path.Combine(treeRoot, Path.GetRelativePath(plan.Root, run.Project.Path)) : run.Project.Path;
+        var directory = plan.Team.FullDirectory(treeRoot);
+        if (!Directory.Exists(directory))
         {
-            return new RerunResult(null, "could not run: your own filter cannot be joined with a class filter");
+            directory = treeRoot;
         }
 
+        var mode = request.OnBase ? Try(() => (DotnetTestMode?)DotnetTestModeDetector.Detect(directory)) ?? plan.Team.Mode : plan.Team.Mode;
+        var location = new DotnetTestLocation(Path.GetRelativePath(treeRoot, directory).Replace('\\', '/') is var relative && relative != "." ? relative : string.Empty, mode);
+        var userOptions = BeforeRunSettings(plan.RerunArguments);
+        var arguments = RerunArguments(plan.RerunArguments, mode, request.OnBase);
+        List<string> filter = [];
+        var others = arguments;
+        if (request.Classes is { } classes)
+        {
+            if (TestFilter.WithinUserFilter([.. classes], TestFilter.SyntaxFor(run.Project, mode), arguments) is not var (joined, rest))
+            {
+                return new RerunResult(null, "could not run: your own filter cannot be joined with a class filter");
+            }
+
+            (filter, others) = (joined, rest);
+        }
+
+        var results = Path.Combine(context.State.Work, "rerun-" + Guid.NewGuid().ToString("N"));
         var reportName = $"testdetta-shadow-{Guid.NewGuid():N}.trx";
-        // A project that ran inside one command over a solution had its build output looked up only when that command needed it.
-        var outputDirectory = run.OutputDirectory ?? (location.Mode == DotnetTestMode.TestingPlatform ? OutputDirectory(run.Project.Path, DotnetTestLocation.For(context.Root, run.Project.Path).FullDirectory(context.Root), userArguments) : null);
-        var (report, userResults) = ReportArguments(location.Mode, outputDirectory, results, reportName, arguments, location.FullDirectory(treeRoot));
+        List<string>? report;
+        if (mode == DotnetTestMode.VSTest)
+        {
+            report = ["--logger", "trx", "--results-directory", results];
+        }
+        else
+        {
+            // A project that ran inside one command over a solution had its build output looked up only when that command needed it.
+            var outputDirectory = run.OutputDirectory ?? OutputDirectory(run.Project.Path, plan.Directory, plan.RerunArguments, context.Budget.For(QueryLimit, null).Limits.Timeout).Directory;
+            report = outputDirectory is null || TestReports.UsesNUnitXml(mode, outputDirectory) && userOptions.Any(static a => a is "-s" or "--settings" || a.StartsWith("--settings", StringComparison.Ordinal))
+                ? null
+                : TestReports.Arguments(mode, outputDirectory, results, reportName) is { Count: > 0 } platform ? platform : null;
+            if (report is not null && ValueOf(userOptions, "--results-directory") is not null)
+            {
+                // The user's results directory was taken out; TestDetta's takes its place.
+                report = [.. report, "--results-directory", results];
+            }
+        }
+
         if (report is null)
         {
             return new RerunResult(null, "could not run: no test report can be asked for");
         }
 
         List<string> command = [.. location.TestArguments(treeRoot, projectPath), .. filter, .. others];
-        if (noBuild && !command.Contains("--no-build"))
+        if (!request.OnBase && !command.Contains("--no-build"))
         {
             command = Inserted(command, ["--no-build"]);
         }
 
-        var before = Snapshot(userResults);
-        var (limits, capped) = noBuild
-            ? context.Budget.For(context.Limits.RerunTimeout, context.Limits.RerunIdle)
-            : context.Budget.For(context.Limits.BaseTimeout, context.Limits.BaseIdle);
-        stdout.WriteLine($"td shadow: rerunning {classes.Count} class(es) of {Path.GetFileName(projectPath)} {(noBuild ? "alone with the change" : "alone on the base commit")}");
+        var (limits, capped) = request.OnBase
+            ? context.Budget.For(context.Limits.BaseTimeout, context.Limits.BaseIdle)
+            : context.Budget.For(context.Limits.RerunTimeout, context.Limits.RerunIdle);
+        stdout.WriteLine($"td shadow: rerunning {(request.Classes is { } some ? $"{some.Count} class(es)" : "the project")} of {Path.GetFileName(projectPath)} {request.Label}");
         stdout.Flush();
         int exitCode;
         try
         {
-            exitCode = new DotnetProcess(_logger).Run(Inserted(command, report), location.FullDirectory(treeRoot), new Dictionary<string, string>(), stdout, limits);
+            var full = Inserted(command, report);
+            exitCode = hooks.Dotnet is { } fake ? fake(full, directory) : new DotnetProcess(_logger).Run(full, directory, new Dictionary<string, string>(), stdout, limits, cancel);
         }
         catch (InvalidOperationException ex)
         {
             return new RerunResult(null, $"could not start: {ex.Message}");
         }
 
+        if (exitCode == DotnetProcess.Cancelled || cancel.IsCancellationRequested)
+        {
+            return new RerunResult(null, "was stopped: the run was cancelled", "the run was cancelled");
+        }
+
         if (exitCode == DotnetProcess.TimedOut)
         {
             // Killed at the budget's end rather than at its own limit or for sitting idle.
-            var outOfBudget = capped && context.Budget.RanOut;
-            return new RerunResult(null, outOfBudget ? "was stopped: the classification time budget ran out" : "timed out", outOfBudget);
+            return capped && context.Budget.RanOut
+                ? new RerunResult(null, "was stopped: the classification time budget ran out", context.Budget.Exhausted())
+                : new RerunResult(null, "timed out");
         }
 
-        var outcome = Collect(location.Mode, treeRoot, reportName, results, userResults, before);
-        return outcome is null ? new RerunResult(null, $"wrote no test report (exit code {exitCode})") : new RerunResult(outcome, null);
+        var outcome = Try(() =>
+        {
+            // A testing-platform report has TestDetta's unique name; it is moved out of wherever the run wrote it.
+            TestReports.Collect(mode, treeRoot, reportName, results);
+            return TrxReport.Read(results);
+        });
+        return outcome is null ? new RerunResult(null, $"wrote no test report that could be read (exit code {exitCode})") : new RerunResult(outcome, null);
+    }
+
+    /// <summary>
+    /// The user's arguments for a rerun: without their results directory, and without the report options TestDetta
+    /// sets for itself (the user's TRX logger, the testing platform's report options), so the rerun's report goes into
+    /// TestDetta's folder only; on the base commit also without <c>--no-build</c>, <c>--no-restore</c> and the output
+    /// paths (<c>-o</c>, <c>--output</c>, <c>--artifacts-path</c>), so the base worktree restores and builds into its
+    /// own folders and never over the working tree's build.
+    /// </summary>
+    /// <param name="userArguments">The user's arguments for a run of one project.</param>
+    /// <param name="mode">The rerun's runner.</param>
+    /// <param name="onBase">True for a rerun on the base commit.</param>
+    internal static List<string> RerunArguments(IReadOnlyList<string> userArguments, DotnetTestMode mode, bool onBase)
+    {
+        List<string> withValue = ["--results-directory"];
+        List<string> flags = [];
+        if (mode == DotnetTestMode.TestingPlatform)
+        {
+            withValue.AddRange(["--report-trx-filename", "--report-xunit-trx-filename"]);
+            flags.AddRange(["--report-trx", "--report-xunit-trx"]);
+        }
+
+        if (onBase)
+        {
+            withValue.AddRange(["-o", "--output", "--artifacts-path"]);
+            flags.AddRange(["--no-build", "--no-restore"]);
+        }
+
+        var arguments = WithoutOptions(userArguments, withValue, flags);
+        if (mode != DotnetTestMode.VSTest)
+        {
+            return arguments;
+        }
+
+        // The user's TRX logger may name a file of its own, anywhere; TestDetta's own takes its place.
+        var result = new List<string>(arguments.Count);
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            if (arguments[i] == "--")
+            {
+                result.AddRange(arguments.Skip(i));
+                break;
+            }
+
+            if (arguments[i] is "--logger" or "-l" && i + 1 < arguments.Count && HasTrxLogger([arguments[i], arguments[i + 1]]))
+            {
+                i++;
+                continue;
+            }
+
+            if (arguments[i].StartsWith('-') && HasTrxLogger([arguments[i]]))
+            {
+                continue;
+            }
+
+            result.Add(arguments[i]);
+        }
+
+        return result;
     }
 
     /// <summary>Sets the verdicts of the classified classes.</summary>
@@ -758,10 +1297,17 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     /// option would fail the run). Null when it cannot be found; the project then runs without a report.
     /// </summary>
     /// <param name="project">The test project file.</param>
-    /// <param name="runDirectory">Directory to ask MSBuild in (the project's <c>global.json</c> location).</param>
+    /// <param name="runDirectory">Directory to ask MSBuild in (the team's working directory).</param>
     /// <param name="userArguments">The user's arguments, for <c>-c</c> and <c>-f</c>.</param>
-    private string? OutputDirectory(string project, string runDirectory, IReadOnlyList<string> userArguments)
+    /// <param name="limit">Longest each query may take; null for no limit.</param>
+    /// <returns>The folder, or null; and true when a query ran past the limit.</returns>
+    private (string? Directory, bool TimedOut) OutputDirectory(string project, string runDirectory, IReadOnlyList<string> userArguments, TimeSpan? limit)
     {
+        if (hooks.Dotnet is not null || limit is { } left && left <= TimeSpan.Zero)
+        {
+            return (null, limit is { } none && none <= TimeSpan.Zero);
+        }
+
         var options = BeforeRunSettings(userArguments);
         var configuration = ValueOf(options, "-c") ?? ValueOf(options, "--configuration") ?? "Debug";
         List<string> query = ["msbuild", project, $"-p:Configuration={configuration}", "-getProperty:TargetPath", "-getProperty:TargetFrameworks"];
@@ -770,24 +1316,34 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             query.Add($"-p:TargetFramework={framework}");
         }
 
-        return Try(() =>
+        var timedOut = false;
+        var directory = Try(() =>
         {
-            var dotnet = new DotnetProcess(_logger);
-            using var properties = System.Text.Json.JsonDocument.Parse(dotnet.Capture(query, runDirectory));
-            var values = properties.RootElement.GetProperty("Properties");
-            if (values.GetProperty("TargetPath").GetString() is not { Length: > 0 } targetPath)
+            try
             {
-                var first = values.GetProperty("TargetFrameworks").GetString()?.Split(';', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-                if (first is null)
+                var dotnet = new DotnetProcess(_logger);
+                using var properties = System.Text.Json.JsonDocument.Parse(dotnet.Capture(query, runDirectory, limit));
+                var values = properties.RootElement.GetProperty("Properties");
+                if (values.GetProperty("TargetPath").GetString() is not { Length: > 0 } targetPath)
                 {
-                    return null;
+                    var first = values.GetProperty("TargetFrameworks").GetString()?.Split(';', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                    if (first is null)
+                    {
+                        return null;
+                    }
+
+                    targetPath = dotnet.Capture([.. query.Where(static q => !q.StartsWith("-getProperty", StringComparison.Ordinal)), $"-p:TargetFramework={first}", "-getProperty:TargetPath"], runDirectory, limit).Trim();
                 }
 
-                targetPath = dotnet.Capture([.. query.Where(static q => !q.StartsWith("-getProperty", StringComparison.Ordinal)), $"-p:TargetFramework={first}", "-getProperty:TargetPath"], runDirectory).Trim();
+                return Path.GetDirectoryName(targetPath);
             }
-
-            return Path.GetDirectoryName(targetPath);
+            catch (TimeoutException)
+            {
+                timedOut = true;
+                return null;
+            }
         });
+        return (directory, timedOut);
     }
 
     /// <summary>
@@ -809,8 +1365,8 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var maps = new List<(string, string, string)>();
         foreach (var project in graph?.Projects.Where(static p => p.IsTestProject) ?? [])
         {
-            var path = CoverageMapStore.PathFor(root!, project.Path);
-            if (File.Exists(path) && Try(() => CoverageMapStore.Read(path)) is { } map && Try(() => Sha256(path)) is { } sha)
+            if (Try(() => CoverageMapStore.PathFor(root!, project.Path)) is { } path && File.Exists(path)
+                && Try(() => CoverageMapStore.Read(path)) is { } map && Try(() => Sha256(path)) is { } sha)
             {
                 maps.Add((Path.GetRelativePath(root!, project.Path).Replace('\\', '/'), map.Commit, sha));
             }
@@ -824,7 +1380,8 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         // The classification's limits decide which failures could be classified in time, so they are inputs too.
-        List<string> classifying = [.. options.Test.ShadowClassify ? (options.Test.ShadowLimits ?? ShadowLimits.Default).Options : ["--shadow-no-classify"]];
+        var limits = options.Test.ShadowLimits ?? ShadowLimits.Default;
+        List<string> classifying = options.Test.ShadowClassify ? [.. limits.Options] : [$"--shadow-analysis-timeout {Durations.Limit(limits.Analysis)}", "--shadow-no-classify"];
         List<string> testArguments = options.Test.DotnetTestArguments.Count > 0 ? ["-- " + CommandLine(options.Test.DotnetTestArguments)] : [];
         var compareWith = $"--base {mergeBase ?? options.Analysis.BaseRef}";
         var command = string.Join(' ', ["td test --shadow", compareWith, .. selecting, .. classifying, .. testArguments]);
@@ -838,7 +1395,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     /// <param name="root">Repository root, for the default report path.</param>
     private void Report(CliOptions options, ShadowResult result, string root)
     {
-        ShadowReport.WriteConsole(result, stdout);
+        TryDo(() => ShadowReport.WriteConsole(result, stdout));
         var path = options.Test.ShadowReport is { } given ? Path.GetFullPath(given) : Path.Combine(root, ".testdetta", "testdetta-shadow.json");
         if (!TryDo(() => ShadowReport.WriteJson(result, path)))
         {
@@ -866,7 +1423,6 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     /// <param name="action">Work that may fail.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Shadow mode is fail-open by design: a TestDetta error must never fail the team's job.")]
     private T? Try<T>(Func<T?> action)
-        where T : class
     {
         try
         {
@@ -875,7 +1431,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             LogFailedStep(ex);
-            return null;
+            return default;
         }
     }
 

@@ -29,8 +29,7 @@ internal static class TestRunArguments
         if (mode == DotnetTestMode.VSTest)
         {
             var userResults = ValueOf(options, "--results-directory");
-            var hasTrx = options.Select((a, i) => (a, i)).Any(p => p.a == "--logger" && p.i + 1 < options.Count && options[p.i + 1].StartsWith("trx", StringComparison.OrdinalIgnoreCase));
-            List<string> arguments = hasTrx ? [] : ["--logger", "trx"];
+            List<string> arguments = HasTrxLogger(options) ? [] : ["--logger", "trx"];
             if (userResults is null)
             {
                 arguments.AddRange(["--results-directory", results]);
@@ -52,9 +51,129 @@ internal static class TestRunArguments
     /// <summary>Report files already in the user's results directory before a run, so only the run's own are read.</summary>
     /// <param name="userResults">The user's results directory, or null.</param>
     public static HashSet<string> Snapshot(string? userResults) =>
-        userResults is not null && Directory.Exists(userResults)
-            ? Directory.GetFiles(userResults, "*.trx", SearchOption.AllDirectories).ToHashSet(StringComparer.Ordinal)
-            : [];
+        userResults is not null ? [.. TrxFiles(userResults)] : [];
+
+    /// <summary>
+    /// Every <c>.trx</c> file under <paramref name="folder"/>, recursively; folders that cannot be read, links and
+    /// <c>.git</c> are skipped, so a repository with an unreadable or looping folder is searched without an error.
+    /// </summary>
+    /// <param name="folder">The folder; nothing when it does not exist.</param>
+    public static IEnumerable<string> TrxFiles(string folder)
+    {
+        if (!Directory.Exists(folder))
+        {
+            return [];
+        }
+
+        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        return new System.IO.Enumeration.FileSystemEnumerable<string>(folder, static (ref entry) => entry.ToFullPath(), options)
+        {
+            ShouldIncludePredicate = static (ref entry) => !entry.IsDirectory && entry.FileName.EndsWith(".trx", StringComparison.OrdinalIgnoreCase),
+            ShouldRecursePredicate = static (ref entry) => !entry.FileName.Equals(".git", StringComparison.Ordinal),
+        };
+    }
+
+    /// <summary>
+    /// When each <c>.trx</c> file under the folders was last written, to tell the reports a run wrote or rewrote
+    /// from those that were there before (<see cref="Changed"/>). A file that vanishes while it is read is skipped.
+    /// </summary>
+    /// <param name="folders">Folders to search (<see cref="TrxFiles"/>); a folder inside another is searched once.</param>
+    public static Dictionary<string, DateTime> ReportTimes(IEnumerable<string> folders)
+    {
+        var times = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        foreach (var folder in folders.Distinct(StringComparer.Ordinal))
+        {
+            foreach (var file in TrxFiles(folder))
+            {
+                try
+                {
+                    times[file] = File.GetLastWriteTimeUtc(file);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Gone or unreadable: not a report this run can be judged by.
+                }
+            }
+        }
+
+        return times;
+    }
+
+    /// <summary>The reports in <paramref name="after"/> that are new or were rewritten since <paramref name="before"/>, ordered by path.</summary>
+    /// <param name="before">Report times before the run.</param>
+    /// <param name="after">Report times after it.</param>
+    public static List<string> Changed(Dictionary<string, DateTime> before, Dictionary<string, DateTime> after) =>
+        [.. after.Where(f => !before.TryGetValue(f.Key, out var time) || time != f.Value).Select(static f => f.Key).Order(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// True when the arguments name a TRX logger in any spelling <c>dotnet test</c> takes: <c>--logger trx</c>,
+    /// <c>-l trx</c>, <c>--logger:trx</c>, <c>--logger=trx</c> (and <c>-l:</c>, <c>-l=</c>), with or without its
+    /// parameters (<c>trx;LogFileName=…</c>), by its friendly name or its URI.
+    /// </summary>
+    /// <param name="options">The user's arguments before a <c>--</c>.</param>
+    public static bool HasTrxLogger(List<string> options)
+    {
+        for (var i = 0; i < options.Count; i++)
+        {
+            var value = options[i] is "--logger" or "-l" && i + 1 < options.Count ? options[i + 1] : InlineValue(options[i], "--logger") ?? InlineValue(options[i], "-l");
+            if (value is not null && (value.StartsWith("trx", StringComparison.OrdinalIgnoreCase) || value.Contains("TrxLogger", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The value of <paramref name="option"/> written in one argument (<c>--option=value</c>, <c>--option:value</c>), or null.</summary>
+    /// <param name="argument">One argument.</param>
+    /// <param name="option">Option name.</param>
+    private static string? InlineValue(string argument, string option) =>
+        argument.Length > option.Length + 1 && argument.StartsWith(option, StringComparison.Ordinal) && argument[option.Length] is '=' or ':'
+            ? argument[(option.Length + 1)..]
+            : null;
+
+    /// <summary>
+    /// The arguments without the given options, in every spelling (<c>--option value</c>, <c>--option=value</c>,
+    /// <c>--option:value</c>, and a flag on its own). Only the arguments before a <c>--</c> are touched; run settings
+    /// after it stay.
+    /// </summary>
+    /// <param name="arguments">A command line.</param>
+    /// <param name="withValue">Options that take a value.</param>
+    /// <param name="flags">Options without a value.</param>
+    public static List<string> WithoutOptions(IReadOnlyList<string> arguments, IReadOnlyCollection<string> withValue, IReadOnlyCollection<string> flags)
+    {
+        var result = new List<string>(arguments.Count);
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            var argument = arguments[i];
+            if (argument == "--")
+            {
+                result.AddRange(arguments.Skip(i));
+                break;
+            }
+
+            if (flags.Contains(argument))
+            {
+                continue;
+            }
+
+            if (withValue.Contains(argument))
+            {
+                i++;
+                continue;
+            }
+
+            if (withValue.Any(option => InlineValue(argument, option) is not null))
+            {
+                continue;
+            }
+
+            result.Add(argument);
+        }
+
+        return result;
+    }
 
     /// <summary>Reads the report of a run, wherever it went.</summary>
     /// <param name="mode">Runner.</param>
@@ -69,7 +188,7 @@ internal static class TestRunArguments
         if (userResults is not null && Directory.Exists(userResults))
         {
             Directory.CreateDirectory(results);
-            foreach (var file in Directory.GetFiles(userResults, "*.trx", SearchOption.AllDirectories).Where(f => !before.Contains(f)))
+            foreach (var file in TrxFiles(userResults).Where(f => !before.Contains(f)).ToList())
             {
                 File.Copy(file, Path.Combine(results, Guid.NewGuid().ToString("N") + ".trx"));
             }
@@ -121,10 +240,35 @@ internal static class TestRunArguments
     /// <param name="arguments">The arguments.</param>
     public static string CommandLine(IEnumerable<string> arguments) => string.Join(' ', arguments.Select(Quoted));
 
-    /// <summary>An argument as a shell would need it: in double quotes when it holds a space or a quote.</summary>
+    /// <summary>Characters that make a shell read an argument as something else, or split it.</summary>
+    private static readonly System.Buffers.SearchValues<char> ShellSpecial = System.Buffers.SearchValues.Create(" \t\"';&|<>()$`*?[]{}\\");
+
+    /// <summary>
+    /// An argument as a shell would need it: in double quotes when it holds a space, a quote or a character the shell
+    /// would act on (<c>;</c>, <c>&amp;</c>, <c>|</c>, redirections, globs, variables), with <c>"</c>, <c>\</c>,
+    /// <c>$</c> and the backtick escaped inside them, so a command copied from a report runs as it ran.
+    /// </summary>
     /// <param name="argument">The argument.</param>
-    public static string Quoted(string argument) =>
-        argument.Length > 0 && !argument.AsSpan().ContainsAny(" \t\"'") ? argument : $"\"{argument.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+    public static string Quoted(string argument)
+    {
+        if (argument.Length > 0 && !argument.AsSpan().ContainsAny(ShellSpecial))
+        {
+            return argument;
+        }
+
+        var escaped = new System.Text.StringBuilder(argument.Length + 2).Append('"');
+        foreach (var c in argument)
+        {
+            if (c is '"' or '\\' or '$' or '`')
+            {
+                escaped.Append('\\');
+            }
+
+            escaped.Append(c);
+        }
+
+        return escaped.Append('"').ToString();
+    }
 
     /// <summary>Lower-case hex SHA-256 of a file.</summary>
     /// <param name="path">File.</param>

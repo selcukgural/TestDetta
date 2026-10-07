@@ -107,7 +107,7 @@ public sealed class ShadowModeTests : IDisposable
         var run = report.GetProperty("run");
         Assert.Equal("per-project", run.GetProperty("kind").GetString());
         Assert.Contains("no single solution or project", run.GetProperty("fallbackReason").GetString(), StringComparison.Ordinal);
-        Assert.Contains("Ran each test project on its own, one after another, because", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Ran each test project your command runs on its own, one after another, because", stdout.ToString(), StringComparison.Ordinal);
         Assert.Contains("--shadow-classify-budget 45m", reproduction.GetProperty("options").EnumerateArray().Select(static o => o.GetString()));
         var classification = report.GetProperty("classification");
         Assert.Equal(900, classification.GetProperty("rerunTimeoutSeconds").GetDouble());
@@ -231,16 +231,19 @@ public sealed class ShadowModeTests : IDisposable
 
         Assert.True(exit == 3, log.Text);
         var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"))).RootElement;
-        Assert.Equal(2, report.GetProperty("schema").GetInt32());
+        Assert.Equal(3, report.GetProperty("schema").GetInt32());
         var run = report.GetProperty("run");
         Assert.Equal("verbatim", run.GetProperty("kind").GetString());
-        Assert.StartsWith("dotnet test --logger trx --results-directory ", run.GetProperty("command").GetString(), StringComparison.Ordinal);
+        Assert.Equal("dotnet test --logger trx", run.GetProperty("command").GetString());
         Assert.Equal(1, run.GetProperty("exitCode").GetInt32());
         Assert.InRange(run.GetProperty("wallSeconds").GetDouble(), 0.1, 3600);
         Assert.Empty(run.GetProperty("unmappedReports").EnumerateArray());
 
         // One dotnet test for the full run; the reruns that follow are TestDetta's own, one project at a time.
         Assert.Single(log.Lines, static l => l.Contains("TestRunner: Running dotnet test", StringComparison.Ordinal));
+
+        // VSTest's own results folders keep the run's reports; nothing was redirected or moved.
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(_repo.Root, "tests", "Shop.Tests", "TestResults"), "*.trx"));
 
         var projects = report.GetProperty("projects").EnumerateArray().ToDictionary(static p => p.GetProperty("path").GetString()!);
         var shop = projects["tests/Shop.Tests/Shop.Tests.csproj"];
@@ -407,8 +410,8 @@ public sealed class ShadowModeTests : IDisposable
         Assert.Equal("caught", classes["Shop.Tests.TaxTests"].GetProperty("verdict").GetString());
         Assert.Equal("unclassified", classes["Shop.Tests.BrokenTests"].GetProperty("verdict").GetString());
 
-        // The reports TestDetta asked for are gone from the build output again.
-        Assert.Empty(Directory.GetFiles(_repo.Root, "*.trx", SearchOption.AllDirectories));
+        // The reports stay where the team's run wrote them, beside its build output: TestDetta only copied them.
+        Assert.NotEmpty(Directory.GetFiles(_repo.Root, "*.trx", SearchOption.AllDirectories));
     }
 
     /// <summary>A line from the analysis's log or the plan: anything that tells what the selection decided.</summary>
@@ -729,6 +732,71 @@ public sealed class ShadowReportTests
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public void The_target_is_found_in_the_equals_and_colon_spellings_too()
+    {
+        var directory = Directory.CreateTempSubdirectory("testdetta-target-").FullName;
+        try
+        {
+            var project = ShadowCommand.Target(["-c", "Release", "--project=tests/A.Tests/A.Tests.csproj", "--no-build"], directory);
+            Assert.Equal((ShadowTargetKind.Project, Path.Combine(directory, "tests/A.Tests/A.Tests.csproj"), 2, 1), (project.Kind, project.Path, project.Index, project.Length));
+            Assert.Equal(["-c", "Release", "--no-build"], project.Without(["-c", "Release", "--project=tests/A.Tests/A.Tests.csproj", "--no-build"]));
+            Assert.Equal(ShadowTargetKind.Solution, ShadowCommand.Target(["--solution:Shop.slnx"], directory).Kind);
+            Assert.Equal(ShadowTargetKind.Other, ShadowCommand.Target(["--test-modules=bin/**/*.Tests.dll"], directory).Kind);
+
+            // An option's value in its = form is not mistaken for the target either.
+            Assert.Equal(ShadowTargetKind.None, ShadowCommand.Target(["--results-directory=tests"], directory).Kind);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("--logger", "trx")]
+    [InlineData("-l", "trx;LogFileName=team.trx")]
+    [InlineData("--logger", "TRX")]
+    [InlineData("--logger:trx", null)]
+    [InlineData("--logger=trx;LogFileName=x.trx", null)]
+    [InlineData("-l:trx", null)]
+    [InlineData("--logger", "logger://Microsoft/TestPlatform/TrxLogger/v1")]
+    public void A_trx_logger_is_recognised_in_every_spelling(string option, string? value)
+    {
+        Assert.True(TestRunArguments.HasTrxLogger(value is null ? [option] : [option, value]));
+        Assert.False(TestRunArguments.HasTrxLogger(["--logger", "console;verbosity=detailed", "-l:html"]));
+    }
+
+    [Fact]
+    public void A_command_in_a_report_is_quoted_as_a_shell_needs_it()
+    {
+        Assert.Equal("dotnet test -l \"trx;LogFileName=a.trx\" --filter \"A|B\" Category!=Slow \"x\\$y\"", "dotnet test " + TestRunArguments.CommandLine(["-l", "trx;LogFileName=a.trx", "--filter", "A|B", "Category!=Slow", "x$y"]));
+    }
+
+    [Fact]
+    public void The_analysis_time_limit_defaults_to_ten_minutes_and_needs_shadow()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(10), ShadowLimits.Default.Analysis);
+        Assert.True(CliOptions.TryParse(["test", "--shadow", "--shadow-analysis-timeout", "none"], "/repo", out var options, out var error), error);
+        Assert.Null(options.Test.ShadowLimits!.Analysis);
+        Assert.Contains("--shadow-analysis-timeout none", options.Test.ShadowLimits.Options);
+        Assert.False(CliOptions.TryParse(["test", "--shadow-analysis-timeout", "5m"], "/repo", out _, out error));
+        Assert.Contains("need --shadow", error, StringComparison.Ordinal);
+        Assert.False(CliOptions.TryParse(["test", "--shadow", "--shadow-analysis-timeout", "soon"], "/repo", out _, out _));
+    }
+
+    [Fact]
+    public void A_pipe_in_a_repository_value_cannot_split_a_table_row()
+    {
+        var project = new ShadowProject("tests/A|B.Tests/A.Tests.csproj", "filtered", "reason", 0, 1, true, [new ShadowClass("A", true, "Coverage", "evidence", 1, false)]);
+
+        var markdown = WriteMarkdown(Result(project));
+
+        var row = markdown.Split('\n').Single(static l => l.StartsWith("| `tests/A", StringComparison.Ordinal));
+        Assert.StartsWith("| `tests/A\\|B.Tests/A.Tests.csproj` | filtered |", row, StringComparison.Ordinal);
+        Assert.Equal(8, row.Replace("\\|", string.Empty, StringComparison.Ordinal).Count(static c => c == '|'));
     }
 
     [Fact]

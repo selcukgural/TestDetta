@@ -29,7 +29,7 @@ internal enum ShadowTargetKind
 /// <param name="Kind">What it is.</param>
 /// <param name="Path">Full path of what the arguments name; the working directory when they name nothing.</param>
 /// <param name="Index">Position of the naming argument in the arguments, or -1 when there is none.</param>
-/// <param name="Length">Arguments it takes: 1 for a positional path, 2 for <c>--project &lt;path&gt;</c> and its kind.</param>
+/// <param name="Length">Arguments it takes: 1 for a positional path or <c>--project=&lt;path&gt;</c>, 2 for <c>--project &lt;path&gt;</c> and its kind.</param>
 internal sealed record ShadowTarget(ShadowTargetKind Kind, string Path, int Index, int Length)
 {
     /// <summary>The arguments without the target, for a run per test project, which names each project itself.</summary>
@@ -76,8 +76,9 @@ internal static partial class ShadowCommand
     /// <summary>
     /// What <paramref name="arguments"/> run: the value of <c>--project</c>, <c>--solution</c>, <c>--directory</c>
     /// or <c>--test-modules</c> (the testing platform's spelling), or else the first positional argument that is a
-    /// solution, project, assembly or existing directory (VSTest's). Only the arguments before a <c>--</c> are read;
-    /// those after it are run settings.
+    /// solution, project, assembly or existing directory (VSTest's). The options are read in each spelling the
+    /// <c>dotnet</c> command line takes: <c>--project x</c>, <c>--project=x</c> and <c>--project:x</c>. Only the
+    /// arguments before a <c>--</c> are read; those after it are run settings.
     /// </summary>
     /// <param name="arguments">The user's <c>dotnet test</c> arguments.</param>
     /// <param name="directory">Directory the command runs in; relative paths resolve against it.</param>
@@ -86,17 +87,17 @@ internal static partial class ShadowCommand
         for (var i = 0; i < arguments.Count && arguments[i] != "--"; i++)
         {
             var argument = arguments[i];
-            if (argument is "--project" or "--solution" or "--directory" or "--test-modules" && i + 1 < arguments.Count)
+            if (Named(argument, i + 1 < arguments.Count ? arguments[i + 1] : null) is var (option, given, length))
             {
-                var value = System.IO.Path.GetFullPath(arguments[i + 1], directory);
-                var kind = argument switch
+                var value = System.IO.Path.GetFullPath(given, directory);
+                var kind = option switch
                 {
                     "--solution" => ShadowTargetKind.Solution,
                     "--directory" => ShadowTargetKind.Directory,
                     "--test-modules" => ShadowTargetKind.Other,
                     _ => KindOf(value) ?? ShadowTargetKind.Project,
                 };
-                return new ShadowTarget(kind, value, i, 2);
+                return new ShadowTarget(kind, value, i, length);
             }
 
             if (argument.StartsWith('-'))
@@ -119,6 +120,33 @@ internal static partial class ShadowCommand
         return new ShadowTarget(ShadowTargetKind.None, directory, -1, 0);
     }
 
+    /// <summary>The options that name what <c>dotnet test</c> runs, in the testing platform's spelling.</summary>
+    private static readonly string[] TargetOptions = ["--project", "--solution", "--directory", "--test-modules"];
+
+    /// <summary>
+    /// The target option <paramref name="argument"/> gives, with its value and how many arguments it takes: two for
+    /// <c>--project x</c>, one for <c>--project=x</c> or <c>--project:x</c>; null for any other argument.
+    /// </summary>
+    /// <param name="argument">The argument.</param>
+    /// <param name="next">The argument after it, or null at the end.</param>
+    private static (string Option, string Value, int Length)? Named(string argument, string? next)
+    {
+        foreach (var option in TargetOptions)
+        {
+            if (argument == option)
+            {
+                return next is null ? null : (option, next, 2);
+            }
+
+            if (argument.Length > option.Length + 1 && argument.StartsWith(option, StringComparison.Ordinal) && argument[option.Length] is '=' or ':')
+            {
+                return (option, argument[(option.Length + 1)..], 1);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>The kind of a path by its extension (<c>.csproj</c>, <c>.fsproj</c>, <c>.proj</c>: any <c>*proj</c>), or a directory that exists; null for anything else.</summary>
     /// <param name="path">Full path.</param>
     private static ShadowTargetKind? KindOf(string path)
@@ -134,10 +162,12 @@ internal static partial class ShadowCommand
     /// <summary>
     /// The project files the command runs, as <c>dotnet test</c> finds them: those of the solution (or filter) it
     /// names, the project it names, or, without either, the one solution or project in the directory. Null when
-    /// that cannot be told (several candidates in the directory, a file that cannot be read): the caller then
-    /// assumes every test project under the directory.
+    /// that cannot be told (several candidates in the directory, a file that cannot be read or has an unexpected
+    /// shape, such as a solution filter without its <c>solution</c> object): the caller then assumes every test
+    /// project under the directory. Nothing a solution file holds can make this throw.
     /// </summary>
     /// <param name="target">What the command names.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Shadow mode is fail-open: a solution file of any shape only makes the scope unknown.")]
     public static IReadOnlyList<string>? Projects(ShadowTarget target)
     {
         try
@@ -150,7 +180,7 @@ internal static partial class ShadowCommand
                 _ => null,
             };
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or System.Xml.XmlException or InvalidOperationException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return null;
         }

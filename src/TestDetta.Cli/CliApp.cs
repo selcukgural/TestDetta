@@ -110,7 +110,8 @@ internal static partial class CliApp
     /// <param name="options">Parsed command line.</param>
     /// <param name="loggerFactory">Creates the loggers.</param>
     /// <param name="logger">Logger of the CLI.</param>
-    private static AnalysisResult Analyze(CliOptions options, ILoggerFactory loggerFactory, ILogger logger)
+    /// <param name="cancel">Stops the analysis between its steps (shadow mode's time limit, Ctrl+C).</param>
+    private static AnalysisResult Analyze(CliOptions options, ILoggerFactory loggerFactory, ILogger logger, CancellationToken cancel = default)
     {
         if (options.Analysis.MapsDir is { } mapsDir)
         {
@@ -125,6 +126,7 @@ internal static partial class CliApp
             {
                 MaxMapAge = options.Analysis.MaxMapAge,
                 DriftFallback = options.Analysis.DriftFallback,
+                Cancellation = cancel,
                 // td test builds anyway before it runs tests; td affected only when asked.
                 GeneratedCode = new TestDetta.Coverage.BuildGeneratedCodeReader(
                     loggerFactory,
@@ -135,40 +137,102 @@ internal static partial class CliApp
     }
 
     /// <summary>
-    /// Carries out <c>td test --shadow</c> (<see cref="ShadowRun"/>). No license is checked, refreshed or read, so
-    /// nothing goes over the network. The analysis runs before the full run, on the tree as the pull request has it,
-    /// but nothing of it is shown until that run has finished: its log is held, and the plan is printed with the
-    /// report, for the classes that ran. An analysis that fails for any reason leaves the full run as it is and the
-    /// report says why it has no shadow result.
+    /// Carries out <c>td test --shadow</c> (<see cref="ShadowRun"/>). No license is checked, refreshed or read, and
+    /// TestDetta itself sends nothing anywhere. The analysis runs before the full run, on the tree as the pull request
+    /// has it, but nothing of it is shown until that run has finished: its log is held, and the plan is printed with
+    /// the report, for the classes that ran. An analysis that fails, or runs past <c>--shadow-analysis-timeout</c>,
+    /// leaves the full run as it is and the report says why it has no shadow result. Ctrl+C and SIGTERM stop the
+    /// analysis or the running tests, and the temp folder and the base worktree are removed before <c>td</c> exits.
     /// </summary>
     /// <param name="options">Parsed command line.</param>
     /// <param name="loggerFactory">Creates the loggers of the full run and the classification.</param>
     /// <param name="stdout">Receives the test output and the report.</param>
     /// <param name="stderr">Receives the held analysis log after the full run.</param>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Shadow mode is fail-open by design: a TestDetta error must never fail the team's job.")]
     private static int Shadow(CliOptions options, ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr)
     {
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        using var held = new StringWriter();
-        AnalysisResult? analysis = null;
-        string? error = null;
-        using (var analysisLogs = new StderrLoggerFactory(held, options.Analysis.LogLevel))
+        using var cancel = new CancellationTokenSource();
+        void Stop(System.Runtime.InteropServices.PosixSignalContext context)
         {
-            var analysisLogger = analysisLogs.CreateLogger(typeof(CliApp).FullName!);
-            try
+            // Shadow mode ends itself: the process must live on to remove its temp folder and the base worktree.
+            context.Cancel = true;
+            cancel.Cancel();
+        }
+
+        using var interrupt = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGINT, Stop);
+        using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, Stop);
+        var analysis = ShadowAnalyze(options, stdout, cancel.Token);
+        return new ShadowRun(loggerFactory, stdout, stderr, new ShadowHooks(), cancel.Token).Run(options, analysis);
+    }
+
+    /// <summary>
+    /// How long an analysis that ran past its time limit is waited for after it was asked to stop: long enough for the
+    /// step it is in (an MSBuild evaluation, the build of a generator's consumer) to end, so it does not build next to
+    /// the team's run; one that does not stop by then is left behind and the tests start anyway.
+    /// </summary>
+    private static readonly TimeSpan AnalysisGrace = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Shadow mode's analysis, within <see cref="ShadowLimits.Analysis"/>. Its log goes into memory (see
+    /// <see cref="ShadowAnalysis.Log"/>); an analysis stopped at the limit leaves no log, since what it logged so far
+    /// could name decisions.
+    /// </summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="stdout">Receives one line when there is no selection.</param>
+    /// <param name="cancel">Ctrl+C or SIGTERM.</param>
+    /// <param name="analyze">The analysis (logger factory, logger, stop); null for <see cref="Analyze"/>. Tests pass one that hangs.</param>
+    internal static ShadowAnalysis ShadowAnalyze(CliOptions options, TextWriter stdout, CancellationToken cancel, Func<ILoggerFactory, ILogger, CancellationToken, AnalysisResult>? analyze = null)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var limit = (options.Test.ShadowLimits ?? ShadowLimits.Default).Analysis;
+        var held = new StringWriter();
+
+        // Not disposed when the analysis is left behind: it may still log into it.
+        var analysisLogs = new StderrLoggerFactory(held, options.Analysis.LogLevel);
+        var analysisLogger = analysisLogs.CreateLogger(typeof(CliApp).FullName!);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        analyze ??= (factory, logger, token) => Analyze(options, factory, logger, token);
+        var analyzing = Task.Run(() => analyze(analysisLogs, analysisLogger, stop.Token), CancellationToken.None);
+        bool finished;
+        try
+        {
+            finished = analyzing.Wait(limit is { } time ? (int)Math.Min(time.TotalMilliseconds, int.MaxValue) : Timeout.Infinite, cancel);
+        }
+        catch (OperationCanceledException)
+        {
+            finished = false;
+        }
+        catch (AggregateException)
+        {
+            finished = true;
+        }
+
+        if (!finished)
+        {
+            stop.Cancel();
+            var ended = analyzing.ContinueWith(static _ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).Wait((int)AnalysisGrace.TotalMilliseconds, CancellationToken.None);
+            var error = cancel.IsCancellationRequested
+                ? "the run was cancelled during the analysis"
+                : $"the analysis did not finish within {Durations.DescribeLimit(limit)} (--shadow-analysis-timeout){(ended ? string.Empty : "; it did not stop and was left behind")}";
+            if (!cancel.IsCancellationRequested)
             {
-                analysis = Analyze(options, analysisLogs, analysisLogger);
+                stdout.WriteLine($"td: {error}; every test still runs.");
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+
+            return new ShadowAnalysis(null, error, stopwatch.Elapsed.TotalSeconds, string.Empty);
+        }
+
+        using (analysisLogs)
+        {
+            if (analyzing.Exception?.InnerException is { } ex)
             {
                 LogFailed(analysisLogger, ex);
-                analysis = null;
-                error = $"the analysis failed ({ex.GetType().Name}: {ex.Message})";
+                var error = $"the analysis failed ({ex.GetType().Name}: {ex.Message})";
                 stdout.WriteLine($"td: {error}; every test still runs.");
+                return new ShadowAnalysis(null, error, stopwatch.Elapsed.TotalSeconds, held.ToString());
             }
         }
 
-        return new ShadowRun(loggerFactory, stdout, stderr).Run(options, new ShadowAnalysis(analysis, error, stopwatch.Elapsed.TotalSeconds, held.ToString()));
+        return new ShadowAnalysis(analyzing.Result, null, stopwatch.Elapsed.TotalSeconds, held.ToString());
     }
 
     /// <summary>

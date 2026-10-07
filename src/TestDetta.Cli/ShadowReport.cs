@@ -11,13 +11,16 @@ internal enum ShadowVerdict
     /// <summary>The selection would have run it.</summary>
     Caught,
 
-    /// <summary>Left out, and it fails alone with the change and passes alone without it.</summary>
+    /// <summary>
+    /// Left out, and a test of it fails with the change (alone, or in its project's full-run context when it is
+    /// order-dependent) and passes, or does not exist, the same way without it.
+    /// </summary>
     Miss,
 
-    /// <summary>Left out, but it passes when run alone with the change: flaky or order-dependent.</summary>
+    /// <summary>Left out, but it passes when run alone and in its project's full-run context with the change: it failed at random.</summary>
     Flaky,
 
-    /// <summary>Left out, but it fails on the base commit too: the change did not break it.</summary>
+    /// <summary>Left out, but every test of it that fails with the change fails the same way on the base commit: the change did not break it.</summary>
     PreExisting,
 
     /// <summary>Left out and not classified (switched off, or a rerun could not run): counts as a miss until checked.</summary>
@@ -38,6 +41,9 @@ internal sealed record ShadowClass(string Name, bool Selected, string Decision, 
 
     /// <summary>What the classification saw (the reruns' outcomes), for the reader.</summary>
     public string? Note { get; init; }
+
+    /// <summary>Its tests that failed in the full run, by the names the report gives them; the classification compares these.</summary>
+    public IReadOnlyList<string> FailedTests { get; init; } = [];
 }
 
 /// <summary>One test project of the repository and what the full run showed of it.</summary>
@@ -80,6 +86,18 @@ internal sealed record ShadowProject(string Path, string Mode, string Reason, in
     public bool Shown => Mode != NotShown;
 
     /// <summary>
+    /// True when some classes the selection knows did not run (<see cref="NotRun"/>): <see cref="Mode"/> and
+    /// <see cref="Reason"/> are then derived from the classes that ran, not the project's own decision.
+    /// </summary>
+    public bool Partial { get; init; }
+
+    /// <summary>
+    /// True when the team's command, which runs this project, failed and the project wrote no test report: a build
+    /// error or a crash the selection cannot be checked against, counted as unexplained.
+    /// </summary>
+    public bool MissingReport { get; init; }
+
+    /// <summary>
     /// The part of <see cref="WallSeconds"/> the selection would have spent: all of it for a project that runs
     /// completely, none for one left out, and for a filtered one the time outside its test classes (build,
     /// start-up, discovery) plus the measured time of the selected classes.
@@ -117,6 +135,12 @@ internal sealed record ShadowRunInfo(ShadowRunKind Kind, string Command, string?
     /// <summary>Test assemblies whose reports could not be matched to one test project; their tests are not compared.</summary>
     public IReadOnlyList<string> UnmappedReports { get; init; } = [];
 
+    /// <summary>
+    /// The folder every test project of which ran or was compared, when the test projects the command runs could not
+    /// be told (several candidates, an unreadable solution, test assemblies named); null when they were known.
+    /// </summary>
+    public string? Scope { get; init; }
+
     /// <summary>The kind's name in the JSON report.</summary>
     public string KindName => Kind switch
     {
@@ -130,12 +154,18 @@ internal sealed record ShadowRunInfo(ShadowRunKind Kind, string Command, string?
 
     /// <summary>One sentence for the reports: how the full run was made and how long it took.</summary>
     /// <param name="code">Formats the command and the reason, which hold the repository's own names (a code span in Markdown).</param>
-    public string Describe(Func<string, string> code) => Kind switch
+    public string Describe(Func<string, string> code)
     {
-        ShadowRunKind.Verbatim => $"Ran your own command as given, adding only a test report per project: {code(Command)} ({Durations.Format(WallSeconds)} in all).",
-        ShadowRunKind.PerProject => $"Ran each test project on its own, one after another, because {code(FallbackReason ?? "it had to")} ({Durations.Format(WallSeconds)} in all).",
-        _ => $"Ran your own command as given: {code(Command)} ({Durations.Format(WallSeconds)} in all).",
-    };
+        var how = Kind switch
+        {
+            ShadowRunKind.Verbatim => $"Ran your own command as given, adding only a test report per project: {code(Command)} ({Durations.Format(WallSeconds)} in all).",
+            ShadowRunKind.PerProject => $"Ran each test project your command runs on its own, one after another, because {code(FallbackReason ?? "it had to")} ({Durations.Format(WallSeconds)} in all).",
+            _ => $"Ran your own command as given: {code(Command)} ({Durations.Format(WallSeconds)} in all).",
+        };
+        return Scope is { } under
+            ? $"{how} Which test projects your command runs could not be told, so every test project under {code(under)} counts."
+            : how;
+    }
 }
 
 /// <summary>What is needed to check a shadow result by hand.</summary>
@@ -200,20 +230,26 @@ internal sealed record ShadowResult(bool Compared, string? NoResultReason, IRead
     /// <summary>How the full run was made and how long it took; null in reports built without one.</summary>
     public ShadowRunInfo? Run { get; init; }
 
+    /// <summary>The time limit of the analysis before the full run (<c>--shadow-analysis-timeout</c>); null for none.</summary>
+    public TimeSpan? AnalysisTimeout { get; init; }
+
     /// <summary>Failed classes with the given verdict, with their project.</summary>
     /// <param name="verdict">Verdict to list.</param>
     public IEnumerable<(ShadowProject Project, ShadowClass Class)> With(ShadowVerdict verdict) =>
         Projects.SelectMany(p => p.Classes.Where(c => c.Verdict == verdict).Select(c => (p, c)));
 
-    /// <summary>Projects whose run failed without a test report naming a failed class: the selection cannot be checked there.</summary>
+    /// <summary>
+    /// Projects whose run failed without a test report naming a failed class, and projects the failed command runs
+    /// that wrote no report at all: the selection cannot be checked there.
+    /// </summary>
     public IEnumerable<ShadowProject> Unexplained =>
-        Projects.Where(static p => p.ExitCode is not (null or 0) && (!p.Reported || !p.Classes.Any(static c => c.Failed)));
+        Projects.Where(static p => p.MissingReport || p.ExitCode is not (null or 0) && (!p.Reported || !p.Classes.Any(static c => c.Failed)));
 
     /// <summary>
-    /// True when the full run failed and no project's report says so: in one command over a solution, a build error or
-    /// a project that wrote no report, which the selection cannot be checked against either.
+    /// True when the full run failed and no project's report says so, and no project it runs is missing a report: a
+    /// build error outside the test projects, which the selection cannot be checked against either.
     /// </summary>
-    public bool UnexplainedRun => Run is { ExitCode: not 0 } && !Projects.Any(static p => p.ExitCode is not (null or 0));
+    public bool UnexplainedRun => Run is { ExitCode: not 0 } && !Projects.Any(static p => p.ExitCode is not (null or 0) || p.MissingReport);
 
     /// <summary>Classes the selection knows that did not run in this job, over every project.</summary>
     public int NotRunClasses => Projects.Sum(static p => p.NotRun.Count);
@@ -275,9 +311,13 @@ internal static class ShadowReport
     /// <summary>
     /// Version of the JSON shape; raised when a field changes meaning. 2 (2026-10-07): decisions only for the classes
     /// that ran, the <c>not-shown</c> mode and <c>notRun</c>, a nullable project <c>exitCode</c>, the <c>run</c> object,
-    /// and a reproduction <c>command</c> that needs no license next to <c>explainCommand</c>.
+    /// and a reproduction <c>command</c> that needs no license next to <c>explainCommand</c>. 3 (2026-10-07): verdicts
+    /// compare failing tests (<c>failedTests</c>), <c>flaky</c> needs a pass in the full-run context too and an
+    /// order-dependent failure is a miss or pre-existing; a project with <c>notRun</c> classes is <c>partial</c>, its
+    /// mode and reason derived from the classes that ran; <c>missingReport</c>; <c>run.scopeKnown</c> and
+    /// <c>run.scope</c>; <c>analysisTimeoutSeconds</c>.
     /// </summary>
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
     /// <summary>Writes the JSON report.</summary>
     /// <param name="result">What to write.</param>
@@ -304,12 +344,15 @@ internal static class ShadowReport
 
         json.WriteBoolean("classified"u8, !result.ClassificationOff);
         json.WriteNumber("analysisSeconds"u8, Math.Round(result.AnalysisSeconds, 3));
+        WriteLimit(json, "analysisTimeoutSeconds"u8, result.AnalysisTimeout);
         if (result.Run is { } run)
         {
             json.WriteStartObject("run"u8);
             json.WriteString("kind"u8, run.KindName);
             json.WriteString("command"u8, run.Command);
             WriteOptional(json, "fallbackReason"u8, run.FallbackReason);
+            json.WriteBoolean("scopeKnown"u8, run.Scope is null);
+            WriteOptional(json, "scope"u8, run.Scope);
             json.WriteNumber("wallSeconds"u8, Math.Round(run.WallSeconds, 3));
             json.WriteNumber("exitCode"u8, run.ExitCode);
             json.WriteStartArray("unmappedReports"u8);
@@ -433,6 +476,8 @@ internal static class ShadowReport
         }
 
         json.WriteBoolean("reported"u8, project.Reported);
+        json.WriteBoolean("partial"u8, project.Partial);
+        json.WriteBoolean("missingReport"u8, project.MissingReport);
         json.WriteStartArray("classes"u8);
         foreach (var testClass in project.Classes)
         {
@@ -447,6 +492,13 @@ internal static class ShadowReport
             }
 
             json.WriteBoolean("failed"u8, testClass.Failed);
+            json.WriteStartArray("failedTests"u8);
+            foreach (var test in testClass.FailedTests)
+            {
+                json.WriteStringValue(test);
+            }
+
+            json.WriteEndArray();
             if (testClass.Verdict is { } verdict)
             {
                 json.WriteString("verdict"u8, Name(verdict));
@@ -472,8 +524,9 @@ internal static class ShadowReport
     }
 
     /// <summary>
-    /// Writes the Markdown job summary. Every value from the repository (paths, class names, reasons) goes into a
-    /// code span (<see cref="MarkdownSummary.Code"/>), so a pull request cannot inject links, images or mentions.
+    /// Writes the Markdown job summary. Every value from the repository (paths, class names, reasons, test names) goes
+    /// into a code span (<see cref="MarkdownSummary.Code"/>), so a pull request cannot inject links, images or mentions;
+    /// in a table cell its pipes are escaped too (<see cref="MarkdownSummary.TableCode"/>), so it cannot split the row.
     /// </summary>
     /// <param name="result">What to write.</param>
     /// <param name="writer">Destination, usually the file named by <c>GITHUB_STEP_SUMMARY</c>.</param>
@@ -484,7 +537,7 @@ internal static class ShadowReport
         writer.WriteLine();
         writer.WriteLine($"**{code(result.Verdict())}**");
         writer.WriteLine();
-        writer.WriteLine("Every test ran, as without TestDetta; the job's result is that run's. This compares it with what TestDetta would have selected, for the test classes that ran in this job.");
+        writer.WriteLine("Every test your command runs ran, as without TestDetta; the job's result is that run's. This compares it with what TestDetta would have selected, for the test classes that ran in this job.");
         writer.WriteLine();
         if (result.Run is { } run)
         {
@@ -499,11 +552,11 @@ internal static class ShadowReport
         }
 
         foreach (var (title, verdict, meaning) in (ReadOnlySpan<(string, ShadowVerdict, string)>)[
-            ("Misses", ShadowVerdict.Miss, "failed with the change, alone and in the full run, and passed alone without it; the selection left them out. Please send us this report."),
+            ("Misses", ShadowVerdict.Miss, "failed with the change, in the full run and again alone or in their project's full-run context, and passed the same way without it; the selection left them out. Please send us this report."),
             ("Not classified", ShadowVerdict.Unclassified, "failed and were left out, and could not be rerun to tell why; treat them as misses until checked."),
             ("Caught", ShadowVerdict.Caught, "failed and the selection would have run them."),
-            ("Failing before the change", ShadowVerdict.PreExisting, "were left out and fail on the base commit too."),
-            ("Flaky or order-dependent", ShadowVerdict.Flaky, "were left out and failed in the full run, but passed when run alone with the change."),
+            ("Failing before the change", ShadowVerdict.PreExisting, "were left out, and every test of them that fails with the change fails on the base commit too."),
+            ("Flaky", ShadowVerdict.Flaky, "were left out and failed in the full run, but passed when rerun alone and in their project's full-run context with the change."),
         ])
         {
             var list = result.With(verdict).ToList();
@@ -525,7 +578,9 @@ internal static class ShadowReport
 
         foreach (var project in result.Unexplained)
         {
-            writer.WriteLine($"- {code(project.Path)} failed (exit code {project.ExitCode}) {(project.Reported ? "with no failed test in its report" : "without a test report")}: the selection cannot be checked there.");
+            writer.WriteLine(project.MissingReport
+                ? $"- {code(project.Path)} wrote no test report while your command failed (exit code {result.Run?.ExitCode}): the selection cannot be checked there."
+                : $"- {code(project.Path)} failed (exit code {project.ExitCode}) {(project.Reported ? "with no failed test in its report" : "without a test report")}: the selection cannot be checked there.");
         }
 
         if (result.UnexplainedRun)
@@ -539,18 +594,20 @@ internal static class ShadowReport
         }
 
         writer.WriteLine();
+        var cell = MarkdownSummary.TableCode;
         writer.WriteLine("| Test project | Selection | Classes run | Not run here | Time | Selection's part | TestDetta's estimate |");
         writer.WriteLine("| --- | --- | --- | --- | --- | --- | --- |");
         foreach (var project in result.Projects)
         {
             if (!project.Shown)
             {
-                writer.WriteLine($"| {code(project.Path)} | not shown: {code(project.Reason)} | | {project.NotRun.Count} | {Durations.Format(project.WallSeconds)} | | |");
+                writer.WriteLine($"| {cell(project.Path)} | not shown: {cell(project.Reason)} | | {project.NotRun.Count} | {Durations.Format(project.WallSeconds)} | | |");
                 continue;
             }
 
             var estimate = project.Estimate is { } e ? Durations.Describe(e) : project.NotRun.Count > 0 ? "not all of it ran" : "no timings";
-            writer.WriteLine($"| {code(project.Path)} | {project.Mode} | {project.Classes.Count(static c => c.Selected)} of {project.Classes.Count} | {project.NotRun.Count} | {Durations.Format(project.WallSeconds)} | {Durations.Format(project.SelectedSeconds)} | {estimate} |");
+            var mode = project.Partial ? $"{project.Mode}, among the classes that ran" : project.Mode;
+            writer.WriteLine($"| {cell(project.Path)} | {mode} | {project.Classes.Count(static c => c.Selected)} of {project.Classes.Count} | {project.NotRun.Count} | {Durations.Format(project.WallSeconds)} | {Durations.Format(project.SelectedSeconds)} | {estimate} |");
         }
 
         writer.WriteLine();
@@ -597,7 +654,9 @@ internal static class ShadowReport
 
         foreach (var project in result.Unexplained)
         {
-            stdout.WriteLine($"  failed without a failed class in a report: {project.Path} (exit code {project.ExitCode})");
+            stdout.WriteLine(project.MissingReport
+                ? $"  no test report while your command failed: {project.Path}"
+                : $"  failed without a failed class in a report: {project.Path} (exit code {project.ExitCode})");
         }
 
         if (result.UnexplainedRun)
