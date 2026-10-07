@@ -86,7 +86,7 @@ public sealed class LicenseServiceTests : IAsyncLifetime
 
     private static string Subscription(string status = "active", int? seats = 5, string modified = "2026-10-03T10:00:00Z",
         string? scope = "github.com/Acme/*", string? endedAt = null, string? endsAt = null, string type = "subscription.updated",
-        string? email = "billing@acme.com", string periodEnd = "2026-11-01T00:00:00Z") =>
+        string? email = "billing@acme.com", string periodEnd = "2026-11-01T00:00:00Z", bool unmodified = false) =>
         System.Text.Json.JsonSerializer.Serialize(new
         {
             type,
@@ -97,7 +97,8 @@ public sealed class LicenseServiceTests : IAsyncLifetime
                 id = "sub-1",
                 status,
                 seats,
-                modified_at = modified,
+                created_at = "2026-10-01T00:00:00Z",
+                modified_at = unmodified ? null : modified,
                 started_at = "2026-10-01T00:00:00Z",
                 current_period_start = "2026-10-01T00:00:00Z",
                 current_period_end = periodEnd,
@@ -288,6 +289,10 @@ public sealed class LicenseServiceTests : IAsyncLifetime
 
         (await Deliver(client, Subscription(seats: 7, modified: "2026-10-03T12:00:00Z"), "msg-2")).Dispose();
         (await Deliver(client, Subscription(seats: 5, modified: "2026-10-03T10:00:00Z"), "msg-1")).Dispose();
+        Assert.Equal(7, (await Record())!.Seats);
+
+        // Polar sends a new subscription without modified_at: its creation time makes it the oldest state.
+        (await Deliver(client, Subscription(seats: 3, type: "subscription.created", unmodified: true), "msg-3")).Dispose();
         Assert.Equal(7, (await Record())!.Seats);
 
         // The same delivery again, even with other content, is handled once.

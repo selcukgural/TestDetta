@@ -229,7 +229,10 @@ public static partial class PolarWebhook
             ended,
             "polar");
 
-        return await store.SaveAsync(record, type, $"polar {type}: status {status}, {seats} seats, until {periodEnd:yyyy-MM-dd}", Date(subscription, "modified_at"), cancellationToken)
+        // Polar leaves modified_at null until a subscription first changes, so a created event carries none;
+        // without the creation time it would count as a manual change and overwrite any newer state.
+        var stateAt = Date(subscription, "modified_at") ?? Date(subscription, "created_at");
+        return await store.SaveAsync(record, type, $"polar {type}: status {status}, {seats} seats, until {periodEnd:yyyy-MM-dd}", stateAt, cancellationToken)
             ? WebhookOutcome.Saved
             : WebhookOutcome.Stale;
     }

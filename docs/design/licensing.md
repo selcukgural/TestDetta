@@ -295,7 +295,9 @@ Still to do in phase 2:
 - **State.** Every `subscription.*` event carries the whole subscription, so the record is rebuilt
   from its current state, keyed `P-<subscription id>`. The write is conditional on Polar's
   `modified_at` being newer, in one statement, so late or simultaneous events never restore an older
-  state.
+  state. Polar leaves `modified_at` null until a subscription first changes, so a `subscription.created`
+  carries none; `created_at` stands in for it, otherwise a late or redelivered created event would
+  count as a manual change and overwrite a newer state (seen in the sandbox on 2026-10-07).
 - **Mapping:**
   - seats come from the subscription's `seats`;
   - the period ends at `ends_at`, or else `current_period_end`; a subscription cancelled at period
@@ -303,6 +305,9 @@ Still to do in phase 2:
   - `ended_at`, `incomplete_expired` or `unpaid` revoke the record, which stops renewals;
   - `trialing` makes a trial license;
   - an incomplete checkout makes no license;
+  - `past_due` and `paused` change nothing by themselves (owner's decision, 2026-10-07): the license
+    runs to the end of the paid period and is not renewed beyond it; Polar's later `unpaid` or
+    `revoked` stops it, `resumed` carries the new period;
   - the licensee is the customer's name or billing name, never the email, which would end up in the
     license string.
 - **Needs attention** (a warning plus an `attention` audit entry): a subscription without a seat
