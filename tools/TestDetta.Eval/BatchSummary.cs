@@ -242,6 +242,12 @@ internal static class BatchSummary
             json.WriteStartObject();
             json.WriteString("testdettaCommit", EvalBuild.Commit);
             json.WriteString("judging", Judging(totals));
+            var (allKilling, allMissed, allOpen) = (totals.Sum(static t => t.Killing), totals.Sum(static t => t.Missed), totals.Sum(static t => t.Inconclusive ?? 0));
+            json.WriteNumber("killing", allKilling);
+            json.WriteNumber("missed", allMissed);
+            json.WriteNumber("inconclusive", allOpen);
+            json.WriteNumber("upperBound95", Math.Round(MissRate.UpperBound(allMissed, allKilling), 6));
+            json.WriteNumber("worstCaseUpperBound95", Math.Round(MissRate.UpperBound(allMissed + allOpen, allKilling + allOpen), 6));
             json.WriteStartArray("repositories");
             foreach (var t in totals)
             {

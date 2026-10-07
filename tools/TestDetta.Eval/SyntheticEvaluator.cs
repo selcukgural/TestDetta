@@ -962,9 +962,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
         var evaluated = state.Reached.ToDictionary(Relative, StringComparer.Ordinal);
         var all = candidates.ToDictionary(Relative, StringComparer.Ordinal);
-        if (stored.Reached.Count == 0 && stored.NotBuilt.Count == 0
-            || stored.Reached.Exists(p => !evaluated.ContainsKey(p))
-            || stored.NotBuilt.Exists(p => !all.ContainsKey(p)))
+        if (stored.Reached.Exists(p => !evaluated.ContainsKey(p)) || stored.NotBuilt.Exists(p => !all.ContainsKey(p)))
         {
             return null;
         }
