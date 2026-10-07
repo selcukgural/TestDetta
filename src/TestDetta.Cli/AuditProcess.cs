@@ -33,6 +33,21 @@ internal static class AuditProcess
         ["UseSharedCompilation"] = "false",
         ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
         ["DOTNET_NOLOGO"] = "1",
+
+        // A copy of a linked worktree has a .git file that points into the team's git directory: git run by a test in
+        // the copy must not refresh that worktree's index on the side.
+        ["GIT_OPTIONAL_LOCKS"] = "0",
+    };
+
+    /// <summary>
+    /// Variables set last, over the worker's and the inherited ones: the SDK and VSTest write their messages in
+    /// English, whatever the runner's language, so the lines that say a test host crashed can be recognized
+    /// (<see cref="AuditTestRun"/> reads them next to the report's own outcome and the exit code).
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["DOTNET_CLI_UI_LANGUAGE"] = "en",
+        ["VSLANG"] = "1033",
     };
 
     /// <summary>Runs dotnet and writes its output to <paramref name="log"/>.</summary>
@@ -44,6 +59,7 @@ internal static class AuditProcess
     /// <param name="cancel">Kills it when cancelled.</param>
     /// <returns>The exit code, <see cref="TimedOut"/> or <see cref="Cancelled"/>.</returns>
     /// <exception cref="InvalidOperationException">dotnet could not be started.</exception>
+    /// <exception cref="OperationCanceledException">The audit was cancelled before it started.</exception>
     public static int Run(IReadOnlyList<string> arguments, string directory, IReadOnlyDictionary<string, string> environment, TextWriter log, TimeSpan? limit, CancellationToken cancel)
     {
         cancel.ThrowIfCancellationRequested();
@@ -53,7 +69,7 @@ internal static class AuditProcess
             psi.ArgumentList.Add(argument);
         }
 
-        foreach (var (name, value) in TestDetta.Coverage.UnattendedRun.Variables.Concat(Quiet).Concat(environment))
+        foreach (var (name, value) in TestDetta.Coverage.UnattendedRun.Variables.Concat(Quiet).Concat(environment).Concat(English))
         {
             psi.Environment[name] = value;
         }
@@ -63,9 +79,17 @@ internal static class AuditProcess
         CountdownEvent? ended = new(2);
         process.OutputDataReceived += (_, e) => Receive(e.Data);
         process.ErrorDataReceived += (_, e) => Receive(e.Data);
-        if (!process.Start())
+        try
         {
-            throw new InvalidOperationException("Could not start dotnet.");
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("Could not start dotnet.");
+            }
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            // dotnet is not on PATH: an error the audit reports, not one that ends it without a report.
+            throw new InvalidOperationException($"Could not start {psi.FileName}: {ex.Message}", ex);
         }
 
         process.BeginOutputReadLine();

@@ -62,18 +62,32 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
             state.Stop = "error";
             state.Error = refused.Message;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException
+                                       or System.ComponentModel.Win32Exception or KeyNotFoundException or AuditTreeChangedException)
         {
             LogFailed(ex);
             state.Stop = "error";
             state.Error = $"{ex.GetType().Name}: {ex.Message}";
         }
-        finally
-        {
-            state.Workspace?.Dispose();
-        }
 
-        var result = new AuditResult(root, state.Stop ?? "sample", state.Mutants, state.Projects, options.Audit, Reproduce(options, root, state.Graph))
+        // The report first: a cancelled CI job may be killed while the copy is deleted, which takes long for a big tree.
+        var result = Result(options, state, budget);
+        var path = ReportPath(options, root);
+        WriteJson(options, result, path, announce: false);
+        WriteSummary(options, result);
+        state.Workspace?.Dispose();
+        result = result with { LeftBehind = state.Workspace?.LeftBehind, WorkFolderRemoved = state.Workspace is not null && state.Workspace.LeftBehind is null };
+        AuditReport.WriteConsole(result, options, stdout);
+        WriteJson(options, result, path, announce: true);
+        return result.Missed > 0 ? Missed : result.StopReason is "error" or "cancelled" ? Failure : Success;
+    }
+
+    /// <summary>The result of what the audit found, however it ended.</summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="state">What was found.</param>
+    /// <param name="budget">The time budget, for the wall time.</param>
+    private AuditResult Result(CliOptions options, State state, ShadowBudget budget) =>
+        new(state.Root, state.Stop ?? "sample", state.Mutants, state.Projects, options.Audit, Reproduce(options, state))
         {
             Error = state.Error,
             Sample = state.Sample,
@@ -81,12 +95,8 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
             Seconds = budget.Spent.TotalSeconds,
             BaselineSeconds = state.BaselineSeconds,
             WorkFolder = state.Workspace?.Folder,
-            LeftBehind = state.Workspace?.LeftBehind,
             Parallelism = options.Audit.Parallelism,
         };
-        Report(options, result, root);
-        return result.Missed > 0 ? Missed : result.StopReason is "error" or "cancelled" ? Failure : Success;
-    }
 
     /// <summary>What the audit has found so far; the report is written from it however the audit ends.</summary>
     /// <param name="root">The team's repository root.</param>
@@ -100,6 +110,9 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
 
         /// <summary>The project graph, once loaded.</summary>
         public ProjectGraph? Graph { get; set; }
+
+        /// <summary>The commit audited, recorded before anything else; every change is compared with it.</summary>
+        public string? Head { get; set; }
 
         /// <summary>Why the audit stopped, once it did.</summary>
         public string? Stop { get; set; }
@@ -133,8 +146,12 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         var root = state.Root;
         var audit = options.Audit;
 
+        // The commit is fixed now: every analysis compares with it, and stops the audit when the repository moved.
+        var head = _git.Head(root);
+        state.Head = head;
+
         // Uncommitted changes would join every change's diff against HEAD and widen every selection.
-        var dirty = _git.ChangedFiles(root, "HEAD").Where(static f => !f.StartsWith(".testdetta/", StringComparison.Ordinal)).ToList();
+        var dirty = _git.ChangedFiles(root, head).Where(static f => !f.StartsWith(".testdetta/", StringComparison.Ordinal)).ToList();
         if (dirty.Count > 0)
         {
             throw new AuditRefused(
@@ -165,35 +182,45 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         state.Workspace = AuditWorkspace.Create(root, audit.WorkDirectory ?? AuditWorkspace.DefaultParent);
         var workspace = state.Workspace;
         var runner = new AuditTestRun(workspace, cancel);
+        var copy = workspace.Copies[0];
+
+        // Before anything builds or runs in the copy: everything it writes must stay inside it.
+        var paths = WritePaths(graph, workspace, options.Test.DotnetTestArguments);
+        foreach (var folder in paths.Where(static p => p.Kind is not ("TargetPath" or "DocumentationFile")).Select(static p => p.Path).Distinct(Paths.Comparer))
+        {
+            AuditWorkspace.MaterializeLinks(folder, copy);
+        }
 
         var started = budget.Spent;
-        var projects = Baseline(graph, maps, workspace, runner, options.Test.DotnetTestArguments, state);
+        var projects = Baseline(new BaselineInput(graph, maps, workspace, runner, options.Test.DotnetTestArguments, paths), state, budget);
         state.BaselineSeconds = (budget.Spent - started).TotalSeconds;
+        if (budget.RanOut)
+        {
+            state.Stop = "budget";
+            return;
+        }
+
         if (projects.Count == 0)
         {
             throw new AuditRefused("no test project wrote a test report TestDetta can read in the run without changes; see the projects in the report");
         }
 
         // Only the repository's own builds of its assemblies, and only inside the copy: an output outside it would be the team's own.
-        var copy = workspace.Copies[0];
         var outputs = projects.SelectMany(p => p.Outputs.Select(o => Path.Combine(copy, o))).Distinct(Paths.Comparer).ToList();
         var assemblies = RepositoryAssemblies.Find(new TestDetta.Coverage.ProjectAssemblies(_logger).FileNames(graph, root), outputs);
-        if (assemblies.FirstOrDefault(a => !Paths.IsUnder(Paths.Normalize(Path.GetFullPath(a)), copy)) is { } outside)
-        {
-            throw new AuditRefused($"{outside} lies outside the working copy; td audit rewrites nothing outside it");
-        }
-
         List<string> relative = [.. assemblies.Select(a => Path.GetRelativePath(copy, a).Replace('\\', '/'))];
-        var workers = new List<AuditWorker> { Worker(workspace, copy, 1, audit.Parallelism) };
+        Detach(copy, relative);
+        var workers = new List<AuditWorker> { Worker(workspace, copy, 1, audit.Parallelism, hooks.Environment) };
         for (var k = 2; k <= Math.Min(audit.Parallelism, sample.Count); k++)
         {
             cancel.ThrowIfCancellationRequested();
-            workers.Add(Worker(workspace, workspace.AddCopy(copy), k, audit.Parallelism));
+            var added = workspace.AddCopy(copy);
+            Detach(added, relative);
+            workers.Add(Worker(workspace, added, k, audit.Parallelism, hooks.Environment));
         }
 
-        var context = new AuditContext(workspace, projects, relative, options.Test.DotnetTestArguments, new AuditSelector(root, options.Analysis, loggerFactory, cancel), maps)
+        var context = new AuditContext(workspace, projects, relative, options.Test.DotnetTestArguments, new AuditSelector(root, head, options.Analysis, loggerFactory, cancel), maps)
         {
-            Budget = budget,
             Parallelism = workers.Count,
         };
         var trial = new AuditTrial(context, hooks, cancel);
@@ -203,7 +230,7 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         var (mutants, stop, failure) = AuditLoop.Run(
             sample,
             workers.Count,
-            new AuditStopRules(audit.TargetBroken, audit.MaxMutants, budget),
+            new AuditStopRules(audit.TargetBroken, audit.MaxMutants, budget) { Healthy = workspace.LowSpace },
             (worker, index, target) => trial.Run(workers[worker], index, target),
             mutant => Progress(mutant, state),
             cancel);
@@ -213,6 +240,60 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         {
             LogFailed(failure);
             state.Error = $"{failure.GetType().Name}: {failure.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Where every project of the copy writes, asked from MSBuild before anything builds or runs there; the audit is
+    /// refused when any of it, or a path option of the user's arguments, lies outside the copy.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="workspace">The work folder.</param>
+    /// <param name="userArguments">The user's <c>dotnet test</c> arguments.</param>
+    /// <exception cref="AuditRefused">Something would be written outside the copy.</exception>
+    private List<AuditOutputPath> WritePaths(ProjectGraph graph, AuditWorkspace workspace, IReadOnlyList<string> userArguments)
+    {
+        var copy = workspace.Copies[0];
+        string Relative(string path) => Path.GetRelativePath(copy, path).Replace('\\', '/');
+        foreach (var project in graph.Projects.Where(static p => p.IsTestProject))
+        {
+            var runDirectory = DotnetTestLocation.For(copy, workspace.InCopy(copy, project.Path)).FullDirectory(copy);
+            if (AuditOutputPaths.OutsideOption(copy, runDirectory, userArguments) is { } option)
+            {
+                throw new AuditRefused(option);
+            }
+        }
+
+        var projects = graph.Projects.Where(static p => p.SdkStyle).Select(p => workspace.InCopy(copy, p.Path)).ToList();
+        var tests = graph.Projects.Where(static p => p.IsTestProject && p.SdkStyle).Select(p => workspace.InCopy(copy, p.Path)).ToHashSet(Paths.Comparer);
+        var paths = AuditOutputPaths.Query(new AuditPathRequest(copy, projects, tests, userArguments), workspace.Scratch("paths"), cancel);
+        return AuditOutputPaths.Outside(copy, projects, paths, Relative) is { } outside ? throw new AuditRefused(outside) : paths;
+    }
+
+    /// <summary>
+    /// Makes every assembly the changes rewrite, and its symbol file, a file of the copy's own (<see cref="AuditWorkspace.Detach"/>)
+    /// and checks it lies inside the copy once links are resolved: the mutant is written in place.
+    /// </summary>
+    /// <param name="copy">Root of a working copy.</param>
+    /// <param name="assemblies">The assemblies, relative to the copy's root.</param>
+    /// <exception cref="AuditRefused">One lies outside the copy.</exception>
+    private static void Detach(string copy, IReadOnlyList<string> assemblies)
+    {
+        foreach (var assembly in assemblies)
+        {
+            var full = Path.Combine(copy, assembly);
+            if (!Paths.IsUnder(Paths.ResolveLinks(Path.GetDirectoryName(full)!), copy))
+            {
+                throw new AuditRefused($"{full} lies outside the working copy once its links are resolved; td audit rewrites nothing outside it");
+            }
+
+            foreach (var file in (string[])[full, Path.ChangeExtension(full, ".pdb")])
+            {
+                if (File.Exists(file))
+                {
+                    AuditWorkspace.Detach(file);
+                }
+            }
         }
     }
 
@@ -243,19 +324,34 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
             : throw new AuditRefused($"no member of the sample is named {string.Join(" or ", audit.Members)} (with --kinds {audit.KindsText})");
     }
 
+    /// <summary>What the baseline needs.</summary>
+    /// <param name="Graph">Projects of the repository.</param>
+    /// <param name="Maps">Coverage maps, for the map commit of each project.</param>
+    /// <param name="Workspace">The work folder.</param>
+    /// <param name="Runner">Runs projects of the copy.</param>
+    /// <param name="UserArguments">The <c>dotnet test</c> arguments.</param>
+    /// <param name="Paths">Where each project of the copy writes (<see cref="WritePaths"/>).</param>
+    private sealed record BaselineInput(
+        ProjectGraph Graph,
+        Dictionary<string, CoverageMap> Maps,
+        AuditWorkspace Workspace,
+        AuditTestRun Runner,
+        IReadOnlyList<string> UserArguments,
+        IReadOnlyList<AuditOutputPath> Paths);
+
     /// <summary>
     /// Runs every test project once in the copy without a change, as the team runs it (building there unless the
-    /// arguments say <c>--no-build</c>), and keeps those that wrote a report without crashing, with their failures, time
-    /// and output folders. The others are listed with the reason; a legacy project that needs the full MSBuild is not run.
+    /// arguments say <c>--no-build</c>), and keeps those that wrote a report of a complete run, with their failures, time
+    /// and output folders. The others are listed with the reason: a legacy project that needs the full MSBuild, and one
+    /// whose own filter cannot be joined with a class filter, are not run. Each build and run may take what is left of
+    /// the budget; once it is spent, no further project runs.
     /// </summary>
-    /// <param name="graph">Projects of the repository.</param>
-    /// <param name="maps">Coverage maps, for the map commit of each project.</param>
-    /// <param name="workspace">The work folder.</param>
-    /// <param name="runner">Runs projects of the copy.</param>
-    /// <param name="userArguments">The <c>dotnet test</c> arguments.</param>
+    /// <param name="input">What the baseline needs.</param>
     /// <param name="state">Receives every project.</param>
-    private List<AuditProject> Baseline(ProjectGraph graph, Dictionary<string, CoverageMap> maps, AuditWorkspace workspace, AuditTestRun runner, IReadOnlyList<string> userArguments, State state)
+    /// <param name="budget">The time budget.</param>
+    private List<AuditProject> Baseline(BaselineInput input, State state, ShadowBudget budget)
     {
+        var (graph, maps, workspace, runner, userArguments, paths) = input;
         var copy = workspace.Copies[0];
         var audited = new List<AuditProject>();
         var noBuild = BeforeRunSettings(userArguments).Contains("--no-build");
@@ -270,31 +366,49 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
                 continue;
             }
 
-            stdout.WriteLine($"td audit: running {relative} without changes");
-            stdout.Flush();
             var mode = DotnetTestLocation.For(copy, workspace.InCopy(copy, project.Path)).Mode;
-            if (mode == DotnetTestMode.TestingPlatform && !noBuild && !runner.Build(copy, project, userArguments))
+            var syntax = TestFilter.SyntaxFor(project, mode);
+            if (AuditTrial.Unjoinable(syntax, userArguments) is { } unjoinable)
             {
-                state.Projects.Add(new AuditProjectInfo(relative, false, "does not build in the working copy") { MapCommit = mapCommit });
+                state.Projects.Add(new AuditProjectInfo(relative, false, unjoinable) { MapCommit = mapCommit });
                 continue;
             }
 
-            var outputs = mode == DotnetTestMode.TestingPlatform ? Outputs(runner, copy, project, userArguments) : null;
-            var run = runner.Run(new AuditRunRequest(copy, project, userArguments, "baseline") { NoBuild = noBuild }, outputs?.FirstOrDefault());
+            if (budget.RanOut)
+            {
+                state.Projects.Add(new AuditProjectInfo(relative, false, "not run: the budget ran out before its run without changes") { MapCommit = mapCommit });
+                continue;
+            }
+
+            stdout.WriteLine($"td audit: running {relative} without changes");
+            stdout.Flush();
+            var inCopy = workspace.InCopy(copy, project.Path);
+            var outputs = paths.Where(p => p.Kind == "TargetPath" && Paths.Comparer.Equals(p.Project, inCopy))
+                .Select(static p => Paths.Normalize(Path.GetDirectoryName(p.Path)!)).Distinct(Paths.Comparer).ToList();
+            if (mode == DotnetTestMode.TestingPlatform && !noBuild && !runner.Build(copy, project, userArguments, budget.For(null, null).Limits.Timeout))
+            {
+                state.Projects.Add(new AuditProjectInfo(relative, false, budget.RanOut ? "not run: the budget ran out while it was built" : "does not build in the working copy") { MapCommit = mapCommit });
+                continue;
+            }
+
+            var (limits, _) = budget.For(null, null);
+            var run = runner.Run(new AuditRunRequest(copy, project, userArguments, "baseline") { NoBuild = noBuild, Timeout = limits.Timeout, CappedByBudget = limits.Timeout is not null }, outputs.FirstOrDefault());
             cancel.ThrowIfCancellationRequested();
             if (!run.Complete || run.Classes == 0)
             {
-                state.Projects.Add(new AuditProjectInfo(relative, false, run.Complete ? "no test ran" : run.Problem) { MapCommit = mapCommit, BaselineSeconds = run.Seconds });
+                var reason = run.OutOfBudget ? "not run: the budget ran out during its run without changes" : run.Complete ? "no test ran" : run.Problem;
+                state.Projects.Add(new AuditProjectInfo(relative, false, reason) { MapCommit = mapCommit, BaselineSeconds = run.Seconds });
                 continue;
             }
 
-            outputs ??= Outputs(runner, copy, project, userArguments);
+            // The output folders as they are now, links resolved, so they compare with the folders of rewritten assemblies.
+            outputs = [.. outputs.Select(static o => Directory.Exists(o) ? Paths.Normalize(AuditWorkspace.RealPath(o)) : o)];
             if (outputs.FirstOrDefault(o => !Paths.IsUnder(o, copy)) is { } outside)
             {
                 throw new AuditRefused($"the build output of {relative} ({outside}) lies outside the working copy, so the copy cannot keep it apart; td audit rewrites nothing outside it");
             }
 
-            audited.Add(new AuditProject(project, relative, mode, TestFilter.SyntaxFor(project, mode))
+            audited.Add(new AuditProject(project, relative, mode, syntax)
             {
                 BaselineFailed = run.Failed,
                 BaselineSeconds = run.Seconds,
@@ -313,34 +427,25 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         return audited;
     }
 
-    /// <summary>A project's output folders in the copy, resolved to real paths so they compare with the copy's root.</summary>
-    /// <param name="runner">Asks MSBuild.</param>
-    /// <param name="copy">Root of the copy.</param>
-    /// <param name="project">The project.</param>
-    /// <param name="userArguments">The user's arguments.</param>
-    private static List<string> Outputs(AuditTestRun runner, string copy, ProjectNode project, IReadOnlyList<string> userArguments) =>
-        [.. runner.OutputDirectories(copy, project, userArguments).Select(static o => Directory.Exists(o) ? Paths.Normalize(AuditWorkspace.RealPath(o)) : o)];
-
     /// <summary>A worker over a copy: with several, each gets its own temporary directory, since many suites write fixed names there.</summary>
     /// <param name="workspace">The work folder.</param>
     /// <param name="copy">The worker's copy.</param>
     /// <param name="number">Its number, from 1.</param>
     /// <param name="parallelism">Workers wanted.</param>
-    private static AuditWorker Worker(AuditWorkspace workspace, string copy, int number, int parallelism)
+    /// <param name="extra">Variables of every run besides those (<see cref="AuditHooks.Environment"/>).</param>
+    private static AuditWorker Worker(AuditWorkspace workspace, string copy, int number, int parallelism, IReadOnlyDictionary<string, string> extra)
     {
         var backups = workspace.Scratch($"backup-{number}");
-        if (parallelism <= 1)
+        var variables = new Dictionary<string, string>(extra, StringComparer.Ordinal);
+        if (parallelism > 1)
         {
-            return new AuditWorker(copy, backups, new Dictionary<string, string>(StringComparer.Ordinal));
+            var temporary = workspace.Scratch($"t{number}");
+            variables["TMPDIR"] = temporary + Path.DirectorySeparatorChar;
+            variables["TMP"] = temporary;
+            variables["TEMP"] = temporary;
         }
 
-        var temporary = workspace.Scratch($"t{number}");
-        return new AuditWorker(copy, backups, new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["TMPDIR"] = temporary + Path.DirectorySeparatorChar,
-            ["TMP"] = temporary,
-            ["TEMP"] = temporary,
-        });
+        return new AuditWorker(copy, backups, variables);
     }
 
     /// <summary>Prints one finished change and keeps it for a report written after a failure.</summary>
@@ -371,21 +476,21 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         }
     }
 
-    /// <summary>What a reader needs to repeat the audit: versions, the commit, the maps and the command.</summary>
+    /// <summary>What a reader needs to repeat the audit: versions, the commit audited, the maps and the command.</summary>
     /// <param name="options">Parsed command line.</param>
-    /// <param name="root">Repository root.</param>
-    /// <param name="graph">Projects, or null when the audit stopped before loading them.</param>
-    private AuditReproduction Reproduce(CliOptions options, string root, ProjectGraph? graph)
+    /// <param name="state">What was found: the root, the commit recorded at the start, the project graph.</param>
+    private AuditReproduction Reproduce(CliOptions options, State state)
     {
+        var (root, graph) = (state.Root, state.Graph);
         var assembly = typeof(AuditRun).Assembly;
         var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
         string? binary = null;
-        string? head = null;
+        var head = state.Head;
         var maps = new List<(string, string, string)>();
         try
         {
             binary = Sha256(assembly.Location);
-            head = _git.Head(root);
+            head ??= _git.Head(root);
             foreach (var project in graph?.Projects.Where(static p => p.IsTestProject) ?? [])
             {
                 var path = CoverageMapStore.PathFor(root, project.Path);
@@ -404,35 +509,54 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         return new AuditReproduction(version, binary, head, maps, AuditReport.Options(options, mutant: null), command);
     }
 
-    /// <summary>Writes the report to the console, the JSON file and, when asked, the job summary.</summary>
+    /// <summary>The JSON report's path: <c>--report</c>, or <c>.testdetta/testdetta-audit.json</c> in the repository.</summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="root">Repository root.</param>
+    private static string ReportPath(CliOptions options, string root) =>
+        options.Audit.Report is { } given ? Path.GetFullPath(given) : Path.Combine(root, ".testdetta", "testdetta-audit.json");
+
+    /// <summary>Writes the JSON report; written once before the work folder is deleted and once after, with the outcome of that.</summary>
     /// <param name="options">Parsed command line.</param>
     /// <param name="result">The result.</param>
-    /// <param name="root">Repository root, for the default report path.</param>
-    private void Report(CliOptions options, AuditResult result, string root)
+    /// <param name="path">The file.</param>
+    /// <param name="announce">True to say on the console where it went (the last write).</param>
+    private void WriteJson(CliOptions options, AuditResult result, string path, bool announce)
     {
-        AuditReport.WriteConsole(result, options, stdout);
-        var path = options.Audit.Report is { } given ? Path.GetFullPath(given) : Path.Combine(root, ".testdetta", "testdetta-audit.json");
         try
         {
             AuditReport.WriteJson(result, options, path);
-            stdout.WriteLine($"td audit: report written to {path}");
+            if (announce)
+            {
+                stdout.WriteLine($"td audit: report written to {path}");
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            stdout.WriteLine($"td audit: could not write {path}: {ex.Message}");
+            if (announce)
+            {
+                stdout.WriteLine($"td audit: could not write {path}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>Appends the Markdown summary when asked, before the work folder is deleted.</summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="result">The result.</param>
+    private void WriteSummary(CliOptions options, AuditResult result)
+    {
+        if (options.Test.SummaryFile is not { } summary)
+        {
+            return;
         }
 
-        if (options.Test.SummaryFile is { } summary)
+        try
         {
-            try
-            {
-                using var writer = File.AppendText(summary);
-                AuditReport.WriteMarkdown(result, options, writer);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                stdout.WriteLine($"td audit: could not write {summary}: {ex.Message}");
-            }
+            using var writer = File.AppendText(summary);
+            AuditReport.WriteMarkdown(result, options, writer);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            stdout.WriteLine($"td audit: could not write {summary}: {ex.Message}");
         }
     }
 

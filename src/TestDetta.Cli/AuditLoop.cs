@@ -6,13 +6,23 @@ namespace TestDetta.Cli;
 /// <param name="TargetBroken">Changes that broke tests after which it stops.</param>
 /// <param name="MaxMutants">Changes that ran tests after which it stops; null for no limit.</param>
 /// <param name="Budget">The time budget, started with the command.</param>
-internal sealed record AuditStopRules(int TargetBroken, int? MaxMutants, ShadowBudget Budget);
+internal sealed record AuditStopRules(int TargetBroken, int? MaxMutants, ShadowBudget Budget)
+{
+    /// <summary>
+    /// Why no further change should start although no count says so (too little disk space left), or null; checked
+    /// before each change, and stops the audit with an error.
+    /// </summary>
+    public Func<string?>? Healthy { get; init; }
+}
 
 /// <summary>
 /// Walks the sample in its fixed order, one change per worker at a time, until a stop condition holds. The conditions
-/// look at counts and time only, never at which change missed, so the changes judged are a prefix of the order: at the
-/// target, changes already running finish and count. A change cut by the budget or a cancellation is kept as stopped
-/// and not counted (docs/design/audit.md, "The sample, and how it stays unbiased").
+/// look at counts and time only, never at which change missed, and decide only whether a further change starts: a
+/// change that started always runs to its end within its own run limits, whatever stops the audit meanwhile (the
+/// target, the limit, the budget, another worker's error). So the changes taken are exactly positions 1 to k of the
+/// order, k being the last one started, with nothing in between left out. Only a cancellation (Ctrl+C, SIGTERM) or an
+/// error cuts a running change short; it is kept as stopped, and the worst-case bound counts it as a miss
+/// (docs/design/audit.md, "The sample, and how it stays unbiased").
 /// </summary>
 internal static class AuditLoop
 {
@@ -66,7 +76,38 @@ internal static class AuditLoop
                 return "budget";
             }
 
-            return next >= sample.Count ? "sample" : null;
+            if (next >= sample.Count)
+            {
+                return "sample";
+            }
+
+            if (rules.Healthy?.Invoke() is { } unhealthy)
+            {
+                failures.Add(new IOException(unhealthy));
+                return "error";
+            }
+
+            return null;
+        }
+
+        void Record(int index, AuditMutant result)
+        {
+            // A result that came in after a cancellation may rest on runs it cut short (SIGINT reaches the test hosts
+            // too): only a miss confirmed before it counts, and what no test can see.
+            if (cancel.IsCancellationRequested && result.Outcome is not (AuditOutcome.Missed or AuditOutcome.Stopped or AuditOutcome.NotReached))
+            {
+                result = result with { Outcome = AuditOutcome.Stopped, Note = "cancelled while it ran" };
+            }
+
+            results[index] = result;
+            ran += result.Ran ? 1 : 0;
+            broke += result.Broke ? 1 : 0;
+            if (result.Outcome == AuditOutcome.Stopped && cancel.IsCancellationRequested)
+            {
+                stop ??= "cancelled";
+            }
+
+            progress(result);
         }
 
         void Work(int worker)
@@ -96,7 +137,13 @@ internal static class AuditLoop
                     lock (gate)
                     {
                         running--;
-                        failures.Add(ex);
+
+                        // The change's result so far when the trial kept one (a miss confirmed before a failed restore),
+                        // else the change counts as stopped: it is part of the order taken, and the worst case counts it.
+                        Record(index, ex is AuditChangeFailedException failed
+                            ? failed.Result
+                            : new AuditMutant(index + 1, sample[index], AuditOutcome.Stopped) { Note = $"stopped by an error: {ex.Message}" });
+                        failures.Add(ex is AuditChangeFailedException { InnerException: { } inner } ? inner : ex);
                         stop = "error";
                     }
 
@@ -106,15 +153,7 @@ internal static class AuditLoop
                 lock (gate)
                 {
                     running--;
-                    results[index] = result;
-                    ran += result.Ran ? 1 : 0;
-                    broke += result.Broke ? 1 : 0;
-                    if (result.Outcome == AuditOutcome.Stopped)
-                    {
-                        stop ??= cancel.IsCancellationRequested ? "cancelled" : "budget";
-                    }
-
-                    progress(result);
+                    Record(index, result);
                 }
             }
         }

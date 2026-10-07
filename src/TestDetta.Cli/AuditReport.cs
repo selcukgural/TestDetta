@@ -6,13 +6,13 @@ using static TestDetta.Cli.TestRunArguments;
 namespace TestDetta.Cli;
 
 /// <summary>
-/// Writes the result of <c>td audit</c>: the verdict and the misses on the console, <c>testdetta-audit.json</c> (schema 1,
+/// Writes the result of <c>td audit</c>: the verdict and the misses on the console, <c>testdetta-audit.json</c> (schema 2,
 /// docs/design/audit.md) and the Markdown job summary. Decisions are shown only for classes that ran and failed.
 /// </summary>
 internal static class AuditReport
 {
     /// <summary>Version of the JSON report.</summary>
-    public const int Schema = 1;
+    public const int Schema = 2;
 
     /// <summary>What the report says about the license, for the owner and for reviewers.</summary>
     public const string License =
@@ -31,20 +31,24 @@ internal static class AuditReport
     };
 
     /// <summary>
-    /// The verdict line: "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103)", then why
-    /// the audit stopped, and whether the target was reached.
+    /// The verdict line: "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2
+    /// inconclusive, 0 stopped (worst case, counting them as misses: 95% upper bound 5.8%, n = 105)", then why the audit
+    /// stopped, and whether the target was reached. Bounds are rounded up, so the line never states less than the bound.
     /// </summary>
     /// <param name="result">The result.</param>
     public static string Verdict(AuditResult result)
     {
-        if (result.Error is { } error && result.Changes == 0)
+        if (result.Error is { } error && result.Changes == 0 && result.Unjudged == 0)
         {
             return $"No audit result: {error}";
         }
 
         var missed = result.Missed == 0 ? "0 missed" : $"{result.Missed} MISSED";
         var bound = result.Broke == 0 ? "no upper bound without a change that broke tests" : $"95% upper bound {Percent(result.UpperBound)}, n = {result.Broke}";
-        var line = $"On your code: {result.Changes} {(result.Changes == 1 ? "change" : "changes")}, {result.Broke} broke tests, {missed} ({bound})";
+        var worstN = result.Broke + result.Unjudged;
+        var worst = worstN == 0 ? "no worst-case bound" : $"worst case, counting them as misses: 95% upper bound {Percent(result.WorstCaseBound)}, n = {worstN}";
+        var line = $"On your code: {result.Changes} {(result.Changes == 1 ? "change" : "changes")}, {result.Broke} broke tests, {missed} ({bound}); " +
+                   $"{result.Count(AuditOutcome.Inconclusive)} inconclusive, {result.Count(AuditOutcome.Stopped)} stopped ({worst})";
         var target = result.Settings.TargetBroken;
         var why = result.StopReason switch
         {
@@ -159,6 +163,18 @@ internal static class AuditReport
             json.WriteNull("upperBound95");
         }
 
+        // Every inconclusive and stopped change counted as one that broke tests and was missed.
+        json.WriteNumber("unjudged", result.Unjudged);
+        json.WriteNumber("worstCaseN", result.Broke + result.Unjudged);
+        if (result.Broke + result.Unjudged > 0)
+        {
+            json.WriteNumber("worstCaseUpperBound95", Math.Round(result.WorstCaseBound, 6));
+        }
+        else
+        {
+            json.WriteNull("worstCaseUpperBound95");
+        }
+
         json.WriteNumber("targetBroken", result.Settings.TargetBroken);
         json.WriteBoolean("targetReached", result.TargetReached);
         json.WriteEndObject();
@@ -178,7 +194,7 @@ internal static class AuditReport
         }
 
         json.WriteString("workFolder", result.WorkFolder);
-        json.WriteBoolean("workFolderRemoved", result.WorkFolder is not null && result.LeftBehind is null);
+        json.WriteBoolean("workFolderRemoved", result.WorkFolderRemoved);
         json.WriteStartArray("dotnetTestArguments");
         foreach (var argument in result.TestArguments)
         {
@@ -254,7 +270,7 @@ internal static class AuditReport
         json.WriteNumber("index", mutant.Index);
         json.WriteString("member", mutant.Member);
         json.WriteString("kind", MutantKinds.Name(mutant.Target.Kind));
-        json.WriteString("file", mutant.File);
+        json.WriteString("file", mutant.File.Length > 0 ? mutant.File : Path.GetRelativePath(root, mutant.Target.Edits[0].Path).Replace('\\', '/'));
         json.WriteBoolean("covered", mutant.Target.Covered);
         json.WriteString("outcome", Name(mutant.Outcome));
         if (mutant.Note is { } note)
@@ -294,9 +310,10 @@ internal static class AuditReport
         {
             // The edit to make by hand, to see the same decision with td test or td affected (which needs a license).
             json.WriteStartArray("edits");
-            foreach (var edit in mutant.Target.Edits)
+            for (var i = 0; i < mutant.Target.Edits.Count; i++)
             {
-                var (line, column) = Position(edit.Path, edit.Position);
+                var edit = mutant.Target.Edits[i];
+                var (line, column) = i < mutant.EditPositions.Count ? mutant.EditPositions[i] : (0, 0);
                 json.WriteStartObject();
                 json.WriteString("file", Path.GetRelativePath(root, edit.Path).Replace('\\', '/'));
                 json.WriteNumber("line", line);
@@ -320,7 +337,22 @@ internal static class AuditReport
     {
         json.WriteStartObject();
         json.WriteString("project", testClass.Project);
-        json.WriteString("class", testClass.Name);
+        if (testClass.Crash && testClass.Name is AuditClass.SelectedPart or AuditClass.LeftOutPart)
+        {
+            // A part of the project whose run did not complete with the change: no class can be named.
+            json.WriteNull("class");
+            json.WriteString("part", testClass.Selected ? "selected" : "left-out");
+        }
+        else
+        {
+            json.WriteString("class", testClass.Name);
+        }
+
+        if (testClass.Crash)
+        {
+            json.WriteBoolean("crash", true);
+        }
+
         json.WriteBoolean("selected", testClass.Selected);
         json.WriteStartObject("chain");
         json.WriteString("projectMode", testClass.ProjectMode);
@@ -372,9 +404,14 @@ internal static class AuditReport
         writer.WriteLine();
         writer.WriteLine(MarkdownSummary.Code(Verdict(result)));
         writer.WriteLine();
-        writer.WriteLine("| Caught | Missed | Did not break | Inconclusive | Not reached | Stopped |");
-        writer.WriteLine("| ---: | ---: | ---: | ---: | ---: | ---: |");
-        writer.WriteLine($"| {result.Count(AuditOutcome.Caught)} | {result.Missed} | {result.Count(AuditOutcome.DidNotBreak)} | {result.Count(AuditOutcome.Inconclusive)} | {result.Count(AuditOutcome.NotReached)} | {result.Count(AuditOutcome.Stopped)} |");
+        writer.WriteLine("| Caught | Missed | Did not break | Inconclusive | Not reached | Stopped | 95% upper bound | Worst case |");
+        writer.WriteLine("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+        var bound = result.Broke == 0 ? "none" : $"{Percent(result.UpperBound)} (n = {result.Broke})";
+        var worstN = result.Broke + result.Unjudged;
+        var worst = worstN == 0 ? "none" : $"{Percent(result.WorstCaseBound)} (n = {worstN})";
+        writer.WriteLine($"| {result.Count(AuditOutcome.Caught)} | {result.Missed} | {result.Count(AuditOutcome.DidNotBreak)} | {result.Count(AuditOutcome.Inconclusive)} | {result.Count(AuditOutcome.NotReached)} | {result.Count(AuditOutcome.Stopped)} | {bound} | {worst} |");
+        writer.WriteLine();
+        writer.WriteLine("The worst case counts every inconclusive and stopped change as one that broke tests and was missed.");
         writer.WriteLine();
         var misses = result.Mutants.Where(static m => m.Outcome == AuditOutcome.Missed).ToList();
         if (misses.Count > 0)
@@ -407,38 +444,13 @@ internal static class AuditReport
         writer.WriteLine();
     }
 
-    /// <summary>The 1-based line and column of a character offset in a file; 0, 0 when the file cannot be read.</summary>
-    /// <param name="path">The file.</param>
-    /// <param name="offset">Character offset, as the sampler took it from the file's text.</param>
-    private static (int Line, int Column) Position(string path, int offset)
-    {
-        string text;
-        try
-        {
-            text = File.ReadAllText(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return (0, 0);
-        }
-
-        var line = 1;
-        var start = 0;
-        for (var i = 0; i < Math.Min(offset, text.Length); i++)
-        {
-            if (text[i] == '\n')
-            {
-                line++;
-                start = i + 1;
-            }
-        }
-
-        return (line, offset - start + 1);
-    }
-
-    /// <summary>A share as a percentage with one decimal: <c>2.9%</c>.</summary>
+    /// <summary>
+    /// An upper bound as a percentage with one decimal, rounded up: <c>2.9%</c> for 0.02922, <c>3.0%</c> for 0.02951. A
+    /// bound shown rounded to the nearest tenth could read lower than it is.
+    /// </summary>
     /// <param name="share">From 0 to 1.</param>
-    private static string Percent(double share) => (share * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%";
+    internal static string Percent(double share) =>
+        (Math.Max(0, Math.Ceiling((share * 1000) - 1e-9)) / 10).ToString("0.0", CultureInfo.InvariantCulture) + "%";
 
     /// <summary>Writes a time limit in seconds, or null for none.</summary>
     /// <param name="json">The writer.</param>

@@ -8,7 +8,7 @@ internal enum AuditOutcome
     /// <summary>Tests broke and the selection ran every class that broke.</summary>
     Caught,
 
-    /// <summary>A class that broke, confirmed alone with and without the change, was left out: a miss.</summary>
+    /// <summary>A class that broke, confirmed alone with and without the change, or a part whose run breaks only with it, was left out: a miss.</summary>
     Missed,
 
     /// <summary>The change ran every test that can load it and none failed.</summary>
@@ -17,10 +17,14 @@ internal enum AuditOutcome
     /// <summary>No audited test project's build output holds the member, so no test can see the change; not counted.</summary>
     NotReached,
 
-    /// <summary>A run did not complete in a way the rules can judge (a crash outside the selection, say); listed, not counted.</summary>
+    /// <summary>
+    /// The runs could not tell (a run that does not complete without the change either, a class whose run alone ran none
+    /// of its tests, a failure the selection ran that could not be confirmed); listed, left out of n, and counted as a
+    /// miss by the worst-case bound.
+    /// </summary>
     Inconclusive,
 
-    /// <summary>Cut by the budget or a cancellation while it ran; listed, not counted.</summary>
+    /// <summary>Cut by a cancellation or an error while it ran; listed, left out of n, and counted as a miss by the worst-case bound.</summary>
     Stopped,
 }
 
@@ -30,6 +34,18 @@ internal enum AuditOutcome
 /// <param name="Selected">True when the selection ran it.</param>
 internal sealed record AuditClass(string Project, string Name, bool Selected)
 {
+    /// <summary>The name of a crash entry for the part of a project the selection ran.</summary>
+    public const string SelectedPart = "(the classes the selection ran)";
+
+    /// <summary>The name of a crash entry for the part of a project the selection left out.</summary>
+    public const string LeftOutPart = "(the classes the selection left out)";
+
+    /// <summary>
+    /// True for a part of a project rather than a class: its run did not complete with the change (a crash, a hang)
+    /// and completed without it, so no class can be named; <see cref="Name"/> is then <see cref="SelectedPart"/> or <see cref="LeftOutPart"/>.
+    /// </summary>
+    public bool Crash { get; init; }
+
     /// <summary>The rule that decided the class (<c>Coverage</c>, <c>Name</c>, …), or why there was none.</summary>
     public string Decision { get; init; } = string.Empty;
 
@@ -76,8 +92,11 @@ internal sealed record AuditMutant(int Index, SyntheticTarget Target, AuditOutco
     /// <summary>Share of the recorded test classes the selection ran.</summary>
     public double SelectedShare { get; init; }
 
-    /// <summary>True when a test host crashed or hung with the change and everything the selection left out passed.</summary>
+    /// <summary>True when a catch rests on a run of the part the selection ran that did not complete with the change, twice, and completed without it.</summary>
     public bool CaughtByCrash { get; init; }
+
+    /// <summary>The 1-based line and column of each edit in the file's text at the audited commit.</summary>
+    public IReadOnlyList<(int Line, int Column)> EditPositions { get; init; } = [];
 
     /// <summary>Why it is inconclusive, not reached or stopped; null otherwise.</summary>
     public string? Note { get; init; }
@@ -177,6 +196,9 @@ internal sealed record AuditResult(
     /// <summary>A work folder that could not be deleted; the next audit removes it.</summary>
     public string? LeftBehind { get; init; }
 
+    /// <summary>True once the work folder was deleted; false in the report written before that.</summary>
+    public bool WorkFolderRemoved { get; init; }
+
     /// <summary>Changes tested at once.</summary>
     public int Parallelism { get; init; } = 1;
 
@@ -195,6 +217,15 @@ internal sealed record AuditResult(
 
     /// <summary>The exact one-sided 95% upper bound of the miss rate (<see cref="MissRate.UpperBound"/>), n = <see cref="Broke"/>.</summary>
     public double UpperBound => MissRate.UpperBound(Missed, Broke);
+
+    /// <summary>Changes taken from the sample whose runs could not judge them: inconclusive and stopped.</summary>
+    public int Unjudged => Count(AuditOutcome.Inconclusive) + Count(AuditOutcome.Stopped);
+
+    /// <summary>
+    /// The bound in the worst case: every inconclusive and stopped change counted as one that broke tests and was
+    /// missed, n = <see cref="Broke"/> + <see cref="Unjudged"/>. Equal to <see cref="UpperBound"/> when every change was judged.
+    /// </summary>
+    public double WorstCaseBound => MissRate.UpperBound(Missed + Unjudged, Broke + Unjudged);
 
     /// <summary>True when as many changes broke tests as the target asks.</summary>
     public bool TargetReached => Broke >= Settings.TargetBroken;

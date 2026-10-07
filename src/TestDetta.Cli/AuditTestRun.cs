@@ -26,12 +26,21 @@ internal sealed record AuditProject(ProjectNode Project, string Relative, Dotnet
 
 /// <summary>What one <c>dotnet test</c> of a project showed.</summary>
 /// <param name="Failed">Failed classes in its report.</param>
-/// <param name="Complete">True when it wrote a report, did not crash and finished within its limit.</param>
+/// <param name="Complete">
+/// True when it finished within its limit and wrote a report that says the run completed: no crashed or aborted test
+/// host (in the report or the log), no error of the run itself, and no failing exit code without a failed test.
+/// </param>
 /// <param name="Problem">Why it is not complete, for the report; null when it is.</param>
 internal sealed record AuditRunOutcome(IReadOnlySet<string> Failed, bool Complete, string? Problem)
 {
     /// <summary>Test classes in its report.</summary>
     public int Classes { get; init; }
+
+    /// <summary>
+    /// Classes with a test that ran (passed or failed): a class missing here did not run at all, so its absence from
+    /// <see cref="Failed"/> says nothing (a class filter that matched none of its tests, say).
+    /// </summary>
+    public IReadOnlySet<string> Executed { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>Its wall time.</summary>
     public double Seconds { get; init; }
@@ -72,8 +81,15 @@ internal sealed record AuditRunRequest(string Copy, ProjectNode Project, IReadOn
 /// <param name="cancel">Stops the run.</param>
 internal sealed class AuditTestRun(AuditWorkspace workspace, CancellationToken cancel)
 {
-    /// <summary>Lines with which VSTest says the test host died, so the report is partial.</summary>
-    private static readonly string[] CrashLines = ["Test host process crashed", "Test Run Aborted"];
+    /// <summary>
+    /// Lines with which VSTest says the test host died, so the report is partial. The runs are made in English
+    /// (<see cref="AuditProcess.English"/>); the report's own outcome and the exit code are read as well, so a message
+    /// in another language does not hide a crash either.
+    /// </summary>
+    private static readonly string[] CrashLines = ["Test host process crashed", "Test Run Aborted", "The active test run was aborted"];
+
+    /// <summary>Overall outcomes of a TRX report that mean the run did not complete.</summary>
+    private static readonly string[] IncompleteOutcomes = ["Aborted", "Error", "Timeout"];
 
     /// <summary>Runs the request and reads its report.</summary>
     /// <param name="request">What to run.</param>
@@ -130,12 +146,13 @@ internal sealed class AuditTestRun(AuditWorkspace workspace, CancellationToken c
                 return new AuditRunOutcome(none, false, $"wrote no test report (exit code {exitCode})") { Seconds = seconds };
             }
 
-            if (crashed)
+            var problem = Problem(exitCode, crashed, ReportProblem(results), outcome.FailedClasses.Count);
+            return new AuditRunOutcome(outcome.FailedClasses, problem is null, problem)
             {
-                return new AuditRunOutcome(outcome.FailedClasses, false, "the test host crashed") { Classes = outcome.ReportedClasses.Count, Seconds = seconds };
-            }
-
-            return new AuditRunOutcome(outcome.FailedClasses, true, null) { Classes = outcome.ReportedClasses.Count, Seconds = seconds };
+                Classes = outcome.ReportedClasses.Count,
+                Executed = outcome.ExecutedClasses,
+                Seconds = seconds,
+            };
         }
         finally
         {
@@ -144,44 +161,89 @@ internal sealed class AuditTestRun(AuditWorkspace workspace, CancellationToken c
     }
 
     /// <summary>
-    /// The build output folders of a test project in a copy, from MSBuild: one per target framework it builds (only
-    /// the user's <c>-f</c> when given), as <c>dotnet test</c> runs them all.
+    /// Why a run that wrote a report did not complete, or null when it did: the log says the test host crashed or the
+    /// run was aborted; the report says so itself (<paramref name="reportProblem"/>); or the run failed (a non-zero exit
+    /// code) without a failed test, as a cleanup failure at the run's level, a testing-platform run in which no test ran
+    /// (exit code 8), or a crash whose message was not recognized does. A class that never ran then must not count as
+    /// passed.
     /// </summary>
-    /// <param name="copy">Root of the working copy.</param>
-    /// <param name="project">The project in the team's tree.</param>
-    /// <param name="userArguments">The user's arguments, for <c>-c</c> and <c>-f</c>.</param>
-    /// <exception cref="InvalidOperationException">MSBuild could not answer.</exception>
-    public List<string> OutputDirectories(string copy, ProjectNode project, IReadOnlyList<string> userArguments)
+    /// <param name="exitCode">The run's exit code.</param>
+    /// <param name="crashLine">True when the log holds a line that says the test host crashed.</param>
+    /// <param name="reportProblem">What the report says went wrong (<see cref="ReportProblem"/>), or null.</param>
+    /// <param name="failedClasses">Failed classes in the report.</param>
+    internal static string? Problem(int exitCode, bool crashLine, string? reportProblem, int failedClasses) =>
+        crashLine ? "the test host crashed"
+        : reportProblem is not null ? reportProblem
+        : exitCode != 0 && failedClasses == 0 ? $"it failed (exit code {exitCode}) without a failed test"
+        : null;
+
+    /// <summary>
+    /// What the reports in <paramref name="folder"/> say went wrong with the run as a whole, or null: a TRX report whose
+    /// overall outcome is <c>Aborted</c>, <c>Error</c> or <c>Timeout</c>, or that holds a run message saying the run was
+    /// aborted or the test host crashed (VSTest writes it there while the outcome stays <c>Failed</c>; in English, since
+    /// the runs are made in English; other run messages of outcome <c>Error</c> are adapters' lines such as xUnit's
+    /// "[FAIL]" and mean nothing); an NUnit result whose run was cancelled. A crash whose message is not recognized is
+    /// still seen: by a failing exit code without a failed test (<see cref="Problem"/>), or, for a whole project's run,
+    /// by test classes missing from its report (<see cref="AuditTrial"/>).
+    /// </summary>
+    /// <param name="folder">The run's report folder.</param>
+    internal static string? ReportProblem(string folder)
     {
-        var copyProject = workspace.InCopy(copy, project.Path);
-        var runDirectory = DotnetTestLocation.For(copy, copyProject).FullDirectory(copy);
-        var options = BeforeRunSettings(userArguments);
-        var configuration = ValueOf(options, "-c") ?? ValueOf(options, "--configuration") ?? "Debug";
-        List<string> query = ["msbuild", copyProject, $"-p:Configuration={configuration}", "-getProperty:TargetPath", "-getProperty:TargetFrameworks"];
-        if ((ValueOf(options, "-f") ?? ValueOf(options, "--framework")) is { } framework)
+        if (!Directory.Exists(folder))
         {
-            query.Add($"-p:TargetFramework={framework}");
+            return null;
         }
 
-        using var properties = System.Text.Json.JsonDocument.Parse(AuditProcess.Capture(query, runDirectory, cancel));
-        var values = properties.RootElement.GetProperty("Properties");
-        if (values.GetProperty("TargetPath").GetString() is { Length: > 0 } single)
+        foreach (var file in Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
         {
-            return [Paths.Normalize(Path.GetDirectoryName(single)!)];
-        }
-
-        var outputs = new List<string>();
-        var frameworks = values.GetProperty("TargetFrameworks").GetString() ?? string.Empty;
-        foreach (var each in frameworks.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            List<string> one = [.. query.Where(static q => !q.StartsWith("-getProperty", StringComparison.Ordinal)), $"-p:TargetFramework={each}", "-getProperty:TargetPath"];
-            if (AuditProcess.Capture(one, runDirectory, cancel).Trim() is { Length: > 0 } path)
+            if (!file.EndsWith(".trx", StringComparison.OrdinalIgnoreCase) && !file.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
             {
-                outputs.Add(Paths.Normalize(Path.GetDirectoryName(path)!));
+                continue;
+            }
+
+            System.Xml.Linq.XDocument document;
+            try
+            {
+                document = System.Xml.Linq.XDocument.Load(file);
+            }
+            catch (System.Xml.XmlException)
+            {
+                return $"its test report {Path.GetFileName(file)} could not be read";
+            }
+
+            if (document.Root is { Name.LocalName: "test-run" } nunit)
+            {
+                if (string.Equals(nunit.Attribute("label")?.Value, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "the test run was cancelled";
+                }
+
+                continue;
+            }
+
+            if (document.Root is not { Name.LocalName: "TestRun" } run)
+            {
+                continue;
+            }
+
+            var ns = run.Name.Namespace;
+            var summary = run.Element(ns + "ResultSummary");
+            if (summary?.Attribute("outcome")?.Value is { } overall && IncompleteOutcomes.Contains(overall, StringComparer.OrdinalIgnoreCase))
+            {
+                return $"the test run ended as {overall}";
+            }
+
+            var aborted = summary?.Element(ns + "RunInfos")?.Elements(ns + "RunInfo")
+                .Select(i => i.Element(ns + "Text")?.Value.Trim() ?? string.Empty)
+                .FirstOrDefault(static text => CrashLines.Any(c => text.Contains(c, StringComparison.OrdinalIgnoreCase)));
+            if (aborted is not null)
+            {
+                var first = aborted.Split('\n', 2)[0].Trim();
+                return $"the test run was aborted: {(first.Length > 200 ? first[..200] + "…" : first)}";
             }
         }
 
-        return outputs;
+        return null;
     }
 
     /// <summary>
@@ -191,8 +253,9 @@ internal sealed class AuditTestRun(AuditWorkspace workspace, CancellationToken c
     /// <param name="copy">Root of the working copy.</param>
     /// <param name="project">The project in the team's tree.</param>
     /// <param name="userArguments">The user's arguments, for <c>-c</c> and <c>-f</c>.</param>
+    /// <param name="limit">Longest the build may take (what is left of the budget); null for no limit.</param>
     /// <returns>True when it built.</returns>
-    public bool Build(string copy, ProjectNode project, IReadOnlyList<string> userArguments)
+    public bool Build(string copy, ProjectNode project, IReadOnlyList<string> userArguments, TimeSpan? limit)
     {
         var copyProject = workspace.InCopy(copy, project.Path);
         var runDirectory = DotnetTestLocation.For(copy, copyProject).FullDirectory(copy);
@@ -203,6 +266,6 @@ internal sealed class AuditTestRun(AuditWorkspace workspace, CancellationToken c
             command.AddRange(["-f", framework]);
         }
 
-        return AuditProcess.Run(command, runDirectory, new Dictionary<string, string>(), TextWriter.Null, limit: null, cancel) == 0;
+        return AuditProcess.Run(command, runDirectory, new Dictionary<string, string>(), TextWriter.Null, limit, cancel) == 0;
     }
 }

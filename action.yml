@@ -69,7 +69,7 @@ inputs:
     required: false
     default: ''
   audit-target-broken:
-    description: "Audit mode only. Stop once this many changes broke tests. Empty keeps the default (100: with no miss, the 95% upper bound of the miss rate is below 3%)."
+    description: "Audit mode only. Stop once this many changes broke tests. Empty keeps the default (100: with no miss, the 95% upper bound of the miss rate is at most 3.0%)."
     required: false
     default: ''
   audit-max-mutants:
@@ -77,7 +77,7 @@ inputs:
     required: false
     default: ''
   audit-budget:
-    description: "Audit mode only. Start no change after this long: 90s, 15m, 4h or 1h30m; a plain number is minutes; 0 or none means no limit. Empty keeps the default (4h). Keep it under the job's timeout-minutes."
+    description: "Audit mode only. Start no change after this long: 90s, 15m, 4h or 1h30m; a plain number is minutes; 0 or none means no limit. Empty keeps the default (4h). A change still running then finishes within its own run limits, so keep it well under the job's timeout-minutes."
     required: false
     default: ''
   audit-parallel:
