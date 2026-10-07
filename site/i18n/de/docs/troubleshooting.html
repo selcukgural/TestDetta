@@ -1,22 +1,22 @@
-<!-- title: Fehlerbehebung; layout: docs; description: Was zu tun ist, wenn {{name}} mehr auswählt als erwartet, keine Coverage-Map findet oder den Basis-Commit nicht findet.; source: ae48c4254831 -->
+<!-- title: Fehlerbehebung; layout: docs; description: Was zu tun ist, wenn {{name}} mehr auswählt als erwartet, keine Coverage-Map findet oder den Basis-Commit nicht findet.; source: 469ec3d17ce3 -->
 <h1>Fehlerbehebung</h1>
 <p class="lead">Jeder Eintrag geht von dem aus, was Sie sehen. Bei allen schreibt <code>-v</code> jede Entscheidung samt Grund nach stderr; dieses Log beantwortet die meisten Fragen, und genau das sollten Sie uns schicken.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
 
 <h2 id="whole-project">Das ganze Testprojekt lief</h2>
-<p>Suchen Sie das Projekt in der Ausgabe: Der Grund steht daneben. Die üblichen Ursachen sind eine build-weite Datei, eine Nicht-C#-Datei im Projekt, ein <code>global using</code> oder ein per Reflection gefundener Typ. <a href="/docs/what-runs-everything/">Was alle Tests auslöst</a> listet sie alle auf. Im <code>-v</code>-Log nennt eine Zeile wie <code>affects whole project: True</code> die Datei.</p>
+<p>Suchen Sie das Projekt in der Ausgabe: Der Grund steht daneben. Die üblichen Ursachen sind eine build-weite Datei, eine Datei im Projekt, die kein C#-, Visual-Basic- oder F#-Quellcode ist, ein <code>global using</code> oder ein per Reflection gefundener Typ. <a href="/docs/what-runs-everything/">Was alle Tests auslöst</a> listet sie alle auf. Im <code>-v</code>-Log nennt eine Zeile wie <code>affects whole project: True</code> die Datei.</p>
 
 <h2 id="no-map">Es wurde keine Coverage-Map verwendet</h2>
 <p>Ohne Map verfolgt die Auswahl Namen, was breiter ist. Das Log sagt, warum es keine gab:</p>
 <ul>
-  <li><code>No coverage maps within 50 commits before the merge base</code>: Auf dem Standard-Branch wurde in letzter Zeit nichts aufgezeichnet. Zeichnen Sie dort bei jedem Push eine Map auf; der Modus <code>record</code> der Action erledigt das.</li>
+  <li><code>No coverage maps within 50 commits before the merge base</code> (ausgegeben mit <code>--maps-dir</code>): Auf dem Standard-Branch wurde in letzter Zeit nichts aufgezeichnet. Zeichnen Sie dort bei jedem Push eine Map auf; der Modus <code>record</code> der Action erledigt das.</li>
   <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: Die Map stammt aus einem anderen Branch oder aus der Zeit vor einem Force-Push oder einem langlebigen Branch. Zeichnen Sie auf dem Standard-Branch erneut auf oder erhöhen Sie <code>--max-map-age</code>.</li>
   <li><code>--maps-dir … does not exist</code>: Der Ordner mit den Maps wurde vor dem Lauf nicht wiederhergestellt.</li>
   <li>Unter GitHub Actions benötigt der Job die Berechtigung <code>actions: read</code>, um die Cache-Einträge mit den Maps aufzulisten.</li>
 </ul>
 
 <h2 id="base">Der Basis-Commit wird nicht gefunden</h2>
-<p>{{name}} vergleicht Ihren Branch mit der Merge-Base und braucht daher die Historie beider. Die Action bricht ab mit:</p>
+<p>{{name}} vergleicht Ihren Branch mit der Merge-Base und braucht daher die Historie beider. Im Test-, Record- und Audit-Modus bricht die Action mit dem folgenden Fehler ab; im Shadow-Modus warnt sie und führt stattdessen Ihr einfaches <code>dotnet test</code> aus:</p>
 <pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
 <p>Checken Sie mit <code>fetch-depth: 0</code> aus. In anderen CI-Systemen schalten Sie Shallow Clones ab und rufen den Ziel-Branch mit einer expliziten Refspec ab, wie für jedes System unter <a href="/docs/other-ci/">Andere CI-Systeme</a> gezeigt.</p>
 

@@ -1,6 +1,6 @@
-<!-- title: Kendi deponuzda doğrulayın; layout: docs; description: {{name}}'ya güvenmeden önce, değişikliklerinizin bozduğu her testi seçtiğini kendi kodunuzda kontrol edin.; source: c8f6a5ee441c -->
+<!-- title: Kendi deponuzda doğrulayın; layout: docs; description: {{name}}'ya güvenmeden önce, değişikliklerinizin bozduğu her testi seçtiğini kendi kodunuzda kontrol edin.; source: 6576c19eb0e9 -->
 <h1>Kendi deponuzda doğrulayın</h1>
-<p class="lead">Değerlendirmemiz açık kaynak kütüphaneler üzerinde çalışır. Sizin kodunuzun kendine özgü kalıpları vardır; bu yüzden neyin çalışacağına karar vermesine izin vermeden önce {{name}}'yı kendi kodunuzda kontrol edin. Bu, birkaç haftalık olağan pull request akışı sürer ve ekibiniz için hiçbir şeyi değiştirmez.</p>
+<p class="lead">Değerlendirmemiz açık kaynak kütüphaneler üzerinde çalışır. Sizin kodunuzun kendine özgü kalıpları vardır; bu yüzden neyin çalışacağına karar vermesine izin vermeden önce {{name}}'yı kendi kodunuzda kontrol edin. Bu, birkaç haftalık olağan pull request akışı sürer ve ekibiniz için hiçbir şeyi değiştirmez. GitHub Action'ın <a href="/docs/github-actions/#shadow">shadow mode</a>'u ve <a href="/docs/github-actions/#audit">audit</a>'i bu kontrolleri sizin için yapar ve lisans gerektirmez; aşağıdaki adımlar bunları <code>td affected</code> ile elle yapar.</p>
 
 <h2 id="idea">Fikir</h2>
 <p>Kapı olarak tüm test paketini çalıştırmaya devam edin. Yanında da {{name}}'ya neyi seçmiş olacağını sorun. Tam koşuda başarısız olan her test sınıfı o seçimin içinde olmalıdır. Biri içinde değilse bu bir kaçırmadır ve bunu duymak isteriz.</p>
@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Tam test adımını <code>td test</code> ile ya da action'ın <code>test</code> moduyla değiştirin. Varsayılan branch'te kayda devam edin: kayıt orada tüm testleri çalıştırır; böylece bir seçimin gizleyebileceği her şey sürümden önce yine yakalanır.</p>
 
 <h2 id="how-we-test">Biz nasıl test ediyoruz</h2>
-<p>Aynı kontrol {{corpusRepositories}} açık kaynak depo üzerinde büyük ölçekte çalışır: üyeler tek tek değiştirilir ve başarısız olan her test sınıfının seçilmiş olması gerekir. Son turda bir testi bozan {{corpusFailingChanges}} değişiklikten {{corpusMissed}} tanesi kaçırıldı; önceki turlardaki her kaçırma, düzeltme olmadan başarısız olan bir testle düzeltildi. <a href="/docs/examples/#corpus">Rakamlarla korpus</a>.</p>
+<p>Aynı kontrol {{corpusRepositories}} açık kaynak depo üzerinde büyük ölçekte çalışır: üyeler tek tek değiştirilir ve başarısız olan her test sınıfının seçilmiş olması gerekir. Son turda bir testi bozan {{corpusFailingChanges}} değişiklikten {{corpusMissed}} tanesi kaçırıldı; önceki turlardaki her gerçek kaçırma, düzeltme olmadan başarısız olan bir testle düzeltildi. Bu sayılar, değerlendirmenin seçimin dışında çöken ya da takılan bir test çalıştırmasını kaçırma saymayan önceki kuralıyla ölçüldü. Kural artık katı: böyle bir çökme ya da takılma, değişiklik olmadan yapılan aynı çalıştırma bunun değişiklikten kaynaklanmadığını göstermedikçe bir kaçırmadır. Sayıların yerini bir sonraki turun sayıları alacak. <a href="/docs/examples/#corpus">Rakamlarla korpus</a>.</p>
 
 <h2 id="related">İlgili sayfalar</h2>
 <ul>

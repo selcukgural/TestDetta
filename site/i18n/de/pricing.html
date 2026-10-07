@@ -1,4 +1,4 @@
-<!-- title: Preise; description: Kostenlos für öffentliche Repositorys, {{trialDays}} Tage kostenlos für private, danach Abrechnung pro aktivem Committer.; source: 39129ae026e2 -->
+<!-- title: Preise; description: Kostenlos für öffentliche Repositorys, {{trialDays}} Tage kostenlos für private, danach Abrechnung pro aktivem Committer.; source: 4cd3ecc43854 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -67,14 +67,14 @@
         <label><span>Entwicklerkosten pro Stunde ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
       </div>
       <div class="calc-results" aria-live="polite">
-        <div class="calc-hero"><output name="hours">91 h</output><span>weniger Warten auf Testergebnisse pro Monat</span></div>
+        <div class="calc-hero"><output name="hours">88 h</output><span>weniger Warten auf Testergebnisse pro Monat</span></div>
         <dl>
-          <div><dt>Gesparte Testminuten pro Lauf</dt><dd><output name="perRun">8,6 min</output></dd></div>
-          <div><dt>Gesparte Runner-Minuten pro Monat</dt><dd><output name="ciMinutes">5.443</output></dd></div>
-          <div><dt>Gesparte Runner-Kosten pro Monat</dt><dd><output name="ciCost">33 $</output></dd></div>
-          <div><dt>Gesparte Entwicklerzeit pro Monat</dt><dd><output name="devCost">5.443 $</output></dd></div>
+          <div><dt>Gesparte Testminuten pro Lauf</dt><dd><output name="perRun">8,4 min</output></dd></div>
+          <div><dt>Gesparte Runner-Minuten pro Monat</dt><dd><output name="ciMinutes">5.292</output></dd></div>
+          <div><dt>Gesparte Runner-Kosten pro Monat</dt><dd><output name="ciCost">32 $</output></dd></div>
+          <div><dt>Gesparte Entwicklerzeit pro Monat</dt><dd><output name="devCost">5.292 $</output></dd></div>
           <div><dt>{{name}} pro Monat</dt><dd><output name="cost">150 $</output></dd></div>
-          <div class="calc-net"><dt>Nettoersparnis pro Monat</dt><dd><output name="net">5.326 $</output></dd></div>
+          <div class="calc-net"><dt>Nettoersparnis pro Monat</dt><dd><output name="net">5.174 $</output></dd></div>
         </dl>
         <p class="calc-note">21 Arbeitstage pro Monat. Gezählt wird nur Testzeit: Builds laufen ohnehin.</p>
       </div>
@@ -101,7 +101,7 @@
     </details>
     <details>
       <summary>Sendet {{name}} unseren Code irgendwohin?</summary>
-      <p>Nein. Analyse, Coverage-Maps und Testläufe bleiben in Ihrer CI. Die einzige Netzwerkverbindung ist eine optionale tägliche Lizenzaktualisierung, die nur die Lizenz selbst sendet; setzen Sie <code>TESTDETTA_LICENSE_REFRESH=off</code>, um sie abzuschalten.</p>
+      <p>Nein. Analyse, Coverage-Maps und Testläufe bleiben in Ihrer CI. Der einzige eigene Netzwerkaufruf von {{name}} ist eine optionale Lizenzaktualisierung, die die Lizenz selbst sendet, höchstens einmal am Tag pro Rechner (einmal pro Job auf CI-Runnern, die frisch starten); die GitHub Action lädt außerdem das {{name}}-Paket von nuget.org herunter. Setzen Sie <code>TESTDETTA_LICENSE_REFRESH=off</code>, um die Aktualisierung abzuschalten.</p>
     </details>
     <details>
       <summary>Wer wickelt Zahlung und Rechnungen ab?</summary>

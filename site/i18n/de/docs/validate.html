@@ -1,6 +1,6 @@
-<!-- title: Im eigenen Repository prüfen; layout: docs; description: Prüfen Sie an Ihrem eigenen Code, dass {{name}} jeden Test auswählt, den Ihre Änderungen brechen, bevor Sie sich darauf verlassen.; source: c8f6a5ee441c -->
+<!-- title: Im eigenen Repository prüfen; layout: docs; description: Prüfen Sie an Ihrem eigenen Code, dass {{name}} jeden Test auswählt, den Ihre Änderungen brechen, bevor Sie sich darauf verlassen.; source: 6576c19eb0e9 -->
 <h1>Im eigenen Repository prüfen</h1>
-<p class="lead">Unsere Evaluierung läuft auf Open-Source-Bibliotheken. Ihr Code hat eigene Muster, also prüfen Sie {{name}} daran, bevor Sie es entscheiden lassen, was läuft. Das dauert ein paar Wochen mit normalen Pull Requests und ändert nichts für Ihr Team.</p>
+<p class="lead">Unsere Evaluierung läuft auf Open-Source-Bibliotheken. Ihr Code hat eigene Muster, also prüfen Sie {{name}} daran, bevor Sie es entscheiden lassen, was läuft. Das dauert ein paar Wochen mit normalen Pull Requests und ändert nichts für Ihr Team. Der <a href="/docs/github-actions/#shadow">Shadow-Modus</a> und das <a href="/docs/github-actions/#audit">Audit</a> der GitHub Action erledigen diese Prüfungen für Sie und brauchen keine Lizenz; die Schritte unten erledigen sie von Hand mit <code>td affected</code>.</p>
 
 <h2 id="idea">Die Idee</h2>
 <p>Lassen Sie weiterhin die vollständige Testsuite als Gate laufen. Fragen Sie {{name}} daneben, was es ausgewählt hätte. Jede Testklasse, die im vollständigen Lauf fehlschlägt, muss in dieser Auswahl enthalten sein. Fehlt eine, ist das ein übersehener Test, und davon wollen wir erfahren.</p>
@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Ersetzen Sie den vollständigen Testschritt durch <code>td test</code> oder den Modus <code>test</code> der Action. Zeichnen Sie auf dem Standard-Branch weiter auf: Dort laufen alle Tests, sodass alles, was eine Auswahl je verbergen könnte, trotzdem vor dem Release auffällt.</p>
 
 <h2 id="how-we-test">Wie wir es testen</h2>
-<p>Dieselbe Prüfung läuft im großen Maßstab auf {{corpusRepositories}} Open-Source-Repositorys: Member werden einzeln geändert, und jede Testklasse, die fehlschlägt, muss ausgewählt worden sein. Von {{corpusFailingChanges}} Änderungen, die in der letzten Runde einen Test brachen, wurden {{corpusMissed}} übersehen; jede in früheren Runden übersehene wurde mit einem Test behoben, der ohne die Korrektur fehlschlägt. <a href="/docs/examples/#corpus">Der Korpus in Zahlen</a>.</p>
+<p>Dieselbe Prüfung läuft im großen Maßstab auf {{corpusRepositories}} Open-Source-Repositorys: Member werden einzeln geändert, und jede Testklasse, die fehlschlägt, muss ausgewählt worden sein. Von {{corpusFailingChanges}} Änderungen, die in der letzten Runde einen Test brachen, wurden {{corpusMissed}} übersehen; jede echte in früheren Runden übersehene wurde mit einem Test behoben, der ohne die Korrektur fehlschlägt. Diese Zahlen wurden nach der früheren Regel der Evaluierung gemessen, die einen Testlauf, der außerhalb der Auswahl abstürzte oder hängen blieb, nicht als übersehen zählte. Die Regel ist jetzt streng: Ein solcher Absturz oder Hänger ist ein übersehener Fall, es sei denn, derselbe Lauf ohne die Änderung zeigt, dass er nicht von der Änderung kommt. Die Zahlen werden durch die der nächsten Runde ersetzt. <a href="/docs/examples/#corpus">Der Korpus in Zahlen</a>.</p>
 
 <h2 id="related">Verwandte Seiten</h2>
 <ul>

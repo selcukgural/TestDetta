@@ -1,4 +1,4 @@
-<!-- title: Gizlilik politikası; description: {{name}} ve bu web sitesi neleri toplar ve neleri asla toplamaz.; source: 33a98c58fb9a -->
+<!-- title: Gizlilik politikası; description: {{name}} ve bu web sitesi neleri toplar ve neleri asla toplamaz.; source: 2abbe29448b7 -->
 <div class="wrap legal prose">
 <h1>Gizlilik politikası</h1>
 <p class="muted">Bu çeviri kolaylık için sunulmuştur; çelişki halinde İngilizce metin geçerlidir.</p>
@@ -6,11 +6,11 @@
 <p class="muted">Son güncelleme: {{legalUpdated}}. Veri sorumlusu: {{licensor}}, {{licensorCountry}}. İletişim: <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
 
 <h2>{{name}} aracı</h2>
-<p>{{name}}, CI'ınızda ve geliştiricilerinizin makinelerinde çalışır. Kaynak kodu, diff'leri, kapsam haritalarını, test adlarını, test sonuçlarını ya da derleme çıktısını hiçbir yere göndermez.</p>
+<p>{{name}}, CI'ınızda ve geliştiricilerinizin makinelerinde çalışır. Kaynak kodu, diff'leri, kapsam haritalarını, test adlarını, test sonuçlarını ya da derleme çıktısını ne bize ne de başka birine gönderir. GitHub Actions'ta {{name}} action'ı kapsam haritalarını deponuzun Actions önbelleğinde, shadow ve audit raporlarını da workflow çalıştırmalarınızın artifact'leri olarak, GitHub hesabınızın içinde tutar.</p>
 <ul>
   <li><strong>Committer'lar.</strong> {{name}}, koltuk sayısını kontrol etmek için farklı commit yazarı e-postalarını yerel olarak sayar. E-postalar ve isimler hiçbir zaman gönderilmez, tarafımızca saklanmaz ve loglara yazılmaz.</li>
   <li><strong>Lisans kontrolü.</strong> Lisans, {{name}} içine gömülü bir açık anahtarla çevrimdışı olarak doğrulanır.</li>
-  <li><strong>Lisans yenileme.</strong> {{name}} günde en fazla bir kez lisans servisimizden lisansınızın güncel sürümünü ister. İstek, lisansın kendisini (lisans sahibini, koltukları ve depo kapsamlarını belirtir) ve her ağ isteğinde olduğu gibi IP adresinizi taşır. Adres yalnızca istek hızını sınırlamak için kullanılır ve saklanmaz. Yenilemeyi tamamen kapatmak için <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın.</li>
+  <li><strong>Lisans yenileme.</strong> {{name}} makine başına günde en fazla bir kez (boş bir ana dizinle başlayan CI runner'larında job başına bir kez) lisans servisimizden lisansınızın güncel sürümünü ister. İstek, lisansın kendisini (lisans sahibini, koltukları ve depo kapsamlarını belirtir) ve her ağ isteğinde olduğu gibi IP adresinizi taşır. Adres yalnızca istek hızını sınırlamak için kullanılır ve saklanmaz. Yenilemeyi tamamen kapatmak için <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın.</li>
 </ul>
 
 <h2>Lisans satın alma</h2>

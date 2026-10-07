@@ -1,4 +1,4 @@
-<!-- title: 料金; description: パブリックリポジトリは無料、プライベートリポジトリは {{trialDays}} 日間無料で、その後はアクティブなコミッター単位の料金です。; source: 39129ae026e2 -->
+<!-- title: 料金; description: パブリックリポジトリは無料、プライベートリポジトリは {{trialDays}} 日間無料で、その後はアクティブなコミッター単位の料金です。; source: 4cd3ecc43854 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -67,14 +67,14 @@
         <label><span>開発者の 1 時間あたりのコスト（{{currency}}）</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
       </div>
       <div class="calc-results" aria-live="polite">
-        <div class="calc-hero"><output name="hours">91 h</output><span>1 か月に削減されるテスト結果の待ち時間</span></div>
+        <div class="calc-hero"><output name="hours">88 h</output><span>1 か月に削減されるテスト結果の待ち時間</span></div>
         <dl>
-          <div><dt>1 回の実行あたりに削減されるテスト時間</dt><dd><output name="perRun">8.6 min</output></dd></div>
-          <div><dt>1 か月に削減されるランナー時間（分）</dt><dd><output name="ciMinutes">5,443</output></dd></div>
-          <div><dt>1 か月に削減されるランナーコスト</dt><dd><output name="ciCost">$33</output></dd></div>
-          <div><dt>1 か月に削減される開発者の時間</dt><dd><output name="devCost">$5,443</output></dd></div>
+          <div><dt>1 回の実行あたりに削減されるテスト時間</dt><dd><output name="perRun">8.4 min</output></dd></div>
+          <div><dt>1 か月に削減されるランナー時間（分）</dt><dd><output name="ciMinutes">5,292</output></dd></div>
+          <div><dt>1 か月に削減されるランナーコスト</dt><dd><output name="ciCost">$32</output></dd></div>
+          <div><dt>1 か月に削減される開発者の時間</dt><dd><output name="devCost">$5,292</output></dd></div>
           <div><dt>{{name}} の月額</dt><dd><output name="cost">$150</output></dd></div>
-          <div class="calc-net"><dt>1 か月の正味の節約額</dt><dd><output name="net">$5,326</output></dd></div>
+          <div class="calc-net"><dt>1 か月の正味の節約額</dt><dd><output name="net">$5,174</output></dd></div>
         </dl>
         <p class="calc-note">1 か月を 21 営業日として計算しています。数えているのはテスト時間だけです。ビルドはどちらの場合も実行されます。</p>
       </div>
@@ -101,7 +101,7 @@
     </details>
     <details>
       <summary>{{name}} はコードをどこかに送信しますか？</summary>
-      <p>いいえ。分析、カバレッジマップ、テストの実行はすべてお使いの CI の中で完結します。唯一のネットワーク通信は、ライセンスそのものを送信する任意の 1 日 1 回のライセンス更新です。無効にするには <code>TESTDETTA_LICENSE_REFRESH=off</code> を設定してください。</p>
+      <p>いいえ。分析、カバレッジマップ、テストの実行はすべてお使いの CI の中で完結します。{{name}} 自身が行う唯一のネットワーク通信は、ライセンスそのものを送信する任意のライセンス更新で、マシンごとに 1 日に最大 1 回（新しい状態で始まる CI ランナーではジョブごとに 1 回）です。GitHub Action はこのほか、nuget.org から {{name}} のパッケージをダウンロードします。更新を無効にするには <code>TESTDETTA_LICENSE_REFRESH=off</code> を設定してください。</p>
     </details>
     <details>
       <summary>支払いと請求書は誰が扱いますか？</summary>

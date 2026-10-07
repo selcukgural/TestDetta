@@ -1,4 +1,4 @@
-<!-- title: Datenschutzerklärung; description: Was {{name}} und diese Website erheben und was sie niemals erheben.; source: 33a98c58fb9a -->
+<!-- title: Datenschutzerklärung; description: Was {{name}} und diese Website erheben und was sie niemals erheben.; source: 2abbe29448b7 -->
 <div class="wrap legal prose">
 <h1>Datenschutzerklärung</h1>
 <p class="muted">Diese Übersetzung dient der Information; im Zweifel gilt die englische Fassung.</p>
@@ -6,11 +6,11 @@
 <p class="muted">Zuletzt aktualisiert am {{legalUpdated}}. Verantwortlicher: {{licensor}}, {{licensorCountry}}. Kontakt: <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
 
 <h2>Das Tool {{name}}</h2>
-<p>{{name}} läuft in Ihrer CI und auf den Rechnern Ihrer Entwicklerinnen und Entwickler. Es sendet weder Quellcode noch Diffs, Coverage-Maps, Testnamen, Testergebnisse oder Build-Ausgaben irgendwohin.</p>
+<p>{{name}} läuft in Ihrer CI und auf den Rechnern Ihrer Entwicklerinnen und Entwickler. Es sendet weder Quellcode noch Diffs, Coverage-Maps, Testnamen, Testergebnisse oder Build-Ausgaben an uns oder an sonst jemanden. In GitHub Actions legt die {{name}}-Action die Coverage-Maps im Actions-Cache Ihres Repositorys ab und die Shadow- und Audit-Berichte als Artefakte Ihrer Workflow-Läufe, innerhalb Ihres GitHub-Kontos.</p>
 <ul>
   <li><strong>Committer.</strong> Um die Anzahl der Seats zu prüfen, zählt {{name}} lokal die eindeutigen E-Mail-Adressen der Commit-Autoren. E-Mail-Adressen und Namen werden niemals übertragen, von uns gespeichert oder in Logs geschrieben.</li>
   <li><strong>Lizenzprüfung.</strong> Die Lizenz wird offline mit einem in {{name}} eingebauten öffentlichen Schlüssel geprüft.</li>
-  <li><strong>Lizenzaktualisierung.</strong> Höchstens einmal am Tag fragt {{name}} bei unserem Lizenzdienst die aktuelle Version Ihrer Lizenz ab. Die Anfrage enthält die Lizenz selbst (die den Lizenznehmer, die Seats und die Repository-Scopes benennt) und, wie jede Netzwerkanfrage, Ihre IP-Adresse. Die Adresse wird nur zur Begrenzung der Anfragerate verwendet und nicht gespeichert. Setzen Sie <code>TESTDETTA_LICENSE_REFRESH=off</code>, um die Aktualisierung vollständig abzuschalten.</li>
+  <li><strong>Lizenzaktualisierung.</strong> Höchstens einmal am Tag pro Rechner (einmal pro Job auf CI-Runnern, die mit einem leeren Home-Verzeichnis starten) fragt {{name}} bei unserem Lizenzdienst die aktuelle Version Ihrer Lizenz ab. Die Anfrage enthält die Lizenz selbst (die den Lizenznehmer, die Seats und die Repository-Scopes benennt) und, wie jede Netzwerkanfrage, Ihre IP-Adresse. Die Adresse wird nur zur Begrenzung der Anfragerate verwendet und nicht gespeichert. Setzen Sie <code>TESTDETTA_LICENSE_REFRESH=off</code>, um die Aktualisierung vollständig abzuschalten.</li>
 </ul>
 
 <h2>Kauf einer Lizenz</h2>

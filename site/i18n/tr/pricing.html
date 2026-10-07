@@ -1,4 +1,4 @@
-<!-- title: Fiyatlandırma; description: Açık depolar için ücretsiz, özel depolar için {{trialDays}} gün ücretsiz, ardından aktif committer başına fiyatlandırma.; source: 39129ae026e2 -->
+<!-- title: Fiyatlandırma; description: Açık depolar için ücretsiz, özel depolar için {{trialDays}} gün ücretsiz, ardından aktif committer başına fiyatlandırma.; source: 4cd3ecc43854 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -67,14 +67,14 @@
         <label><span>Geliştiricinin saatlik maliyeti ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
       </div>
       <div class="calc-results" aria-live="polite">
-        <div class="calc-hero"><output name="hours">91 sa.</output><span>test sonuçlarını bekleme süresi her ay kazanılır</span></div>
+        <div class="calc-hero"><output name="hours">88 sa.</output><span>test sonuçlarını bekleme süresi her ay kazanılır</span></div>
         <dl>
-          <div><dt>Koşu başına kazanılan test dakikası</dt><dd><output name="perRun">8,6 dk.</output></dd></div>
-          <div><dt>Aylık kazanılan runner dakikası</dt><dd><output name="ciMinutes">5.443</output></dd></div>
-          <div><dt>Aylık runner maliyeti tasarrufu</dt><dd><output name="ciCost">$33</output></dd></div>
-          <div><dt>Aylık kazanılan geliştirici zamanı</dt><dd><output name="devCost">$5.443</output></dd></div>
+          <div><dt>Koşu başına kazanılan test dakikası</dt><dd><output name="perRun">8,4 dk.</output></dd></div>
+          <div><dt>Aylık kazanılan runner dakikası</dt><dd><output name="ciMinutes">5.292</output></dd></div>
+          <div><dt>Aylık runner maliyeti tasarrufu</dt><dd><output name="ciCost">$32</output></dd></div>
+          <div><dt>Aylık kazanılan geliştirici zamanı</dt><dd><output name="devCost">$5.292</output></dd></div>
           <div><dt>Aylık {{name}} maliyeti</dt><dd><output name="cost">$150</output></dd></div>
-          <div class="calc-net"><dt>Aylık net tasarruf</dt><dd><output name="net">$5.326</output></dd></div>
+          <div class="calc-net"><dt>Aylık net tasarruf</dt><dd><output name="net">$5.174</output></dd></div>
         </dl>
         <p class="calc-note">Ayda 21 iş günü. Yalnızca test süresi sayılır: derlemeler her iki durumda da çalışır.</p>
       </div>
@@ -101,7 +101,7 @@
     </details>
     <details>
       <summary>{{name}} kodumuzu herhangi bir yere gönderiyor mu?</summary>
-      <p>Hayır. Analiz, kapsam haritaları ve test koşuları CI'ınızda kalır. Tek ağ çağrısı, lisansın kendisini gönderen isteğe bağlı günlük lisans yenilemesidir; kapatmak için <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın.</p>
+      <p>Hayır. Analiz, kapsam haritaları ve test koşuları CI'ınızda kalır. {{name}}'nın kendine ait tek ağ çağrısı, lisansın kendisini gönderen, makine başına günde en fazla bir kez (temiz başlayan CI runner'larında job başına bir kez) yapılan isteğe bağlı bir lisans yenilemesidir; GitHub Action ayrıca {{name}} paketini nuget.org'dan indirir. Yenilemeyi kapatmak için <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın.</p>
     </details>
     <details>
       <summary>Ödeme ve faturalarla kim ilgileniyor?</summary>

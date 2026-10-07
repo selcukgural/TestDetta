@@ -1,6 +1,6 @@
 <!-- title: Getting started; layout: docs; description: Install {{name}} in CI and run only the .NET tests a change can affect. -->
 <h1>Getting started</h1>
-<p class="lead">{{name}} compares your branch with its base, works out which test projects and which test classes can observe the change, and runs just those. When it cannot be sure, it runs more, never less.</p>
+<p class="lead">{{name}} compares your branch with its base, works out which test projects and which test classes can observe the change, and runs just those. When it cannot be sure, it runs more, never less; what it cannot see is listed under <a href="/docs/limitations/">Limitations</a>.</p>
 
 <h2>Requirements</h2>
 <ul>
@@ -13,7 +13,7 @@
 <h2>Quick start</h2>
 
 <h3>GitHub Actions</h3>
-<p>The GitHub Action builds {{name}} for you; there is nothing to install. Add two steps to your workflow: one records a coverage map on pushes to your default branch, the other runs only the affected tests on pull requests.</p>
+<p>The GitHub Action fetches the {{name}} package it pins from nuget.org and checks its SHA-512 before running it; there is nothing to install. Add two steps to your workflow: one records a coverage map on pushes to your default branch, the other runs only the affected tests on pull requests.</p>
 <pre><code>- if: github.event_name == 'push'
   uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
   with:

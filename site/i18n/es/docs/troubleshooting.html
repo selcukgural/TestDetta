@@ -1,22 +1,22 @@
-<!-- title: Solución de problemas; layout: docs; description: Qué hacer cuando {{name}} selecciona más de lo esperado, no encuentra ningún mapa de cobertura o no encuentra el commit base.; source: ae48c4254831 -->
+<!-- title: Solución de problemas; layout: docs; description: Qué hacer cuando {{name}} selecciona más de lo esperado, no encuentra ningún mapa de cobertura o no encuentra el commit base.; source: 469ec3d17ce3 -->
 <h1>Solución de problemas</h1>
 <p class="lead">Cada entrada parte de lo que ves. En todos los casos, <code>-v</code> escribe cada decisión y su motivo en stderr; ese registro responde a la mayoría de las preguntas y es lo que debes enviarnos.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
 
 <h2 id="whole-project">Se ejecutó todo el proyecto de pruebas</h2>
-<p>Busca el proyecto en la salida: el motivo aparece a su lado. Las causas habituales son un archivo que afecta a toda la compilación, un archivo que no es de C# dentro del proyecto, un <code>global using</code> o un tipo que se encuentra por reflexión. <a href="/docs/what-runs-everything/">Qué lo ejecuta todo</a> los enumera todos. En el registro de <code>-v</code>, una línea como <code>affects whole project: True</code> nombra el archivo.</p>
+<p>Busca el proyecto en la salida: el motivo aparece a su lado. Las causas habituales son un archivo que afecta a toda la compilación, un archivo del proyecto que no es código fuente de C#, Visual Basic o F#, un <code>global using</code> o un tipo que se encuentra por reflexión. <a href="/docs/what-runs-everything/">Qué lo ejecuta todo</a> los enumera todos. En el registro de <code>-v</code>, una línea como <code>affects whole project: True</code> nombra el archivo.</p>
 
 <h2 id="no-map">No se usó ningún mapa de cobertura</h2>
 <p>Sin un mapa, la selección rastrea nombres, lo que es más amplio. El registro indica por qué no lo había:</p>
 <ul>
-  <li><code>No coverage maps within 50 commits before the merge base</code>: no se ha registrado nada recientemente en la rama predeterminada. Registra un mapa en cada push a ella; el modo <code>record</code> de la acción lo hace.</li>
+  <li><code>No coverage maps within 50 commits before the merge base</code> (se muestra con <code>--maps-dir</code>): no se ha registrado nada recientemente en la rama predeterminada. Registra un mapa en cada push a ella; el modo <code>record</code> de la acción lo hace.</li>
   <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: el mapa procede de otra rama, o de antes de un force push o de una rama de larga duración. Vuelve a registrar en la rama predeterminada o aumenta <code>--max-map-age</code>.</li>
   <li><code>--maps-dir … does not exist</code>: la carpeta con los mapas no se restauró antes de la ejecución.</li>
   <li>En GitHub Actions, el job necesita el permiso <code>actions: read</code> para listar las entradas de caché que contienen los mapas.</li>
 </ul>
 
 <h2 id="base">No se encuentra el commit base</h2>
-<p>{{name}} compara tu rama con la merge base, así que necesita el historial de ambas. La acción se detiene con:</p>
+<p>{{name}} compara tu rama con la merge base, así que necesita el historial de ambas. En los modos test, record y audit, la acción se detiene con el error siguiente; en el modo sombra avisa y ejecuta en su lugar tu <code>dotnet test</code> normal:</p>
 <pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
 <p>Haz el checkout con <code>fetch-depth: 0</code>. En otros sistemas de CI, desactiva los clones superficiales y descarga la rama de destino con un refspec explícito, como se muestra para cada sistema en <a href="/docs/other-ci/">otros sistemas de CI</a>.</p>
 

@@ -1,6 +1,6 @@
-<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: 8a80a118b806 -->
+<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: 236167938ec7 -->
 <h1>Primeros pasos</h1>
-<p class="lead">{{name}} compara tu rama con su base, determina qué proyectos de pruebas y qué clases de prueba pueden observar el cambio, y ejecuta solo esos. Cuando no puede estar seguro, ejecuta más, nunca menos.</p>
+<p class="lead">{{name}} compara tu rama con su base, determina qué proyectos de pruebas y qué clases de prueba pueden observar el cambio, y ejecuta solo esos. Cuando no puede estar seguro, ejecuta más, nunca menos; lo que no puede ver se enumera en <a href="/docs/limitations/">Limitaciones</a>.</p>
 
 <h2>Requisitos</h2>
 <ul>
@@ -13,7 +13,7 @@
 <h2>Inicio rápido</h2>
 
 <h3>GitHub Actions</h3>
-<p>La GitHub Action compila {{name}} por ti; no hay nada que instalar. Añade dos pasos a tu workflow: uno registra un mapa de cobertura en los push a tu rama predeterminada y el otro ejecuta solo las pruebas afectadas en las pull requests.</p>
+<p>La GitHub Action obtiene de nuget.org el paquete de {{name}} que fija y comprueba su SHA-512 antes de ejecutarlo; no hay nada que instalar. Añade dos pasos a tu workflow: uno registra un mapa de cobertura en los push a tu rama predeterminada y el otro ejecuta solo las pruebas afectadas en las pull requests.</p>
 <pre><code>- if: github.event_name == 'push'
   uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
   with:

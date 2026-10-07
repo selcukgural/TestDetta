@@ -1,6 +1,7 @@
-<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: c0da757212f2 -->
+<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: ec87645519ae -->
 <h1>Licencia</h1>
 <p class="lead">Los repositorios públicos usan {{name}} gratis. Los repositorios privados pasan una cadena de licencia al CI. Un problema de licencia nunca hace fallar una compilación: sin una licencia válida se ejecutan todas las pruebas, como antes de {{name}}.</p>
+<div class="callout"><p><strong>Hasta el lanzamiento</strong>, las licencias todavía no se venden ni se aplican: {{name}} comprueba la licencia e informa de lo que encontró, como se describe aquí (<code>td license status</code> añade "Not enforced yet"), pero selecciona pruebas diga lo que diga la comprobación, y ninguna licencia se verifica ni se puede instalar hasta que el servicio de licencias tenga su primera clave.</p></div>
 
 <h2>Repositorios públicos</h2>
 <p>Un repositorio público no necesita licencia, pero {{name}} solo sabe que un repositorio es público donde el CI lo indica:</p>
@@ -23,7 +24,7 @@
   with:
     mode: test
     license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
-<p>Solo <code>td affected</code> y <code>td test</code> comprueban la licencia. <code>td record</code> ejecuta todas las pruebas de todos modos y no necesita ninguna.</p>
+<p>Solo <code>td affected</code>, <code>td test</code> (no <code>td test --shadow</code>) y <code>td license status</code> leen la licencia. <code>td record</code>, <code>td test --shadow</code> y <code>td audit</code> ejecutan todas las pruebas de todos modos y no necesitan ninguna.</p>
 
 <h2>Cómo comprobarla</h2>
 <p><code>td license status</code> muestra qué cubre la licencia encontrada: su validez, los repositorios que cubre y el número de committers activos, sin datos personales. El mismo estado aparece en el registro, en el job summary y en la salida JSON siempre que importa: válida, a punto de caducar, por encima de los puestos, caducada, ámbito incorrecto, no válida o ausente.</p>
@@ -35,7 +36,7 @@
 <p>Primero se comprueba y después se escribe en <code>~/.testdetta/license</code>.</p>
 
 <h2>Renovación automática</h2>
-<p>Una licencia incluye la dirección desde la que se renueva. Como máximo una vez al día, {{name}} obtiene la versión actual y la guarda en <code>~/.testdetta/license</code>, así que las renovaciones y los puestos añadidos llegan sin tocar tus secretos. La solicitud envía la licencia en una cabecera y nada de tu repositorio. Se ejecuta a la vez que el análisis, con un tiempo de espera de 6 segundos, y cualquier fallo se ignora. Un fallo que puede ser pasajero (sin respuesta, un tiempo de espera agotado, un error del servidor) se reintenta al cabo de una hora, así que una red bloqueada cuesta como mucho unos segundos por hora, casi siempre ocultos tras el análisis; define <code>TESTDETTA_LICENSE_REFRESH=off</code> donde no se pueda acceder al servicio. Se respeta <code>HTTPS_PROXY</code>.</p>
+<p>Una licencia incluye la dirección desde la que se renueva. Como máximo una vez al día por máquina, {{name}} obtiene la versión actual y la guarda en <code>~/.testdetta/license</code>, así que las renovaciones y los puestos añadidos llegan sin tocar tus secretos. La solicitud envía la licencia en una cabecera y nada de tu repositorio. Se ejecuta a la vez que el análisis, con un tiempo de espera de 6 segundos, y cualquier fallo se ignora. Un fallo que puede ser pasajero (sin respuesta, un tiempo de espera agotado, un error del servidor) se reintenta al cabo de una hora, así que una red bloqueada cuesta como mucho unos segundos por hora, casi siempre ocultos tras el análisis; define <code>TESTDETTA_LICENSE_REFRESH=off</code> donde no se pueda acceder al servicio. Se respeta <code>HTTPS_PROXY</code>. La hora del último intento se guarda en <code>~/.testdetta/license-refresh</code>, así que en los runners de CI que empiezan con un directorio personal vacío la actualización se ejecuta una vez por job.</p>
 <p>En una red que no puede acceder al servicio de licencias, define <code>TESTDETTA_LICENSE_REFRESH=off</code> y sustituye tú mismo la cadena de licencia cuando recibas una nueva.</p>
 
 <h2>Qué repositorios cubre una licencia</h2>

@@ -1,6 +1,6 @@
-<!-- title: Cómo decide; layout: docs; description: Cómo convierte {{name}} un git diff en los proyectos de pruebas y las clases de prueba que hay que ejecutar.; source: d28e5a3cd793 -->
+<!-- title: Cómo decide; layout: docs; description: Cómo convierte {{name}} un git diff en los proyectos de pruebas y las clases de prueba que hay que ejecutar.; source: 94ed2f9b12ee -->
 <h1>Cómo decide</h1>
-<p class="lead">{{name}} reduce la selección paso a paso, y solo donde tiene pruebas de ello. Todo lo que no puede rastrear recurre a ejecutar más.</p>
+<p class="lead">{{name}} reduce la selección paso a paso, y solo donde tiene pruebas de ello. Todo lo que sabe que no puede rastrear recurre a ejecutar más; los pocos patrones que no puede ver en absoluto se enumeran en <a href="/docs/limitations/">Limitaciones</a>.</p>
 
 <h2>Seleccionar más, nunca menos</h2>
 <p>Una prueba pasada por alto es un error; una prueba de más solo cuesta tiempo de CI. Todas las reglas siguientes se derivan de eso. Cuando el análisis no está seguro de si un cambio afecta a un proyecto o a una clase, lo trata como afectado, y el motivo aparece en la salida.</p>
@@ -11,7 +11,7 @@
 <p>Los archivos modificados se asignan a sus proyectos y se siguen a través de las <code>ProjectReference</code> hasta cada proyecto que depende de ellos. Los archivos que afectan a toda la compilación, como <code>Directory.Build.props</code>, <code>global.json</code> y <code>.editorconfig</code>, afectan a todos los proyectos que están por debajo de ellos.</p>
 
 <h3>2. Símbolos</h3>
-<p>En los archivos de C#, se comparan los árboles de sintaxis antiguo y nuevo. Los cambios en comentarios y espacios en blanco no seleccionan nada; en los demás casos, {{name}} sabe qué tipos y miembros cambiaron.</p>
+<p>En los archivos de C#, Visual Basic y F#, se comparan los árboles de sintaxis antiguo y nuevo. Los cambios en comentarios y espacios en blanco no seleccionan nada; en los demás casos, {{name}} sabe qué tipos y miembros cambiaron.</p>
 
 <h3>3. Cobertura</h3>
 <p>Tras <code>td record</code>, un mapa de qué clase de prueba ejecutó qué método, registrado en el commit base, da directamente las clases de prueba de los métodos, propiedades y constructores modificados. Un cambio en el inicializador de un campo o una propiedad cuenta como un cambio en el constructor en el que se compila. Una clase de prueba que carga el ensamblado de un proyecto desde su ruta, como una prueba de línea base de la API pública que lee cada declaración por reflexión, se ejecuta cada vez que ese proyecto cambia.</p>
@@ -22,7 +22,7 @@
 <h3>5. Alternativas seguras</h3>
 <p>Se ejecuta un proyecto de pruebas completo cuando un cambio no se puede rastrear:</p>
 <ul>
-  <li>archivos que no son de C# dentro de un proyecto, como <code>appsettings.json</code>, el <code>.csproj</code> o un <code>.resx</code>;</li>
+  <li>archivos de un proyecto que no son código fuente de C#, Visual Basic o F# (un archivo de firma de F# cuenta entre ellos), como <code>appsettings.json</code>, el <code>.csproj</code> o un <code>.resx</code>;</li>
   <li>global usings y atributos de ensamblado;</li>
   <li>tipos que un framework descubre por reflexión, como controladores, manejadores de mensajes y configuraciones de EF.</li>
 </ul>

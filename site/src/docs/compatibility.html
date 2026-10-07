@@ -8,7 +8,7 @@
   <tbody>
     <tr><td>.NET SDK</td><td>The .NET 10 SDK runs {{name}} itself. Your tests keep the SDK and runner your repository already uses.</td></tr>
     <tr><td>Git history</td><td>The full history of your branch and its target branch, so the merge base can be found. Shallow clones cannot work.</td></tr>
-    <tr><td>Operating system</td><td>Linux and macOS, x64 and arm64. Windows has not been tested yet.</td></tr>
+    <tr><td>Operating system</td><td>Tested on Linux x64 (our CI) and macOS arm64 (the evaluation). Other architectures have not been tested, and Windows has not been tested yet.</td></tr>
     <tr><td>Legacy project files</td><td>Non-SDK <code>.csproj</code> files with <code>packages.config</code> restore and build with the full MSBuild: Visual Studio or its Build Tools on Windows (found through <code>vswhere</code>), Mono's <code>msbuild</code> on macOS and Linux, or the executable that <code>TESTDETTA_MSBUILD</code> names. Their tests run from the compiled assembly through VSTest, the engine of <code>vstest.console.exe</code>. Tested on macOS with Mono.</td></tr>
   </tbody>
 </table>

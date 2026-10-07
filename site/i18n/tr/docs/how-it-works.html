@@ -1,6 +1,6 @@
-<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: d28e5a3cd793 -->
+<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 94ed2f9b12ee -->
 <h1>Nasıl karar verir</h1>
-<p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediği her şeyde daha fazlasını çalıştırmaya geri döner.</p>
+<p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediğini bildiği her şeyde daha fazlasını çalıştırmaya geri döner; hiç göremediği birkaç kalıp <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
 <h2>Daha fazlasını seç, asla daha azını değil</h2>
 <p>Kaçırılan bir test bir hatadır; fazladan bir test yalnızca CI süresine mal olur. Aşağıdaki her kural bundan çıkar. Analiz, bir değişikliğin bir projeyi ya da sınıfı etkileyip etkilemediğinden emin olamadığında onu etkilenmiş sayar ve gerekçe çıktıda görünür.</p>
@@ -11,7 +11,7 @@
 <p>Değişen dosyalar ait oldukları projelere eşlenir ve <code>ProjectReference</code>'lar üzerinden onlara bağımlı her projeye kadar izlenir. <code>Directory.Build.props</code>, <code>global.json</code> ve <code>.editorconfig</code> gibi derlemenin geneline etki eden dosyalar altlarındaki her projeyi etkiler.</p>
 
 <h3>2. Semboller</h3>
-<p>C# dosyalarında eski ve yeni söz dizimi ağaçları karşılaştırılır. Yorum ve boşluk değişiklikleri hiçbir şey seçmez; diğer durumlarda {{name}} hangi tiplerin ve üyelerin değiştiğini bilir.</p>
+<p>C#, Visual Basic ve F# dosyalarında eski ve yeni söz dizimi ağaçları karşılaştırılır. Yorum ve boşluk değişiklikleri hiçbir şey seçmez; diğer durumlarda {{name}} hangi tiplerin ve üyelerin değiştiğini bilir.</p>
 
 <h3>3. Kapsam</h3>
 <p><code>td record</code> çalıştıktan sonra, base commit'te kaydedilmiş ve hangi test sınıfının hangi metodu çalıştırdığını gösteren bir harita, değişen metotlar, property'ler ve constructor'lar için test sınıflarını doğrudan verir. Değişen bir alan ya da property başlatıcısı, derlendiği constructor'ın değişikliği sayılır. Bir projenin assembly'sini kendi yolundan yükleyen test sınıfı, örneğin bütün bildirimleri yansımayla okuyan bir public API karşılaştırma testi, o proje her değiştiğinde çalışır.</p>
@@ -22,7 +22,7 @@
 <h3>5. Geri dönüşler</h3>
 <p>Bir değişiklik izlenemediğinde test projesinin tamamı çalışır:</p>
 <ul>
-  <li>bir projedeki C# dışı dosyalar, örneğin <code>appsettings.json</code>, <code>.csproj</code> ya da bir <code>.resx</code>;</li>
+  <li>bir projede C#, Visual Basic ya da F# kaynağı olmayan dosyalar (bir F# imza dosyası da bunlardan sayılır), örneğin <code>appsettings.json</code>, <code>.csproj</code> ya da bir <code>.resx</code>;</li>
   <li>global using'ler ve assembly attribute'ları;</li>
   <li>bir framework'ün reflection ile keşfettiği tipler, örneğin controller'lar, mesaj handler'ları ve EF yapılandırmaları.</li>
 </ul>

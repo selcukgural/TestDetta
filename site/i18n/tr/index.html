@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 54f9316cd2f6 -->
+<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 6b56b8bbf63f -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -22,7 +22,7 @@
         <span class="badge-ok">Başarılı</span>
       </div>
       <div class="check-body">
-        <p class="check-saving"><strong data-count>%93</strong> daha az test süresi</p>
+        <p class="check-saving"><strong data-count>%93</strong> daha az kaydedilmiş test süresi</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">Tüm testler</span>
@@ -68,8 +68,9 @@
       <div><strong data-count>{{corpusRepositories}}</strong><span>depo; her birinin kendi framework'leri ve derleme tuhaflıkları var</span></div>
       <div><strong data-count>{{corpusFailingChanges}}</strong><span>en az bir testi bozan değişiklik</span></div>
       <div><strong data-count>{{corpusMedianShare}}</strong><span>medyan depoda değişiklik başına çalışan test sınıfı oranı</span></div>
-      <div><strong data-count>{{corpusMissed}}</strong><span>kaçırma (son tur); önceki turlardaki her kaçırma, düzeltme olmadan başarısız olan bir testle düzeltildi</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>kaçırma (son tur); önceki turlardaki her gerçek kaçırma, düzeltme olmadan başarısız olan bir testle düzeltildi</span></div>
     </div>
+    <p class="band-note" data-reveal>Bu sayılar, değerlendirmenin seçimin dışında çöken ya da takılan bir test çalıştırmasını kaçırma saymayan önceki kuralıyla ölçüldü. Kural artık katı: böyle bir çökme ya da takılma, değişiklik olmadan yapılan aynı çalıştırma bunun değişiklikten kaynaklanmadığını göstermedikçe bir kaçırmadır. Sayıların yerini bir sonraki turun sayıları alacak.</p>
     <figure class="dist" data-reveal>
 <svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
 <title id="dist-title">Değişiklik başına çalıştırılan test sınıflarının oranı, depo başına bir çubuk</title>
@@ -176,7 +177,7 @@
       <div><dt>0</dt><dd><strong>satır kodunuz CI'ınızın dışına çıkar</strong>Analiz, kapsam haritaları ve test sonuçları makinelerinizde kalır.</dd></div>
       <div><dt>0</dt><dd><strong>derleme bir lisans sorunu yüzünden başarısız olur</strong>Geçerli bir lisans olmadan, eskisi gibi tüm testler çalışır.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>test framework'ü ve runner</strong>VSTest ve Microsoft.Testing.Platform üzerinde xUnit v2 ve v3, NUnit, MSTest ve TUnit.</dd></div>
-      <div><dt>1</dt><dd><strong>günlük ağ çağrısı, isteğe bağlı</strong>Lisansın kendisinden başka hiçbir şey göndermeyen bir lisans yenilemesi.</dd></div>
+      <div><dt>1</dt><dd><strong>tür ağ çağrısı, isteğe bağlı</strong>Lisansın kendisinden başka hiçbir şey göndermeyen, makine başına günde en fazla bir kez (temiz başlayan runner'larda job başına bir kez) yapılan bir lisans yenilemesi.</dd></div>
     </dl>
   </div>
   <div class="wrap">
@@ -209,7 +210,7 @@
         <li class="gha-step gha-b">
           <span class="gha-event">pull request'te</span>
           <h3>Değişikliğin etkilediklerini çalıştırın</h3>
-          <p>Merge base'deki ya da ondan önceki en yeni harita geri yüklenir, yalnızca etkilenen test sınıfları çalışır ve job summary her birinin neden çalıştığını söyler.</p>
+          <p>Merge base'den önceki 50 commit içindeki en yeni harita geri yüklenir, yalnızca etkilenen test sınıfları çalışır ve job summary her birinin neden çalıştığını söyler.</p>
           <p class="gha-summary"><span class="badge-ok">Başarılı</span> 274 sınıftan 8'i · test süresinin %93'ü kazanıldı</p>
         </li>
       </ol>

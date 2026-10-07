@@ -1,6 +1,6 @@
-<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: 8a80a118b806 -->
+<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: 236167938ec7 -->
 <h1>Başlarken</h1>
-<p class="lead">{{name}} branch'inizi base'iyle karşılaştırır, hangi test projelerinin ve hangi test sınıflarının değişikliği gözlemleyebileceğini belirler ve yalnızca onları çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.</p>
+<p class="lead">{{name}} branch'inizi base'iyle karşılaştırır, hangi test projelerinin ve hangi test sınıflarının değişikliği gözlemleyebileceğini belirler ve yalnızca onları çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil; göremedikleri <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
 <h2>Gereksinimler</h2>
 <ul>
@@ -13,7 +13,7 @@
 <h2>Hızlı başlangıç</h2>
 
 <h3>GitHub Actions</h3>
-<p>GitHub Action {{name}}'yı sizin için derler; kurmanız gereken bir şey yok. Workflow'unuza iki adım ekleyin: biri varsayılan branch'inize yapılan push'larda bir kapsam haritası kaydeder, diğeri pull request'lerde yalnızca etkilenen testleri çalıştırır.</p>
+<p>GitHub Action, sabitlediği {{name}} paketini nuget.org'dan indirir ve çalıştırmadan önce SHA-512'sini kontrol eder; kurmanız gereken bir şey yok. Workflow'unuza iki adım ekleyin: biri varsayılan branch'inize yapılan push'larda bir kapsam haritası kaydeder, diğeri pull request'lerde yalnızca etkilenen testleri çalıştırır.</p>
 <pre><code>- if: github.event_name == 'push'
   uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
   with:

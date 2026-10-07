@@ -1,4 +1,4 @@
-<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: fa32d74d5a04 -->
+<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: 511855824b2a -->
 <h1>Seguridad y datos</h1>
 <p class="lead">{{name}} se ejecuta en tu CI y en tus máquinas. Tu código fuente, tus mapas de cobertura y los resultados de tus pruebas nunca salen de ellos. Esta página enumera todo lo que guarda y cada llamada de red que hace.</p>
 
@@ -29,14 +29,14 @@
 <p>En GitHub Actions, los mapas se guardan en la caché de Actions de tu repositorio. <code>.testdetta/coverage/</code> y <code>.testdetta/cache/</code> se generan; mantenlos fuera del control de versiones.</p>
 
 <h2 id="network">La única llamada de red</h2>
-<p>Con una licencia de suscripción, {{name}} pide al servicio de licencias una licencia renovada como máximo una vez al día, para que las renovaciones lleguen al CI sin que nadie tenga que actualizar un secreto.</p>
+<p>Con una licencia de suscripción, {{name}} pide al servicio de licencias una licencia renovada como máximo una vez al día por máquina (una vez por job en los runners de CI que empiezan con un directorio personal vacío), para que las renovaciones lleguen al CI sin que nadie tenga que actualizar un secreto.</p>
 <ul>
   <li>Envía la propia licencia y nada más: ni el nombre del repositorio, ni código, ni rutas, ni recuentos.</li>
   <li>Se ejecuta junto al análisis y espera como máximo 6 segundos. Un fallo que puede ser pasajero se reintenta al cabo de una hora; si no se puede acceder al servicio, la licencia actual sigue funcionando.</li>
   <li>Se respeta <code>HTTPS_PROXY</code>.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> la desactiva. Las licencias sin conexión y de empresa nunca se conectan con nosotros.</li>
 </ul>
-<p>Los repositorios públicos no necesitan licencia y no hacen ninguna llamada. Tampoco el modo sombra (<code>td test --shadow</code>) ni el audit (<code>td audit</code>), que no leen ninguna licencia. Lo que usa la red en un job así no es de {{name}}: la GitHub Action descarga el paquete de {{name}} desde nuget.org, comprobado con el SHA-512 que fija, y lista y restaura los mapas de cobertura de tu caché de Actions; tus compilaciones restauran paquetes como siempre, y la nueva ejecución del modo sombra sobre el commit base restaura los paquetes de ese commit como cualquier compilación.</p>
+<p>Una ejecución sin licencia no hace ninguna llamada, y los repositorios públicos no necesitan ninguna. Tampoco el modo sombra (<code>td test --shadow</code>) ni el audit (<code>td audit</code>), que no leen ninguna licencia. Lo que usa la red en un job así no es de {{name}}: la GitHub Action descarga el paquete de {{name}} desde nuget.org, comprobado con el SHA-512 que fija, y lista y restaura los mapas de cobertura de tu caché de Actions; tus compilaciones restauran paquetes como siempre, la nueva ejecución del modo sombra sobre el commit base restaura los paquetes de ese commit como cualquier compilación, y las compilaciones y ejecuciones de pruebas del audit en su copia restauran paquetes de la misma forma.</p>
 
 <h2 id="license-check">Cómo se comprueba la licencia</h2>
 <p>Una licencia es una cadena firmada que se verifica en tu máquina con una clave pública incluida en {{name}}. Indica los repositorios que cubre, que se comparan con el remoto <code>origin</code> después de eliminar cualquier credencial. Un problema de licencia nunca hace fallar una compilación: en su lugar se ejecutan todas las pruebas, como antes de {{name}}. <a href="/docs/license/">Más sobre las licencias</a>.</p>

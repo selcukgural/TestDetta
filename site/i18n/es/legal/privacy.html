@@ -1,4 +1,4 @@
-<!-- title: Política de privacidad; description: Qué recopilan {{name}} y este sitio web, y qué no recopilan nunca.; source: 33a98c58fb9a -->
+<!-- title: Política de privacidad; description: Qué recopilan {{name}} y este sitio web, y qué no recopilan nunca.; source: 2abbe29448b7 -->
 <div class="wrap legal prose">
 <h1>Política de privacidad</h1>
 <p class="muted">Esta traducción se ofrece por comodidad; en caso de discrepancia, prevalece la versión en inglés.</p>
@@ -6,11 +6,11 @@
 <p class="muted">Última actualización: {{legalUpdated}}. Responsable del tratamiento: {{licensor}}, {{licensorCountry}}. Contacto: <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
 
 <h2>La herramienta {{name}}</h2>
-<p>{{name}} se ejecuta dentro de tu CI y en las máquinas de tus desarrolladores. No envía a ninguna parte código fuente, diffs, mapas de cobertura, nombres de pruebas, resultados de pruebas ni salida de compilación.</p>
+<p>{{name}} se ejecuta dentro de tu CI y en las máquinas de tus desarrolladores. No nos envía ni a nosotros ni a nadie más código fuente, diffs, mapas de cobertura, nombres de pruebas, resultados de pruebas ni salida de compilación. En GitHub Actions, la acción de {{name}} guarda los mapas de cobertura en la caché de Actions de tu repositorio, y los informes del modo sombra y del audit como artefactos de las ejecuciones de tu workflow, dentro de tu cuenta de GitHub.</p>
 <ul>
   <li><strong>Committers.</strong> Para comprobar el número de puestos, {{name}} cuenta localmente las direcciones de correo distintas de los autores de commits. Los correos y los nombres nunca se envían, ni los almacenamos nosotros, ni se escriben en los registros.</li>
   <li><strong>Comprobación de la licencia.</strong> La licencia se verifica sin conexión, con una clave pública integrada en {{name}}.</li>
-  <li><strong>Actualización de la licencia.</strong> Como máximo una vez al día, {{name}} pide a nuestro servicio de licencias la versión actual de tu licencia. La solicitud incluye la propia licencia (que indica el licenciatario, los puestos y los ámbitos de repositorio) y, como cualquier solicitud de red, tu dirección IP. La dirección se usa solo para limitar la frecuencia de solicitudes y no se almacena. Define <code>TESTDETTA_LICENSE_REFRESH=off</code> para desactivar la actualización por completo.</li>
+  <li><strong>Actualización de la licencia.</strong> Como máximo una vez al día por máquina (una vez por job en los runners de CI que empiezan con un directorio personal vacío), {{name}} pide a nuestro servicio de licencias la versión actual de tu licencia. La solicitud incluye la propia licencia (que indica el licenciatario, los puestos y los ámbitos de repositorio) y, como cualquier solicitud de red, tu dirección IP. La dirección se usa solo para limitar la frecuencia de solicitudes y no se almacena. Define <code>TESTDETTA_LICENSE_REFRESH=off</code> para desactivar la actualización por completo.</li>
 </ul>
 
 <h2>Compra de una licencia</h2>

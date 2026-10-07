@@ -4,19 +4,19 @@
 <pre><code>td affected --base origin/main -v</code></pre>
 
 <h2 id="whole-project">The whole test project ran</h2>
-<p>Look for the project in the output: the reason is printed next to it. The usual causes are a build-wide file, a non-C# file in the project, a <code>global using</code>, or a type found through reflection. <a href="/docs/what-runs-everything/">What runs everything</a> lists them all. In the <code>-v</code> log, a line such as <code>affects whole project: True</code> names the file.</p>
+<p>Look for the project in the output: the reason is printed next to it. The usual causes are a build-wide file, a file in the project that is not C#, Visual Basic or F# source, a <code>global using</code>, or a type found through reflection. <a href="/docs/what-runs-everything/">What runs everything</a> lists them all. In the <code>-v</code> log, a line such as <code>affects whole project: True</code> names the file.</p>
 
 <h2 id="no-map">No coverage map was used</h2>
 <p>Without a map, selection traces names, which is wider. The log says why there was none:</p>
 <ul>
-  <li><code>No coverage maps within 50 commits before the merge base</code>: nothing was recorded recently on the default branch. Record a map on every push there; the action's <code>record</code> mode does it.</li>
+  <li><code>No coverage maps within 50 commits before the merge base</code> (printed with <code>--maps-dir</code>): nothing was recorded recently on the default branch. Record a map on every push there; the action's <code>record</code> mode does it.</li>
   <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: the map comes from another branch, or from before a force push or a long-running branch. Record again on the default branch, or raise <code>--max-map-age</code>.</li>
   <li><code>--maps-dir … does not exist</code>: the folder with the maps was not restored before the run.</li>
   <li>On GitHub Actions, the job needs <code>actions: read</code> permission to list the cache entries that hold the maps.</li>
 </ul>
 
 <h2 id="base">The base commit cannot be found</h2>
-<p>{{name}} compares your branch with the merge base, so it needs the history of both. The action stops with:</p>
+<p>{{name}} compares your branch with the merge base, so it needs the history of both. In test, record and audit modes the action stops with the error below; in shadow mode it warns and runs your plain <code>dotnet test</code> instead:</p>
 <pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
 <p>Check out with <code>fetch-depth: 0</code>. On other CI systems, turn off shallow clones and fetch the target branch with an explicit refspec, as shown for each system in <a href="/docs/other-ci/">other CI systems</a>.</p>
 

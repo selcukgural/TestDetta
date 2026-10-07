@@ -1,4 +1,4 @@
-<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: fa32d74d5a04 -->
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 511855824b2a -->
 <h1>Güvenlik ve veri</h1>
 <p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz, kapsam haritalarınız ve test sonuçlarınız oradan hiç çıkmaz. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
 
@@ -29,14 +29,14 @@
 <p>GitHub Actions'ta haritalar deponuzun Actions önbelleğinde saklanır. <code>.testdetta/coverage/</code> ve <code>.testdetta/cache/</code> otomatik üretilir; bunları sürüm kontrolünün dışında tutun.</p>
 
 <h2 id="network">Tek ağ çağrısı</h2>
-<p>Abonelik lisansıyla {{name}}, lisans servisinden günde en fazla bir kez yenilenmiş bir lisans ister; böylece yenilemeler, kimsenin bir secret'ı güncellemesi gerekmeden CI'a ulaşır.</p>
+<p>Abonelik lisansıyla {{name}}, lisans servisinden makine başına günde en fazla bir kez (boş bir ana dizinle başlayan CI runner'larında job başına bir kez) yenilenmiş bir lisans ister; böylece yenilemeler, kimsenin bir secret'ı güncellemesi gerekmeden CI'a ulaşır.</p>
 <ul>
   <li>Yalnızca lisansın kendisini gönderir, başka hiçbir şeyi değil: depo adı, kod, yollar ya da sayılar gönderilmez.</li>
   <li>Analizle birlikte çalışır ve en fazla 6 saniye bekler. Geçebilecek bir hata bir saat sonra yeniden denenir; servise ulaşılamazsa mevcut lisans çalışmaya devam eder.</li>
   <li><code>HTTPS_PROXY</code> dikkate alınır.</li>
   <li><code>TESTDETTA_LICENSE_REFRESH=off</code> bu çağrıyı kapatır. Çevrimdışı ve kurumsal lisanslar hiçbir zaman dışarıya çağrı yapmaz.</li>
 </ul>
-<p>Açık depolar lisansa ihtiyaç duymaz ve hiçbir çağrı yapmaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) ve audit (<code>td audit</code>) da çağrı yapmaz. Böyle bir job'da ağı kullanan şey {{name}}'nın kendisi değildir: GitHub Action, {{name}} paketini nuget.org'dan indirir ve sabitlediği SHA-512'ye karşı doğrular, kapsam haritalarını da Actions önbelleğinizde listeler ve geri yükler; derlemeleriniz paketleri her zaman olduğu gibi restore eder ve shadow mode'un base commit üzerindeki yeniden çalıştırması o commit'in paketlerini her derleme gibi restore eder.</p>
+<p>Lisanssız bir çalıştırma hiçbir çağrı yapmaz ve açık depolar lisansa ihtiyaç duymaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) ve audit (<code>td audit</code>) da çağrı yapmaz. Böyle bir job'da ağı kullanan şey {{name}}'nın kendisi değildir: GitHub Action, {{name}} paketini nuget.org'dan indirir ve sabitlediği SHA-512'ye karşı doğrular, kapsam haritalarını da Actions önbelleğinizde listeler ve geri yükler; derlemeleriniz paketleri her zaman olduğu gibi restore eder shadow mode'un base commit üzerindeki yeniden çalıştırması o commit'in paketlerini her derleme gibi restore eder ve audit'in kopyasındaki derlemeleri ve test çalıştırmaları da paketleri aynı şekilde restore eder.</p>
 
 <h2 id="license-check">Lisans nasıl kontrol edilir</h2>
 <p>Lisans imzalı bir dizedir ve {{name}}'ya gömülü bir açık anahtarla sizin makinenizde doğrulanır. Kapsadığı depoları adlandırır; bunlar, içindeki kimlik bilgileri önce çıkarılarak <code>origin</code> remote'uyla eşleştirilir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: bunun yerine, tıpkı {{name}}'dan önceki gibi tüm testler çalışır. <a href="/docs/license/">Lisanslar hakkında daha fazlası</a>.</p>

@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} liest Ihren Git-Diff und führt nur die .NET-Testklassen aus, die eine Änderung betreffen kann. Ist es sich nicht sicher, führt es mehr aus, nie weniger.; source: 54f9316cd2f6 -->
+<!-- title: {{name}}; description: {{name}} liest Ihren Git-Diff und führt nur die .NET-Testklassen aus, die eine Änderung betreffen kann. Ist es sich nicht sicher, führt es mehr aus, nie weniger.; source: 6b56b8bbf63f -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -22,7 +22,7 @@
         <span class="badge-ok">Bestanden</span>
       </div>
       <div class="check-body">
-        <p class="check-saving"><strong data-count>93 %</strong> weniger Testzeit</p>
+        <p class="check-saving"><strong data-count>93 %</strong> weniger aufgezeichnete Testzeit</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">Alle Tests</span>
@@ -68,8 +68,9 @@
       <div><strong data-count>{{corpusRepositories}}</strong><span>Repositorys, jedes mit eigenen Frameworks und Build-Eigenheiten</span></div>
       <div><strong data-count>{{corpusFailingChanges}}</strong><span>Änderungen, die mindestens einen Test brachen</span></div>
       <div><strong data-count>{{corpusMedianShare}}</strong><span>der Testklassen liefen pro Änderung im Median-Repository</span></div>
-      <div><strong data-count>{{corpusMissed}}</strong><span>übersehene Fälle in der letzten Runde; jeder frühere wurde mit einem Test behoben, der ohne die Korrektur fehlschlägt</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>übersehene Fälle in der letzten Runde; jeder frühere echte wurde mit einem Test behoben, der ohne die Korrektur fehlschlägt</span></div>
     </div>
+    <p class="band-note" data-reveal>Diese Zahlen wurden nach der früheren Regel der Evaluierung gemessen, die einen Testlauf, der außerhalb der Auswahl abstürzte oder hängen blieb, nicht als übersehen zählte. Die Regel ist jetzt streng: Ein solcher Absturz oder Hänger ist ein übersehener Fall, es sei denn, derselbe Lauf ohne die Änderung zeigt, dass er nicht von der Änderung kommt. Die Zahlen werden durch die der nächsten Runde ersetzt.</p>
     <figure class="dist" data-reveal>
 <svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
 <title id="dist-title">Anteil der pro Änderung ausgeführten Testklassen, ein Balken pro Repository</title>
@@ -176,7 +177,7 @@
       <div><dt>0</dt><dd><strong>Zeilen Ihres Codes verlassen Ihre CI</strong>Analyse, Coverage-Maps und Testergebnisse bleiben auf Ihren Rechnern.</dd></div>
       <div><dt>0</dt><dd><strong>Builds scheitern an einem Lizenzproblem</strong>Ohne gültige Lizenz laufen alle Tests, wie bisher.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>Test-Frameworks und Test Runner</strong>xUnit v2 und v3, NUnit, MSTest und TUnit, unter VSTest und Microsoft.Testing.Platform.</dd></div>
-      <div><dt>1</dt><dd><strong>Netzwerkaufruf am Tag, optional</strong>Eine Lizenzerneuerung, die die Lizenz sendet und sonst nichts.</dd></div>
+      <div><dt>1</dt><dd><strong>Art von Netzwerkaufruf, optional</strong>Eine Lizenzerneuerung, die die Lizenz sendet und sonst nichts, höchstens einmal am Tag pro Rechner (einmal pro Job auf Runnern, die frisch starten).</dd></div>
     </dl>
   </div>
   <div class="wrap">
@@ -209,7 +210,7 @@
         <li class="gha-step gha-b">
           <span class="gha-event">bei Pull Request</span>
           <h3>Ausführen, was die Änderung betrifft</h3>
-          <p>Die neueste Map an oder vor der Merge-Base wird wiederhergestellt, nur die betroffenen Testklassen laufen, und die Job Summary sagt, warum jede davon lief.</p>
+          <p>Die neueste Map innerhalb von 50 Commits vor der Merge-Base wird wiederhergestellt, nur die betroffenen Testklassen laufen, und die Job Summary sagt, warum jede davon lief.</p>
           <p class="gha-summary"><span class="badge-ok">Bestanden</span> 8 von 274 Klassen · 93 % Testzeit gespart</p>
         </li>
       </ol>

@@ -1,6 +1,6 @@
 <!-- title: How it decides; layout: docs; description: How {{name}} turns a git diff into the test projects and test classes to run. -->
 <h1>How it decides</h1>
-<p class="lead">{{name}} narrows the selection one step at a time, and only where it has evidence. Whatever it cannot trace falls back to running more.</p>
+<p class="lead">{{name}} narrows the selection one step at a time, and only where it has evidence. Whatever it knows it cannot trace falls back to running more; the few patterns it cannot see at all are listed under <a href="/docs/limitations/">Limitations</a>.</p>
 
 <h2>Select more, never less</h2>
 <p>A missed test is a bug; an extra test only costs CI time. Every rule below follows from that. When the analysis is unsure whether a change affects a project or a class, it treats it as affected, and the reason shows up in the output.</p>
@@ -11,7 +11,7 @@
 <p>Changed files are mapped to their projects and followed through <code>ProjectReference</code>s to every project that depends on them. Build-wide files such as <code>Directory.Build.props</code>, <code>global.json</code> and <code>.editorconfig</code> affect every project below them.</p>
 
 <h3>2. Symbols</h3>
-<p>For C# files, the old and new syntax trees are compared. Comment and whitespace edits select nothing; otherwise {{name}} knows which types and members changed.</p>
+<p>For C#, Visual Basic and F# files, the old and new syntax trees are compared. Comment and whitespace edits select nothing; otherwise {{name}} knows which types and members changed.</p>
 
 <h3>3. Coverage</h3>
 <p>After <code>td record</code>, a map of which test class ran which method, recorded at the base commit, gives the test classes for changed methods, properties and constructors directly. A changed field or property initializer counts as a change to the constructor it compiles into. A test class that loads a project's assembly from its path, such as a public API baseline test that reads every declaration through reflection, runs whenever that project changes.</p>
@@ -22,7 +22,7 @@
 <h3>5. Fallbacks</h3>
 <p>A whole test project runs when a change cannot be traced:</p>
 <ul>
-  <li>non-C# files in a project, such as <code>appsettings.json</code>, the <code>.csproj</code> or a <code>.resx</code>;</li>
+  <li>files in a project that are not C#, Visual Basic or F# source (an F# signature file counts among them), such as <code>appsettings.json</code>, the <code>.csproj</code> or a <code>.resx</code>;</li>
   <li>global usings and assembly attributes;</li>
   <li>types a framework discovers through reflection, such as controllers, message handlers and EF configurations.</li>
 </ul>

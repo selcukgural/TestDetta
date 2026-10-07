@@ -5,11 +5,11 @@
 <p class="muted">Last updated {{legalUpdated}}. Controller: {{licensor}}, {{licensorCountry}}. Contact: <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
 
 <h2>The {{name}} tool</h2>
-<p>{{name}} runs inside your CI and on your developers' machines. It does not send source code, diffs, coverage maps, test names, test results or build output anywhere.</p>
+<p>{{name}} runs inside your CI and on your developers' machines. It does not send source code, diffs, coverage maps, test names, test results or build output to us or to anyone else. In GitHub Actions, the {{name}} action keeps the coverage maps in your repository's Actions cache and the shadow and audit reports as artifacts of your workflow runs, inside your GitHub account.</p>
 <ul>
   <li><strong>Committers.</strong> To check the seat count, {{name}} counts distinct commit author emails locally. Emails and names are never sent, stored by us, or written to logs.</li>
   <li><strong>License check.</strong> The license is verified offline, with a public key built into {{name}}.</li>
-  <li><strong>License refresh.</strong> At most once a day, {{name}} asks our license service for the current version of your license. The request carries the license itself (which names the licensee, seats and repository scopes) and, like any network request, your IP address. The address is used only to limit request rates and is not stored. Set <code>TESTDETTA_LICENSE_REFRESH=off</code> to turn refresh off entirely.</li>
+  <li><strong>License refresh.</strong> At most once a day per machine (once per job on CI runners that start with an empty home directory), {{name}} asks our license service for the current version of your license. The request carries the license itself (which names the licensee, seats and repository scopes) and, like any network request, your IP address. The address is used only to limit request rates and is not stored. Set <code>TESTDETTA_LICENSE_REFRESH=off</code> to turn refresh off entirely.</li>
 </ul>
 
 <h2>Buying a license</h2>

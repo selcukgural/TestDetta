@@ -1,6 +1,6 @@
-<!-- title: Valídalo en tu repositorio; layout: docs; description: Comprueba en tu propio código que {{name}} selecciona todas las pruebas que rompen tus cambios, antes de confiar en él.; source: c8f6a5ee441c -->
+<!-- title: Valídalo en tu repositorio; layout: docs; description: Comprueba en tu propio código que {{name}} selecciona todas las pruebas que rompen tus cambios, antes de confiar en él.; source: 6576c19eb0e9 -->
 <h1>Valídalo en tu repositorio</h1>
-<p class="lead">Nuestra evaluación se hace sobre bibliotecas de código abierto. Tu código tiene sus propios patrones, así que comprueba {{name}} con él antes de dejar que decida qué se ejecuta. Lleva un par de semanas de pull requests normales y no cambia nada para tu equipo.</p>
+<p class="lead">Nuestra evaluación se hace sobre bibliotecas de código abierto. Tu código tiene sus propios patrones, así que comprueba {{name}} con él antes de dejar que decida qué se ejecuta. Lleva un par de semanas de pull requests normales y no cambia nada para tu equipo. El <a href="/docs/github-actions/#shadow">modo sombra</a> y el <a href="/docs/github-actions/#audit">audit</a> de la GitHub Action hacen estas comprobaciones por ti y no necesitan licencia; los pasos siguientes las hacen a mano con <code>td affected</code>.</p>
 
 <h2 id="idea">La idea</h2>
 <p>Sigue usando el conjunto completo de pruebas como control. Junto a él, pregunta a {{name}} qué habría seleccionado. Cada clase de prueba que falla en la ejecución completa tiene que estar en esa selección. Si alguna no está, es una prueba pasada por alto, y queremos saberlo.</p>
@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Sustituye el paso de pruebas completo por <code>td test</code>, o por el modo <code>test</code> de la acción. Sigue registrando en la rama predeterminada: allí se ejecutan todas las pruebas, así que cualquier cosa que una selección pudiera ocultar se detecta antes del lanzamiento.</p>
 
 <h2 id="how-we-test">Cómo lo probamos nosotros</h2>
-<p>La misma comprobación se ejecuta a gran escala en {{corpusRepositories}} repositorios de código abierto: los miembros se modifican de uno en uno y cada clase de prueba que falla tiene que haber sido seleccionada. De {{corpusFailingChanges}} cambios que rompieron una prueba en la última ronda, se pasaron por alto {{corpusMissed}}; cada prueba pasada por alto en rondas anteriores se corrigió con una prueba que falla sin la corrección. <a href="/docs/examples/#corpus">El corpus en cifras</a>.</p>
+<p>La misma comprobación se ejecuta a gran escala en {{corpusRepositories}} repositorios de código abierto: los miembros se modifican de uno en uno y cada clase de prueba que falla tiene que haber sido seleccionada. De {{corpusFailingChanges}} cambios que rompieron una prueba en la última ronda, se pasaron por alto {{corpusMissed}}; cada prueba realmente pasada por alto en rondas anteriores se corrigió con una prueba que falla sin la corrección. Estas cifras se midieron con la regla anterior de la evaluación, que no contaba como prueba pasada por alto una ejecución de pruebas que se bloqueó o se colgó fuera de la selección. Ahora la regla es estricta: un bloqueo o un cuelgue así es una prueba pasada por alto, salvo que la misma ejecución sin el cambio muestre que no se debe al cambio. Las cifras se sustituirán por las de la próxima ronda. <a href="/docs/examples/#corpus">El corpus en cifras</a>.</p>
 
 <h2 id="related">Páginas relacionadas</h2>
 <ul>

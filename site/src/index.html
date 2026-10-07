@@ -22,7 +22,7 @@
         <span class="badge-ok">Passed</span>
       </div>
       <div class="check-body">
-        <p class="check-saving"><strong data-count>93%</strong> less test time</p>
+        <p class="check-saving"><strong data-count>93%</strong> less recorded test time</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">All tests</span>
@@ -68,8 +68,9 @@
       <div><strong data-count>{{corpusRepositories}}</strong><span>repositories, each with its own frameworks and build quirks</span></div>
       <div><strong data-count>{{corpusFailingChanges}}</strong><span>changes that broke at least one test</span></div>
       <div><strong data-count>{{corpusMedianShare}}</strong><span>of its test classes ran per change in the median repository</span></div>
-      <div><strong data-count>{{corpusMissed}}</strong><span>misses in the latest round; every earlier miss was fixed with a test that fails without it</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>misses in the latest round; every earlier real miss was fixed with a test that fails without it</span></div>
     </div>
+    <p class="band-note" data-reveal>These numbers were measured under the evaluation's earlier rule, which did not count a test run that crashed or hung outside the selection as a miss. The rule is now strict: such a crash or hang is a miss unless the same run without the change shows it is not the change's. The numbers will be replaced by the next round's.</p>
     <figure class="dist" data-reveal>
 <svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
 <title id="dist-title">Share of test classes run per change, one bar per repository</title>
@@ -176,7 +177,7 @@
       <div><dt>0</dt><dd><strong>lines of your code leave your CI</strong>Analysis, coverage maps and test results stay on your machines.</dd></div>
       <div><dt>0</dt><dd><strong>builds failed by a license problem</strong>Without a valid license every test runs, as before.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>test frameworks and runners</strong>xUnit v2 and v3, NUnit, MSTest and TUnit, on VSTest and Microsoft.Testing.Platform.</dd></div>
-      <div><dt>1</dt><dd><strong>network call a day, optional</strong>A license renewal that sends the license and nothing else.</dd></div>
+      <div><dt>1</dt><dd><strong>kind of network call, optional</strong>A license renewal that sends the license and nothing else, at most once a day per machine (once per job on runners that start fresh).</dd></div>
     </dl>
   </div>
   <div class="wrap">
@@ -209,7 +210,7 @@
         <li class="gha-step gha-b">
           <span class="gha-event">on pull request</span>
           <h3>Run what the change affects</h3>
-          <p>The newest map at or before the merge base is restored, only the affected test classes run, and the job summary says why each one did.</p>
+          <p>The newest map within 50 commits before the merge base is restored, only the affected test classes run, and the job summary says why each one did.</p>
           <p class="gha-summary"><span class="badge-ok">Passed</span> 8 of 274 classes · 93% of test time saved</p>
         </li>
       </ol>

@@ -1,22 +1,22 @@
-<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: ae48c4254831 -->
+<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: 469ec3d17ce3 -->
 <h1>Sorun giderme</h1>
 <p class="lead">Her başlık gördüğünüz durumdan yola çıkar. Hepsi için <code>-v</code>, her kararı gerekçesiyle birlikte stderr'e yazar; bu log çoğu soruyu yanıtlar ve bize göndermeniz gereken de odur.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
 
 <h2 id="whole-project">Test projesinin tamamı çalıştı</h2>
-<p>Çıktıda projeyi bulun: gerekçe yanında yazılıdır. Olağan nedenler derlemenin geneline etki eden bir dosya, projedeki C# dışı bir dosya, bir <code>global using</code> ya da reflection ile bulunan bir tiptir. <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a> sayfası hepsini listeler. <code>-v</code> logunda <code>affects whole project: True</code> gibi bir satır dosyanın adını verir.</p>
+<p>Çıktıda projeyi bulun: gerekçe yanında yazılıdır. Olağan nedenler derlemenin geneline etki eden bir dosya, projede C#, Visual Basic ya da F# kaynağı olmayan bir dosya, bir <code>global using</code> ya da reflection ile bulunan bir tiptir. <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a> sayfası hepsini listeler. <code>-v</code> logunda <code>affects whole project: True</code> gibi bir satır dosyanın adını verir.</p>
 
 <h2 id="no-map">Hiçbir kapsam haritası kullanılmadı</h2>
 <p>Harita olmadan seçim isimleri izler ve bu daha geniştir. Log, neden harita olmadığını söyler:</p>
 <ul>
-  <li><code>No coverage maps within 50 commits before the merge base</code>: varsayılan branch'te yakın zamanda hiçbir şey kaydedilmemiş. Oradaki her push'ta bir harita kaydedin; action'ın <code>record</code> modu bunu yapar.</li>
+  <li><code>No coverage maps within 50 commits before the merge base</code> (<code>--maps-dir</code> ile yazdırılır): varsayılan branch'te yakın zamanda hiçbir şey kaydedilmemiş. Oradaki her push'ta bir harita kaydedin; action'ın <code>record</code> modu bunu yapar.</li>
   <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: harita başka bir branch'ten, ya da bir force push'tan veya uzun süre yaşamış bir branch'ten öncesinden geliyor. Varsayılan branch'te yeniden kaydedin ya da <code>--max-map-age</code> değerini yükseltin.</li>
   <li><code>--maps-dir … does not exist</code>: haritaları içeren klasör koşudan önce geri yüklenmemiş.</li>
   <li>GitHub Actions'ta, haritaları tutan önbellek kayıtlarını listeleyebilmek için job'un <code>actions: read</code> iznine ihtiyacı vardır.</li>
 </ul>
 
 <h2 id="base">Base commit bulunamıyor</h2>
-<p>{{name}} branch'inizi merge base ile karşılaştırır; bu yüzden ikisinin de geçmişine ihtiyaç duyar. Action şu mesajla durur:</p>
+<p>{{name}} branch'inizi merge base ile karşılaştırır; bu yüzden ikisinin de geçmişine ihtiyaç duyar. Test, record ve audit modlarında Action aşağıdaki hatayla durur; shadow mode'da uyarı verir ve bunun yerine düz <code>dotnet test</code> komutunuzu çalıştırır:</p>
 <pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
 <p>Checkout'u <code>fetch-depth: 0</code> ile yapın. Diğer CI sistemlerinde shallow clone'ları kapatın ve hedef branch'i açık bir refspec ile fetch edin; her sistem için nasıl yapılacağı <a href="/docs/other-ci/">Diğer CI sistemleri</a> sayfasında gösterilmiştir.</p>
 

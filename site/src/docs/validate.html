@@ -1,6 +1,6 @@
 <!-- title: Validate on your repository; layout: docs; description: Check that {{name}} selects every test your changes break, on your own code, before you rely on it. -->
 <h1>Validate on your repository</h1>
-<p class="lead">Our evaluation runs on open-source libraries. Your code has its own patterns, so check {{name}} on it before you let it decide what runs. This takes a couple of weeks of normal pull requests and changes nothing for your team.</p>
+<p class="lead">Our evaluation runs on open-source libraries. Your code has its own patterns, so check {{name}} on it before you let it decide what runs. This takes a couple of weeks of normal pull requests and changes nothing for your team. The GitHub Action's <a href="/docs/github-actions/#shadow">shadow mode</a> and <a href="/docs/github-actions/#audit">audit</a> do these checks for you and need no license; the steps below do them by hand with <code>td affected</code>.</p>
 
 <h2 id="idea">The idea</h2>
 <p>Keep running the full suite as the gate. Next to it, ask {{name}} what it would have selected. Every test class that fails in the full run must be in that selection. If one is not, that is a miss, and we want to hear about it.</p>
@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Replace the full test step with <code>td test</code>, or the action's <code>test</code> mode. Keep recording on the default branch: it runs every test there, so anything a selection could ever hide is still caught before release.</p>
 
 <h2 id="how-we-test">How we test it</h2>
-<p>The same check runs at scale on {{corpusRepositories}} open-source repositories: members are changed one at a time and every test class that fails must have been selected. Out of {{corpusFailingChanges}} changes that broke a test in the latest round, {{corpusMissed}} were missed; every miss in earlier rounds was fixed with a test that fails without the fix. <a href="/docs/examples/#corpus">The corpus in numbers</a>.</p>
+<p>The same check runs at scale on {{corpusRepositories}} open-source repositories: members are changed one at a time and every test class that fails must have been selected. Out of {{corpusFailingChanges}} changes that broke a test in the latest round, {{corpusMissed}} were missed; every real miss in earlier rounds was fixed with a test that fails without the fix. These numbers were measured under the evaluation's earlier rule, which did not count a test run that crashed or hung outside the selection as a miss. The rule is now strict: such a crash or hang is a miss unless the same run without the change shows it is not the change's. The numbers will be replaced by the next round's. <a href="/docs/examples/#corpus">The corpus in numbers</a>.</p>
 
 <h2 id="related">Related pages</h2>
 <ul>

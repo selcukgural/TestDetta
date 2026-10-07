@@ -1,6 +1,6 @@
-<!-- title: Erste Schritte; layout: docs; description: Richten Sie {{name}} in der CI ein und führen Sie nur die .NET-Tests aus, die eine Änderung betreffen kann.; source: 8a80a118b806 -->
+<!-- title: Erste Schritte; layout: docs; description: Richten Sie {{name}} in der CI ein und führen Sie nur die .NET-Tests aus, die eine Änderung betreffen kann.; source: 236167938ec7 -->
 <h1>Erste Schritte</h1>
-<p class="lead">{{name}} vergleicht Ihren Branch mit seiner Basis, ermittelt, welche Testprojekte und welche Testklassen die Änderung bemerken können, und führt nur diese aus. Ist es sich nicht sicher, führt es mehr aus, nie weniger.</p>
+<p class="lead">{{name}} vergleicht Ihren Branch mit seiner Basis, ermittelt, welche Testprojekte und welche Testklassen die Änderung bemerken können, und führt nur diese aus. Ist es sich nicht sicher, führt es mehr aus, nie weniger; was es nicht sehen kann, ist unter <a href="/docs/limitations/">Einschränkungen</a> aufgeführt.</p>
 
 <h2>Voraussetzungen</h2>
 <ul>
@@ -13,7 +13,7 @@
 <h2>Schnellstart</h2>
 
 <h3>GitHub Actions</h3>
-<p>Die GitHub Action baut {{name}} für Sie; Sie müssen nichts installieren. Fügen Sie Ihrem Workflow zwei Schritte hinzu: Einer zeichnet bei Pushes auf Ihren Standard-Branch eine Coverage-Map auf, der andere führt in Pull Requests nur die betroffenen Tests aus.</p>
+<p>Die GitHub Action lädt das {{name}}-Paket, das sie festschreibt, von nuget.org herunter und prüft seinen SHA-512, bevor sie es ausführt; Sie müssen nichts installieren. Fügen Sie Ihrem Workflow zwei Schritte hinzu: Einer zeichnet bei Pushes auf Ihren Standard-Branch eine Coverage-Map auf, der andere führt in Pull Requests nur die betroffenen Tests aus.</p>
 <pre><code>- if: github.event_name == 'push'
   uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
   with:

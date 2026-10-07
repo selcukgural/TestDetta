@@ -176,6 +176,7 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.9em; }
 .band-stats strong { display: block; font-size: 2.4rem; letter-spacing: -0.03em; line-height: 1.1; color: #fff; margin-bottom: 8px; }
 .band-stats span { color: var(--ink-muted); font-size: 0.93rem; }
 .band-link { text-align: center; margin: 28px 0 0; }
+.band-note { max-width: 46em; margin: 20px auto 0; text-align: center; color: var(--ink-muted); font-size: 0.86rem; }
 .band a { color: var(--ink-accent); }
 @media (max-width: 860px) { .band-stats { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 480px) { .band-stats { grid-template-columns: 1fr; } }

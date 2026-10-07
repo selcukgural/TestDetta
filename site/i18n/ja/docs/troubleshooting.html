@@ -1,22 +1,22 @@
-<!-- title: トラブルシューティング; layout: docs; description: {{name}} が想定より多く選択する、カバレッジマップが見つからない、ベースコミットが見つからない、といった場合の対処法を説明します。; source: ae48c4254831 -->
+<!-- title: トラブルシューティング; layout: docs; description: {{name}} が想定より多く選択する、カバレッジマップが見つからない、ベースコミットが見つからない、といった場合の対処法を説明します。; source: 469ec3d17ce3 -->
 <h1>トラブルシューティング</h1>
 <p class="lead">各項目は、目にした症状から始まります。どの場合も、<code>-v</code> を指定するとすべての判断とその理由が stderr に書き込まれます。ほとんどの疑問はこのログで解決でき、当社にお送りいただきたいのもこのログです。</p>
 <pre><code>td affected --base origin/main -v</code></pre>
 
 <h2 id="whole-project">テストプロジェクト全体が実行された</h2>
-<p>出力の中でそのプロジェクトを探してください。理由が横に表示されています。よくある原因は、ビルド全体に関わるファイル、プロジェクト内の C# 以外のファイル、<code>global using</code>、リフレクションで検出される型です。すべての原因は<a href="/docs/what-runs-everything/">すべてが実行される変更</a>に一覧があります。<code>-v</code> のログでは、<code>affects whole project: True</code> のような行にそのファイルが示されます。</p>
+<p>出力の中でそのプロジェクトを探してください。理由が横に表示されています。よくある原因は、ビルド全体に関わるファイル、プロジェクト内の C#、Visual Basic、F# のソース以外のファイル、<code>global using</code>、リフレクションで検出される型です。すべての原因は<a href="/docs/what-runs-everything/">すべてが実行される変更</a>に一覧があります。<code>-v</code> のログでは、<code>affects whole project: True</code> のような行にそのファイルが示されます。</p>
 
 <h2 id="no-map">カバレッジマップが使われなかった</h2>
 <p>マップがない場合、選択は名前によるトレースで行われ、範囲が広くなります。マップがなかった理由はログに示されます。</p>
 <ul>
-  <li><code>No coverage maps within 50 commits before the merge base</code>：既定のブランチで最近何も記録されていません。既定のブランチへのプッシュごとにマップを記録してください。アクションの <code>record</code> モードがこれを行います。</li>
+  <li><code>No coverage maps within 50 commits before the merge base</code>（<code>--maps-dir</code> を指定した場合に出力）：既定のブランチで最近何も記録されていません。既定のブランチへのプッシュごとにマップを記録してください。アクションの <code>record</code> モードがこれを行います。</li>
   <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>：マップが別のブランチのもの、またはフォースプッシュや長期間存続するブランチより前のものです。既定のブランチで記録し直すか、<code>--max-map-age</code> を引き上げてください。</li>
   <li><code>--maps-dir … does not exist</code>：実行前にマップのフォルダーが復元されていません。</li>
   <li>GitHub Actions では、マップを格納したキャッシュエントリを一覧表示するために、ジョブに <code>actions: read</code> のアクセス許可が必要です。</li>
 </ul>
 
 <h2 id="base">ベースコミットが見つからない</h2>
-<p>{{name}} はブランチをマージベースと比較するため、両方の履歴が必要です。アクションは次のメッセージで停止します。</p>
+<p>{{name}} はブランチをマージベースと比較するため、両方の履歴が必要です。test、record、audit モードでは、アクションは次のエラーで停止します。shadow モードでは警告を出し、代わりに通常の <code>dotnet test</code> を実行します。</p>
 <pre class="wrap-code"><code>TestDetta compares with a base commit and needs the full history. Use actions/checkout with fetch-depth: 0.</code></pre>
 <p><code>fetch-depth: 0</code> でチェックアウトしてください。ほかの CI システムでは、シャロークローンを無効にし、明示的な refspec でターゲットブランチをフェッチします。各システムでの方法は<a href="/docs/other-ci/">その他の CI システム</a>を参照してください。</p>
 

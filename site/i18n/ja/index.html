@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 54f9316cd2f6 -->
+<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 6b56b8bbf63f -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -22,7 +22,7 @@
         <span class="badge-ok">成功</span>
       </div>
       <div class="check-body">
-        <p class="check-saving">テスト時間を <strong data-count>93%</strong> 削減</p>
+        <p class="check-saving">記録されたテスト時間を <strong data-count>93%</strong> 削減</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">すべてのテスト</span>
@@ -68,8 +68,9 @@
       <div><strong data-count>{{corpusRepositories}}</strong><span>件のリポジトリ。フレームワークもビルドの癖もそれぞれ異なります</span></div>
       <div><strong data-count>{{corpusFailingChanges}}</strong><span>件の、少なくとも 1 つのテストを失敗させた変更</span></div>
       <div><strong data-count>{{corpusMedianShare}}</strong><span>中央値のリポジトリで、1 回の変更あたりに実行されたテストクラスの割合</span></div>
-      <div><strong data-count>{{corpusMissed}}</strong><span>件の見逃し（最新ラウンド）。過去の見逃しは、それぞれ修正なしでは失敗するテストを添えて修正済み</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>件の見逃し（最新ラウンド）。過去の実際の見逃しは、それぞれ修正なしでは失敗するテストを添えて修正済み</span></div>
     </div>
+    <p class="band-note" data-reveal>これらの数値は評価の以前のルールで測定したもので、そのルールでは選択の外でクラッシュまたはハングしたテスト実行を見逃しと数えていませんでした。現在のルールは厳格です。そのようなクラッシュやハングは、変更なしの同じ実行で変更が原因ではないと示されない限り、見逃しです。これらの数値は次のラウンドの数値に置き換えられます。</p>
     <figure class="dist" data-reveal>
 <svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
 <title id="dist-title">1 回の変更あたりに実行されたテストクラスの割合（リポジトリごとに 1 本の棒）</title>
@@ -176,7 +177,7 @@
       <div><dt>0</dt><dd><strong>行のコードも CI の外に出ません</strong>分析、カバレッジマップ、テスト結果はお使いのマシンにとどまります。</dd></div>
       <div><dt>0</dt><dd><strong>件：ライセンスの問題によるビルドの失敗</strong>有効なライセンスがない場合は、これまでどおりすべてのテストを実行します。</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>テストフレームワークとテストランナー</strong>xUnit v2 と v3、NUnit、MSTest、TUnit に、VSTest と Microsoft.Testing.Platform の両方で対応しています。</dd></div>
-      <div><dt>1</dt><dd><strong>回：1 日あたりのネットワーク通信（任意）</strong>ライセンスの更新で、送信するのはライセンスだけです。</dd></div>
+      <div><dt>1</dt><dd><strong>種類のネットワーク通信（任意）</strong>ライセンスの更新で、送信するのはライセンスだけです。マシンごとに 1 日に最大 1 回（新しい状態で始まるランナーではジョブごとに 1 回）です。</dd></div>
     </dl>
   </div>
   <div class="wrap">
@@ -209,7 +210,7 @@
         <li class="gha-step gha-b">
           <span class="gha-event">プルリクエスト時</span>
           <h3>変更が影響するテストを実行</h3>
-          <p>マージベース時点またはそれ以前の最新のマップを復元して、影響を受けるテストクラスだけを実行し、それぞれが実行された理由をジョブサマリーに示します。</p>
+          <p>マージベースより前の 50 コミット以内で最新のマップを復元して、影響を受けるテストクラスだけを実行し、それぞれが実行された理由をジョブサマリーに示します。</p>
           <p class="gha-summary"><span class="badge-ok">成功</span> 274 クラス中 8 クラス · テスト時間を 93% 削減</p>
         </li>
       </ol>

@@ -1,4 +1,4 @@
-<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 7b16c078e097 -->
+<!-- title: Qué lo ejecuta todo; layout: docs; description: Los cambios que hacen que {{name}} ejecute un proyecto de pruebas completo o todos los proyectos bajo una carpeta, y los archivos que ignora.; source: 97f5b983683c -->
 <h1>Qué lo ejecuta todo</h1>
 <p class="lead">La mayoría de los cambios seleccionan unas pocas clases de prueba. Algunos no se pueden acotar de forma segura, así que {{name}} ejecuta un proyecto de pruebas completo o todos los proyectos bajo una carpeta. Esta página los enumera todos, para que una selección amplia nunca te sorprenda.</p>
 
@@ -25,7 +25,7 @@
     <tr><td>Un <code>global using</code> o un atributo de ensamblado</td><td>Se aplica a todos los archivos.</td></tr>
     <tr><td>Un cambio de C# en código que ninguna declaración abarca, por ejemplo bajo una condición del preprocesador</td><td>No hay ningún miembro que seguir.</td></tr>
     <tr><td>Un tipo modificado que nada nombra, pero que un framework podría descubrir por reflexión (controladores, manejadores de mensajes, configuraciones de EF)</td><td>Ni los nombres ni la cobertura pueden decir quién lo encuentra.</td></tr>
-    <tr><td>Un proyecto usado como analizador o generador de código fuente</td><td>Su efecto está en la compilación, no en las llamadas.</td></tr>
+    <tr><td>Un proyecto usado como analizador o generador de código fuente, cuando lo que genera no se puede comparar (vea la tabla anterior)</td><td>Su efecto está en la compilación, no en las llamadas.</td></tr>
   </tbody>
 </table>
 <p>Cada uno de estos casos ejecuta además todos los proyectos de pruebas que dependen del proyecto afectado.</p>

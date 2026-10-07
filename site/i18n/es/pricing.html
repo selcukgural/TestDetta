@@ -1,4 +1,4 @@
-<!-- title: Precios; description: Gratis para repositorios públicos, {{trialDays}} días gratis para los privados y después un precio por committer activo.; source: 39129ae026e2 -->
+<!-- title: Precios; description: Gratis para repositorios públicos, {{trialDays}} días gratis para los privados y después un precio por committer activo.; source: 4cd3ecc43854 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -67,14 +67,14 @@
         <label><span>Coste de un desarrollador por hora ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
       </div>
       <div class="calc-results" aria-live="polite">
-        <div class="calc-hero"><output name="hours">91 h</output><span>menos de espera de resultados de pruebas al mes</span></div>
+        <div class="calc-hero"><output name="hours">88 h</output><span>menos de espera de resultados de pruebas al mes</span></div>
         <dl>
-          <div><dt>Minutos de pruebas ahorrados por ejecución</dt><dd><output name="perRun">8,6 min</output></dd></div>
-          <div><dt>Minutos de runner ahorrados al mes</dt><dd><output name="ciMinutes">5443</output></dd></div>
-          <div><dt>Coste de runner ahorrado al mes</dt><dd><output name="ciCost">33 US$</output></dd></div>
-          <div><dt>Tiempo de desarrollo ahorrado al mes</dt><dd><output name="devCost">5443 US$</output></dd></div>
+          <div><dt>Minutos de pruebas ahorrados por ejecución</dt><dd><output name="perRun">8,4 min</output></dd></div>
+          <div><dt>Minutos de runner ahorrados al mes</dt><dd><output name="ciMinutes">5292</output></dd></div>
+          <div><dt>Coste de runner ahorrado al mes</dt><dd><output name="ciCost">32 US$</output></dd></div>
+          <div><dt>Tiempo de desarrollo ahorrado al mes</dt><dd><output name="devCost">5292 US$</output></dd></div>
           <div><dt>{{name}} al mes</dt><dd><output name="cost">150 US$</output></dd></div>
-          <div class="calc-net"><dt>Ahorro neto al mes</dt><dd><output name="net">5326 US$</output></dd></div>
+          <div class="calc-net"><dt>Ahorro neto al mes</dt><dd><output name="net">5174 US$</output></dd></div>
         </dl>
         <p class="calc-note">21 días laborables al mes. Solo se cuenta el tiempo de pruebas: las compilaciones se ejecutan de todos modos.</p>
       </div>
@@ -101,7 +101,7 @@
     </details>
     <details>
       <summary>¿{{name}} envía nuestro código a algún sitio?</summary>
-      <p>No. El análisis, los mapas de cobertura y las ejecuciones de pruebas se quedan en tu CI. La única llamada de red es una actualización diaria opcional de la licencia que envía la propia licencia; define <code>TESTDETTA_LICENSE_REFRESH=off</code> para desactivarla.</p>
+      <p>No. El análisis, los mapas de cobertura y las ejecuciones de pruebas se quedan en tu CI. La única llamada de red propia de {{name}} es una actualización opcional de la licencia que envía la propia licencia, como máximo una vez al día por máquina (una vez por job en los runners de CI que empiezan desde cero); la GitHub Action además descarga el paquete de {{name}} desde nuget.org. Define <code>TESTDETTA_LICENSE_REFRESH=off</code> para desactivar la actualización.</p>
     </details>
     <details>
       <summary>¿Quién gestiona los pagos y las facturas?</summary>
