@@ -205,6 +205,12 @@ projects.
 - **Recording scope changed**: only the assemblies of projects the test project compiles against
   (transitively, without references that do not compile against) are instrumented. A copy of another
   project's executable in the test output used to be instrumented and broke when a test ran it.
+  Projects may share an assembly name (Meziantou.Analyzer's Roslyn variants, UnitsNet's per-language
+  test projects): `ProjectAssemblies.Owners` lists every project behind a file name, and
+  `GeneratedSourceReader.CompiledAgainst` keeps the name when any of them is in the test project's
+  reference closure, with that project as its owner for generated code and build inputs (the first
+  by path when several are reached). Keeping only the project the graph listed first left the other
+  variants' test projects with uninstrumented or missing assemblies.
 - **Selection** (`TestSelector.AddOutputUsers`, `BuildOutputUse`, `BuildInputsDiffer`): as decided above.
   A use outside the tests, while initializing or in a fixture's setup runs the whole project; a map
   without `outputUses` runs it; a multi-targeted test project whose build uses the output runs it

@@ -21,18 +21,21 @@ internal sealed partial class ProjectAssemblies(ILogger logger)
         new(Owners(graph, repoRoot).Keys, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// The project that compiles each assembly file name. A project whose name needs evaluation is
+    /// Every project that compiles each assembly file name, in graph order. Several projects may share
+    /// one name (variants of a library built against different dependencies, each with its own test
+    /// project); which of them a test output holds depends on the test project
+    /// (<see cref="GeneratedSourceReader.CompiledAgainst"/>). A project whose name needs evaluation is
     /// listed under both its file name (the default) and the evaluated name.
     /// </summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root, the working directory of MSBuild.</param>
-    public Dictionary<string, ProjectNode> Owners(ProjectGraph graph, string repoRoot)
+    public Dictionary<string, List<ProjectNode>> Owners(ProjectGraph graph, string repoRoot)
     {
         var dotnet = new DotnetProcess(logger);
-        var names = new Dictionary<string, ProjectNode>(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, List<ProjectNode>>(StringComparer.OrdinalIgnoreCase);
         foreach (var project in graph.Projects)
         {
-            names.TryAdd(project.AssemblyName + ".dll", project);
+            Add(names, project.AssemblyName + ".dll", project);
             if (!project.AssemblyNameUnresolved)
             {
                 continue;
@@ -53,11 +56,28 @@ internal sealed partial class ProjectAssemblies(ILogger logger)
             LogEvaluated(project.Path, evaluated);
             if (evaluated.Length > 0)
             {
-                names.TryAdd(evaluated + ".dll", project);
+                Add(names, evaluated + ".dll", project);
             }
         }
 
         return names;
+    }
+
+    /// <summary>Lists <paramref name="project"/> under <paramref name="fileName"/>, once.</summary>
+    /// <param name="names">Owners by file name.</param>
+    /// <param name="fileName">Assembly file name.</param>
+    /// <param name="project">A project that compiles it.</param>
+    private static void Add(Dictionary<string, List<ProjectNode>> names, string fileName, ProjectNode project)
+    {
+        if (!names.TryGetValue(fileName, out var owners))
+        {
+            names[fileName] = owners = [];
+        }
+
+        if (!owners.Contains(project))
+        {
+            owners.Add(project);
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "AssemblyName of {Project} evaluated by MSBuild: {Name}")]

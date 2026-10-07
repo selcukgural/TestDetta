@@ -78,8 +78,8 @@ public sealed partial class BuildGeneratedCodeReader(ILoggerFactory loggerFactor
             return GeneratedCodeRead.NotAvailable($"{Path.GetFileName(targetPath)} has no portable PDB to read generated code from (set DebugType to portable or embedded)");
         }
 
-        var owners = new ProjectAssemblies(_logger).Owners(graph, repoRoot);
-        var assemblies = GeneratedSourceReader.RepositoryAssemblies(GeneratedSourceReader.CompiledAgainst(graph, testProject, owners), Path.GetDirectoryName(targetPath)!);
+        var owners = GeneratedSourceReader.CompiledAgainst(graph, testProject, new ProjectAssemblies(_logger).Owners(graph, repoRoot));
+        var assemblies = GeneratedSourceReader.RepositoryAssemblies(owners.Keys, Path.GetDirectoryName(targetPath)!);
         var sources = GeneratedSourceReader.Read(repoRoot, testProject, targetPath, owners, assemblies);
         LogRead(testProject.Path, sources.Count, assemblies.Count + 1);
         var tracked = new GitClient(loggerFactory.CreateLogger<GitClient>()).TrackedFiles(repoRoot).ToHashSet(StringComparer.Ordinal);

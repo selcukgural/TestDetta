@@ -56,7 +56,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// Assembly file names of the last graph recorded for: every test project of a repository needs
     /// the same set, and evaluating names may start MSBuild.
     /// </summary>
-    private (ProjectGraph Graph, Dictionary<string, ProjectNode> Owners)? _assemblyNames;
+    private (ProjectGraph Graph, Dictionary<string, List<ProjectNode>> Owners)? _assemblyNames;
 
     /// <summary>Records the coverage map of one test project.</summary>
     /// <param name="request">What to record.</param>
@@ -104,15 +104,16 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 $"{Path.GetFileName(project)} has no build output at {targetPath}; build it with -c {request.Configuration} first, or drop --no-build.");
         }
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
-        var assemblies = GeneratedSourceReader.RepositoryAssemblies(GeneratedSourceReader.CompiledAgainst(request.Graph, request.TestProject, AssemblyOwners(request)), outputDirectory);
-        var generated = ReadGenerated(request, targetPath, assemblies, framework);
+        var owners = GeneratedSourceReader.CompiledAgainst(request.Graph, request.TestProject, AssemblyOwners(request));
+        var assemblies = GeneratedSourceReader.RepositoryAssemblies(owners.Keys, outputDirectory);
+        var generated = ReadGenerated(request, targetPath, owners, assemblies, framework);
         // Read before instrumentation rewrites the assemblies and their PDBs, as the generated code is.
         var tracked = new GitClient(loggerFactory.CreateLogger<GitClient>()).TrackedFiles(request.RepoRoot).ToHashSet(StringComparer.Ordinal);
-        var buildInputs = GeneratedSourceReader.ReadBuildInputs(request.RepoRoot, request.TestProject, targetPath, AssemblyOwners(request), assemblies, tracked);
+        var buildInputs = GeneratedSourceReader.ReadBuildInputs(request.RepoRoot, request.TestProject, targetPath, owners, assemblies, tracked);
         IReadOnlyList<string>? generatedFrameworks = null;
         if (framework is not null && request.Options.Framework is null)
         {
-            (generated, generatedFrameworks) = ReadOtherFrameworks(dotnet, request, runDirectory, framework, generated);
+            (generated, generatedFrameworks) = ReadOtherFrameworks(dotnet, request, runDirectory, framework, owners, generated);
         }
         else if (framework is not null && TargetFrameworks(dotnet, request, runDirectory) is [] or [_])
         {
@@ -634,9 +635,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) && framework.Length > 3 && framework[3..].All(char.IsAsciiDigit);
     }
 
-    /// <summary>The project behind each assembly file name of the request's repository, cached per graph.</summary>
+    /// <summary>Every project behind each assembly file name of the request's repository, cached per graph.</summary>
     /// <param name="request">What is being recorded.</param>
-    private Dictionary<string, ProjectNode> AssemblyOwners(RecordRequest request)
+    private Dictionary<string, List<ProjectNode>> AssemblyOwners(RecordRequest request)
     {
         if (_assemblyNames is { } cached && ReferenceEquals(cached.Graph, request.Graph))
         {
@@ -654,11 +655,12 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// </summary>
     /// <param name="request">What is being recorded.</param>
     /// <param name="targetPath">Test assembly.</param>
+    /// <param name="owners">Project of each repository assembly in the test project's build (<see cref="GeneratedSourceReader.CompiledAgainst"/>).</param>
     /// <param name="assemblies">Repository assemblies in the test output.</param>
     /// <param name="framework">Framework of the build, for a project that targets several; null otherwise.</param>
-    private List<GeneratedSource> ReadGenerated(RecordRequest request, string targetPath, List<string> assemblies, string? framework)
+    private List<GeneratedSource> ReadGenerated(RecordRequest request, string targetPath, IReadOnlyDictionary<string, ProjectNode> owners, List<string> assemblies, string? framework)
     {
-        var generated = GeneratedSourceReader.Read(request.RepoRoot, request.TestProject, targetPath, AssemblyOwners(request), assemblies)
+        var generated = GeneratedSourceReader.Read(request.RepoRoot, request.TestProject, targetPath, owners, assemblies)
             .ConvertAll(source => source with { Framework = framework });
         LogGenerated(request.TestProject.Path, generated.Count);
         return generated;
@@ -674,12 +676,14 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="request">What is being recorded.</param>
     /// <param name="runDirectory">Where dotnet runs.</param>
     /// <param name="recorded">Framework whose tests are recorded, whose generated code is read already.</param>
+    /// <param name="owners">Project of each repository assembly in the test project's build (<see cref="GeneratedSourceReader.CompiledAgainst"/>).</param>
     /// <param name="generated">Generated code of <paramref name="recorded"/>.</param>
     private (List<GeneratedSource> Generated, IReadOnlyList<string>? Frameworks) ReadOtherFrameworks(
         DotnetProcess dotnet,
         RecordRequest request,
         string runDirectory,
         string recorded,
+        IReadOnlyDictionary<string, ProjectNode> owners,
         List<GeneratedSource> generated)
     {
         var frameworks = TargetFrameworks(dotnet, request, runDirectory);
@@ -694,8 +698,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 return (all, null);
             }
 
-            var assemblies = GeneratedSourceReader.RepositoryAssemblies(GeneratedSourceReader.CompiledAgainst(request.Graph, request.TestProject, AssemblyOwners(request)), Path.GetDirectoryName(targetPath)!);
-            all.AddRange(ReadGenerated(request, targetPath, assemblies, other));
+            var assemblies = GeneratedSourceReader.RepositoryAssemblies(owners.Keys, Path.GetDirectoryName(targetPath)!);
+            all.AddRange(ReadGenerated(request, targetPath, owners, assemblies, other));
         }
 
         return (all, frameworks);

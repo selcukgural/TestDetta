@@ -12,16 +12,21 @@ namespace TestDetta.Coverage;
 internal static class GeneratedSourceReader
 {
     /// <summary>
-    /// The assembly file names of <paramref name="owners"/> whose projects the test project compiles
-    /// against, itself or through the projects it compiles against. A project referenced without
-    /// compiling against it may still have its output copied next to the tests (LibGit2Sharp's test
-    /// app), to run as another process: it is not instrumented, since an instrumented copy run outside
-    /// the test host breaks, and its use is recorded as a process start (docs/design/runtime-file-reads.md).
+    /// The repository assemblies of this test project's build, by file name, each with the project
+    /// behind it: those of <paramref name="owners"/> with a project the test project compiles against,
+    /// itself or through the projects it compiles against. A project referenced without compiling
+    /// against it may still have its output copied next to the tests (LibGit2Sharp's test app), to run
+    /// as another process: it is not instrumented, since an instrumented copy run outside the test host
+    /// breaks, and its use is recorded as a process start (docs/design/runtime-file-reads.md).
+    /// Several projects may share an assembly name (variants of one library built against different
+    /// dependencies, each with its own test project): a name is kept when any of its projects is
+    /// reached, and that project is its owner. When the references reach several, the first by path
+    /// is taken, so the choice never depends on the order the graph lists them in.
     /// </summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="testProject">The test project.</param>
-    /// <param name="owners">Project of each repository assembly, by file name.</param>
-    public static IEnumerable<string> CompiledAgainst(ProjectGraph graph, ProjectNode testProject, IReadOnlyDictionary<string, ProjectNode> owners)
+    /// <param name="owners">Every project of each repository assembly, by file name (<see cref="ProjectAssemblies.Owners"/>).</param>
+    public static Dictionary<string, ProjectNode> CompiledAgainst(ProjectGraph graph, ProjectNode testProject, IReadOnlyDictionary<string, List<ProjectNode>> owners)
     {
         var closure = new HashSet<string>(StringComparer.Ordinal) { testProject.Path };
         var queue = new Queue<ProjectNode>([testProject]);
@@ -36,7 +41,17 @@ internal static class GeneratedSourceReader
             }
         }
 
-        return owners.Where(o => closure.Contains(o.Value.Path)).Select(static o => o.Key);
+        var compiled = new Dictionary<string, ProjectNode>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (fileName, projects) in owners)
+        {
+            var owner = projects.Where(p => closure.Contains(p.Path)).MinBy(static p => p.Path, StringComparer.Ordinal);
+            if (owner is not null)
+            {
+                compiled[fileName] = owner;
+            }
+        }
+
+        return compiled;
     }
 
     /// <summary>The repository's own assemblies found in a test output directory, except TestDetta's runtime.</summary>
@@ -68,7 +83,7 @@ internal static class GeneratedSourceReader
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="testProject">The test project.</param>
     /// <param name="targetPath">Its compiled test assembly.</param>
-    /// <param name="owners">Project of each repository assembly, by file name.</param>
+    /// <param name="owners">Project of each repository assembly in this test project's build, by file name (<see cref="CompiledAgainst"/>).</param>
     /// <param name="assemblies">Repository assemblies in the test output.</param>
     public static List<GeneratedSource> Read(
         string repoRoot,
@@ -104,7 +119,7 @@ internal static class GeneratedSourceReader
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="testProject">The test project.</param>
     /// <param name="targetPath">Its compiled test assembly.</param>
-    /// <param name="owners">Project of each repository assembly, by file name.</param>
+    /// <param name="owners">Project of each repository assembly in this test project's build, by file name (<see cref="CompiledAgainst"/>).</param>
     /// <param name="assemblies">Repository assemblies in the test output.</param>
     /// <param name="tracked">Files git tracks, relative, with '/' separators.</param>
     public static Dictionary<string, IReadOnlyDictionary<string, string>> ReadBuildInputs(
