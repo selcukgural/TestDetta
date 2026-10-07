@@ -607,7 +607,7 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         using var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(sent, response.Headers.Contains("Strict-Transport-Security"));
+        Assert.Equal(sent ? ["max-age=31536000; includeSubDomains"] : [], response.Headers.TryGetValues("Strict-Transport-Security", out var hsts) ? hsts : []);
     }
 
     [Theory]

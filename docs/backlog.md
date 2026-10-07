@@ -327,16 +327,12 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
-- **License service behind Cloud Run: forwarded headers not applied?** (2026-10-07, before launch): responses on
-  `https://license.testdetta.com` carry no `Strict-Transport-Security`, although production calls `UseHsts()`, which
-  adds it only when the request counts as HTTPS. So `X-Forwarded-Proto` is probably not applied
-  (`TrustedProxies=*`, `ForwardedHops=1`), and then `X-Forwarded-For` may not be either: every client would share
-  the front end's address and the per-address limit (60/min) would apply to all customers together. Check what the
-  container receives (`RemoteIpAddress`, `X-Forwarded-*`), fix the forwarded-headers setup, and test both HSTS and
-  the per-address partition on the deployed service.
-- **License service: `/healthz` does not reach the service on Cloud Run** (2026-10-07): Cloud Run's front end
-  answers some paths ending in `z` itself (a Google 404 page), so the health route is unreachable there. Nothing
-  uses it yet; move it (e.g. `/v1/health`) before monitoring or an uptime check is set up.
+- ~~**License service behind Cloud Run: forwarded headers not applied?**~~: done (2026-10-07). They were applied,
+  but `UseHsts()` ran before `UseForwardedHeaders`, so it saw plain HTTP. Forwarded headers now come first; HSTS
+  matches the site (1 year, subdomains). Checked on the deployed sandbox: HSTS sent, the per-address limit partitions
+  by client (this machine at 429 while Cloud Shell got 200 in the same minute), a forged `X-Forwarded-For` does not
+  escape it.
+- ~~**License service: `/healthz` does not reach the service on Cloud Run**~~: done (2026-10-07), now `/v1/health`.
 - ~~**Eval: crash and confirmation rules are not symmetric**~~: done (2026-10-07, owner: switch, with a marked break
   in the round history). The evaluator judges by `td audit`'s rules (`MutantJudge`; docs/evaluation.md, "How mutants
   are judged"): a part left out that completes only without the mutant is a miss, a crash counts as caught only when

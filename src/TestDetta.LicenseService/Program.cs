@@ -25,6 +25,12 @@ builder.WebHost.ConfigureKestrel(static kestrel =>
     kestrel.AddServerHeader = false;
 });
 
+// As the site sends it (site/firebase.json), so the API is never the weaker link.
+builder.Services.AddHsts(static hsts =>
+{
+    hsts.MaxAge = TimeSpan.FromDays(365);
+    hsts.IncludeSubDomains = true;
+});
 builder.Services.AddSingleton(settings);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(settings.ConnectionString));
