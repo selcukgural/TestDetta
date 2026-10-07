@@ -65,6 +65,10 @@ public sealed partial class ResendMailer(HttpClient http, ServiceSettings settin
 
             json.WriteString("subject"u8, mail.Subject);
             json.WriteString("text"u8, mail.Text);
+            if (mail.Html is { Length: > 0 } html)
+            {
+                json.WriteString("html"u8, html);
+            }
             json.WriteEndObject();
         }
 

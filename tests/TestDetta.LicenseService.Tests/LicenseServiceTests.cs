@@ -572,6 +572,53 @@ public sealed class LicenseServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public void The_designed_mail_encodes_checkout_text_and_carries_the_same_license_as_the_plain_one()
+    {
+        var record = new LicenseRecord("P-1", "<b>Acme</b> & \"Co\"", "Team <i>", LicenseKind.Trial, 1, ["github.com/acme/<script>"],
+            DateTimeOffset.Parse("2026-10-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse("2026-10-31T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture), false, "polar");
+
+        var mail = LicenseMail.For(record, "testdetta1.payload.signature", "buyer@acme.com");
+
+        var html = mail.Html!;
+        Assert.DoesNotContain("<b>Acme", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<i>", html, StringComparison.Ordinal);
+        Assert.Contains("&lt;b&gt;Acme&lt;/b&gt; &amp; &quot;Co&quot;", html, StringComparison.Ordinal);
+        Assert.Contains(">testdetta1.payload.signature</div>", html, StringComparison.Ordinal);
+        Assert.Contains("\ntestdetta1.payload.signature\n", mail.Text, StringComparison.Ordinal);
+        Assert.Contains("1 active committer", mail.Text, StringComparison.Ordinal);
+        Assert.Contains("Team <i> · trial", mail.Text, StringComparison.Ordinal);
+        Assert.Contains("license: ${{ secrets.TESTDETTA_LICENSE }}", html, StringComparison.Ordinal);
+        Assert.Contains("license: ${{ secrets.TESTDETTA_LICENSE }}", mail.Text, StringComparison.Ordinal);
+        Assert.Contains(LicenseMailHtml.LogoUrl, html, StringComparison.Ordinal);
+        foreach (var body in (string[])[html, mail.Text])
+        {
+            Assert.Contains("Your invoice comes from Polar.", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("buyer@acme.com", body, StringComparison.Ordinal);
+        }
+
+        // A license issued by hand is invoiced directly: the mail names no seller rather than a wrong one.
+        var direct = LicenseMail.For(record with { Source = "admin" }, "testdetta1.payload.signature", "buyer@acme.com");
+        Assert.DoesNotContain("Polar", direct.Html!, StringComparison.Ordinal);
+        Assert.DoesNotContain("Polar", direct.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Resend_gets_the_designed_version_next_to_the_plain_text()
+    {
+        using var handler = new FixedHandler(HttpStatusCode.OK);
+        using var http = new HttpClient(handler) { BaseAddress = ResendMailer.ApiBase };
+        var settings = Settings() with { ResendApiKey = "re_test", MailFrom = "TestDetta <licenses@example.com>" };
+        var mailer = new ResendMailer(http, settings, Microsoft.Extensions.Logging.Abstractions.NullLogger<ResendMailer>.Instance);
+
+        await mailer.SendAsync(new LicenseMail("buyer@acme.com", "Subject", "plain") { Html = "<p>designed</p>" }, "P-1/abc", CancellationToken.None);
+
+        using var body = System.Text.Json.JsonDocument.Parse(handler.Body);
+        Assert.Equal(("plain", "<p>designed</p>"), (body.RootElement.GetProperty("text").GetString(), body.RootElement.GetProperty("html").GetString()));
+    }
+
+    [Fact]
     public void An_email_provider_needs_a_sender()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>

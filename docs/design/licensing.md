@@ -335,8 +335,16 @@ later; e-mail is enough for the first sales.
   and an admin sends the license from `admin show`. An event without a usable address (one plain
   address) is audited the same way.
 - **Personal data.** The address comes from the event (`customer.email`) and is neither stored nor
-  logged; logs and audit name the license id only. The mail is plain text, so the licensee name from
-  the checkout cannot become markup or links.
+  logged; logs and audit name the license id only.
+- **Format (2026-10-07).** Plain text and a designed HTML version with the same content, both built from
+  one `LicenseMailParts` (`LicenseMail`, `LicenseMailHtml`): details, the key alone in a box (Apple Mail
+  selects it whole with one tap; `td` drops any whitespace a copy adds), setup steps, a link to the setup
+  guide. Tables and inline styles, no script, no web fonts, no tracking; the only image is the logo,
+  `https://testdetta.com/assets/email-logo.png` (Gmail shows no SVG). Every checkout value (licensee,
+  plan, scopes) is HTML-encoded where it is placed, so it cannot become markup or links. The seller line
+  follows the record's source: a Polar purchase says it is sold and invoiced by Polar as merchant of
+  record; any other source names no seller rather than a wrong one. Replies go to `support@`
+  (`deploy.sh` sets `MAIL_REPLY_TO`).
 - **Settings.** `Licenses:ResendApiKey` (a key with sending access to the sender's domain only,
   separate from any mailbox's key), `Licenses:MailFrom` (required with the key) and optionally
   `Licenses:MailReplyTo`. Without the key, delivery is off and logged at debug level.
