@@ -365,7 +365,9 @@ domain mapping; Porkbun holds the CNAME). Scripts in `deploy/license-service/`:
   Cloud Run runs it with at most 2 instances, none when idle. The organization allows IAM members of its
   own domain only, so the public endpoint comes from turning Cloud Run's invoker check off rather than
   granting `allUsers`; the service answers unproven requests with 404 and rate-limits them. Cloud Run's
-  front end answers `/healthz` itself, so that route never reaches the service there (backlog).
+  front end answers some paths ending in `z` itself, so the health route is `/v1/health`, not `/healthz`.
+  TLS ends at that front end: forwarded headers are applied first, before HSTS (sent only on requests that
+  count as HTTPS) and the rate limiter (partitioned by the client's address).
 - Secrets are made by a person and never printed: the signing key is generated straight into Secret Manager
   (`license-signing-key-td-2026-10`, key id `td-2026-10`), and the connection string with a random password
   (`license-connection-string`). Cloud Run mounts both as files, the key outside `TESTDETTA_SECRETS`.

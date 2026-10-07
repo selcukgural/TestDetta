@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
@@ -579,7 +580,7 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         using var client = service.CreateClient();
         async Task<HttpStatusCode> From(string address)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "/healthz");
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/health");
             request.Headers.Add("X-Forwarded-For", address);
             using var response = await client.SendAsync(request);
             return response.StatusCode;
@@ -592,6 +593,24 @@ public sealed class LicenseServiceTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("*", true)]
+    [InlineData(null, false)]
+    public async Task Hsts_is_sent_when_a_trusted_proxy_says_the_request_came_over_https(string? trustedProxies, bool sent)
+    {
+        using var service = Service(trustedProxies: trustedProxies).WithWebHostBuilder(static host => host.UseEnvironment("Production"));
+        using var client = service.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "http://license.example/v1/health");
+        // As Cloud Run's front end sends it: TLS ends there, the container sees plain HTTP.
+        request.Headers.Add("X-Forwarded-Proto", "https");
+        request.Headers.Add("X-Forwarded-For", "203.0.113.1");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(sent, response.Headers.Contains("Strict-Transport-Security"));
+    }
+
+    [Theory]
     [InlineData(1, false)]
     [InlineData(2, true)]
     public async Task Behind_two_proxies_the_client_is_the_second_address_from_the_right(int hops, bool separate)
@@ -600,7 +619,7 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         using var client = service.CreateClient();
         async Task<HttpStatusCode> From(string client1)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "/healthz");
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/health");
             // As Firebase Hosting in front of Cloud Run sends it: the client, then Hosting's own address.
             request.Headers.Add("X-Forwarded-For", $"{client1}, 192.0.2.50");
             using var response = await client.SendAsync(request);

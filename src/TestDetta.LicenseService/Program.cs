@@ -63,14 +63,10 @@ builder.Services.AddRateLimiter(limiter =>
 
 var app = builder.Build();
 await app.Services.GetRequiredService<LicenseStore>().EnsureSchemaAsync(CancellationToken.None);
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHsts();
-}
-
 if (settings.TrustedProxies.Count > 0)
 {
-    // Before the rate limiter, which partitions by the client's address.
+    // First: the rate limiter partitions by the client's address, and HSTS is only sent on requests that
+    // count as HTTPS, which behind Cloud Run's front end only X-Forwarded-Proto tells.
     var forwarded = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, ForwardLimit = settings.ForwardedHops };
     forwarded.KnownIPNetworks.Clear();
     forwarded.KnownProxies.Clear();
@@ -89,9 +85,15 @@ if (settings.TrustedProxies.Count > 0)
     app.UseForwardedHeaders(forwarded);
 }
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
 app.UseRouting();
 app.UseRateLimiter();
-app.MapGet("/healthz", static () => Results.Text("ok"));
+// Not /healthz: Cloud Run's front end answers some paths ending in "z" itself, so that never reaches the service.
+app.MapGet("/v1/health", static () => Results.Text("ok"));
 app.MapGet("/v1/licenses/{id}", RefreshEndpoint.HandleAsync);
 app.MapPost("/webhooks/polar", PolarWebhook.HandleAsync);
 await app.RunAsync();
