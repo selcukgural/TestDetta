@@ -54,7 +54,7 @@ internal static partial class LicenseGate
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or FormatException)
         {
             // git or the file system failed: the run goes on as without a license.
-            return new LicenseStatus(LicenseState.Missing, $"the license could not be checked ({ex.Message}); every test runs", null, null);
+            return new LicenseStatus(LicenseState.Missing, $"the license could not be checked ({ex.Message}){LicenseCheck.EveryTestRuns(LicenseKeys.Enforced)}", null, null);
         }
     }
 

@@ -130,6 +130,11 @@ public sealed class LicensingTests : IDisposable
         Assert.Equal(LicenseState.OverSeats, over.State);
         Assert.False(over.AllowsSelection);
         Assert.True(Run(license, authors: eightRecently).AllowsSelection);
+
+        // Before launch nothing changes what runs, so no message may say every test runs.
+        var input = new LicenseCheckInput([], "github.com/acme/app", five, Now, false);
+        Assert.EndsWith("; every test runs", LicenseCheck.Check(input, Trusted, enforced: true).Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("every test runs", LicenseCheck.Check(input, Trusted, enforced: false).Message, StringComparison.Ordinal);
     }
 
     [Fact]

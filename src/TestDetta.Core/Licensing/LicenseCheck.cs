@@ -58,11 +58,20 @@ public static class LicenseCheck
         return genuine.Where(g => g.Claims.Id == id).MaxBy(static g => g.Claims.Issued);
     }
 
+    /// <summary>
+    /// What a message adds when the license does not cover the run: "; every test runs" once the
+    /// license is enforced, nothing before (tests are selected whatever the outcome).
+    /// </summary>
+    /// <param name="enforced">Whether the license decides the run (<see cref="LicenseKeys.Enforced"/>).</param>
+    public static string EveryTestRuns(bool enforced) => enforced ? "; every test runs" : "";
+
     /// <summary>Checks <paramref name="input"/> against the public keys TestDetta trusts.</summary>
     /// <param name="input">What was found.</param>
     /// <param name="trustedKeys">Public keys by key id.</param>
-    public static LicenseStatus Check(LicenseCheckInput input, IReadOnlyDictionary<string, byte[]> trustedKeys)
+    /// <param name="enforced">Whether the license decides the run; the messages say "every test runs" only then.</param>
+    public static LicenseStatus Check(LicenseCheckInput input, IReadOnlyDictionary<string, byte[]> trustedKeys, bool enforced = LicenseKeys.Enforced)
     {
+        var runs = EveryTestRuns(enforced);
         if (input.IsPublic)
         {
             return new LicenseStatus(LicenseState.PublicRepository, "public repository: no license needed", null, null);
@@ -70,34 +79,34 @@ public static class LicenseCheck
 
         if (input.Licenses.Count == 0)
         {
-            return new LicenseStatus(LicenseState.Missing, "no TestDetta license found (set TESTDETTA_LICENSE or TESTDETTA_LICENSE_FILE); every test runs", null, null);
+            return new LicenseStatus(LicenseState.Missing, $"no TestDetta license found (set TESTDETTA_LICENSE or TESTDETTA_LICENSE_FILE){runs}", null, null);
         }
 
         if (Best(input.Licenses, trustedKeys, out var error) is not { } best)
         {
-            return new LicenseStatus(LicenseState.Invalid, $"the TestDetta license is not valid: {error}; every test runs", null, null);
+            return new LicenseStatus(LicenseState.Invalid, $"the TestDetta license is not valid: {error}{runs}", null, null);
         }
 
         var claims = best.Claims;
 
         if (input.Identity is null)
         {
-            return new LicenseStatus(LicenseState.WrongScope, $"license {claims.Id}: the repository has no origin remote to match its scope (set TESTDETTA_LICENSE_SCOPE); every test runs", claims, null);
+            return new LicenseStatus(LicenseState.WrongScope, $"license {claims.Id}: the repository has no origin remote to match its scope (set TESTDETTA_LICENSE_SCOPE){runs}", claims, null);
         }
 
         if (!claims.Scopes.Any(scope => RepositoryIdentity.Matches(input.Identity, scope)))
         {
-            return new LicenseStatus(LicenseState.WrongScope, $"license {claims.Id} does not cover {input.Identity}; every test runs", claims, null);
+            return new LicenseStatus(LicenseState.WrongScope, $"license {claims.Id} does not cover {input.Identity}{runs}", claims, null);
         }
 
         if (input.Now < claims.ValidFrom)
         {
-            return new LicenseStatus(LicenseState.NotYetValid, $"license {claims.Id} starts on {claims.ValidFrom:yyyy-MM-dd}; every test runs", claims, null);
+            return new LicenseStatus(LicenseState.NotYetValid, $"license {claims.Id} starts on {claims.ValidFrom:yyyy-MM-dd}{runs}", claims, null);
         }
 
         if (input.Now > claims.ValidUntil)
         {
-            return new LicenseStatus(LicenseState.Expired, $"license {claims.Id} expired on {claims.ValidUntil:yyyy-MM-dd}; every test runs", claims, null);
+            return new LicenseStatus(LicenseState.Expired, $"license {claims.Id} expired on {claims.ValidUntil:yyyy-MM-dd}{runs}", claims, null);
         }
 
         var committers = new ActiveCommitters(input.Authors, input.ExtraBots);
@@ -108,7 +117,7 @@ public static class LicenseCheck
             var daysOver = committers.DaysOver(input.Now, allowed, OverSeatsDays + 1);
             var over = $"{active} active committers in the last 30 days; license {claims.Id} covers {claims.Seats}";
             return daysOver > OverSeatsDays
-                ? new LicenseStatus(LicenseState.OverSeats, $"{over}, for more than {OverSeatsDays} days; every test runs until seats are added", claims, active)
+                ? new LicenseStatus(LicenseState.OverSeats, $"{over}, for more than {OverSeatsDays} days{(enforced ? "; every test runs until seats are added" : "")}", claims, active)
                 : new LicenseStatus(LicenseState.Warning, $"{over}; add seats within {OverSeatsDays - daysOver + 1} day(s) to keep test selection", claims, active);
         }
 
