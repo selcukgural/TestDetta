@@ -249,6 +249,21 @@ public sealed class LicenseServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Signature_check_accepts_an_older_polar_secret_keyed_by_its_own_bytes()
+    {
+        // Polar secrets from before 2026-09-08 are not whsec_: the HMAC key is the secret's UTF-8 bytes.
+        const string secret = "polar_whs_0123456789abcdefABCDEF";
+        var body = System.Text.Encoding.UTF8.GetBytes("""{"type":"subscription.created"}""");
+        var at = DateTimeOffset.FromUnixTimeSeconds(1791366000);
+        byte[] signed = [.. System.Text.Encoding.UTF8.GetBytes("msg_1.1791366000."), .. body];
+        var signature = "v1," + Convert.ToBase64String(HMACSHA256.HashData(System.Text.Encoding.UTF8.GetBytes(secret), signed));
+
+        Assert.True(PolarWebhook.Verify(secret, "msg_1", "1791366000", signature, body, at));
+        Assert.False(PolarWebhook.Verify(secret, "msg_1", "1791366000", signature, [.. body, (byte)' '], at));
+        Assert.False(PolarWebhook.Verify(secret + "x", "msg_1", "1791366000", signature, body, at));
+    }
+
+    [Fact]
     public async Task A_subscription_becomes_a_license_without_the_customers_email()
     {
         using var service = Service();

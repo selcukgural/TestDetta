@@ -89,9 +89,11 @@ public static partial class PolarWebhook
     }
 
     /// <summary>
-    /// Checks a Standard Webhooks signature: HMAC-SHA256 with the secret (base64 after <c>whsec_</c>) over
-    /// <c>{id}.{timestamp}.{body}</c>, compared in constant time with each <c>v1,</c> signature of the
-    /// header, and a timestamp within <see cref="Tolerance"/> of <paramref name="now"/>.
+    /// Checks a Standard Webhooks signature: HMAC-SHA256 over <c>{id}.{timestamp}.{body}</c>, compared in
+    /// constant time with each <c>v1,</c> signature of the header, and a timestamp within
+    /// <see cref="Tolerance"/> of <paramref name="now"/>. The key is the base64 after <c>whsec_</c> (Polar's
+    /// secrets from 2026-09-08 on) or the secret's own UTF-8 bytes (older secrets); like Polar's SDKs, both
+    /// are tried, since either requires the secret.
     /// </summary>
     /// <param name="secret">The endpoint's secret, <c>whsec_...</c>.</param>
     /// <param name="id">The <c>webhook-id</c> header.</param>
@@ -107,19 +109,49 @@ public static partial class PolarWebhook
             return false;
         }
 
-        byte[] key;
-        try
-        {
-            key = Convert.FromBase64String(secret.StartsWith("whsec_", StringComparison.Ordinal) ? secret[6..] : secret);
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-
         var prefix = Encoding.UTF8.GetBytes($"{id}.{timestamp}.");
         byte[] signed = [.. prefix, .. body];
-        var expected = HMACSHA256.HashData(key, signed);
+        foreach (var key in Keys(secret))
+        {
+            if (Matches(HMACSHA256.HashData(key, signed), signatures))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The keys a Polar secret may stand for: the base64 after <c>whsec_</c>, then the secret's bytes.</summary>
+    /// <param name="secret">The endpoint's secret.</param>
+    private static IEnumerable<byte[]> Keys(string secret)
+    {
+        if (secret.StartsWith("whsec_", StringComparison.Ordinal))
+        {
+            byte[]? decoded = null;
+            try
+            {
+                decoded = Convert.FromBase64String(secret[6..]);
+            }
+            catch (FormatException)
+            {
+                // Not base64 after all: only the secret's own bytes remain.
+            }
+
+            if (decoded is not null)
+            {
+                yield return decoded;
+            }
+        }
+
+        yield return Encoding.UTF8.GetBytes(secret);
+    }
+
+    /// <summary>True when one <c>v1,</c> signature of <paramref name="signatures"/> equals <paramref name="expected"/>.</summary>
+    /// <param name="expected">The HMAC computed with one candidate key.</param>
+    /// <param name="signatures">The <c>webhook-signature</c> header.</param>
+    private static bool Matches(byte[] expected, string signatures)
+    {
         foreach (var part in signatures.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             if (!part.StartsWith("v1,", StringComparison.Ordinal))

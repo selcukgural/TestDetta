@@ -277,7 +277,8 @@ Still to do in phase 2:
 `POST /webhooks/polar` (`PolarWebhook`) turns Polar subscription events into license records.
 
 - **Signature.** Polar signs with the Standard Webhooks scheme (secrets made on or after
-  2026-09-08). The check is HMAC-SHA256 with the base64 key after `whsec_` over
+  2026-09-08; older ones are keyed by their own UTF-8 bytes, and both keys are tried, as Polar's SDKs do:
+  the sandbox handed out such a secret on 2026-10-07). The check is HMAC-SHA256 with the base64 key after `whsec_` over
   `{webhook-id}.{webhook-timestamp}.{body}`, compared in constant time with every `v1,` signature,
   and the timestamp must be within 5 minutes. It is checked against the specification's published
   test vector. A failure returns 401, logs a warning, and nothing is stored. Without
