@@ -8,7 +8,8 @@
 # person, never by a script that could print them:
 #   license-signing-key-td-2026-10  openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | gcloud secrets create ... --data-file=-
 #   license-connection-string       Host=/cloudsql/<instance>;Database=licenses;Username=license_service;Password=<random>
-# This script reads no secret: it grants access to them and creates the database and the domain mapping.
+# This script reads no secret: it grants access to them and creates the database (deploy.sh makes the
+# domain mapping).
 set -euo pipefail
 P=testdetta-510908 R=europe-west1
 SA=license-service@$P.iam.gserviceaccount.com
