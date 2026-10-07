@@ -327,6 +327,9 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
+- **License service: `/healthz` does not reach the service on Cloud Run** (2026-10-07): Cloud Run's front end
+  answers some paths ending in `z` itself (a Google 404 page), so the health route is unreachable there. Nothing
+  uses it yet; move it (e.g. `/v1/health`) before monitoring or an uptime check is set up.
 - ~~**Eval: crash and confirmation rules are not symmetric**~~: done (2026-10-07, owner: switch, with a marked break
   in the round history). The evaluator judges by `td audit`'s rules (`MutantJudge`; docs/evaluation.md, "How mutants
   are judged"): a part left out that completes only without the mutant is a miss, a crash counts as caught only when
