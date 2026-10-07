@@ -26,7 +26,7 @@ const CH_MAP = {
     { id: "q1", kind: "q", x: 625, y: 100, w: 260, h: 46, label: "Static constructor mı?", sub: "" },
     { id: "q2", kind: "q", x: 625, y: 170, w: 260, h: 46, label: "Constructor mı?", sub: "" },
     { id: "q3", kind: "q", x: 625, y: 240, w: 260, h: 46, label: "Yeni mi / yansımayla mı?", sub: "IsAnswerable" },
-    { id: "q4", kind: "q", x: 625, y: 310, w: 260, h: 46, label: "Harita biliyor mu?", sub: "Lookup" },
+    { id: "q4", kind: "q", x: 625, y: 310, w: 260, h: 46, label: "Harita biliyor mu?", sub: "Instrumented + Lookup" },
     { id: "q5", kind: "q", x: 625, y: 380, w: 260, h: 46, label: "Bir kez çalışan kod mu?", sub: "RunOnceReason" },
     { id: "q6", kind: "q", x: 625, y: 450, w: 260, h: 46, label: "Metaveri değişti mi?", sub: "MetadataChanged" },
     { id: "q7", kind: "q", x: 625, y: 520, w: 260, h: 46, label: "Haritalı proje var mı?", sub: "answers.Count" },
@@ -209,6 +209,14 @@ const CH_MAP = {
       input: "Yeni <code>Round</code>'u çağıran ve haritada bilinen <code>Invoice.Total</code>",
       output: "<code>Total</code>'ı çalıştıran sınıflar, kanıt <code>ran Invoice.Total, which names the changed code</code>; yayılım <code>Total</code>'da durur",
       purpose: "Senaryo 2'nin devamı: yeni kodu harita bilmez ama onu çağıran mevcut kodu bilir. Yansımayla bulunabilir türün üyesi burada cevaplanabilir, çünkü bildirimi değişmedi, yalnız çalışınca yaptığı değişti.",
+    },
+    {
+      title: "Senaryo 11 · Harita, sahibi enstrümante etmedi (2026-10-07)", nodes: ["start", "q1", "q2", "q3", "q4", "no"], edges: ["t0", "t1", "t2", "t3", "n4"],
+      who: "<code>Answers</code> içinde <code>Instrumented(project, map, owner.Path)</code>; <code>TryResolveType</code> aynı kontrolü yapar",
+      file: "src/TestDetta.Core/CoverageSelection.cs",
+      input: "İki dll'e derlenen bağlı (linked) dosya: <code>Helper.Run</code> hem A'da hem B'de; harita yalnız A'yı enstrümante etmiş (<code>InstrumentedProjects = [A, Tests]</code>)",
+      output: "Sahip B için <code>false</code>, sebep <code>a map does not know it (… was recorded without instrumenting B.csproj)</code>; isim izleme B'nin kopyasından devam eder",
+      purpose: "Harita aynı adları A'dan bilir; B'nin kopyası için cevap veremez (meziantou #17). Yalnız haritada liste varsa ve test projesi sahibe karşı derleniyorsa (opak referans değil) uygulanır; listesiz eski haritalar eskisi gibi cevaplar.",
     },
   ],
 };

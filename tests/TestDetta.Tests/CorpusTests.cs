@@ -163,8 +163,8 @@ public sealed class CorpusTests : IDisposable
         var summary = BatchSummary.Write(_directory, corpus);
 
         Assert.Contains("on 1 repositories TestDetta ran 20 % of the test classes on average, project level 80 %", summary, StringComparison.Ordinal);
-        Assert.Contains("| a |  | done | 2 | 0 | 20 % | 80 % |", summary, StringComparison.Ordinal);
-        Assert.Contains("| old |  | done | 1 | 0 | 50 % | – |", summary, StringComparison.Ordinal);
+        Assert.Contains("| a |  | done | 2 | 0 | 0 | 20 % | 80 % |", summary, StringComparison.Ordinal);
+        Assert.Contains("| old |  | done | 1 | 0 | 0 | 50 % | – |", summary, StringComparison.Ordinal);
         var totals = BatchSummary.ReadSummary(_directory)!;
         Assert.Equal(0.8, totals.Single(static t => t.Entry.Name == "a").ProjectLevelShare!.Value, 4);
     }

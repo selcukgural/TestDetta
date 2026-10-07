@@ -36,6 +36,9 @@ internal sealed partial class CoverageSelection
     /// </summary>
     private readonly IReadOnlySet<string> _runsCompletely;
 
+    /// <summary>Projects each test project compiles against (itself included), computed on first use.</summary>
+    private readonly Dictionary<string, HashSet<string>> _compiledAgainst = new(Paths.Comparer);
+
     /// <summary>Test classes selected from coverage, per test project, with the evidence of their first selection.</summary>
     private readonly Dictionary<string, Dictionary<string, string>> _selected = new(Paths.Comparer);
 
@@ -404,7 +407,8 @@ internal sealed partial class CoverageSelection
                 continue;
             }
 
-            if (map.ClassesRunningType(typeName) is not { } classes
+            if (owners.Any(o => !Instrumented(project, map, o))
+                || map.ClassesRunningType(typeName) is not { } classes
                 || map.TypeRanOutsideTests(typeName)
                 || map.TypeRanDuringInitialization(typeName)
                 || map.TypeHasExternalCallback(typeName))
@@ -448,6 +452,15 @@ internal sealed partial class CoverageSelection
             if (_runsCompletely.Contains(project))
             {
                 runsCompletely = true;
+                continue;
+            }
+
+            // The test project compiles the owner's assembly, but its recording ran that assembly uninstrumented: the
+            // names the map knows belong to another assembly (a linked file compiled into two), so it cannot answer.
+            if (!Instrumented(project, map, owner.Path))
+            {
+                unresolved ??= $"a map does not know it ({Path.GetFileName(project)} was recorded without instrumenting {Path.GetFileName(owner.Path)})";
+                known = false;
                 continue;
             }
 
@@ -502,6 +515,57 @@ internal sealed partial class CoverageSelection
             answers = Answers;
             unresolved = Unresolved;
         }
+    }
+
+    /// <summary>
+    /// False when the map of <paramref name="testProject"/> lists the projects its recording instrumented
+    /// (<see cref="CoverageMap.InstrumentedProjects"/>) and <paramref name="owner"/> is one the test project compiles
+    /// against but not among them; true otherwise, also for maps without the list, which answer as before. A project
+    /// the test project reaches only through its output was never instrumented and is decided by its output uses.
+    /// </summary>
+    /// <param name="testProject">Normalized test project path.</param>
+    /// <param name="map">Its map.</param>
+    /// <param name="owner">Normalized path of the project that compiles the changed code.</param>
+    private bool Instrumented(string testProject, CoverageIndex map, string owner)
+    {
+        if (map.Map.InstrumentedProjects is not { } instrumented || !CompiledAgainst(testProject).Contains(owner))
+        {
+            return true;
+        }
+
+        var relative = Path.GetRelativePath(_repoRoot, owner).Replace('\\', '/');
+        return instrumented.Contains(relative, Paths.Comparer);
+    }
+
+    /// <summary>The projects <paramref name="testProject"/> compiles against: its references, except those it does not compile against, transitively.</summary>
+    /// <param name="testProject">Normalized test project path.</param>
+    private HashSet<string> CompiledAgainst(string testProject)
+    {
+        if (_compiledAgainst.TryGetValue(testProject, out var closure))
+        {
+            return closure;
+        }
+
+        closure = new HashSet<string>(Paths.Comparer) { testProject };
+        var queue = new Queue<string>([testProject]);
+        while (queue.TryDequeue(out var path))
+        {
+            if (_graph.Find(path) is not { } project)
+            {
+                continue;
+            }
+
+            foreach (var reference in project.References)
+            {
+                if (!project.OpaqueReferences.Contains(reference) && closure.Add(reference))
+                {
+                    queue.Enqueue(reference);
+                }
+            }
+        }
+
+        _compiledAgainst[testProject] = closure;
+        return closure;
     }
 
     /// <summary>Adds the classes of every answer to the selection of its project; a class keeps the evidence of its first selection.</summary>

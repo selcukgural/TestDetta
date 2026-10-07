@@ -327,17 +327,30 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
-- **Eval: crash and confirmation rules are not symmetric** (found in the `td audit` review 2026-10-07; owner
-  decision open, published numbers unchanged): the corpus evaluator (`SyntheticEvaluator.RunOutsideSelection`,
-  `Confirm`) confirms a class the selection left out alone with the mutant and alone without it before it
-  counts as a miss, while a class the selection ran counts as caught from the full run alone. After a full
-  run that crashed or hung, it reruns only the part the selection left out: when that passes the mutant
-  counts as caught (`CaughtByCrash`) without the selected part being run again, and when that crashes or
-  hangs too the mutant is inconclusive and leaves n. Unconfirmed catches can enter n and a crash in a part
-  left out can leave it, so the measured miss rate can lean low; how much is not measured. `td audit` now
-  uses symmetric rules (docs/design/audit.md, "Judging"); changing the evaluator the same way changes
-  comparability with earlier corpus rounds and costs more runs per caught mutant (two short ones), so it is
-  the owner's call: keep, switch with a marked break in the round history, or run both for one round.
+- ~~**Eval: crash and confirmation rules are not symmetric**~~: done (2026-10-07, owner: switch, with a marked break
+  in the round history). The evaluator judges by `td audit`'s rules (`MutantJudge`; docs/evaluation.md, "How mutants
+  are judged"): a part left out that completes only without the mutant is a miss, a crash counts as caught only when
+  the selected part crashes again, selected failures are confirmed alone with and without the mutant (one run each
+  per project, skipped once the verdict cannot change), a class whose run alone ran none of its tests is
+  inconclusive; runs in English, completeness also from the TRX outcome, the exit code and the class count. Reports
+  state `judging: strict (2026-10-07)`, the inconclusive mutants and a worst-case bound. Outcome cache version 3 keeps
+  raw runs; version 2 files are not reused, so the next round runs every mutant again. Published numbers up to
+  `runs-full-1006` are marked as lenient until the next round replaces them.
+- ~~**Eval incidents**~~: done (2026-10-07). Per repository and per round: a project not recorded on TestDetta's side
+  (above all with passing tests), maps with 0 classes, all failed or unnamed failures, and with `--compare` fewer
+  recorded classes than the previous round (docs/evaluation.md, "Incidents").
+- ~~**B1: recording fails loudly**~~: done (2026-10-07). A test assembly that is not instrumented, a tracker that wrote
+  nothing although the tests passed, or no class recorded makes the project "not recorded" with that reason
+  (docs/design/unrecorded-classes.md).
+- ~~**B2: the map knows what it instrumented**~~: done (2026-10-07). `instrumentedProjects` in the map; a changed member
+  of a project the test project compiles against but the map did not instrument is traced by name (meziantou #17).
+  Old maps answer as before.
+- ~~**B3: using-alias names**~~: done (2026-10-07). Type names in a file's using alias (and a VB `Imports` alias) count
+  as named by the declarations of that file that use the alias (meziantou #18, #27); global aliases keep the
+  global-using rules. Side effect, measured in explain mode on meziantou with the fix-owners maps: a type named only
+  in an alias (its analyzers and fixers) was "nothing names it, may be found by reflection" and ran whole projects;
+  now it counts as named and coverage answers for it. Mean share 37% → 6.5% (failing mutants 45% → 8.7%), and all
+  529 failing classes of that round's sample are still selected; the next strict round measures it.
 - **Eval: mutants do not reach MSBuild's bootstrap copy** (2026-10-06): the eval rewrites the
   assemblies in the test output folders; MSBuild tests that run the bootstrapped MSBuild
   (`ExecBootstrapedMSBuild`, about 60 methods, at most ~3% of the suite) load the copy under

@@ -31,12 +31,25 @@ internal static class SyntheticReport
         var killing = mutants.Where(static m => m.Killing).ToList();
         var missed = killing.Where(static m => m.MissedClasses.Count > 0).ToList();
         var undetected = mutants.Where(static m => !m.Detected).ToList();
+        var inconclusive = mutants.Count(static m => m.Inconclusive);
 
         text.AppendLine(CultureInfo.InvariantCulture, $"# TestDetta synthetic evaluation: {repository} at {Short(run.Sha)}");
         text.AppendLine();
         if (run.Error is not null)
         {
             text.AppendLine(CultureInfo.InvariantCulture, $"**Could not be evaluated:** {Cell(run.Error)}");
+            text.AppendLine();
+        }
+
+        if (run.Incidents.Count > 0)
+        {
+            text.AppendLine("## Incidents");
+            text.AppendLine();
+            foreach (var incident in run.Incidents)
+            {
+                text.AppendLine(CultureInfo.InvariantCulture, $"- {Cell(incident)}");
+            }
+
             text.AppendLine();
         }
 
@@ -47,6 +60,7 @@ internal static class SyntheticReport
             text.AppendLine();
         }
 
+        text.AppendLine(CultureInfo.InvariantCulture, $"- Judging: {run.Judging} (docs/evaluation.md, \"Judging\")");
         if (run.Toolchain is not null)
         {
             text.AppendLine(CultureInfo.InvariantCulture, $"- Toolchain: {run.Toolchain}");
@@ -55,10 +69,11 @@ internal static class SyntheticReport
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Members changed: {mutants.Count} ({mutants.Count(static m => m.Target.Covered)} covered by a recorded test)");
         text.AppendLine(CultureInfo.InvariantCulture,
-            $"- Mutants in a test output: {injected}; failed a test class: {killing.Count} ({mutants.Count(static m => m.CaughtByCrash)} by crashing or hanging inside the selection); still crashed or hung: {mutants.Count(static m => m.Inconclusive)}");
+            $"- Mutants in a test output: {injected}; failed a test class: {killing.Count} ({mutants.Count(static m => m.CaughtByCrash)} by crashing or hanging inside the selection); inconclusive: {inconclusive}");
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- **Missed: {missed.Count} of {killing.Count} failing mutants ({missed.Sum(static m => m.MissedClasses.Count)} test classes)**; " +
-            $"95% upper bound of the miss rate: {MissRate.UpperBound(missed.Count, killing.Count):P2}");
+            $"95% upper bound of the miss rate: {MissRate.UpperBound(missed.Count, killing.Count):P2}; " +
+            $"worst case, every inconclusive mutant a miss: {missed.Count + inconclusive} of {killing.Count + inconclusive}, upper bound {MissRate.UpperBound(missed.Count + inconclusive, killing.Count + inconclusive):P2}");
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Changes TestDetta did not see: {undetected.Count} ({undetected.Count(static m => m.Killing)} of them failed a test)");
         text.AppendLine(CultureInfo.InvariantCulture,
@@ -92,6 +107,18 @@ internal static class SyntheticReport
         AppendComparison(text, run, killing, OtherSelector.DotnetAffected, "dotnet-affected (the tool itself)");
         AppendTia(text, run, killing);
 
+        if (inconclusive > 0)
+        {
+            text.AppendLine("## Inconclusive");
+            text.AppendLine();
+            foreach (var mutant in mutants.Where(static m => m.Inconclusive))
+            {
+                text.AppendLine(CultureInfo.InvariantCulture, $"- {Code(Member(mutant))}: {Cell(mutant.Note ?? "no reason recorded")}");
+            }
+
+            text.AppendLine();
+        }
+
         if (missed.Count > 0)
         {
             text.AppendLine("## Missed");
@@ -111,7 +138,7 @@ internal static class SyntheticReport
         text.AppendLine("|---|---|---|---|---|---|---|---|");
         foreach (var (mutant, index) in mutants.Take(MaxRows).Select(static (m, i) => (m, i + 1)))
         {
-            var failed = mutant.Inconclusive ? "crashed or hung"
+            var failed = mutant.Inconclusive ? "inconclusive"
                 : mutant.CaughtByCrash ? "crashed inside the selection"
                 : mutant.MutatedMethods == 0 ? "not in output"
                 : mutant.KilledClasses.Count.ToString(CultureInfo.InvariantCulture);
@@ -256,6 +283,27 @@ internal static class SyntheticReport
             json.WriteNumber("seconds", Math.Round(run.Seconds, 1));
             json.WriteNumber("mapAge", run.MapAge);
             json.WriteString("mapCommit", run.MapCommit);
+            json.WriteString("judging", run.Judging);
+            WriteStrings(json, "incidents", run.Incidents);
+            json.WriteStartArray("maps");
+            foreach (var map in run.Maps)
+            {
+                json.WriteStartObject();
+                json.WriteString("project", map.Project);
+                json.WriteNumber("classes", map.Classes);
+                if (map.Failed is { } failedClasses)
+                {
+                    json.WriteNumber("failed", failedClasses);
+                }
+                else
+                {
+                    json.WriteNull("failed");
+                }
+
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
             json.WriteStartArray("unreported");
             foreach (var project in run.Unreported)
             {
@@ -280,9 +328,19 @@ internal static class SyntheticReport
                     json.WriteBoolean("stoppedOnBuild", true);
                 }
 
+                if (mutant.Note is { } note)
+                {
+                    json.WriteString("note", note);
+                }
+
                 json.WriteNumber("selectedShare", Math.Round(mutant.SelectedShare, 4));
                 WriteStrings(json, "killed", mutant.KilledClasses);
                 WriteStrings(json, "missed", mutant.MissedClasses);
+                if (mutant.NotCounted.Count > 0)
+                {
+                    WriteStrings(json, "notCounted", mutant.NotCounted);
+                }
+
                 if (mutant.Others.Count > 0)
                 {
                     json.WriteStartObject("others");

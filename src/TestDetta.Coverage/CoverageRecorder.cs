@@ -106,6 +106,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var outputDirectory = Path.GetDirectoryName(targetPath)!;
         var owners = GeneratedSourceReader.CompiledAgainst(request.Graph, request.TestProject, AssemblyOwners(request));
         var assemblies = GeneratedSourceReader.RepositoryAssemblies(owners.Keys, outputDirectory);
+        if (!assemblies.Contains(targetPath, StringComparer.OrdinalIgnoreCase))
+        {
+            // Test classes mark themselves through their instrumented entry points: without the test assembly among
+            // the instrumented ones, the map would know no class and list every one as failed.
+            throw new RecordingFailedException(
+                $"its test assembly {Path.GetFileName(targetPath)} is not among the repository assemblies TestDetta instruments in its output " +
+                "(no project the test project compiles against owns that file name), so no test class could be recorded; the tests were not run");
+        }
+
         var generated = ReadGenerated(request, targetPath, owners, assemblies, framework);
         // Read before instrumentation rewrites the assemblies and their PDBs, as the generated code is.
         var tracked = new GitClient(loggerFactory.CreateLogger<GitClient>()).TrackedFiles(request.RepoRoot).ToHashSet(StringComparer.Ordinal);
@@ -152,6 +161,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var synchronizedOutput = TextWriter.Synchronized(output);
             var runs = RunShards(shards, new ShardContext(request, mode, runDirectory, outputDirectory, instrumentation, work), testArguments, synchronizedOutput);
             ThrowIfTimedOut(runs, project, request);
+            ThrowIfTrackerSilent(runs, project);
 
             // A shard that crashed before its process wrote results (NLog: a subset of its classes takes
             // the host down when they run without the others) would cost the project its whole map.
@@ -184,6 +194,17 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var resultsFiles = new List<string>(runs.Length);
             foreach (var run in runs)
             {
+                if (run.Result.ResultsFiles.Count == 0 && run.Result.Report is { Total: > 0 } ran)
+                {
+                    // The report says tests ran: this is no project without tests, and the map would be empty.
+                    throw new RecordingFailedException(
+                        $"its tests ran ({ran.Total}, exit code {run.Result.ExitCode}), but TestDetta's tracker wrote no coverage results, also when run again " +
+                        "in one process and with the suite's own parallelism: the test host crashed before writing them, or never loaded the tracker")
+                    {
+                        TestsPassed = run.Result.ExitCode == 0 && ran.FailedClasses.Count == 0,
+                    };
+                }
+
                 if (run.Result.ResultsFiles.Count == 0)
                 {
                     throw new NoTestsRecordedException(
@@ -200,6 +221,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
 
             var map = BuildMap(request, instrumentation.Methods, resultsFiles);
+            ThrowIfNoClassRecorded(runs, map, project);
             map = map with { FailedClasses = Untrusted(runs, map) };
             map = map with
             {
@@ -213,6 +235,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 Generated = generated,
                 GeneratedFrameworks = generatedFrameworks,
                 BuildInputs = buildInputs,
+                InstrumentedProjects = InstrumentedProjects(request.RepoRoot, owners, assemblies),
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
             };
@@ -227,6 +250,69 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             Directory.Delete(work, recursive: true);
         }
     }
+
+    /// <summary>
+    /// Throws when a test process ran tests and passed, but the tracker wrote no results in it: it never loaded there.
+    /// That is no crash (a crash fails the run), so running again in one process or with the suite's parallelism, as
+    /// for a crash, would only end in a misleading "no test ran"; the project is not recorded, with this reason.
+    /// </summary>
+    /// <param name="runs">Finished shards.</param>
+    /// <param name="project">Test project path, for the message.</param>
+    internal static void ThrowIfTrackerSilent(Task<ShardResult>[] runs, string project)
+    {
+        if (runs.FirstOrDefault(static r => r.Result is { ResultsFiles.Count: 0, ExitCode: 0, Report: { Total: > 0, FailedClasses.Count: 0 } }) is { } silent)
+        {
+            throw new RecordingFailedException(
+                $"the tests of {Path.GetFileName(project)} ran and passed ({silent.Result.Report!.Total}), but TestDetta's tracker wrote no coverage results " +
+                "in their test process: it did not load there")
+            {
+                TestsPassed = true,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Throws when the tests ran and passed but no test class was recorded: the tracker wrote results, yet no class
+    /// marked itself while it ran (its entry points were not instrumented). Such a map would list every class as
+    /// failed and say nothing; a map with some classes recorded keeps the rest as untrusted, as before
+    /// (docs/design/unrecorded-classes.md).
+    /// </summary>
+    /// <param name="runs">Finished shards.</param>
+    /// <param name="map">The map built from their results.</param>
+    /// <param name="project">Test project path, for the message.</param>
+    internal static void ThrowIfNoClassRecorded(Task<ShardResult>[] runs, CoverageMap map, string project)
+    {
+        if (map.Classes.Count > 0 || map.Fixtures.Count > 0 || runs.Any(static r => r.Result.ExitCode != 0 || r.Result.Report is not { FailedClasses.Count: 0 }))
+        {
+            return;
+        }
+
+        var executed = runs.Sum(static r => r.Result.Report!.ExecutedClasses.Count);
+        if (executed > 0)
+        {
+            throw new RecordingFailedException(
+                $"the tests of {Path.GetFileName(project)} ran and passed ({executed} test classes), but TestDetta recorded none of their classes: " +
+                "the tracker wrote results, yet no test class marked itself while it ran")
+            {
+                TestsPassed = true,
+            };
+        }
+    }
+
+    /// <summary>
+    /// The projects behind the instrumented assemblies, relative to the repository root and sorted, for
+    /// <see cref="CoverageMap.InstrumentedProjects"/>.
+    /// </summary>
+    /// <param name="repoRoot">Repository root.</param>
+    /// <param name="owners">Project of each repository assembly file name in the test project's build.</param>
+    /// <param name="assemblies">The instrumented assemblies.</param>
+    internal static List<string> InstrumentedProjects(string repoRoot, IReadOnlyDictionary<string, ProjectNode> owners, IReadOnlyList<string> assemblies) =>
+        [.. assemblies
+            .Select(a => owners.GetValueOrDefault(Path.GetFileName(a)))
+            .OfType<ProjectNode>()
+            .Select(p => Path.GetRelativePath(repoRoot, p.Path).Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)];
 
     /// <summary>Runs every shard in its own test process and waits for all of them.</summary>
     /// <param name="shards">Filters, one per shard; a single empty one runs everything.</param>
@@ -407,7 +493,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="ExitCode">Exit code of <c>dotnet test</c>.</param>
     /// <param name="ResultsFiles">Coverage results written by the tracker, one per process that loaded it.</param>
     /// <param name="Report">The shard's TRX report, or null when the run could not write one.</param>
-    private sealed record ShardResult(int ExitCode, IReadOnlyList<string> ResultsFiles, TrxOutcome? Report);
+    internal sealed record ShardResult(int ExitCode, IReadOnlyList<string> ResultsFiles, TrxOutcome? Report);
 
     /// <summary>
     /// Test classes whose coverage cannot be trusted: those that failed in any shard, and those the

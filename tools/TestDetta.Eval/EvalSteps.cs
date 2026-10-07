@@ -20,6 +20,13 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     /// <summary>File in a commit's map cache listing the test projects whose recording hung.</summary>
     private const string HungFile = "hung.txt";
 
+    /// <summary>
+    /// File in a commit's map cache listing the test projects that got no map, one per line: the project relative to
+    /// the clone, whether the failure was TestDetta's (<see cref="RecordingFailedException"/>: <c>passed</c>,
+    /// <c>failed</c> or <c>not run</c>, the tests' result) or not (<c>-</c>: no build, no tests, a hang), and the reason.
+    /// </summary>
+    private const string NotRecordedFile = "not-recorded.tsv";
+
     /// <summary>Test projects whose recording hung; they are left out of the rest of the evaluation.</summary>
     private readonly HashSet<string> _hung = new(StringComparer.Ordinal);
 
@@ -55,6 +62,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             var recorder = new CoverageRecorder(workspace.LoggerFactory);
             var temporary = directory + ".partial";
             Directory.CreateDirectory(temporary);
+            var notRecorded = new List<string>();
 
             foreach (var project in TestProjects(graph))
             {
@@ -76,6 +84,10 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
                     }
 
                     LogNotRecorded(project.Path, ex.Message);
+                    var tests = ex is RecordingFailedException failed
+                        ? failed.TestsPassed switch { true => "passed", false => "failed", null => "not run" }
+                        : "-";
+                    notRecorded.Add($"{Path.GetRelativePath(workspace.RepoRoot, project.Path).Replace('\\', '/')}\t{tests}\t{ex.Message.ReplaceLineEndings(" ").Replace('\t', ' ')}");
                 }
                 finally
                 {
@@ -85,6 +97,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 
             RemoveLeftBehind(untracked);
             File.WriteAllLines(Path.Combine(temporary, HungFile), _hung.Select(p => Path.GetRelativePath(workspace.RepoRoot, p)));
+            File.WriteAllLines(Path.Combine(temporary, NotRecordedFile), notRecorded);
             Directory.Move(temporary, directory);
             LogRecorded(sha);
             if (cached is not null)
@@ -122,11 +135,56 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     }
 
     /// <summary>
+    /// What a reader of the evaluation's numbers must know about its maps at <paramref name="sha"/>
+    /// (docs/evaluation.md, "Incidents"): a test project TestDetta failed to record (its test assembly not instrumented,
+    /// the tracker silent), above all one whose tests passed; a map that recorded no test class; a map whose every
+    /// class failed, or whose failures no report names (it is not used). Each makes the selection for that project
+    /// fall back to names, so its share and its misses are not what a working recording would give.
+    /// </summary>
+    /// <param name="sha">Commit the maps were recorded at.</param>
+    /// <param name="maps">The maps, by normalized test project path.</param>
+    public List<string> Incidents(string sha, IReadOnlyDictionary<string, CoverageMap> maps)
+    {
+        var incidents = new List<string>();
+        var file = Path.Combine(workspace.MapCache, sha, NotRecordedFile);
+        foreach (var line in File.Exists(file) ? File.ReadLines(file) : [])
+        {
+            var parts = line.Split('\t', 3);
+            if (parts.Length < 3 || parts[1] == "-")
+            {
+                continue;
+            }
+
+            incidents.Add(parts[1] == "passed"
+                ? $"{parts[0]}: not recorded although its tests passed: {parts[2]}"
+                : $"{parts[0]}: not recorded ({(parts[1] == "failed" ? "some of its tests failed" : "its tests were not run")}): {parts[2]}");
+        }
+
+        foreach (var map in maps.Values.OrderBy(static m => m.TestProject, StringComparer.Ordinal))
+        {
+            if (map.FailedClasses is null)
+            {
+                incidents.Add($"{map.TestProject}: tests failed while recording and no report says which; the map is not used");
+            }
+            else if (map.Classes.Count == 0)
+            {
+                incidents.Add($"{map.TestProject}: the map recorded 0 test classes{(map.FailedClasses.Count > 0 ? $" ({map.FailedClasses.Count} failed or unrecorded)" : string.Empty)}");
+            }
+            else if (map.Classes.Keys.All(map.FailedClasses.Contains))
+            {
+                incidents.Add($"{map.TestProject}: every one of the map's {map.Classes.Count} test classes failed while recording");
+            }
+        }
+
+        return incidents;
+    }
+
+    /// <summary>
     /// Version of the evaluation's own recording logic (<see cref="RecordAt"/>, <see cref="TestProjects"/>,
     /// the recording options it passes); raise it with any change there, since cached recordings are
-    /// keyed by it.
+    /// keyed by it. 3: the projects that got no map are listed with the reason (<see cref="NotRecordedFile"/>).
     /// </summary>
-    private const int RecordingVersion = 2;
+    private const int RecordingVersion = 3;
 
     /// <summary>Longest a test project's build may take; a build that hangs leaves the project out instead of stopping the evaluation.</summary>
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(30);
@@ -312,7 +370,8 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     }
 
     /// <summary>
-    /// The projects whose run without mutants produced a test report and did not crash. Without one a
+    /// The projects whose run without mutants produced a test report and completed (no crash, no report or exit
+    /// code saying the run did not complete, <see cref="ProjectRun.Complete"/>). Without one a
     /// project's failures are unknown: counting them as none would let a mutant only that project
     /// catches look harmless, or a crash outside the selection look caught; and a project that crashes
     /// anyway would count every mutant as caught by a crash. Such projects are left out and named.
@@ -324,7 +383,8 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         var reporting = new List<ProjectNode>(testProjects.Count);
         foreach (var project in testProjects)
         {
-            if (baseline.Unreported.Contains(project.Path) || baseline.Crashed.Contains(project.Path))
+            if (baseline.Unreported.Contains(project.Path) || baseline.Crashed.Contains(project.Path)
+                || baseline.Projects.TryGetValue(project.Path, out var run) && !run.Complete)
             {
                 LogUnreported(project.Path);
                 continue;

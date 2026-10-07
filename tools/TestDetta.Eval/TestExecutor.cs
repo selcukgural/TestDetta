@@ -29,9 +29,31 @@ internal sealed record TestRunOutcome(
     /// </summary>
     public IReadOnlySet<string> Crashed { get; init; } = new HashSet<string>();
 
-    /// <summary>True when every run produced a report and no test host crashed or hung.</summary>
-    public bool Complete => Unreported.Count == 0 && Aborted == 0;
+    /// <summary>
+    /// Each project's run as the judging reads it (docs/evaluation.md, "Judging"), by normalized test project path:
+    /// whether it completed and why not, its failed, executed and reported classes.
+    /// </summary>
+    public IReadOnlyDictionary<string, ProjectRun> Projects { get; init; } = new Dictionary<string, ProjectRun>();
+
+    /// <summary>
+    /// True when every run produced a report, no test host crashed or hung, and no report or exit code says a run did
+    /// not complete (<see cref="ProjectRun.Complete"/>).
+    /// </summary>
+    public bool Complete => Unreported.Count == 0 && Aborted == 0 && Projects.Values.All(static p => p.Complete);
 }
+
+/// <summary>One project's run, as the judging reads it.</summary>
+/// <param name="Complete">
+/// True when it finished within its limit and wrote a report that says the run completed: no crashed or aborted
+/// test host (in the log or the report), and no failing exit code without a failed test
+/// (<see cref="TestRunCompleteness"/>). A whole project's run is checked against the baseline's class count too, by
+/// the judging.
+/// </param>
+/// <param name="Problem">Why it did not complete, for the report; null when it did.</param>
+/// <param name="Failed">Failed classes in its report.</param>
+/// <param name="Executed">Classes with a test that ran (passed or failed); a class missing here did not run at all.</param>
+/// <param name="Classes">Test classes in its report.</param>
+internal sealed record ProjectRun(bool Complete, string? Problem, IReadOnlySet<string> Failed, IReadOnlySet<string> Executed, int Classes);
 
 /// <summary>What <see cref="TestExecutor"/> runs in.</summary>
 /// <param name="RepoRoot">Clone directory.</param>
@@ -145,12 +167,20 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             variables[name] = value;
         }
 
+        // Last: the SDK and VSTest write in English, so a crash line is recognized whatever the machine's language.
+        foreach (var (name, value) in TestRunCompleteness.English)
+        {
+            variables[name] = value;
+        }
+
         var stopwatch = Stopwatch.StartNew();
         var total = 0;
         var unreported = new HashSet<string>(Paths.Comparer);
         var aborted = 0;
         var crashedProjects = new HashSet<string>(Paths.Comparer);
         var failed = new Dictionary<string, IReadOnlySet<string>>(Paths.Comparer);
+        var projects = new Dictionary<string, ProjectRun>(Paths.Comparer);
+        var none = new HashSet<string>(StringComparer.Ordinal);
         var dotnet = new DotnetProcess(logger);
 
         foreach (var (project, baseArguments, location) in runs)
@@ -165,6 +195,9 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             // run is repeated once before it is reported as aborted.
             TrxOutcome? outcome = null;
             var crashed = false;
+            var timedOut = false;
+            var exitCode = 0;
+            string? reportProblem = null;
             for (var attempt = 0; attempt < 2; attempt++)
             {
                 var id = Interlocked.Increment(ref _state.Runs);
@@ -181,7 +214,6 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 var output = Outputs.TryGetValue(project.Path, out var directory) ? directory : string.Empty;
                 List<string> arguments = [.. baseArguments, .. TestReports.Arguments(location.Mode, output, results, reportName)];
                 var logPath = Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log");
-                int exitCode;
                 var started = Stopwatch.GetTimestamp();
                 using (var log = File.CreateText(logPath))
                 {
@@ -192,17 +224,18 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 Cleanup();
                 TestReports.Collect(location.Mode, context.RepoRoot, reportName, results);
                 outcome = TrxReport.Read(results);
+                reportProblem = TestRunCompleteness.ReportProblem(results);
                 if (exitCode == DotnetProcess.TimedOut)
                 {
                     // A hang repeats; a second attempt would only double the wait.
                     crashed = true;
+                    timedOut = true;
                     break;
                 }
 
                 var seconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
                 _state.Longest.AddOrUpdate(project.Path, seconds, (_, longest) => Math.Max(longest, seconds));
-                crashed = File.ReadLines(logPath).Any(static l =>
-                    l.Contains("Test host process crashed", StringComparison.Ordinal) || l.Contains("Test Run Aborted", StringComparison.Ordinal));
+                crashed = TestRunCompleteness.HasCrashLine(File.ReadLines(logPath));
                 if (!crashed)
                 {
                     break;
@@ -222,14 +255,18 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
             if (outcome is null || crashed && outcome.Total == 0)
             {
                 unreported.Add(project.Path);
+                var why = timedOut ? "timed out" : crashed ? "the test host crashed before a test ran" : $"wrote no test report (exit code {exitCode})";
+                projects[project.Path] = new ProjectRun(false, why, none, none, 0);
                 continue;
             }
 
             total += outcome.Total;
             failed[project.Path] = outcome.FailedClasses;
+            var problem = timedOut ? "timed out" : TestRunCompleteness.Problem(exitCode, crashed, reportProblem, outcome.FailedClasses.Count);
+            projects[project.Path] = new ProjectRun(problem is null, problem, outcome.FailedClasses, outcome.ExecutedClasses, outcome.ReportedClasses.Count);
         }
 
-        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, unreported, aborted) { Crashed = crashedProjects };
+        return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, unreported, aborted) { Crashed = crashedProjects, Projects = projects };
     }
 
     /// <summary>Time limit of a run of <paramref name="project"/>; a generous fixed one before the project ran once.</summary>

@@ -40,15 +40,11 @@ internal static class AuditProcess
     };
 
     /// <summary>
-    /// Variables set last, over the worker's and the inherited ones: the SDK and VSTest write their messages in
-    /// English, whatever the runner's language, so the lines that say a test host crashed can be recognized
-    /// (<see cref="AuditTestRun"/> reads them next to the report's own outcome and the exit code).
+    /// Variables set last, over the worker's and the inherited ones: the runs are made in English
+    /// (<see cref="TestDetta.Coverage.TestRunCompleteness.English"/>), so the lines that say a test host crashed can be
+    /// recognized.
     /// </summary>
-    internal static readonly IReadOnlyDictionary<string, string> English = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["DOTNET_CLI_UI_LANGUAGE"] = "en",
-        ["VSLANG"] = "1033",
-    };
+    internal static IReadOnlyDictionary<string, string> English => TestDetta.Coverage.TestRunCompleteness.English;
 
     /// <summary>Runs dotnet and writes its output to <paramref name="log"/>.</summary>
     /// <param name="arguments">Arguments of the dotnet executable.</param>

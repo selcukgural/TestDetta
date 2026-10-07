@@ -7,7 +7,12 @@ namespace TestDetta.Eval;
 /// <param name="KilledClasses">Test classes that failed with the mutant but not without it (<c>Project: Class</c>).</param>
 /// <param name="MissedClasses">Of those, the classes TestDetta did not select: a missed test.</param>
 /// <param name="SelectedShare">Share of the recorded test classes that TestDetta selected, from 0 to 1.</param>
-/// <param name="Inconclusive">True when a mutant run crashed, so neither list can be trusted.</param>
+/// <param name="Inconclusive">
+/// True when the runs could not decide (docs/evaluation.md, "Judging"): a doubt that could hide a miss (a part
+/// TestDetta left out that does not complete without the mutant either, a class whose run alone ran none of its tests),
+/// or a catch that could not be confirmed with nothing else to decide. The mutant leaves the miss rate's n and is
+/// counted as a miss in the worst-case bound.
+/// </param>
 internal sealed record SyntheticMutant(
     SyntheticTarget Target,
     bool Detected,
@@ -18,10 +23,16 @@ internal sealed record SyntheticMutant(
     bool Inconclusive)
 {
     /// <summary>
-    /// True when the full run crashed or hung, but the classes TestDetta left out passed with the mutant
-    /// in place: the failure was in the selection, so TestDetta caught it without a class list to show.
+    /// True when the mutant was caught and a part TestDetta ran crashed or hung with the mutant, again when run
+    /// apart, and completed without it: TestDetta caught it without a class list to show.
     /// </summary>
     public bool CaughtByCrash { get; init; }
+
+    /// <summary>Why the mutant is inconclusive; null otherwise.</summary>
+    public string? Note { get; init; }
+
+    /// <summary>Classes that failed with the mutant but were not counted, with the reason (<c>Project: Class: why</c>).</summary>
+    public IReadOnlyList<string> NotCounted { get; init; } = [];
 
     /// <summary>
     /// True when TestDetta's analysis stopped on a build that fails with the mutant (a generator mutant its
@@ -113,4 +124,19 @@ internal sealed record SyntheticRun(string Sha, int TestClasses, double Baseline
 
     /// <summary>Commit the drift modes' maps were recorded at; null without drift modes.</summary>
     public string? MapCommit { get; init; }
+
+    /// <summary>The judging rules the mutants were judged by (<see cref="MutantJudge.Rules"/>).</summary>
+    public string Judging { get; init; } = MutantJudge.Rules;
+
+    /// <summary>Recorded test classes per map, by test project name, for the incidents and the comparison with an earlier round.</summary>
+    public IReadOnlyList<MapCount> Maps { get; init; } = [];
+
+    /// <summary>What went wrong while recording or evaluating that a reader of the numbers must know (docs/evaluation.md, "Incidents").</summary>
+    public IReadOnlyList<string> Incidents { get; init; } = [];
 }
+
+/// <summary>What one coverage map of an evaluation holds.</summary>
+/// <param name="Project">The test project's name.</param>
+/// <param name="Classes">Recorded test classes (with coverage).</param>
+/// <param name="Failed">Classes that failed while recording; null when the recording could not tell which.</param>
+internal sealed record MapCount(string Project, int Classes, int? Failed);

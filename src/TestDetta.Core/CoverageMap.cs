@@ -207,6 +207,15 @@ public sealed record CoverageMap(
     public IReadOnlyDictionary<string, IReadOnlyList<ClassLocation>>? ClassLocations { get; init; }
 
     /// <summary>
+    /// The projects whose assemblies the recording instrumented in the test project's output (the test project
+    /// included), as paths relative to the repository root with '/' separators, sorted. A project the test project
+    /// compiles against that is not here ran uninstrumented: the map knows nothing of its code, even where a project it
+    /// does know compiles the same file (a linked source file) into another assembly under the same names. Null for maps
+    /// recorded before this was kept, which selection reads as before: a member the map names counts as known.
+    /// </summary>
+    public IReadOnlyList<string>? InstrumentedProjects { get; init; }
+
+    /// <summary>
     /// True when the map knows every class the runner reported, run or not, so a class outside them
     /// was not seen while recording rather than seen running nothing.
     /// </summary>

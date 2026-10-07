@@ -509,33 +509,33 @@ public sealed class AuditUnitTests
         {
             // xUnit writes every failed test as a run message of outcome Error: no sign of a crash.
             File.WriteAllText(Path.Combine(folder, "a.trx"), Trx("[xUnit.net 00:00:00.07]     Crash.Tests.BTests.Fails [FAIL]"));
-            Assert.Null(AuditTestRun.ReportProblem(folder));
+            Assert.Null(TestDetta.Coverage.TestRunCompleteness.ReportProblem(folder));
 
             // What VSTest writes when the test host dies; the runs are made in English.
             File.WriteAllText(Path.Combine(folder, "a.trx"), Trx("The active test run was aborted. Reason: Test host process crashed : Process terminated.\nboom"));
-            Assert.Equal("the test run was aborted: The active test run was aborted. Reason: Test host process crashed : Process terminated.", AuditTestRun.ReportProblem(folder));
+            Assert.Equal("the test run was aborted: The active test run was aborted. Reason: Test host process crashed : Process terminated.", TestDetta.Coverage.TestRunCompleteness.ReportProblem(folder));
 
             // The same under a German runner is not recognized here; the exit code without a failed test, or the classes
             // missing from a whole project's run, still tell (below, and AuditJudgingTests).
             File.WriteAllText(Path.Combine(folder, "a.trx"), Trx("Der aktive Testlauf wurde abgebrochen. Grund: Der Testhostprozess ist abgestürzt."));
-            Assert.Null(AuditTestRun.ReportProblem(folder));
+            Assert.Null(TestDetta.Coverage.TestRunCompleteness.ReportProblem(folder));
 
             File.WriteAllText(Path.Combine(folder, "a.trx"), """<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><ResultSummary outcome="Aborted" /></TestRun>""");
-            Assert.Equal("the test run ended as Aborted", AuditTestRun.ReportProblem(folder));
+            Assert.Equal("the test run ended as Aborted", TestDetta.Coverage.TestRunCompleteness.ReportProblem(folder));
 
             File.WriteAllText(Path.Combine(folder, "a.trx"), """<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><ResultSummary outcome="Failed" /></TestRun>""");
-            Assert.Null(AuditTestRun.ReportProblem(folder));
+            Assert.Null(TestDetta.Coverage.TestRunCompleteness.ReportProblem(folder));
         }
         finally
         {
             Directory.Delete(folder, recursive: true);
         }
 
-        Assert.Equal("the test host crashed", AuditTestRun.Problem(1, crashLine: true, reportProblem: null, failedClasses: 3));
-        Assert.Equal("it failed (exit code 1) without a failed test", AuditTestRun.Problem(1, crashLine: false, reportProblem: null, failedClasses: 0));
-        Assert.Equal("it failed (exit code 8) without a failed test", AuditTestRun.Problem(8, crashLine: false, reportProblem: null, failedClasses: 0));
-        Assert.Null(AuditTestRun.Problem(1, crashLine: false, reportProblem: null, failedClasses: 2));
-        Assert.Null(AuditTestRun.Problem(0, crashLine: false, reportProblem: null, failedClasses: 0));
+        Assert.Equal("the test host crashed", TestDetta.Coverage.TestRunCompleteness.Problem(1, crashLine: true, reportProblem: null, failedClasses: 3));
+        Assert.Equal("it failed (exit code 1) without a failed test", TestDetta.Coverage.TestRunCompleteness.Problem(1, crashLine: false, reportProblem: null, failedClasses: 0));
+        Assert.Equal("it failed (exit code 8) without a failed test", TestDetta.Coverage.TestRunCompleteness.Problem(8, crashLine: false, reportProblem: null, failedClasses: 0));
+        Assert.Null(TestDetta.Coverage.TestRunCompleteness.Problem(1, crashLine: false, reportProblem: null, failedClasses: 2));
+        Assert.Null(TestDetta.Coverage.TestRunCompleteness.Problem(0, crashLine: false, reportProblem: null, failedClasses: 0));
         Assert.Equal("en", AuditProcess.English["DOTNET_CLI_UI_LANGUAGE"]);
         Assert.Equal("1033", AuditProcess.English["VSLANG"]);
     }
