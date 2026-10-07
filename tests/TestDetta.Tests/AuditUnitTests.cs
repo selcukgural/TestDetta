@@ -201,6 +201,24 @@ public sealed class AuditUnitTests
     }
 
     [Fact]
+    public void A_work_folder_inside_the_repository_is_refused_before_anything_is_written()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "td-audit-inside-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var error = Assert.Throws<IOException>(() => AuditWorkspace.Create(AuditWorkspace.RealPath(root), Path.Combine(root, "work")));
+
+            Assert.Contains("inside the repository", error.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void The_verdict_states_changes_broken_misses_and_the_bound_with_n()
     {
         Assert.True(CliOptions.TryParse(["audit"], "/repo", out var options, out _));

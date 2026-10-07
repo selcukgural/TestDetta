@@ -63,13 +63,18 @@ internal sealed class AuditWorkspace : IDisposable
     /// </summary>
     /// <param name="root">The team's repository root.</param>
     /// <param name="parent">Where work folders go.</param>
-    /// <exception cref="IOException">The disk has no room for the copy, or the copy failed.</exception>
+    /// <exception cref="IOException">The work folder would lie inside the repository, the disk has no room for the copy, or the copy failed.</exception>
     public static AuditWorkspace Create(string root, string parent)
     {
-        Directory.CreateDirectory(parent);
-
         // MSBuild and git see the real path (macOS: /tmp is /private/tmp); the copy is checked against what they report.
         parent = RealPath(Path.GetFullPath(parent));
+        if (Paths.IsUnder(Paths.Normalize(parent), Paths.Normalize(root)))
+        {
+            // The copy would contain itself, and the team's tree would hold the mutants.
+            throw new IOException($"The work folder {parent} lies inside the repository; give --work-dir outside it.");
+        }
+
+        Directory.CreateDirectory(parent);
         RemoveStale(parent);
         CheckSpace(root, parent);
         var workspace = new AuditWorkspace(root, Path.Combine(Path.GetFullPath(parent), $"{Prefix}{Environment.ProcessId}-{Guid.NewGuid().ToString("N")[..8]}"));

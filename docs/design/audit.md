@@ -182,6 +182,8 @@ audit asks the sampler for its uniform order.
   it and its tests are unchanged but for a `using`. The recording fingerprint did not change (TestDetta.Coverage
   and TestDetta.Core only gained an `InternalsVisibleTo`; `AnalysisOptions`, `AnalysisPipeline` and
   `CodeChangeReader`, which gained the overlay, are not reached by the recorder).
+- **Work folder**: refused inside the repository (the copy would contain itself), checked before anything is
+  created.
 - **Dirty tree**: `GitClient.ChangedFiles(root, "HEAD")` without `.testdetta/`, the same files `td test --base HEAD`
   would add; any refuses the audit (exit 1, with a report naming up to five).
 - **Baseline**: per test project in the copy, `dotnet test <project> <args>` with a report (VSTest TRX, the testing
