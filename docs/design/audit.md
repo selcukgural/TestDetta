@@ -229,9 +229,13 @@ The mutant code is shared, not copied: `TestDetta.Mutants` (new library under `s
 evaluator) holds the mutant kinds, the injector (`MutationInjector`, `Mutation`, schemas), the target sampler and
 its edits, the repository-assembly finder, the tree copy, the covered-member and miss-rate math. The evaluator
 keeps its behaviour and its tests (they only gain a `using`); its default sample (80% covered) is unchanged, the
-audit asks the sampler for its uniform order. The judging code is not shared: the audit's rules ("Judging") are
-stricter than the evaluator's on crashes and catches, and the evaluator keeps its own until the owner decides
-(docs/backlog.md, "Next"), since changing it changes comparability with earlier corpus rounds.
+audit asks the sampler for its uniform order. Since 2026-10-07 the evaluator judges by the same rules ("Judging"):
+the owner chose the strict rules for both, with a marked break in the round history (docs/evaluation.md, "How mutants
+are judged"). What decides whether a run completed is shared code (`TestDetta.Coverage.TestRunCompleteness`: the
+English runs, the crash lines, the report's outcome, the exit code); the judging itself is written twice, for the
+audit's one project at a time with its report entries (`AuditTrial`) and for the evaluator's several projects,
+selectors compared on the same failures, and runs stored for later rounds (`MutantJudge`), and the same cases are tested
+for both (`AuditJudgingTests`, `EvalJudgingTests`).
 
 ## As built (2026-10-07)
 

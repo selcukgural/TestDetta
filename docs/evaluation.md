@@ -1,6 +1,80 @@
 # Evaluation on real repositories
 
+## How mutants are judged (from 2026-10-07)
+
+Every doubt counts against TestDetta. The corpus evaluator (`tools/TestDetta.Eval`, `MutantJudge`) judges each
+mutant by the same rules as `td audit` (docs/design/audit.md, "Judging"); the summaries name them as
+`judging: strict (2026-10-07)`.
+
+**Rule change.** Up to and including round `runs-full-1006`, the evaluator was lenient in three ways: a crash or
+hang outside the selection made the mutant inconclusive and never a miss; a crash of the full run counted as caught
+when the part the selection left out passed, without the selected part being run again; and a class the selection
+ran counted as caught from the full run alone, unconfirmed. The numbers published above (rounds 1 to 3, the F#
+round) were measured under those rules. They will be replaced by the next round's, measured under the strict rules
+below; until then they are marked as measured with the lenient judging.
+
+**Judging.**
+
+- A **run that does not complete** is one that hits its time limit, whose test host crashed (the log or the report
+  says so), whose report says the run was aborted, ended as an error or timed out, that fails (a non-zero exit code)
+  without a failed test, or, for a run of a whole project, whose report lists fewer test classes than the run without
+  mutants did (a host that died without a recognised message). The runs are made in English
+  (`DOTNET_CLI_UI_LANGUAGE=en`, `VSLANG=1033`) so the crash lines are recognised; the report's outcome, the exit code
+  and the class count catch what a message does not. A test project whose run without mutants does not complete is
+  left out and named.
+- A class the selection **left out** that fails with the mutant (and not without it) runs alone with the mutant,
+  every such class of a project in one run. Passing there, it failed only next to other tests and is not counted.
+  Failing there, it runs alone without the mutant, the failing ones in one run: failing there too, it fails alone
+  anyway and is not counted; passing there, or when that run cannot tell, it is a **miss**.
+- A class the selection **ran** that fails is confirmed the same way, in one run with and one without the mutant per
+  project, and counts as **caught** only when it fails alone with the mutant and passes alone without it. When the run
+  without it cannot tell, the catch is unconfirmed. Once the verdict is decided (a miss, a doubt, or a confirmed
+  catch), the remaining selected classes are not confirmed, unless another selector compared on the same mutants
+  (project level, drift modes, dotnet-tia) left them out; they stay among the failed classes for the precision figure.
+- A class whose run alone **ran none of its tests** makes the mutant inconclusive; it never counts as passed alone.
+- A full run that **does not complete** runs again without the mutant, by parts:
+  - the selection ran nothing in that project: completing without the mutant is a **miss** (the part left out breaks
+    with it); not completing there either, **inconclusive**;
+  - it ran the whole project: the run is repeated with the mutant; not completing again and completing without it
+    is **caught by a crash**; a repeat that completes is judged by its failures;
+  - it ran some classes: the classes it left out run apart with the mutant (not completing there and completing
+    without it is a miss; their failures are judged as above); then the classes it ran (not completing there and
+    completing without it is caught); when neither part fails apart, **inconclusive**.
+- A mutant with a miss is **missed**; else with a doubt that could hide a miss, **inconclusive**; else with a
+  confirmed catch, **caught**; else with an unconfirmed catch, **inconclusive**; else it did not break a test.
+
+**Reported.** n is the number of failing mutants (caught and missed); the 95% upper bound of the miss rate is the
+exact one-sided Clopper-Pearson bound. Next to it, every report states the inconclusive mutants and a **worst-case
+bound** that counts each of them as a failing mutant that was missed. Inconclusive mutants are listed with the reason.
+
+**Cost.** A caught mutant now costs, besides its full run, one run of its failing selected classes with the mutant and
+one without (the second is shared by every mutant that fails the same classes of a project, and stored in the
+outcome cache). A mutant whose full run crashes or hangs costs one more run of the part the selection ran, which waits
+for its time limit again when it hangs.
+
+**Outcome cache.** From cache version 3 every run is stored raw, under what it ran (project, whole / only some classes /
+all but some, the mutant on or off), with its completeness; a later round judges again from the stored runs and makes
+only the runs a changed selection asks for (docs/design/eval-result-cache.md). Nothing of a version 2 cache is reused:
+its full runs were judged complete without the report outcome, the exit code and the class count, it holds no
+confirmation of selected classes, and its runs alone do not say whether a class ran at all.
+
+## Incidents
+
+The per-repository report (`synthetic.md`, `synthetic.json`) and the round summary (`summary.md`, `summary.json`)
+list what a reader of the numbers must know, because each one makes the selection of a project fall back to names:
+
+- a test project **not recorded although its tests passed** (or not recorded on TestDetta's side at all: its test
+  assembly not instrumented, the tracker silent; `td record` says "not recorded" with the reason);
+- a map that recorded **0 test classes**, one whose **every class failed** while recording, and one whose failures no
+  report names (it is not used);
+- with `--compare <previous round>`, **fewer recorded classes** than in the previous round of the same repository, in
+  total or in one map (read from the previous round's own `synthetic.json` when its summary has no counts).
+
+The round comparison (`comparison.md`) also says when two rounds were judged by different rules.
+
 ## F#: Argu (2026-10-06)
+
+*Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*
 
 First measurement of F# analysis (docs/design/vb-fsharp-support.md), Argu at the corpus commit, 100
 synthetic changes sampled from F# members (`|> id` source edits, IL mutants of every kind):
@@ -17,6 +91,8 @@ attributes are compiler attributes; a running class nested in the entry point's 
 Argu was "not informative" before (F# not analysed); it is now sampled like every other repository.
 
 ## Corpus round 3 (2026-10-06)
+
+*Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*
 
 The whole corpus at the pinned commits, built from `592c15b` plus the generator-copy fix, run twice:
 once with the single-bucket rule off and once with it on, nothing else different (outcomes cached, so
@@ -82,6 +158,8 @@ Median share per repository 30% (rule on: 35%), mean 40% (rule on: 44%); whole a
 
 ## Corpus round 2 (2026-10-03 → 2026-10-04)
 
+*Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*
+
 The same method as round 1 on 42 repositories (Refit added), with every fix up to `e55241c`: MSBuild
 evaluation of each project, the real preprocessor symbols per target framework, initialization and
 field-read data in the maps. Recorded fresh at each repository's head
@@ -120,6 +198,8 @@ selects) 91%. Median share per repository 35% (round 1: 27%).**
   Mapperly.
 
 ## Corpus round 1 (2026-09-30 → 2026-10-02)
+
+*Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*
 
 `testdetta-eval --corpus eval/corpus.json`: per repository, coverage is recorded at the default branch's
 head, then up to 100 sampled members are changed one at a time (source edit for TestDetta, a `throw` in

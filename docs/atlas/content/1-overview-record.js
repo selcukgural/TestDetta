@@ -70,6 +70,7 @@ foreach (var project in SelectTestProjects(graph, root, projects))
 }`) + ul([
         "<code>NoTestsRecordedException</code>: proje \"skipped\" olarak raporlanır (hiç test koşmadı).",
         "<code>InvalidOperationException</code> (ör. derlenmedi): proje \"not recorded\" olur; PR'da isimle izlenerek seçilir.",
+        "<code>RecordingFailedException</code> (2026-10-07, TestDetta tarafında başarısız kayıt): test dll'i enstrümante edilen dll'ler arasında değil, testler geçti ama izleyici sonuç yazmadı ya da hiç sınıf kaydedilmedi. Proje yine \"not recorded\" olur, sebep aynen yazılır (<code>TestsPassed</code>: geçti / düştü / koşmadı); her sınıfı \"failed\" gösteren harita ya da yaşanmamış bir çökme raporu yazılmaz. Çıkış kodları değişmez.",
       ]),
     },
     {
@@ -293,6 +294,8 @@ call    TestDettaTracker.Hit(int32)`) + ul([
         "<code>--parallel n</code>: sınıflar <code>n</code> parçaya dağıtılır, her parça ayrı süreç; sonda bilinen sınıfları dışlayan bir \"artakalan\" parça.",
         "Bir parça sonuç yazmazsa tek süreçte filtresiz tekrar; o da olmazsa testin kendi paralelliğiyle (<code>TESTDETTA_PARALLEL_FLOWS=1</code>).",
         "Zaman aşımı <code>RecordingTimedOutException</code>; hiç test koşmadıysa <code>NoTestsRecordedException</code>.",
+        "Testler geçti ama parça sonuç yazmadıysa bu çökme değildir: tekrar denenmez, <code>ThrowIfTrackerSilent</code> projeyi \"not recorded\" yapar. Tekrarlardan sonra da sonuç yoksa ama TRX test koştuğunu söylüyorsa mesaj \"no test ran\" değil, \"host sonuç yazmadan çöktü ya da izleyiciyi yüklemedi\" olur.",
+        "Enstrümantasyondan önce: test dll'i (<code>TargetPath</code>) <code>RepositoryAssemblies</code> içinde değilse sınıflar kendini işaretleyemez; testler hiç koşmadan <code>RecordingFailedException</code>.",
       ]),
     },
     {
@@ -353,8 +356,8 @@ public static void Hit(int id)
       who: "<code>Record</code> metodunun sonu, ardından <code>CoverageMapStore.Write</code>",
       file: "src/TestDetta.Coverage/CoverageRecorder.cs, src/TestDetta.Core/CoverageMapStore.cs:27",
       input: "TRX raporları, sınıf konumları, üretilmiş kaynaklar",
-      output: "<code>FailedClasses</code>, <code>SkippedClasses</code>, <code>Platform</code>, <code>Framework</code>, <code>ClassLocations</code>, <code>Generated</code> eklenmiş harita dosyası",
-      purpose: "Haritaya güvenilemeyecek yerleri işaretlemek: kayıtta başarısız olan sınıf her proje etkilendiğinde koşar; atlanan sınıf başka platformda seçilir.",
+      output: "<code>FailedClasses</code>, <code>SkippedClasses</code>, <code>Platform</code>, <code>Framework</code>, <code>ClassLocations</code>, <code>Generated</code>, <code>InstrumentedProjects</code> eklenmiş harita dosyası",
+      purpose: "Haritaya güvenilemeyecek yerleri işaretlemek: kayıtta başarısız olan sınıf her proje etkilendiğinde koşar; atlanan sınıf başka platformda seçilir. <code>InstrumentedProjects</code> (2026-10-07, <code>CoverageRecorder.InstrumentedProjects</code>): enstrümante edilen dll'lerin projeleri, depo köküne göre, sıralı; seçim bunu B2 kuralında okur (Bölüm 4). Testler geçip hiç sınıf kaydedilmediyse (<code>ThrowIfNoClassRecorded</code>) harita yazılmaz, proje \"not recorded\" olur.",
     },
     {
       title: "Dll'ler her durumda eski haline döner", nodes: ["run", "restore"], edges: ["back"],

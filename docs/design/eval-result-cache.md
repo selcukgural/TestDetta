@@ -30,8 +30,8 @@ In round 2b, 43% of the mutants failed no test, and OpenTelemetry alone took two
   output folder, as today. The corpus pool passes `~/sift-corpus/cache`.
 - The mutant sample is already deterministic (seed per entry, default 1), and outcomes are stored per
   member and kind, so a sample that shifts because the maps changed only computes the new mutants.
-- Nothing about a stored outcome changes: crashed, hung or unreported runs are never stored, and
-  `OutcomeCache.Version` is still raised with any change to injection, runs or confirmation.
+- `OutcomeCache.Version` is raised with any change to injection, how runs are made or judged complete; files of
+  another version are ignored.
 - Each outcome stores the test projects the evaluation ran (`Evaluated`). A project whose run without
   mutants crashed is left out of that evaluation, so its failures are not in the outcome; when a later
   round evaluates it, the outcome is not reused (found in round 2d: Mapperly's main test project crashed
@@ -40,8 +40,8 @@ In round 2b, 43% of the mutants failed no test, and OpenTelemetry alone took two
   round that wrote it (`~/sift-corpus/stamp-outcomes.py`).
 
 After a TestDetta fix, a round then records maps only where the recorder changed, computes the
-selection for every mutant (seconds) and compares it with the stored failures. Classes that look
-missed are still confirmed alone, from the cache when known.
+selection for every mutant (seconds) and judges it against the stored runs; only runs the new selection
+asks for and the cache lacks are made (see "Runs are stored raw" below).
 
 ### 2. A recording key that follows the recorder's code, not all of Core
 
@@ -88,11 +88,21 @@ the parallelism check: four to six full runs per repository, about 25 minutes fo
   consistent than a fresh run.
 - When some mutant has to run on a stored baseline, its test projects are built then; one that no
   longer builds is left out of those runs.
-- **A full run that crashed or hung is stored as such** (`FullRunIncomplete`). Such a mutant is judged
-  by running what TestDetta left out, the only place a miss can be; later rounds skip the full run,
-  which mostly waits for its timeout (Polly: 8 such mutants took 11 of 16 minutes on a warm cache).
-  When that run missed nothing, the selection's fingerprint is stored with it (`NothingMissedWith`):
-  the same selection leaves out the same classes and is not run again, any other selection is.
+- **Runs are stored raw** (cache version 3, 2026-10-07, with the strict judging of docs/evaluation.md, "How mutants
+  are judged"). A mutant's outcome holds every run made with it, keyed by what the run ran: the test project, the
+  whole project, only some classes or all but some (the classes hashed), the mutant on, and for a whole run the
+  attempt (a crashed or hung run is repeated once). Each run keeps whether it completed and why not, its failed
+  classes, the classes in its report and, for a run of some classes, the classes that ran. Runs without any mutant
+  are the same for every mutant of the commit and are stored once for all of them (`Controls`), when they completed.
+  The outcome also stores the test projects the mutant reached and those that did not build with it.
+- **Judging again from stored runs.** For a mutant with a stored outcome, the judging runs against the stored runs
+  only; when it asks for a run the cache does not have (today's selection leaves out other classes, a control run never
+  completed), the mutant is run, and only that run is made, the stored ones are taken as they are. A full run that
+  hung is not waited for again. A change to TestDetta's selection therefore costs only the runs its new decisions ask
+  for; a change to the judging rules costs nothing when it asks for no new run.
+- **Version 2 files are ignored.** Their full runs were judged complete without the report's outcome, the exit code
+  and the class count, they hold no confirmation of the classes the selection ran, and their runs alone do not say
+  whether a class ran at all; the strict rules need all of that.
 
 ## Memory guard
 

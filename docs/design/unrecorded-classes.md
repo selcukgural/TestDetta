@@ -97,7 +97,29 @@ Round 2c missed a failing MSpec context in AwesomeAssertions' `MSpec.Specs`. Two
 Maps recorded before the fix still name the namespace; it is selected as a class the index misses,
 and its filter (`MSpec.Specs.`) runs the whole project, which is safe.
 
+### Recordings that failed on TestDetta's side (2026-10-07)
+
+A class the reports say ran, with no trace in the map, is kept as untrusted (it runs whenever its project is
+affected). When that is every class, the recording itself failed, and the map would list every class as failed:
+meziantou-analyzer's maps in round `runs-full-1006` (its five test projects share one assembly name, and the test
+assembly was not among the instrumented ones). Such a project is now **not recorded**, with the reason
+(`RecordingFailedException`; `td record` prints "not recorded" and keeps its exit codes):
+
+- its test assembly is not among the repository assemblies the recorder instruments (checked before the tests run);
+- its tests ran and passed, but the tracker wrote no results in their test process (it did not load there; this is
+  no crash, so the crash reruns in one process and with the suite's parallelism are not tried);
+- its tests ran, but no results were written even after those reruns (the message says the host crashed before
+  writing them or never loaded the tracker, instead of "no test ran");
+- its tests ran and passed, the tracker wrote results, yet no test class was recorded.
+
+The map also lists the projects whose assemblies the recording instrumented (`instrumentedProjects`). Selection reads
+a changed member whose project the test project compiles against, but which the map did not instrument, as one the
+map does not know, and traces it by name: a linked file compiled into two assemblies has the same names in both, and
+the map's knowledge of one must not answer for the other (meziantou-analyzer, mutant 17 of `runs-full-1006`).
+
 ### Old maps
+
+Maps without `instrumentedProjects` answer as before: a member the map names counts as known.
 
 Without `SkippedClasses` neither rule applies and selection is unchanged. Without `ClassLocations`
 rule 2 finds no orphan anchors and skips as before.
