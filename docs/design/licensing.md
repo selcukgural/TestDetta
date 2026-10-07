@@ -226,8 +226,7 @@ A small web service, the only holder of the signing key.
 
 `src/TestDetta.LicenseService`: ASP.NET Core with Postgres through Npgsql and plain SQL, deployed as a
 container (`Dockerfile`: images pinned by digest, the image's non-root user, the signing key mounted
-as a file and never baked in or passed as a variable). The host is not chosen yet (user decision:
-container, decided later).
+as a file and never baked in or passed as a variable). Hosting: Cloud Run (see "Hosting" below).
 
 - **Records** (`licenses`) are the source of truth. Every change also writes an `audit` row with its
   reason, in the same transaction.
@@ -338,6 +337,27 @@ later; e-mail is enough for the first sales.
 5. Verify the sending domain in Resend (DKIM and the return-path records in DNS), make an API key
    with sending access to that domain only, and set `Licenses__ResendApiKey`,
    `Licenses__MailFrom` and `Licenses__MailReplyTo`.
+
+## Hosting (2026-10-07)
+
+Google Cloud project `testdetta-510908`, region `europe-west1`, at `https://license.testdetta.com/` (a Cloud Run
+domain mapping; Porkbun holds the CNAME). Scripts in `deploy/license-service/`:
+
+- `setup.sh`, once: the service account `license-service` gets `cloudsql.client` and read access to its two
+  secrets only; the database `licenses` is created. The Cloud SQL instance (`testdetta-licenses`, Postgres 17,
+  smallest shared-core tier, backups and point-in-time recovery, deletion protection, encrypted connections
+  only), the Artifact Registry repository and the service account were made by hand the same day.
+- `deploy.sh`: Cloud Build builds the image (the upload is limited to what the Dockerfile copies,
+  `.gcloudignore`), tagged with the commit; Cloud Run runs it with at most 2 instances, none when idle.
+- Secrets are made by a person and never printed: the signing key is generated straight into Secret Manager
+  (`license-signing-key-td-2026-10`, key id `td-2026-10`), and the connection string with a random password
+  (`license-connection-string`). Cloud Run mounts both as files, the key outside `TESTDETTA_SECRETS`.
+- Client addresses: Cloud Run's front end is the only way in and appends the client, so
+  `TrustedProxies=*` with `ForwardedHops=1`.
+
+The key's public half is not in `LicenseKeys.Trusted` yet: adding it makes such licenses verify and starts
+refresh requests, while the site says no license verifies before launch. It goes in with launch, together
+with that text.
 
 ## Phases
 

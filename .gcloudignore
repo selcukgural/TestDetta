@@ -1,0 +1,13 @@
+# What `gcloud builds submit` uploads: only what src/TestDetta.LicenseService/Dockerfile copies
+# (deploy/license-service/deploy.sh). Everything else stays on this machine.
+/*
+!/global.json
+!/Directory.Build.props
+!/Directory.Packages.props
+!/.editorconfig
+!/src/
+/src/*
+!/src/TestDetta.Core/
+!/src/TestDetta.LicenseService/
+bin/
+obj/
