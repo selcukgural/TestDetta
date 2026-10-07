@@ -1,7 +1,8 @@
 # `td audit`: the corpus method on the team's own code
 
 Status: designed and built 2026-10-07 (owner decision the same day: part of v1 and of shadow mode's graduation
-criteria, docs/design/shadow-mode.md). "As built" at the end records where the build differs from the plan.
+criteria, docs/design/shadow-mode.md); reviewed and fixed the same day (judging, the work folder, the commit;
+schema 2). "As built" at the end records where the build differs from the plan.
 
 ## Problem
 
@@ -10,9 +11,12 @@ them and no miss the miss rate is bounded only to about 3/n, so a month gives a 
 gives hundreds of failures per repository by breaking code on purpose (IL mutants) and checking that the
 selection contains every test class that failed. `td audit` runs that method on the team's own repository, on
 their CI runner or a developer machine, so the graduation criterion "at least 100 changes that broke tests and
-0 missed (95% upper bound below 3%)" can be met in one run:
+0 missed (95% upper bound at most 3.0%)" can be met in one run. Bounds are shown rounded up to a tenth of a
+percent, so a shown bound is never below the real one: n = 100 with no miss is 2.95%, shown as 3.0%, which is
+why the criterion says "at most 3.0%" (n = 102 is the first to show 2.9%).
 
-> On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103).
+> On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2 inconclusive, 0 stopped
+> (worst case, counting them as misses: 95% upper bound 5.9%, n = 105); target of 100 reached.
 
 ## Command
 
@@ -24,7 +28,7 @@ td audit [options] [-- <dotnet test arguments>]
 | --- | --- | --- |
 | `--target-broken <n>` | 100 | Stop once n changes broke tests (conclusively, see "Judging"). |
 | `--max-mutants <n>` | no limit | Stop after n changes that ran tests. |
-| `--budget <time>` | 4h | Start no change after this long; a change still running is stopped and not counted. `90s`, `15m`, `1h30m`, a plain number of minutes, `0`/`none` for no limit (`Durations.TryParseLimit`, at most 168h). |
+| `--budget <time>` | 4h | Start no change after this long; a change still running finishes within its own run limits and counts (the audit can run past the budget by that change). `90s`, `15m`, `1h30m`, a plain number of minutes, `0`/`none` for no limit (`Durations.TryParseLimit`, at most 168h). The copy, the baseline's builds and runs draw from it too. |
 | `--parallel <n>` | 1 | Changes tested at once, each in its own working copy. Every one runs test hosts: memory grows with n (the machine once ran out of memory with parallel test hosts), so 1 unless the runner has room. |
 | `--seed <n>` | 1 | Seed of the sample order. |
 | `--kinds <list>` | all | `throw`, `return-default`, `flip-branch`, `field-value`, or `all`. |
@@ -42,13 +46,18 @@ audit could not run or was cancelled (the reason is in the report when one could
 
 - **Reads** the repository: sources, project files (MSBuild evaluation, as `td test`), the coverage maps
   (`.testdetta/coverage`, or `--maps-dir` restored there as `td test` does), and git (`status`, `rev-parse`,
-  `ls-files`, the first-parent history for the map age). Nothing is changed in the repository's files or in git:
-  no source edit, no commit, stash or worktree.
+  `cat-file`, `ls-files`, the first-parent history for the map age). TestDetta changes nothing in the
+  repository's files or in git: no source edit, no commit, stash or worktree. One exception it cannot rule out:
+  when the repository is a linked worktree, the copy's `.git` file points into the team's git directory, so a
+  test that runs git in the copy reads it, and one that writes to git (a commit, a tag) would write there.
+  Every process the audit starts has `GIT_OPTIONAL_LOCKS=0`, so git's own index refreshes do not.
 - **Writes** a work folder `td-audit-<pid>-<random>` under `--work-dir` (a copy of the working tree, backups of
-  rewritten assemblies, test reports and logs), deleted at the end; the JSON report; the summary when asked. In
+  rewritten assemblies, test reports and logs), readable by its owner only (`0700`: the copy holds whatever the
+  tree holds, ignored secret files included), deleted at the end; the JSON report; the summary when asked. In
   the repository only TestDetta's own `.testdetta/`: the project-graph cache every `td` command keeps
   (`.testdetta/cache`), the report by default, and with `--maps-dir` the restored maps, as `td test` does.
-- **Executes** `cp` (the copy), `dotnet test` and `dotnet msbuild -getProperty` in the copy, `git` read-only.
+- **Executes** `cp` (the copy), `dotnet test`, `dotnet build` (testing-platform projects) and `dotnet msbuild`
+  (a driver project that only evaluates where the projects write) in the copy, `git` read-only.
 - **No license and no network call.** Owner decision 2026-10-07: shadow mode needs no license because it skips
   nothing; the audit skips nothing either (every test that could see a change runs, with and without it), so it
   is dispatched before the license refresh like `td test --shadow`: no license variable or file is read, nothing
@@ -60,32 +69,47 @@ audit could not run or was cancelled (the reason is in the report when one could
 The team's build output is never written. Every mutant lives in a **copy of the working tree** (sources, build
 output and all, `.git` included so tests that look for the repository root still find it):
 
-1. **Start**: earlier work folders under `--work-dir` whose owner file names a process that no longer runs (a
-   crash, a `kill -9`, a power cut) are deleted; only folders with that owner file are touched.
+1. **Start**: earlier work folders under `--work-dir` whose owner file names a process of this machine (same host
+   name) that no longer runs (a crash, a `kill -9`, a power cut) and that no process holds locked are deleted;
+   only folders with that owner file are touched. A running audit keeps its owner file open with an exclusive
+   lock (`FileShare.None`, `flock` on Unix), so a sweep from another PID namespace (a container sharing `/tmp`),
+   to which its process id looks dead, cannot delete it; a folder another host made is never swept.
 2. **Copy**: `cp -cpR` on macOS (APFS clones), `cp -a --reflink=auto` on Linux (Btrfs, XFS), file by file on
-   Windows: the evaluator's `WorkerCopies.Copy`, moved into the shared library. Without copy-on-write the copy
-   costs the tree's size once; the audit refuses to start when the disk has less free space than the tree plus
-   1 GB.
-3. **Baseline** in the copy: every test project runs once as `dotnet test <project> <args>` with a test report:
+   Windows: the evaluator's `WorkerCopies.Copy`, moved into the shared library. Before every copy (each worker's
+   too) the disk must have room for it plus 1 GB: the tree's size without copy-on-write, the size of its `bin` and
+   `obj` folders on a clone (the baseline's build rewrites them).
+3. **Where the copy writes**, asked before anything builds or runs there (`AuditOutputPaths`): one `dotnet msbuild`
+   of a driver project evaluates every SDK-style project of the copy, every target framework, with the user's
+   `-c`, `-f` (test projects), `-r` and `-p` properties, and reports `TargetPath`, `OutputPath`, `OutDir`,
+   `IntermediateOutputPath`, `BaseOutputPath`, `BaseIntermediateOutputPath`, `MSBuildProjectExtensionsPath`, the
+   artifacts path and a documentation file. Any of them outside the copy once links are resolved (an absolute
+   `OutputPath` or artifacts path, a `bin` folder that is a link to the team's own), a project MSBuild gives no
+   answer for, or an `-o`, `--output`, `--artifacts-path`, `--results-directory` or `--diag` that leads out of the
+   copy refuses the audit: the copy's build would write the team's files.
+4. **Links**: in those folders every file link is replaced by a real file before the baseline (a build writes
+   files in place, and `cp` keeps the team's links, which `CreateSymbolicLinksForCopyLocalIfPossible` points into
+   the team's own build output); a folder link out of the copy refuses the audit.
+5. **Baseline** in the copy: every test project runs once as `dotnet test <project> <args>` with a test report:
    this builds in the copy (unless `--no-build` is among the arguments, then the copied build output is used), so
-   the binaries match `HEAD`.
-4. **Outputs**: each audited project's output folders are asked from MSBuild in the copy. An output folder or an
-   assembly to rewrite outside the copy (an absolute `OutputPath` or artifacts path) stops the audit before any
-   rewrite: it would be the team's own output.
-5. **Per change**: the evaluator's `MutationInjector.Inject` rewrites the copies of the member's assembly in the
-   copy's test outputs, its backups in the work folder; after the change's runs the backups are copied back in a
-   `finally`. A restore that fails stops the audit (the copy can no longer be trusted); nothing outside the copy
-   is affected either way.
-6. **Ctrl+C, SIGTERM, timeouts**: a cancellation token stops the loop and kills the running `dotnet test`
-   process tree; a run past its time limit (five times the project's baseline run, at least two minutes, cut to
-   what is left of the budget) is killed the same way. The work folder is deleted in a `finally`, the partial
-   report is written (`stopReason: cancelled`).
-7. **End**: the work folder is deleted. A folder that cannot be deleted is named in the report; the next run
+   the binaries match `HEAD`. Each build and run may take what is left of the budget.
+6. **Per change**: every assembly the changes rewrite and its `.pdb` is first made a file of its own in each copy
+   (a symbolic or hard link replaced by a copy of its content), and must lie inside the copy once links are
+   resolved. The evaluator's `MutationInjector.Inject` rewrites the copies of the member's assembly in the copy's
+   test outputs, its backups in the work folder; after the change's runs the backups are copied back. A restore
+   that fails stops the audit (the copy can no longer be trusted), after the change's result is recorded; nothing
+   outside the copy is affected either way.
+7. **Ctrl+C, SIGTERM, timeouts**: a cancellation token stops the loop and kills the running `dotnet test`
+   process tree; a run past its time limit (five times the project's baseline run, at least two minutes; the
+   budget does not cut it) is killed the same way. The partial report is written (`stopReason: cancelled`)
+   before the work folder is deleted, so a CI job killed while a large copy is deleted still has it.
+8. **End**: the work folder is deleted. A folder that cannot be deleted is named in the report; the next run
    removes it (step 1).
 
 So a crash at any point leaves at most a folder in the temp directory, never a mutated assembly in the team's
 build. The tests check that the team's build output is byte-identical after a normal run, a cancellation, a
-timeout and an exception in the middle of a change.
+timeout and an exception in the middle of a change, and while a change is in when the team's test output holds
+its assemblies as links into its own build; and that an absolute `BaseOutputPath` is refused before anything
+builds in the copy.
 
 ## The selection for a change: `td test`'s own decision
 
@@ -101,31 +125,64 @@ code).
 
 Because the analysis compares with `HEAD`, uncommitted changes would join every change and widen every
 selection; the audit refuses to run on a working tree with changes to tracked files or untracked files git does
-not ignore (`.testdetta/` aside), and says which.
+not ignore (`.testdetta/` aside), and says which. The commit is recorded when the audit starts: every analysis
+compares with that commit (not with whatever `HEAD` is by then), reads the edited file's text from it (`git
+cat-file --filters`, so line endings match the offsets the sampler took from the clean tree), and before and
+after each analysis the repository must still be at it with a clean working tree; otherwise the audit stops
+with an error (a developer committing or editing during an hours-long run would otherwise widen every later
+selection).
 
 ## Which tests run for a change
 
 Every audited test project whose build output in the copy holds a rewritten assembly runs **completely**, the
 way the baseline ran it: `dotnet test <project> --no-build <args> <report>`. A project whose output does not
 hold the member's assembly cannot load the mutant. Audited are the test projects that wrote a readable report
-without crashing in the baseline and do not need the full MSBuild (legacy projects); the rest are named in the
-report with the reason and their tests are not part of the audit.
+of a complete run in the baseline, do not need the full MSBuild (legacy projects), and whose own filter (after
+`--`) can be joined with a class filter; the rest are named in the report with the reason and their tests are not
+part of the audit. An xUnit v3 class or query filter and a TUnit tree-node filter cannot be joined: in such a
+project the classes the selection left out could not be run apart, so it could show catches but never a miss.
 
-## Judging (the evaluator's rules)
+## Judging
 
-- A class that fails with the change and did not fail in the baseline **broke**.
-- Broke and selected: **caught**.
-- Broke and left out: run alone with the change; a class that passes then failed only next to other tests and is
-  not counted. A class that fails alone runs alone without the change (the original assemblies back for that
-  run); failing there too, it fails alone anyway and is not counted. What remains is a **miss**.
-- A project run that did not complete (crash, hang, no report): its classes the selection left out run with the
-  change; all passing means the failure was in the selection (**caught**); failures are judged as above; an
-  incomplete run there too makes the change **inconclusive** (listed, not counted).
-- A change with a miss is **missed**; with only caught classes **caught**; with no failure **did not break**; a
-  member no audited output holds is **not reached** (listed, not counted).
+The rule behind every case: **every doubt goes against TestDetta**. A failure the selection left out must be
+shown not to be the change's before it is dropped, and a failure the selection ran must be shown to be the
+change's before it counts as caught, by the same runs from the other side.
+
+- A class that fails with the change and did not fail in the baseline **failed**.
+- **Left out** and failed: run alone with the change. A class that passes then failed only next to other tests and
+  is not counted; one whose run alone ran none of its tests (a class filter that matched nothing) makes the change
+  **inconclusive**. A class that fails alone runs alone without the change (the original assemblies back for that
+  run): failing there too, it fails alone anyway and is not counted; passing there, or when that run cannot tell
+  (it does not complete, or runs none of its tests), it is a **miss**.
+- **Selected** and failed: the same two runs. It counts as **caught** only when it fails alone with the change and
+  passes alone without it. Passing alone with the change, or failing alone without it: not counted. When the run
+  without the change cannot tell, the catch is unconfirmed (the change is inconclusive unless something else
+  decides it). These runs are made only while the change has no miss (with a miss the change is missed anyway).
+- A **run that does not complete** (a crashed or hung test host, a run that ends without a failed test but with a
+  failing exit code, a report that says the run was aborted, or a run of the whole project that reports fewer
+  classes than the baseline did) runs again without the change, the same invocation:
+  - the selection ran **nothing** in that project (skipped, not affected): the run of the whole project is the part
+    left out. Completing without the change makes the change a **miss** (an entry for the part, since no class can
+    be named); not completing there either, **inconclusive**.
+  - it ran the **whole project**: nothing is left out, so no miss is possible here. The run is repeated with the
+    change; not completing again, and completing without the change, is **caught** (`caughtByCrash`); a repeat
+    that completes is judged by its failures (none: not counted).
+  - it ran **some classes**: the classes it left out run apart with the change (within the user's filter): not
+    completing there and completing without the change is a **miss**; their failures are judged as above. When
+    no miss showed there, the classes it ran run apart the same way: not completing with the change and
+    completing without it is **caught**, failures are judged as above. When neither part fails apart, the
+    change is **inconclusive** (a crash only when both run together).
+- A change with a miss is **missed**; else with a doubt that could hide a miss **inconclusive**; else with a
+  confirmed catch **caught**; else with an unconfirmed catch **inconclusive**; else **did not break**. A member no
+  audited output holds is **not reached** (listed, not counted).
+- **Cut short**: a change a cancellation or an error stops while it runs is **stopped**; one that already had a
+  confirmed miss stays **missed** (its result is kept before the mutant is restored, also when the restore fails).
+  A miss whose runs ended after a cancellation does not count (Ctrl+C reaches the test hosts too).
 
 n is the number of changes that broke tests (caught + missed). The bound is the evaluator's exact one-sided
-Clopper-Pearson bound (`MissRate.UpperBound`), stated with n: with 0 misses it is about 3/n.
+Clopper-Pearson bound (`MissRate.UpperBound`), stated with n: with 0 misses it is about 3/n. Next to it, the
+**worst-case bound** counts every inconclusive and stopped change as one that broke tests and was missed (n plus
+those changes): what the result would be if every unjudged change were a miss. Both are shown rounded up.
 
 ## The sample, and how it stays unbiased
 
@@ -140,22 +197,29 @@ Clopper-Pearson bound (`MissRate.UpperBound`), stated with n: with 0 misses it i
   map says no test runs are exactly where a miss would show (a test that does run them but is not in the map).
   The audit samples **uniformly over all candidates**; coverage is reported per change, never used to pick or
   skip one. It costs runs (uncovered members break tests less often), which the target and budget absorb.
-- **Stopping**: the sample is walked in order; the stop conditions look at counts, never at which change missed.
-  At the target the counted changes are a prefix of the order (with `--parallel`, changes already running
-  finish and count). Changes cut by the budget or a cancellation are listed as stopped, not counted.
+- **Stopping, and the prefix rule**: the sample is walked in order; the stop conditions look at counts and time,
+  never at which change missed, and decide only whether a further change starts. A change that started always
+  runs to its end within its own run limits, whatever stops the audit meanwhile (the target, `--max-mutants`,
+  the budget, another worker's error): so the changes taken are exactly positions 1 to k of the order, k being the
+  last one started, each judged, with none in between left out (with `--parallel`, the changes running when a
+  condition holds finish and count). Without that, the budget would end most often in the middle of a miss (a
+  miss takes two more runs than a catch) and drop it. Only a cancellation (Ctrl+C, SIGTERM, a cancelled CI job)
+  or an error cuts running changes short: they are listed as stopped, outside n, and the worst-case bound counts
+  them as misses.
 - What is left out is left out by construction (no edit, generator, not reached, project not audited), the same
   whatever the tests do, and every such count is in the report.
 
 ## Stop conditions
 
 In order of checking before each change: cancelled; `--target-broken` reached; `--max-mutants` reached; budget
-spent (it starts with the command: copy and baseline included); sample exhausted. The verdict names the reason,
-and says when the target was not reached.
+spent (it starts with the command: copy and baseline included); sample exhausted; less than 1 GB free on the work
+folder's disk (an error). The verdict names the reason, and says when the target was not reached.
 
 ## Report
 
 Console (the verdict, then one line per change as it finishes), Markdown summary, and `testdetta-audit.json`
-(schema below). Per miss: the member and its file, the kind, the failing classes, the decision chain (what
+(schema below). The verdict line, the summary's table and the JSON totals give the inconclusive and stopped
+counts and the worst-case bound next to the bound. Per miss: the member and its file, the kind, the failing classes, the decision chain (what
 TestDetta saw change, how the test project was decided and why, the class's decision and its evidence, the map's
 commit), the edit to make by hand, and the command that reproduces it (`td audit --member … --kinds …`).
 
@@ -165,59 +229,95 @@ The mutant code is shared, not copied: `TestDetta.Mutants` (new library under `s
 evaluator) holds the mutant kinds, the injector (`MutationInjector`, `Mutation`, schemas), the target sampler and
 its edits, the repository-assembly finder, the tree copy, the covered-member and miss-rate math. The evaluator
 keeps its behaviour and its tests (they only gain a `using`); its default sample (80% covered) is unchanged, the
-audit asks the sampler for its uniform order.
+audit asks the sampler for its uniform order. The judging code is not shared: the audit's rules ("Judging") are
+stricter than the evaluator's on crashes and catches, and the evaluator keeps its own until the owner decides
+(docs/backlog.md, "Next"), since changing it changes comparability with earlier corpus rounds.
 
 ## As built (2026-10-07)
 
 - **Code**: `CliApp.Audit` (dispatched before the license refresh, with SIGINT and SIGTERM registered through
   `PosixSignalRegistration` so the process lives on to clean up), `AuditRun` (checks, sample, baseline, report),
-  `AuditWorkspace` (work folder, owner file, stale sweep, copies, free-space check), `AuditTestRun` (one `dotnet
-  test` of a project in a copy, with a report, read and deleted at once; output folders from `dotnet msbuild
-  -getProperty:TargetPath`, one per target framework), `AuditProcess` (dotnet with a limit and the cancellation
-  token, killing the whole tree; no MSBuild node, build server or compiler server outlives a command), `AuditSelector`
-  (the overlay pipeline), `AuditTrial` (one change), `AuditLoop` (the walk and the stop conditions), `AuditReport`
-  and `AuditResult`. The report-argument helpers of shadow mode moved to `TestRunArguments` for both. The shared
+  `AuditWorkspace` (work folder, locked owner file, stale sweep, copies, free-space checks, `Detach` and
+  `MaterializeLinks`), `AuditOutputPaths` (where every project of the copy writes, one MSBuild driver),
+  `AuditTestRun` (one `dotnet test` of a project in a copy, with a report, read and deleted at once; complete or
+  not, `Problem`, `ReportProblem`), `AuditProcess` (dotnet with a limit and the cancellation token, killing the
+  whole tree; no MSBuild node, build server or compiler server outlives a command; English output,
+  `GIT_OPTIONAL_LOCKS=0`), `AuditSelector` (the overlay pipeline at the recorded commit, its checks), `AuditTrial`
+  (one change: inject, select, `JudgeRuns`, restore; `AuditHooks.Runs` replaces the runs in tests), `AuditLoop`
+  (the walk and the stop conditions), `AuditReport` and `AuditResult`. The report-argument helpers of shadow mode moved to `TestRunArguments` for both. The shared
   library is `src/TestDetta.Mutants` (`MutantKind`, `MutationInjector`, `TargetSampler` with
   `SampleRequest.Uniform`, `RepositoryAssemblies`, `TreeCopy`, `Selections`, `MissRate`); the evaluator forwards to
   it and its tests are unchanged but for a `using`. The recording fingerprint did not change (TestDetta.Coverage
   and TestDetta.Core only gained an `InternalsVisibleTo`; `AnalysisOptions`, `AnalysisPipeline` and
   `CodeChangeReader`, which gained the overlay, are not reached by the recorder).
 - **Work folder**: refused inside the repository (the copy would contain itself), checked before anything is
-  created.
-- **Dirty tree**: `GitClient.ChangedFiles(root, "HEAD")` without `.testdetta/`, the same files `td test --base HEAD`
-  would add; any refuses the audit (exit 1, with a report naming up to five).
+  created; created `0700`; the owner file (`pid`, `host`, `repository`, `started`) stays open with
+  `FileShare.None` until the folder is deleted.
+- **Dirty tree and the commit**: `HEAD` recorded first; `GitClient.ChangedFiles(root, <commit>)` without
+  `.testdetta/`, the same files `td test --base HEAD` would add; any refuses the audit (exit 1, with a report naming
+  up to five). Before and after each analysis the same check and `HEAD` again (`AuditSelector.Check`); a difference
+  stops the audit with `AuditTreeChangedException` (`stopReason: error`, the change stopped). The pipeline runs
+  with the recorded commit as its base.
 - **Baseline**: per test project in the copy, `dotnet test <project> <args>` with a report (VSTest TRX, the testing
   platform's own report option, NUnit's XML), building there unless `--no-build` is among the arguments; a
-  testing-platform project is built first, since its report option is read from its build output. Not audited, with
-  the reason in the report: a legacy project (full MSBuild), one that does not build, one that writes no report,
-  crashes or times out, one in whose report no test ran. Its time is the baseline's wall time, build included.
+  testing-platform project is built first, since its report option is read from its build output. Builds and runs
+  may take what is left of the budget; once it is spent the audit stops (`budget`) before any change. Not audited,
+  with the reason in the report: a legacy project (full MSBuild), one whose own filter cannot be joined
+  (`AuditTrial.Unjoinable`), one that does not build, one that writes no report, does not complete or times out,
+  one in whose report no test ran. Its time is the baseline's wall time, build included.
+- **Complete runs** (`AuditTestRun.Problem`): the run finished within its limit and wrote a report; its log has no
+  "Test host process crashed", "Test Run Aborted" or "The active test run was aborted" (the SDK and VSTest are
+  set to English, `DOTNET_CLI_UI_LANGUAGE=en`, `VSLANG=1033`, last, over the team's variables); its TRX outcome
+  is not `Aborted`, `Error` or `Timeout` and no run message says the run was aborted (other run messages of
+  outcome `Error` are adapters' lines, such as xUnit's "[FAIL]" for every failed test); an NUnit result is not
+  `Cancelled`; a failing exit code comes with a failed class (exit 8 of the testing platform, no test ran, is
+  not complete); and a run of the whole project reports at least as many classes as the baseline
+  (`AuditTrial.Whole`), which catches a crash whose message is in another language.
 - **Rewriting**: `MutationInjector.Inject` on the repository's assemblies in the audited outputs of the worker's
-  copy (`RepositoryAssemblies.Find`, which leaves copies that came from a NuGet package alone), backups under the
-  work folder, restored by `Mutation.Dispose` in a `using`. A member whose mutant changes no compiled code (a
+  copy (`RepositoryAssemblies.Find`, which leaves copies that came from a NuGet package alone), each detached
+  first (`AuditWorkspace.Detach`, in every copy), backups under the work folder, restored by `Mutation.Dispose`
+  after the change's result is recorded (a failed restore throws `AuditChangeFailedException` with the result). A member whose mutant changes no compiled code (a
   `flip-branch` on a member without a two-way branch, a `return-default` on a by-reference return), or whose
   assembly only unaudited projects hold, is **not reached**: listed, not counted. A member Cecil cannot rewrite is
   not reached too, with the error; a file error while rewriting or restoring stops the audit (`stopReason: error`).
-- **Time limits**: a change's run may take `max(2 min, 5 × baseline × workers)`, cut to what is left of the budget
-  (`ShadowBudget.For`); a run killed at a cut that was the budget's makes the change **stopped**. No idle limit: a
-  hung test host is killed at its time limit.
-- **Judging** as designed. A left-out class that fails alone with the change and whose run without it does not
-  complete stays a miss ("the run without it: …"). A class filter that cannot be joined with the user's own filter
-  (`TestFilter.WithinUserFilter`), or a crash outside the selection under a user filter, makes the change
-  inconclusive. `notCounted` lists the classes that failed only next to other tests or fail alone anyway.
-- **Parallel**: worker k > 1 gets a copy of the first copy made after the baseline (same binaries) and, with more
-  than one worker, its own `TMPDIR` under the work folder. One analysis at a time (`AuditSelector` holds a lock).
+- **Time limits**: a change's run may take `max(2 min, 5 × baseline × workers)`; the budget does not cut it, so a
+  change that started finishes (an audit can run past `--budget` by up to one change's runs; leave that room
+  under a CI job's timeout). No idle limit: a hung test host is killed at its time limit.
+- **Judging** as designed (`AuditTrial`: `JudgeProject`, `Incomplete`, `Part`, `ConfirmLeftOut`, `ConfirmSelected`,
+  `Verdict`). Run names in logs and hooks: `m<i>-full`, `-full-without`, `-again`, `-again-without`, `-left-out`,
+  `-left-out-without`, `-selected`, `-selected-without`, `-alone`, `-alone-without`, `-control`,
+  `-selected-alone`, `-selected-alone-without`, `-selected-control`. The classes a filtered selection left out run
+  with the user's VSTest filter joined as `(user)&(excluding)` (`AuditTrial.ExcludingWithin`); the other runners take
+  `--filter-not-class` or a tree-node filter next to the user's options (a conflicting user filter is refused up
+  front). `notCounted` lists the classes that failed only next to other tests or fail alone anyway, and a crash of a
+  whole-project selection that did not come back.
+- **Cost of the confirmations**: a caught change takes two more runs (the failing classes alone with and without
+  the change), a crash or hang one to three more (one with the change, which may run to its limit again). On the
+  test fixture a caught change took 2.2 s instead of about 1 s; on a real suite the two runs cost a test host
+  start and the failing classes' tests each, small next to the full run of the project.
+- **Parallel**: worker k > 1 gets a copy of the first copy made after the baseline (same binaries, space checked
+  first) and, with more than one worker, its own `TMPDIR` under the work folder. One analysis at a time
+  (`AuditSelector` holds a lock).
+- **Report first**: the JSON report and the summary are written before the work folder is deleted, the JSON again
+  after it with `workFolderRemoved`.
 - **Not done in v1**: generator and analyzer projects (left out of the sample, counted as `generatorMembers`),
   legacy projects, data-file mutants (`empty-file`), the evaluator's schema (every mutant is written in alone; the
   copy makes that cheap and the result the same). The owner may want a `td audit` path for generator code later.
-- **Measured**: the fixture repository of the tests (4 members, 1 test project) audits in about 8 s on this machine,
-  copy and baseline included; one change costs a full run of the projects that load it plus an analysis.
+- **Measured**: the fixture repository of the tests (3 members, 1 test project) audits in about 9 s on this machine,
+  copy and baseline included; a change that did not break anything costs a full run of the projects that load it
+  plus an analysis (1 s there), a caught or missed one two filtered runs more (2.2 s).
 
-### `testdetta-audit.json` (schema 1)
+### `testdetta-audit.json` (schema 2)
+
+Schema 2 (2026-10-07): `totals.unjudged`, `totals.worstCaseN`, `totals.worstCaseUpperBound95`; a `broken` or
+`notCounted` entry can be a part of a project (`class: null`, `part`, `crash: true`); `caughtByCrash` means a
+catch that rests on a repeated crash of the selected part; the verdict names the inconclusive and stopped counts
+and the worst case; `edits` positions come from the audited commit's text.
 
 ```jsonc
 {
-  "schema": 1,
-  "verdict": "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); target of 100 reached.",
+  "schema": 2,
+  "verdict": "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2 inconclusive, 0 stopped (worst case, counting them as misses: 95% upper bound 5.9%, n = 105); target of 100 reached.",
   "stopReason": "target",             // target | max-mutants | budget | sample | cancelled | error
   "error": "…",                       // only with an error
   "license": "No license is needed and none was read: … TestDetta made no network call.",
@@ -227,13 +327,16 @@ audit asks the sampler for its uniform order.
     "caught": 103, "missed": 0, "didNotBreak": 7, "inconclusive": 2, "notReached": 31, "stopped": 0,
     "brokeUncovered": 4,              // broke although no map said a test ran the member
     "upperBound95": 0.028666,         // MissRate.UpperBound(missed, broke); null with broke = 0
+    "unjudged": 2,                    // inconclusive + stopped
+    "worstCaseN": 105,                // broke + unjudged
+    "worstCaseUpperBound95": 0.058745, // MissRate.UpperBound(missed + unjudged, broke + unjudged); null with worstCaseN = 0
     "targetBroken": 100, "targetReached": true
   },
   "run": {
     "wallSeconds": 9120.4, "baselineSeconds": 312.0, "parallelism": 1,
     "budgetSeconds": 14400,           // null: no limit
     "maxMutants": null,
-    "workFolder": "/tmp/td-audit-4242-1a2b3c4d", "workFolderRemoved": true,
+    "workFolder": "/tmp/td-audit-4242-1a2b3c4d", "workFolderRemoved": true,   // false in the report written before the deletion
     "dotnetTestArguments": ["-c", "Release"]
   },
   "sample": {
@@ -250,7 +353,7 @@ audit asks the sampler for its uniform order.
   "mutants": [{
     "index": 7, "member": "Shop.Discount.Apply", "kind": "return-default", "file": "src/Shop/Calc.cs",
     "covered": true, "outcome": "missed",   // caught | missed | did-not-break | not-reached | inconclusive | stopped
-    "note": "…",                      // why not reached, inconclusive or stopped
+    "note": "…",                      // why not reached, inconclusive or stopped; for a miss kept after a cancellation, that
     "mutatedMethods": 1, "seconds": 38.5,
     "selectedShare": 0.12, "caughtByCrash": false,   // these four only when a project was reached
     "reached": ["tests/Shop.Tests/Shop.Tests.csproj"],
@@ -259,13 +362,17 @@ audit asks the sampler for its uniform order.
       "project": "tests/Shop.Tests/Shop.Tests.csproj", "class": "Shop.Tests.DiscountTests", "selected": false,
       "chain": { "projectMode": "Filtered", "projectReason": "…", "decision": "Skipped", "evidence": "…", "mapCommit": "9f3c…" },
       "note": "fails alone with the change and passes alone without it"
+    }, {
+      "project": "tests/Wait.Tests/Wait.Tests.csproj", "class": null, "part": "left-out", "crash": true, "selected": false,
+      "chain": { "projectMode": "Skipped", "projectReason": "…", "decision": "Skipped", "evidence": "…", "mapCommit": "9f3c…" },
+      "note": "the run did not complete with the change (timed out after 2 min) and completes without it; the selection ran none of this project"
     }],
-    "notCounted": [],                 // failed only next to other tests, or fails alone anyway
+    "notCounted": [],                 // failed only next to other tests, fails alone anyway, a crash that did not come back
     "edits": [{ "file": "src/Shop/Calc.cs", "line": 3, "column": 58, "replaces": 0, "insert": "(" }],   // misses only
     "reproduce": "td audit --member Shop.Discount.Apply --kinds return-default --max-map-age 50 --drift-fallback all"
   }],
   "reproduction": {
-    "testDettaVersion": "…", "testDettaSha256": "…", "head": "…",
+    "testDettaVersion": "…", "testDettaSha256": "…", "head": "…",   // head: the commit recorded at the start
     "maps": [{ "testProject": "…", "commit": "…", "sha256": "…" }],
     "options": ["--seed 1", "--kinds all", "--max-map-age 50", "--drift-fallback all", "-- -c Release"],
     "command": "td audit --seed 1 --kinds all --max-map-age 50 --drift-fallback all -- -c Release"
@@ -283,3 +390,12 @@ audit asks the sampler for its uniform order.
   breaking anything means 130 or more full runs; the budget (4 h) and the target bound it. Teams with long suites
   will need `--parallel` (memory permitting) or a longer budget; the report says when the target was not reached.
   Open: combining several runs into one bound (a roll-up like `td shadow report`), which needs disjoint samples.
+- **Criterion and the worst case** (open): graduation asks for the bound at most 3.0% with n at least 100. The
+  report also gives the worst case (inconclusive and stopped changes counted as misses); whether graduation should
+  ask for that to be at most 3.0% as well, or for none of them, is the owner's call.
+- **The evaluator's rules** (open, docs/backlog.md "Next"): the corpus evaluator keeps its earlier, asymmetric
+  rules for crashes and catches (unconfirmed catches count, a crash left out can leave n); `td audit` does not
+  inherit them. Changing the evaluator changes comparability with earlier rounds.
+- **Budget overrun**: a change that started finishes within its own limits, so an audit can run past `--budget`
+  by one change's runs (with a hang, a few times five baseline runs). A hard stop would bring back the bias the
+  prefix rule removes; a cancelled job counts the change as stopped instead.

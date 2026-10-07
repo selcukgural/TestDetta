@@ -138,9 +138,10 @@ Single pull requests convince nobody; a month of them does.
 - **Graduation criteria**, written in the documentation before the team starts, so the exit is not a
   sales argument: within 30 days, at least 40 pull requests with a shadow result and no unexplained miss,
   plus one `td audit` run on the team's own code with at least 100 changes that broke tests and 0 missed
-  (95% upper bound below 3%). The audit is needed because real failing pull requests are too few in 30 days
-  for a meaningful bound: with n failing pull requests and 0 misses the bound is about 3/n, so even 20 of
-  them leave 15%; the audit's 100 breaking changes bring it under 3% in one run.
+  (95% upper bound at most 3.0%, as the audit shows it: rounded up to a tenth, 2.95% at n = 100). The audit
+  is needed because real failing pull requests are too few in 30 days for a meaningful bound: with n
+  failing pull requests and 0 misses the bound is about 3/n, so even 20 of them leave 15%; the audit's 100
+  breaking changes bring it to 3.0% in one run.
 
 ## `td audit`: TestDetta's own audit on the team's code (part of v1)
 

@@ -293,7 +293,8 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
 7. **`td audit` on the team's own code** (owner, 2026-10-07: part of v1): the corpus method run on the
    customer's repository (docs/design/shadow-mode.md, "`td audit`"): IL mutants of the team's members, the
    tests run the full way, and the selection checked against every class that failed. Graduation needs one
-   run with at least 100 changes that broke tests and 0 missed (95% upper bound below 3%), because real
+   run with at least 100 changes that broke tests and 0 missed (95% upper bound at most 3.0%, shown rounded
+   up: 2.95% at n = 100), because real
    failing pull requests in 30 days are too few for a meaningful bound (about 3/n for n of them). Status
    2026-10-07: built (docs/design/audit.md): `td audit` and the Action's `mode: audit` (for a schedule, the
    report as an artifact for 90 days), no license and no network call; every mutant lives in a copy of the
@@ -301,9 +302,21 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    a cancellation, a timeout and an exception); the selection per change is `td test --base HEAD` with the
    evaluator's edit given in memory (`AnalysisOptions.WorkingTreeOverlay`); the sample is uniform over every
    member, coverage not used; stop at `--target-broken` (100), `--max-mutants`, `--budget` (4h); JSON schema 1.
-   The mutant code is shared with the evaluator through `src/TestDetta.Mutants`. Open: a first run on a real
-   team repository (and on TestDetta itself) to see the time per change; generator and legacy projects are
-   not audited yet; combining several runs into one bound.
+   The mutant code is shared with the evaluator through `src/TestDetta.Mutants`. Review fixes (2026-10-07,
+   schema 2): every doubt goes against TestDetta (a run that does not complete runs again without the
+   change: a left-out part that completes only then is a miss; a crash counts as caught only when the
+   selected part crashes again; selected failures are confirmed alone with and without the change like
+   misses; a class that ran none of its tests alone is inconclusive; a project whose own filter cannot be
+   joined with a class filter is not audited); a confirmed miss survives a later cancellation, error or
+   failed restore; the budget only stops new changes, so the judged changes are a prefix of the order; the
+   verdict shows the inconclusive and stopped counts and a worst-case bound counting them as misses; runs in
+   English, completeness from the TRX outcome, the exit code and the classes reported; MSBuild asked where
+   every project writes before anything builds (refused when outside the copy), links never written
+   through, free space checked before every copy and change, the commit pinned for every analysis, the
+   work folder 0700 with a locked owner file. Open: a first run on a real team repository (and on
+   TestDetta itself) to see the time per change; generator and legacy projects are not audited yet;
+   combining several runs into one bound; whether graduation also needs the worst-case bound at most
+   3.0% (owner).
 
 Until v1 only misses are fixed. Parked until after v1: narrowing the run-once rules, Microsoft
 code coverage next to recording, per-call third-party callbacks, the precision round (3),
@@ -311,6 +324,17 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
+- **Eval: crash and confirmation rules are not symmetric** (found in the `td audit` review 2026-10-07; owner
+  decision open, published numbers unchanged): the corpus evaluator (`SyntheticEvaluator.RunOutsideSelection`,
+  `Confirm`) confirms a class the selection left out alone with the mutant and alone without it before it
+  counts as a miss, while a class the selection ran counts as caught from the full run alone. After a full
+  run that crashed or hung, it reruns only the part the selection left out: when that passes the mutant
+  counts as caught (`CaughtByCrash`) without the selected part being run again, and when that crashes or
+  hangs too the mutant is inconclusive and leaves n. Unconfirmed catches can enter n and a crash in a part
+  left out can leave it, so the measured miss rate can lean low; how much is not measured. `td audit` now
+  uses symmetric rules (docs/design/audit.md, "Judging"); changing the evaluator the same way changes
+  comparability with earlier corpus rounds and costs more runs per caught mutant (two short ones), so it is
+  the owner's call: keep, switch with a marked break in the round history, or run both for one round.
 - **Eval: mutants do not reach MSBuild's bootstrap copy** (2026-10-06): the eval rewrites the
   assemblies in the test output folders; MSBuild tests that run the bootstrapped MSBuild
   (`ExecBootstrapedMSBuild`, about 60 methods, at most ~3% of the suite) load the copy under
