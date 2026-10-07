@@ -184,8 +184,8 @@ internal sealed record RecordSettings(string Configuration, IReadOnlyList<string
 internal sealed record AuditSettings
 {
     /// <summary>
-    /// Default of <see cref="TargetBroken"/>: the graduation criterion of shadow mode, where 0 misses bound the miss
-    /// rate below 3% at 95% confidence (docs/design/shadow-mode.md).
+    /// Default of <see cref="TargetBroken"/>: the n of shadow mode's graduation criterion (<see cref="AuditGraduation"/>),
+    /// where 0 misses bound the miss rate to 2.95% at 95% confidence, shown as 3.0% (docs/design/shadow-mode.md).
     /// </summary>
     public const int DefaultTargetBroken = 100;
 

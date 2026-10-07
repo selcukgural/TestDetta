@@ -6,17 +6,21 @@ using static TestDetta.Cli.TestRunArguments;
 namespace TestDetta.Cli;
 
 /// <summary>
-/// Writes the result of <c>td audit</c>: the verdict and the misses on the console, <c>testdetta-audit.json</c> (schema 2,
-/// docs/design/audit.md) and the Markdown job summary. Decisions are shown only for classes that ran and failed.
+/// Writes the result of <c>td audit</c>: the verdict, whether the run is shadow mode's graduation evidence, the misses and
+/// a run past the budget on the console, <c>testdetta-audit.json</c> (schema 3, docs/design/audit.md) and the Markdown job
+/// summary. Decisions are shown only for classes that ran and failed.
 /// </summary>
 internal static class AuditReport
 {
-    /// <summary>Version of the JSON report.</summary>
-    public const int Schema = 2;
+    /// <summary>
+    /// Version of the JSON report. 3 (2026-10-07): <c>graduation</c> (whether the run meets shadow mode's graduation
+    /// criterion, and why not), <c>run.overBudgetSeconds</c>, <c>run.finishedAfterBudget</c> and <c>run.overBudget</c>.
+    /// </summary>
+    public const int Schema = 3;
 
     /// <summary>What the report says about the license, for the owner and for reviewers.</summary>
     public const string License =
-        "No license is needed and none was read: the audit runs every test that can see a change and skips nothing. TestDetta made no network call.";
+        "No license is needed and none was read: the audit runs every test that can see a change and skips nothing. TestDetta itself made no network call; the dotnet builds and test runs it started may restore packages, as your own do.";
 
     /// <summary>The name of an outcome in the reports.</summary>
     /// <param name="outcome">The outcome.</param>
@@ -97,6 +101,12 @@ internal static class AuditReport
         stdout.WriteLine("td audit: " + Verdict(result));
         stdout.WriteLine($"  caught {result.Count(AuditOutcome.Caught)}, missed {result.Missed}, did not break {result.Count(AuditOutcome.DidNotBreak)}, " +
                          $"inconclusive {result.Count(AuditOutcome.Inconclusive)}, not reached {result.Count(AuditOutcome.NotReached)}, stopped {result.Count(AuditOutcome.Stopped)}");
+        stdout.WriteLine($"  graduation evidence: {AuditGraduation.Judge(result).Line}");
+        if (OverBudget(result) is { } over)
+        {
+            stdout.WriteLine($"  {over}");
+        }
+
         foreach (var mutant in result.Mutants.Where(static m => m.Outcome == AuditOutcome.Missed))
         {
             stdout.WriteLine($"  MISS #{mutant.Index} {mutant.Member} ({MutantKinds.Name(mutant.Target.Kind)}, {mutant.File}):");
@@ -179,11 +189,41 @@ internal static class AuditReport
         json.WriteBoolean("targetReached", result.TargetReached);
         json.WriteEndObject();
 
+        var graduation = AuditGraduation.Judge(result);
+        json.WriteStartObject("graduation");
+        json.WriteBoolean("met", graduation.Met);
+        json.WriteString("status", graduation.Status);
+        json.WriteString("line", graduation.Line);
+        WriteStrings(json, "reasons", graduation.Reasons);
+        json.WriteString("criterion", AuditGraduation.Criterion);
+        json.WriteEndObject();
+
         json.WriteStartObject("run");
         json.WriteNumber("wallSeconds", Math.Round(result.Seconds, 1));
         json.WriteNumber("baselineSeconds", Math.Round(result.BaselineSeconds, 1));
         json.WriteNumber("parallelism", result.Parallelism);
         WriteLimit(json, "budgetSeconds", result.Settings.Budget);
+        if (result.Settings.Budget is null)
+        {
+            json.WriteNull("overBudgetSeconds");
+        }
+        else
+        {
+            json.WriteNumber("overBudgetSeconds", Math.Round(result.OverBudgetSeconds, 1));
+        }
+
+        json.WriteStartArray("finishedAfterBudget");
+        foreach (var index in result.FinishedAfterBudget)
+        {
+            json.WriteNumberValue(index);
+        }
+
+        json.WriteEndArray();
+        if (OverBudget(result) is { } over)
+        {
+            json.WriteString("overBudget", over);
+        }
+
         if (result.Settings.MaxMutants is { } max)
         {
             json.WriteNumber("maxMutants", max);
@@ -413,6 +453,14 @@ internal static class AuditReport
         writer.WriteLine();
         writer.WriteLine("The worst case counts every inconclusive and stopped change as one that broke tests and was missed.");
         writer.WriteLine();
+        writer.WriteLine($"**Graduation evidence** ({AuditGraduation.Criterion}): {AuditGraduation.Judge(result).Line}.");
+        writer.WriteLine();
+        if (OverBudget(result) is { } over)
+        {
+            writer.WriteLine(over);
+            writer.WriteLine();
+        }
+
         var misses = result.Mutants.Where(static m => m.Outcome == AuditOutcome.Missed).ToList();
         if (misses.Count > 0)
         {
@@ -449,8 +497,39 @@ internal static class AuditReport
     /// bound shown rounded to the nearest tenth could read lower than it is.
     /// </summary>
     /// <param name="share">From 0 to 1.</param>
-    internal static string Percent(double share) =>
-        (Math.Max(0, Math.Ceiling((share * 1000) - 1e-9)) / 10).ToString("0.0", CultureInfo.InvariantCulture) + "%";
+    internal static string Percent(double share) => (Tenths(share) / 10.0).ToString("0.0", CultureInfo.InvariantCulture) + "%";
+
+    /// <summary>A share in tenths of a percent, rounded up as <see cref="Percent"/> shows it: 30 for 0.02951.</summary>
+    /// <param name="share">From 0 to 1.</param>
+    internal static int Tenths(double share) => (int)Math.Max(0, Math.Ceiling((share * 1000) - 1e-9));
+
+    /// <summary>
+    /// Why and by how much the audit ran past its budget, or null within it (less than a second over counts as within).
+    /// The budget only stops new changes: a change that started finishes within its own run limits, so the judged
+    /// changes stay a prefix of the sample, and a stop in the middle of a change (most often a miss, which takes more
+    /// runs) cannot drop it.
+    /// </summary>
+    /// <param name="result">The result.</param>
+    internal static string? OverBudget(AuditResult result)
+    {
+        if (result.Settings.Budget is not { } budget || result.OverBudgetSeconds < 1)
+        {
+            return null;
+        }
+
+        var over = $"The audit ended {Durations.Format(result.OverBudgetSeconds)} after its {Durations.DescribeLimit(budget)} budget";
+        var finished = result.FinishedAfterBudget;
+        if (finished.Count == 0)
+        {
+            return $"{over}: steps the budget does not cut (copying the working tree, preparing the copies, the analyses, writing the report) " +
+                   "ran past it; leave room for that under the job's timeout-minutes.";
+        }
+
+        var changes = finished.Count == 1 ? $"change #{finished[0]} was" : $"changes {string.Join(", ", finished.Select(static i => $"#{i}"))} were";
+        return $"{over}: {changes} running when it ran out and finished within {(finished.Count == 1 ? "its" : "their")} own run limits, " +
+               "because the budget only stops new changes, so the judged changes stay a prefix of the sample and none is dropped half-way; " +
+               "leave room for that under the job's timeout-minutes.";
+    }
 
     /// <summary>Writes a time limit in seconds, or null for none.</summary>
     /// <param name="json">The writer.</param>

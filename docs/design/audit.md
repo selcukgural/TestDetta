@@ -2,7 +2,9 @@
 
 Status: designed and built 2026-10-07 (owner decision the same day: part of v1 and of shadow mode's graduation
 criteria, docs/design/shadow-mode.md); reviewed and fixed the same day (judging, the work folder, the commit;
-schema 2). "As built" at the end records where the build differs from the plan.
+schema 2). Owner decisions later the same day (schema 3): graduation asks for the worst-case bound at most 3.0%,
+and the report states whether a run meets it and why not; a run past the budget keeps the prefix rule and says
+by how much and why. "As built" at the end records where the build differs from the plan.
 
 ## Problem
 
@@ -10,13 +12,22 @@ Shadow mode shows TestDetta on a team's real pull requests, but real failing pul
 them and no miss the miss rate is bounded only to about 3/n, so a month gives a weak bound. The corpus evaluation
 gives hundreds of failures per repository by breaking code on purpose (IL mutants) and checking that the
 selection contains every test class that failed. `td audit` runs that method on the team's own repository, on
-their CI runner or a developer machine, so the graduation criterion "at least 100 changes that broke tests and
-0 missed (95% upper bound at most 3.0%)" can be met in one run. Bounds are shown rounded up to a tenth of a
-percent, so a shown bound is never below the real one: n = 100 with no miss is 2.95%, shown as 3.0%, which is
-why the criterion says "at most 3.0%" (n = 102 is the first to show 2.9%).
+their CI runner or a developer machine, so the graduation criterion can be met in one run: **at least 100
+changes that broke tests, 0 missed, and the worst-case 95% upper bound at most 3.0%** (owner, 2026-10-07). The
+worst case counts every inconclusive and stopped change as one that broke tests and was missed ("Judging"): a
+change the runs could not judge might be a miss, so a run that leaves many unjudged must not pass on the judged
+ones alone. Bounds are shown rounded up to a tenth of a percent, so a shown bound is never below the real one:
+n = 100 with no miss is 2.95%, shown as 3.0%, which is why the criterion says "at most 3.0%" (n = 102 is the first
+to show 2.9%); the criterion compares the shown figure. With no unjudged change the worst case is the bound
+itself; one inconclusive change needs at least 156 changes that broke tests next to it (1 miss in 157 is 2.99%,
+shown as 3.0%). A run with
+`--member` tests the members asked for, not the sample, and is never the evidence; `--target-broken` does not
+change the criterion. The evidence is one run as it came out: the report gives the seed, and a run repeated with
+other seeds until one passes is not the evidence.
 
 > On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2 inconclusive, 0 stopped
 > (worst case, counting them as misses: 95% upper bound 5.9%, n = 105); target of 100 reached.
+> Graduation evidence: no: worst case 5.9% > 3.0% because 2 inconclusive and 0 stopped are counted as misses
 
 ## Command
 
@@ -28,7 +39,7 @@ td audit [options] [-- <dotnet test arguments>]
 | --- | --- | --- |
 | `--target-broken <n>` | 100 | Stop once n changes broke tests (conclusively, see "Judging"). |
 | `--max-mutants <n>` | no limit | Stop after n changes that ran tests. |
-| `--budget <time>` | 4h | Start no change after this long; a change still running finishes within its own run limits and counts (the audit can run past the budget by that change). `90s`, `15m`, `1h30m`, a plain number of minutes, `0`/`none` for no limit (`Durations.TryParseLimit`, at most 168h). The copy, the baseline's builds and runs draw from it too. |
+| `--budget <time>` | 4h | Start no change after this long; a change still running finishes within its own run limits and counts (the audit can run past the budget by that change; the report says by how much and which changes). `90s`, `15m`, `1h30m`, a plain number of minutes, `0`/`none` for no limit (`Durations.TryParseLimit`, at most 168h). The copy, the baseline's builds and runs draw from it too. Leave room under a CI job's `timeout-minutes` (below, "Stop conditions"). |
 | `--parallel <n>` | 1 | Changes tested at once, each in its own working copy. Every one runs test hosts: memory grows with n (the machine once ran out of memory with parallel test hosts), so 1 unless the runner has room. |
 | `--seed <n>` | 1 | Seed of the sample order. |
 | `--kinds <list>` | all | `throw`, `return-default`, `flip-branch`, `field-value`, or `all`. |
@@ -58,10 +69,12 @@ audit could not run or was cancelled (the reason is in the report when one could
   (`.testdetta/cache`), the report by default, and with `--maps-dir` the restored maps, as `td test` does.
 - **Executes** `cp` (the copy), `dotnet test`, `dotnet build` (testing-platform projects) and `dotnet msbuild`
   (a driver project that only evaluates where the projects write) in the copy, `git` read-only.
-- **No license and no network call.** Owner decision 2026-10-07: shadow mode needs no license because it skips
-  nothing; the audit skips nothing either (every test that could see a change runs, with and without it), so it
-  is dispatched before the license refresh like `td test --shadow`: no license variable or file is read, nothing
-  is refreshed or sent. The report says so. Like shadow mode, it shows decisions only for classes that ran and
+- **No license, and no network call of TestDetta's own.** Owner decision 2026-10-07: shadow mode needs no license
+  because it skips nothing; the audit skips nothing either (every test that could see a change runs, with and
+  without it), so it is dispatched before the license refresh like `td test --shadow`: no license variable or file
+  is read, nothing is refreshed or sent. The `dotnet build` and `dotnet test` runs it starts restore packages as
+  the team's own do (from the local cache, or from the team's feeds when a package is missing there). The report
+  says both. Like shadow mode, it shows decisions only for classes that ran and
   failed, never a selection for tests that did not run.
 
 ## Mutating binaries without touching the team's build output
@@ -215,11 +228,28 @@ In order of checking before each change: cancelled; `--target-broken` reached; `
 spent (it starts with the command: copy and baseline included); sample exhausted; less than 1 GB free on the work
 folder's disk (an error). The verdict names the reason, and says when the target was not reached.
 
+**Past the budget** (owner, 2026-10-07: keep the rule, report it): the budget only decides whether a further change
+starts. The changes running when it runs out finish within their own run limits (a run may take
+`max(2 min, 5 × baseline × workers)`, and a change takes several runs: the full runs, then the confirmations), so
+the audit can end after its budget; a hard stop would drop the change in the middle, most often a miss (it takes
+more runs), and break the prefix rule. When it ends at least a second after the budget, the console, the summary
+and the JSON (`run.overBudgetSeconds`, `run.finishedAfterBudget`, `run.overBudget`) say by how much and why: the
+changes, by index, that were running when it ran out, or, with none, the steps the budget does not cut (copying the
+working tree and preparing the copies, the analyses, writing the report). Leave that room under a CI job's
+`timeout-minutes`: at least one change's runs of the projects that load it, a few times the slowest baseline run;
+a job killed at its timeout cancels the audit, and the change then running is reported as stopped.
+
 ## Report
 
 Console (the verdict, then one line per change as it finishes), Markdown summary, and `testdetta-audit.json`
 (schema below). The verdict line, the summary's table and the JSON totals give the inconclusive and stopped
-counts and the worst-case bound next to the bound. Per miss: the member and its file, the kind, the failing classes, the decision chain (what
+counts and the worst-case bound next to the bound. One line, in all three, says whether the run is the graduation
+evidence and, if not, every condition it misses (`AuditGraduation`): "yes: 103 changes broke tests (100 needed), 0
+missed, worst case 2.9% (at most 3.0% needed)", "not yet: 87 changes broke tests, 100 needed" (only n is short),
+"no: 1 missed", "no: worst case 4.1% > 3.0% because 5 inconclusive and 0 stopped are counted as misses", "no: only
+the members asked for with --member were audited, not the sample"; several are joined with "; ". A "yes" adds that
+it covers the audited test projects only when some are not audited. A run past its budget gets one more line
+("Past the budget"). Per miss: the member and its file, the kind, the failing classes, the decision chain (what
 TestDetta saw change, how the test project was decided and why, the class's decision and its evidence, the map's
 commit), the edit to make by hand, and the command that reproduces it (`td audit --member … --kinds …`).
 
@@ -282,7 +312,11 @@ stricter than the evaluator's on crashes and catches, and the evaluator keeps it
   not reached too, with the error; a file error while rewriting or restoring stops the audit (`stopReason: error`).
 - **Time limits**: a change's run may take `max(2 min, 5 × baseline × workers)`; the budget does not cut it, so a
   change that started finishes (an audit can run past `--budget` by up to one change's runs; leave that room
-  under a CI job's timeout). No idle limit: a hung test host is killed at its time limit.
+  under a CI job's timeout). No idle limit: a hung test host is killed at its time limit. `AuditRun.Progress` notes
+  every change that ends after the budget ran out (`AuditResult.FinishedAfterBudget`); `AuditReport.OverBudget`
+  writes the line from it and the wall time.
+- **Graduation evidence**: `AuditGraduation.Judge` (constants `BrokeNeeded` 100 and `WorstCaseTenthsAtMost` 30,
+  compared with the figure as shown, `AuditReport.Tenths`).
 - **Judging** as designed (`AuditTrial`: `JudgeProject`, `Incomplete`, `Part`, `ConfirmLeftOut`, `ConfirmSelected`,
   `Verdict`). Run names in logs and hooks: `m<i>-full`, `-full-without`, `-again`, `-again-without`, `-left-out`,
   `-left-out-without`, `-selected`, `-selected-without`, `-alone`, `-alone-without`, `-control`,
@@ -307,20 +341,22 @@ stricter than the evaluator's on crashes and catches, and the evaluator keeps it
   copy and baseline included; a change that did not break anything costs a full run of the projects that load it
   plus an analysis (1 s there), a caught or missed one two filtered runs more (2.2 s).
 
-### `testdetta-audit.json` (schema 2)
+### `testdetta-audit.json` (schema 3)
 
 Schema 2 (2026-10-07): `totals.unjudged`, `totals.worstCaseN`, `totals.worstCaseUpperBound95`; a `broken` or
 `notCounted` entry can be a part of a project (`class: null`, `part`, `crash: true`); `caughtByCrash` means a
 catch that rests on a repeated crash of the selected part; the verdict names the inconclusive and stopped counts
-and the worst case; `edits` positions come from the audited commit's text.
+and the worst case; `edits` positions come from the audited commit's text. Schema 3 (2026-10-07): `graduation`
+(whether the run meets the graduation criterion, and why not); `run.overBudgetSeconds`, `run.finishedAfterBudget`
+and `run.overBudget`. Nothing else changed meaning.
 
 ```jsonc
 {
-  "schema": 2,
+  "schema": 3,
   "verdict": "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2 inconclusive, 0 stopped (worst case, counting them as misses: 95% upper bound 5.9%, n = 105); target of 100 reached.",
   "stopReason": "target",             // target | max-mutants | budget | sample | cancelled | error
   "error": "…",                       // only with an error
-  "license": "No license is needed and none was read: … TestDetta made no network call.",
+  "license": "No license is needed and none was read: … TestDetta itself made no network call; the dotnet builds and test runs it started may restore packages, as your own do.",
   "totals": {
     "changes": 112,                   // changes that ran tests to a judgement (caught + missed + didNotBreak + inconclusive)
     "broke": 103,                     // n: caught + missed
@@ -332,9 +368,19 @@ and the worst case; `edits` positions come from the audited commit's text.
     "worstCaseUpperBound95": 0.058745, // MissRate.UpperBound(missed + unjudged, broke + unjudged); null with worstCaseN = 0
     "targetBroken": 100, "targetReached": true
   },
+  "graduation": {
+    "met": false,
+    "status": "no",                   // met | not-yet (only too few changes broke tests) | no
+    "line": "no: worst case 5.9% > 3.0% because 2 inconclusive and 0 stopped are counted as misses",
+    "reasons": ["worst case 5.9% > 3.0% because 2 inconclusive and 0 stopped are counted as misses"],   // empty when met
+    "criterion": "at least 100 changes that broke tests, 0 missed, and the worst-case 95% upper bound (inconclusive and stopped changes counted as misses) at most 3.0% as shown, rounded up"
+  },
   "run": {
     "wallSeconds": 9120.4, "baselineSeconds": 312.0, "parallelism": 1,
     "budgetSeconds": 14400,           // null: no limit
+    "overBudgetSeconds": 0,           // how far the audit ended after the budget; null without a budget
+    "finishedAfterBudget": [],        // indexes of the changes running when the budget ran out, which finished after it
+    // "overBudget": "The audit ended 12 m 4 s after its 4 h budget: change #112 was running when …",   // only when 1 s or more over
     "maxMutants": null,
     "workFolder": "/tmp/td-audit-4242-1a2b3c4d", "workFolderRemoved": true,   // false in the report written before the deletion
     "dotnetTestArguments": ["-c", "Release"]
@@ -382,7 +428,7 @@ and the worst case; `edits` positions come from the audited commit's text.
 
 ### For the owner
 
-- **No license, no network** (as decided for shadow mode): the audit reveals decisions only for classes that ran
+- **No license, no network call of its own** (as decided for shadow mode): the audit reveals decisions only for classes that ran
   and failed with a change, never a selection for a pull request. Someone could still learn from it which test
   classes cover which member; that is what a coverage map already says, on their own machine.
 - **Cost**: a change runs every test project that loads the member's assembly, completely; on a large suite with
@@ -390,12 +436,12 @@ and the worst case; `edits` positions come from the audited commit's text.
   breaking anything means 130 or more full runs; the budget (4 h) and the target bound it. Teams with long suites
   will need `--parallel` (memory permitting) or a longer budget; the report says when the target was not reached.
   Open: combining several runs into one bound (a roll-up like `td shadow report`), which needs disjoint samples.
-- **Criterion and the worst case** (open): graduation asks for the bound at most 3.0% with n at least 100. The
-  report also gives the worst case (inconclusive and stopped changes counted as misses); whether graduation should
-  ask for that to be at most 3.0% as well, or for none of them, is the owner's call.
+- **Criterion and the worst case** (decided 2026-10-07): graduation asks for n at least 100, 0 missed, and the
+  worst-case bound at most 3.0% as shown; the report says per run whether it meets it and why not.
 - **The evaluator's rules** (open, docs/backlog.md "Next"): the corpus evaluator keeps its earlier, asymmetric
   rules for crashes and catches (unconfirmed catches count, a crash left out can leave n); `td audit` does not
   inherit them. Changing the evaluator changes comparability with earlier rounds.
-- **Budget overrun**: a change that started finishes within its own limits, so an audit can run past `--budget`
-  by one change's runs (with a hang, a few times five baseline runs). A hard stop would bring back the bias the
-  prefix rule removes; a cancelled job counts the change as stopped instead.
+- **Budget overrun** (decided 2026-10-07: keep the rule, report it): a change that started finishes within its
+  own limits, so an audit can run past `--budget` by one change's runs (with a hang, a few times five baseline
+  runs). A hard stop would bring back the bias the prefix rule removes; a cancelled job counts the change as
+  stopped instead. The report says by how much and why ("Past the budget").

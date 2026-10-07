@@ -137,11 +137,13 @@ Single pull requests convince nobody; a month of them does.
   History lives in CI artifacts for v1 (no setup); a branch or the hosted tier may come later.
 - **Graduation criteria**, written in the documentation before the team starts, so the exit is not a
   sales argument: within 30 days, at least 40 pull requests with a shadow result and no unexplained miss,
-  plus one `td audit` run on the team's own code with at least 100 changes that broke tests and 0 missed
-  (95% upper bound at most 3.0%, as the audit shows it: rounded up to a tenth, 2.95% at n = 100). The audit
-  is needed because real failing pull requests are too few in 30 days for a meaningful bound: with n
-  failing pull requests and 0 misses the bound is about 3/n, so even 20 of them leave 15%; the audit's 100
-  breaking changes bring it to 3.0% in one run.
+  plus one `td audit` run on the team's own code with at least 100 changes that broke tests, 0 missed, and
+  the worst-case 95% upper bound at most 3.0% (owner, 2026-10-07): the worst case counts every inconclusive
+  and stopped change as a miss, and the figure is compared as the audit shows it, rounded up to a tenth
+  (2.95% at n = 100 with none unjudged). The audit report says in one line whether the run meets this and,
+  if not, why (docs/design/audit.md, "Report"). The audit is needed because real failing pull requests are
+  too few in 30 days for a meaningful bound: with n failing pull requests and 0 misses the bound is about
+  3/n, so even 20 of them leave 15%; the audit's 100 breaking changes bring it to 3.0% in one run.
 
 ## `td audit`: TestDetta's own audit on the team's code (part of v1)
 
@@ -154,7 +156,8 @@ runners, so it costs their CI minutes: off by default, with a cap. It is part of
 because the graduation criteria need one run of it. Built 2026-10-07 (`td audit`, Action `mode: audit`); design and as built:
 docs/design/audit.md (the team's build output is never written: every mutant lives in a copy of the working
 tree; the selection per change is `td test`'s own, from the team's maps; the sample is uniform, not weighted
-toward covered members; no license and no network call).
+toward covered members; no license, and no network call of TestDetta's own: the builds and test runs it starts
+restore packages as the team's own do).
 
 ## Next step after shadow: run first, then the rest
 

@@ -202,6 +202,15 @@ internal sealed record AuditResult(
     /// <summary>Changes tested at once.</summary>
     public int Parallelism { get; init; } = 1;
 
+    /// <summary>
+    /// Changes (by index) that were running when the budget ran out and finished after it, within their own run limits:
+    /// the budget only stops new changes, so the judged changes stay a prefix of the sample.
+    /// </summary>
+    public IReadOnlyList<int> FinishedAfterBudget { get; init; } = [];
+
+    /// <summary>How far the audit ran past its budget, in seconds; 0 within it or without a budget.</summary>
+    public double OverBudgetSeconds => Settings.Budget is { } budget && Seconds > budget.TotalSeconds ? Seconds - budget.TotalSeconds : 0;
+
     /// <summary>Changes that ran tests to a judgement.</summary>
     public int Changes => Mutants.Count(static m => m.Ran);
 

@@ -287,17 +287,18 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    failing tests, and a class that passes alone is checked in its full-run context before it is called
    flaky; reruns write only into TestDetta's folder and the base rerun builds on its own; an analysis time
    limit; Ctrl+C and SIGTERM clean up. Graduation: within 30 days, 40 pull requests with a shadow result and
-   no unexplained miss, plus one `td audit` run (item 7). Open: the roll-up (`td shadow report`), the
+   no unexplained miss, plus one `td audit` run that meets the audit's criterion (item 7). Open: the roll-up (`td shadow report`), the
    shadow-mode and reviewer pages, replaying real pull request histories before a partner sees it; the base
    worktree does not see files above the repository root.
 7. **`td audit` on the team's own code** (owner, 2026-10-07: part of v1): the corpus method run on the
    customer's repository (docs/design/shadow-mode.md, "`td audit`"): IL mutants of the team's members, the
    tests run the full way, and the selection checked against every class that failed. Graduation needs one
-   run with at least 100 changes that broke tests and 0 missed (95% upper bound at most 3.0%, shown rounded
-   up: 2.95% at n = 100), because real
-   failing pull requests in 30 days are too few for a meaningful bound (about 3/n for n of them). Status
+   run with at least 100 changes that broke tests, 0 missed, and the worst-case 95% upper bound (inconclusive
+   and stopped changes counted as misses) at most 3.0% as shown, rounded up (owner, 2026-10-07; 2.95% at
+   n = 100 with none unjudged); the report says per run whether it meets that and why not. The audit is needed
+   because real failing pull requests in 30 days are too few for a meaningful bound (about 3/n for n of them). Status
    2026-10-07: built (docs/design/audit.md): `td audit` and the Action's `mode: audit` (for a schedule, the
-   report as an artifact for 90 days), no license and no network call; every mutant lives in a copy of the
+   report as an artifact for 90 days), no license and no network call of its own; every mutant lives in a copy of the
    working tree, so the team's sources and build output are only read (tested byte for byte after a normal run,
    a cancellation, a timeout and an exception); the selection per change is `td test --base HEAD` with the
    evaluator's edit given in memory (`AnalysisOptions.WorkingTreeOverlay`); the sample is uniform over every
@@ -315,8 +316,9 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    through, free space checked before every copy and change, the commit pinned for every analysis, the
    work folder 0700 with a locked owner file. Open: a first run on a real team repository (and on
    TestDetta itself) to see the time per change; generator and legacy projects are not audited yet;
-   combining several runs into one bound; whether graduation also needs the worst-case bound at most
-   3.0% (owner).
+   combining several runs into one bound. Decided 2026-10-07 (schema 3): graduation needs the worst-case
+   bound at most 3.0%, and the report says whether a run meets it and why not; a run past `--budget` keeps
+   the prefix rule and the report says by how much and which changes ran on.
 
 Until v1 only misses are fixed. Parked until after v1: narrowing the run-once rules, Microsoft
 code coverage next to recording, per-call third-party callbacks, the precision round (3),

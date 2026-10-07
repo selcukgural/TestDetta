@@ -11,7 +11,8 @@ namespace TestDetta.Cli;
 /// team's library code are broken one at a time by the evaluator's IL mutants, in a copy of the working tree (the
 /// team's sources and build output are only read); every audited test project that can load a change runs completely;
 /// and TestDetta's selection for that change, made as <c>td test</c> makes it from the team's maps, must contain every
-/// class that broke. Needs no license and makes no network call: like shadow mode it skips nothing.
+/// class that broke. Needs no license, and TestDetta itself makes no network call (the builds and test runs it starts may restore
+/// packages as the team's own do): like shadow mode it skips nothing.
 /// </summary>
 /// <param name="loggerFactory">Creates the loggers.</param>
 /// <param name="stdout">Receives progress and the report.</param>
@@ -96,6 +97,7 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
             BaselineSeconds = state.BaselineSeconds,
             WorkFolder = state.Workspace?.Folder,
             Parallelism = options.Audit.Parallelism,
+            FinishedAfterBudget = [.. state.FinishedAfterBudget.Order()],
         };
 
     /// <summary>What the audit has found so far; the report is written from it however the audit ends.</summary>
@@ -131,6 +133,9 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
 
         /// <summary>Wall time of the baseline.</summary>
         public double BaselineSeconds { get; set; }
+
+        /// <summary>Changes that finished after the budget ran out (they had started before), for the report.</summary>
+        public List<int> FinishedAfterBudget { get; } = [];
     }
 
     /// <summary>A reason the audit does not run, for the user.</summary>
@@ -232,7 +237,7 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
             workers.Count,
             new AuditStopRules(audit.TargetBroken, audit.MaxMutants, budget) { Healthy = workspace.LowSpace },
             (worker, index, target) => trial.Run(workers[worker], index, target),
-            mutant => Progress(mutant, state),
+            mutant => Progress(mutant, state, budget),
             cancel);
         state.Mutants = mutants;
         state.Stop = stop;
@@ -448,12 +453,21 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         return new AuditWorker(copy, backups, variables);
     }
 
-    /// <summary>Prints one finished change and keeps it for a report written after a failure.</summary>
+    /// <summary>
+    /// Prints one finished change and keeps it for a report written after a failure; a change that ends after the budget
+    /// ran out (it started before) is noted, so the report can say why the audit ran past its budget.
+    /// </summary>
     /// <param name="mutant">The change.</param>
     /// <param name="state">The state that collects them.</param>
-    private void Progress(AuditMutant mutant, State state)
+    /// <param name="budget">The time budget.</param>
+    private void Progress(AuditMutant mutant, State state, ShadowBudget budget)
     {
         state.Mutants.Add(mutant);
+        if (budget.RanOut && mutant.Outcome != AuditOutcome.Stopped)
+        {
+            state.FinishedAfterBudget.Add(mutant.Index);
+        }
+
         var broke = state.Mutants.Count(static m => m.Broke);
         stdout.WriteLine($"td audit: [{broke} broke] #{mutant.Index} {mutant.Member} ({MutantKinds.Name(mutant.Target.Kind)}): {AuditReport.Name(mutant.Outcome)}" +
                          (mutant.Outcome == AuditOutcome.Missed ? $", MISSED {string.Join(", ", mutant.Broken.Where(static c => !c.Selected).Select(static c => c.Name))}" : string.Empty) +

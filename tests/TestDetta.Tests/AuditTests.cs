@@ -95,8 +95,15 @@ public sealed class AuditTests : IDisposable
 
         Assert.True(exit == 3, stdout.ToString());
         var report = Read();
-        Assert.Equal(2, report.GetProperty("schema").GetInt32());
+        Assert.Equal(3, report.GetProperty("schema").GetInt32());
         Assert.StartsWith("On your code: 3 changes, 2 broke tests, 1 MISSED (95% upper bound", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
+        var graduation = report.GetProperty("graduation");
+        Assert.False(graduation.GetProperty("met").GetBoolean());
+        Assert.Equal("no", graduation.GetProperty("status").GetString());
+        Assert.Equal("no: 1 missed; only the members asked for with --member were audited, not the sample; 2 changes broke tests, 100 needed", graduation.GetProperty("line").GetString());
+        Assert.Contains("graduation evidence: no: 1 missed", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, report.GetProperty("run").GetProperty("overBudgetSeconds").GetDouble());
+        Assert.False(report.GetProperty("run").TryGetProperty("overBudget", out _));
         Assert.Equal("sample", report.GetProperty("stopReason").GetString());
         Assert.Contains("No license is needed", report.GetProperty("license").GetString(), StringComparison.Ordinal);
         var totals = report.GetProperty("totals");

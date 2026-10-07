@@ -422,6 +422,74 @@ public sealed class AuditUnitTests
     }
 
     [Fact]
+    public void Graduation_evidence_needs_100_changes_that_broke_tests_no_miss_and_the_worst_case_at_most_3_0_percent_as_shown()
+    {
+        Assert.True(CliOptions.TryParse(["audit"], "/repo", out var options, out _));
+        AuditResult Run(int caught, int missed = 0, int inconclusive = 0, int stopped = 0, AuditSettings? settings = null)
+        {
+            var outcomes = Enumerable.Repeat(AuditOutcome.Caught, caught).Concat(Enumerable.Repeat(AuditOutcome.Missed, missed))
+                .Concat(Enumerable.Repeat(AuditOutcome.Inconclusive, inconclusive)).Concat(Enumerable.Repeat(AuditOutcome.Stopped, stopped)).ToList();
+            var sample = Sample(outcomes.Count);
+            return new AuditResult("/repo", "target", [.. outcomes.Select((o, i) => Mutant(i + 1, sample[i], o))], [], settings ?? options.Audit,
+                new AuditReproduction("1.0", null, null, [], [], "td audit"));
+        }
+
+        var met = AuditGraduation.Judge(Run(100));
+        Assert.True(met.Met);
+        Assert.Equal("met", met.Status);
+        Assert.Equal("yes: 100 changes broke tests (100 needed), 0 missed, worst case 3.0% (at most 3.0% needed)", met.Line);
+
+        Assert.Equal("not yet: 87 changes broke tests, 100 needed", AuditGraduation.Judge(Run(87)).Line);
+        Assert.Equal("not-yet", AuditGraduation.Judge(Run(87)).Status);
+        Assert.Equal("no: 1 missed", AuditGraduation.Judge(Run(120, missed: 1)).Line);
+
+        // 5 unjudged changes next to 100 caught: the worst case counts 5 misses in 105, far above 3.0%.
+        var worst = AuditGraduation.Judge(Run(100, inconclusive: 4, stopped: 1));
+        Assert.Equal("no", worst.Status);
+        Assert.Equal("no: worst case 9.8% > 3.0% because 4 inconclusive and 1 stopped are counted as misses", worst.Line);
+
+        // One inconclusive change is outweighed by enough judged ones: 1 of 201 is 2.4% in the worst case.
+        Assert.True(AuditGraduation.Judge(Run(200, inconclusive: 1)).Met);
+
+        // n = 99 with no miss shows 3.0% as well, but n is short.
+        Assert.Equal("not yet: 99 changes broke tests, 100 needed", AuditGraduation.Judge(Run(99)).Line);
+
+        var members = AuditGraduation.Judge(Run(150, settings: options.Audit with { Members = ["Lib.Code.M1"] }));
+        Assert.Equal("no: only the members asked for with --member were audited, not the sample", members.Line);
+
+        // A lower target does not lower the criterion.
+        Assert.Equal("not yet: 50 changes broke tests, 100 needed", AuditGraduation.Judge(Run(50, settings: options.Audit with { TargetBroken = 50 })).Line);
+    }
+
+    [Fact]
+    public void An_audit_that_ends_after_its_budget_says_by_how_much_and_which_changes_ran_on()
+    {
+        Assert.True(CliOptions.TryParse(["audit", "--budget", "10m"], "/repo", out var options, out _));
+        var sample = Sample(3);
+        var result = new AuditResult("/repo", "budget", [.. sample.Select((t, i) => Mutant(i + 1, t, AuditOutcome.Caught))], [], options.Audit,
+            new AuditReproduction("1.0", null, null, [], [], "td audit")) { Seconds = 754, FinishedAfterBudget = [3] };
+
+        Assert.Equal(154, result.OverBudgetSeconds);
+        Assert.Equal(
+            "The audit ended 2 m 34 s after its 10 min budget: change #3 was running when it ran out and finished within its own run limits, " +
+            "because the budget only stops new changes, so the judged changes stay a prefix of the sample and none is dropped half-way; " +
+            "leave room for that under the job's timeout-minutes.",
+            AuditReport.OverBudget(result));
+        Assert.Contains("changes #2, #3 were running", AuditReport.OverBudget(result with { FinishedAfterBudget = [2, 3] }), StringComparison.Ordinal);
+        Assert.Contains("steps the budget does not cut", AuditReport.OverBudget(result with { FinishedAfterBudget = [] }), StringComparison.Ordinal);
+        Assert.Null(AuditReport.OverBudget(result with { Seconds = 600.5 }));
+        Assert.Null(AuditReport.OverBudget(result with { Settings = options.Audit with { Budget = null } }));
+
+        var console = new StringWriter();
+        AuditReport.WriteConsole(result, options, console);
+        Assert.Contains("  The audit ended 2 m 34 s after its 10 min budget: change #3", console.ToString(), StringComparison.Ordinal);
+        var markdown = new StringWriter();
+        AuditReport.WriteMarkdown(result, options, markdown);
+        Assert.Contains("The audit ended 2 m 34 s after its 10 min budget", markdown.ToString(), StringComparison.Ordinal);
+        Assert.Contains("**Graduation evidence** (at least 100 changes that broke tests, 0 missed, and the worst-case", markdown.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_bound_is_shown_rounded_up_so_100_changes_and_no_miss_read_as_at_most_3_0_percent()
     {
         Assert.Equal("3.0%", AuditReport.Percent(TestDetta.Mutants.MissRate.UpperBound(0, 100)));   // 2.951%
