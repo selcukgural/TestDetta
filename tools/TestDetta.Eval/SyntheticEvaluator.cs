@@ -59,6 +59,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         var mutants = new List<SyntheticMutant>();
         var started = System.Diagnostics.Stopwatch.StartNew();
+        List<string> incidents = [];
+        List<MapCount> mapCounts = [];
         try
         {
             // What the tests do depends on the SDK and runtime too, so a toolchain has its own outcomes.
@@ -85,11 +87,20 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             }
 
             var maps = _steps.RecordAt(sha);
+            incidents = _steps.Incidents(sha, maps);
+            mapCounts = [.. maps.Values
+                .OrderBy(static m => m.TestProject, StringComparer.Ordinal)
+                .Select(static m => new MapCount(Path.GetFileNameWithoutExtension(m.TestProject), m.Classes.Count, m.FailedClasses?.Count))];
             workspace.Git.Checkout(sha);
             if (settings.ExplainOnly)
             {
                 Explain(sha, maps, request);
-                return new SyntheticRun(sha, maps.Values.Sum(static m => m.Classes.Count), 0, [], null) { Seconds = started.Elapsed.TotalSeconds };
+                return new SyntheticRun(sha, maps.Values.Sum(static m => m.Classes.Count), 0, [], null)
+                {
+                    Seconds = started.Elapsed.TotalSeconds,
+                    Incidents = incidents,
+                    Maps = mapCounts,
+                };
             }
 
             workspace.Executor.Setup();
@@ -160,7 +171,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 // An outcome stored before generator mutants compiled their consumers does not hold for one.
                 if (_cache?.Find(targets[i]) is { } outcome
                     && (outcome.ConsumersCompiled || !_generatorTests.ContainsKey(targets[i]))
-                    && FromCache(targets[i], outcome, state) is { } reused)
+                    && FromCache(targets[i], outcome, state, baseline, candidates) is { } reused)
                 {
                     results[i] = reused with { StoppedOnBuild = selections[i].StoppedOnBuild };
                     continue;
@@ -181,6 +192,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 Seconds = started.Elapsed.TotalSeconds,
                 MapAge = settings.MapAge,
                 MapCommit = mapCommit,
+                Incidents = incidents,
+                Maps = mapCounts,
             };
 
             void Report()
@@ -229,7 +242,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             assemblies.AddRange([.. built.Values.SelectMany(static a => a).Distinct(StringComparer.Ordinal).Where(a => !assemblies.Contains(a, StringComparer.Ordinal))]);
             var pendingTargets = pending.Select(i => (Id: i + 1, Target: targets[i])).ToList();
             using var schema = settings.UseSchema ? TrySchema(assemblies, pendingTargets, testProjects, baseline.Outcome) : null;
-            var context = new MutantContext(testProjects, maps, assemblies, baseline.Outcome, schema);
+            var context = new MutantContext(testProjects, maps, assemblies, baseline.Outcome, schema) { BaselineClasses = baseline.ClassesByProject };
             var (parallelism, copies) = Parallelism(schema, testProjects, baseline.Outcome, pending.Count);
             using var workerCopies = copies;
             workspace.Executor.Concurrency = parallelism;
@@ -276,7 +289,13 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         {
             var cause = ex is AggregateException aggregate ? aggregate.InnerExceptions[0] : ex;
             LogFailed(sha, cause);
-            return new SyntheticRun(sha, 0, 0, mutants, cause.Message) { Toolchain = settings.Toolchain?.Description, Seconds = started.Elapsed.TotalSeconds };
+            return new SyntheticRun(sha, 0, 0, mutants, cause.Message)
+            {
+                Toolchain = settings.Toolchain?.Description,
+                Seconds = started.Elapsed.TotalSeconds,
+                Incidents = incidents,
+                Maps = mapCounts,
+            };
         }
         finally
         {
@@ -319,7 +338,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="Projects">Test projects that built and reported; the ones the mutants run.</param>
     /// <param name="Outcome">The run.</param>
     /// <param name="Unreported">Projects left out because they wrote no report or crashed, relative to the clone.</param>
-    private sealed record Baseline(List<ProjectNode> Projects, TestRunOutcome Outcome, List<string> Unreported);
+    private sealed record Baseline(List<ProjectNode> Projects, TestRunOutcome Outcome, List<string> Unreported)
+    {
+        /// <summary>Test classes in each reporting project's report, by normalized path; a whole run with a mutant that reports fewer did not complete.</summary>
+        public IReadOnlyDictionary<string, int> ClassesByProject { get; init; } = new Dictionary<string, int>();
+    }
 
     /// <summary>
     /// Builds the test projects and runs them without mutants. A complete run is stored with the
@@ -336,7 +359,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
         workspace.Executor.Outputs = _steps.OutputDirectories(built);
         var outcome = workspace.Executor.RunAll(built, "baseline");
-        var unreported = built.Where(p => outcome.Unreported.Contains(p.Path) || outcome.Crashed.Contains(p.Path))
+        var unreported = built.Where(p => outcome.Unreported.Contains(p.Path) || outcome.Crashed.Contains(p.Path)
+                || outcome.Projects.TryGetValue(p.Path, out var run) && !run.Complete)
             .Select(Relative).ToList();
         var reporting = _steps.Reporting(built, outcome);
         if (reporting.Count == 0)
@@ -346,6 +370,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
         // A project that writes no report without crashing (no tests, no TRX logger) does so every
         // time; one that crashed or hung may have done so under load and must run again next time.
+        var classes = reporting.ToDictionary(static p => p.Path, p => outcome.Projects.GetValueOrDefault(p.Path)?.Classes ?? 0, StringComparer.Ordinal);
         if (outcome.Aborted == 0 && outcome.Crashed.Count == 0)
         {
             _cache?.StoreBaseline(new StoredBaseline(
@@ -353,10 +378,14 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 [.. reporting.Select(Relative)],
                 outcome.FailedByProject.ToDictionary(p => Relative(p.Key), static p => p.Value.Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal),
                 outcome.Seconds,
-                outcome.Total) { Unreported = unreported });
+                outcome.Total)
+            {
+                Unreported = unreported,
+                ClassesByProject = classes.ToDictionary(p => Relative(p.Key), static p => p.Value, StringComparer.Ordinal),
+            });
         }
 
-        return new Baseline(reporting, outcome, unreported);
+        return new Baseline(reporting, outcome, unreported) { ClassesByProject = classes };
     }
 
     /// <summary>
@@ -366,7 +395,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// <param name="candidates">Test projects to evaluate.</param>
     private Baseline? StoredBaselineFor(List<ProjectNode> candidates)
     {
-        if (_cache?.Baseline is not { } stored || !stored.Candidates.SequenceEqual(candidates.Select(Relative), StringComparer.Ordinal))
+        // A baseline stored without its class counts cannot tell a whole run that stopped early: it runs again.
+        if (_cache?.Baseline is not { ClassesByProject: { } counts } stored || !stored.Candidates.SequenceEqual(candidates.Select(Relative), StringComparer.Ordinal))
         {
             return null;
         }
@@ -393,7 +423,10 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         }
 
         var outcome = new TestRunOutcome(stored.Seconds, stored.Total, failed, new HashSet<string>(StringComparer.Ordinal), 0);
-        return new Baseline(projects, outcome, stored.Unreported);
+        return new Baseline(projects, outcome, stored.Unreported)
+        {
+            ClassesByProject = projects.ToDictionary(static p => p.Path, p => counts.GetValueOrDefault(Relative(p)), StringComparer.Ordinal),
+        };
     }
 
     /// <summary>
@@ -520,7 +553,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         Dictionary<string, CoverageMap> Maps,
         List<string> Assemblies,
         TestRunOutcome Baseline,
-        Schema? Schema);
+        Schema? Schema)
+    {
+        /// <summary>Test classes in the baseline's report of each project, by normalized path.</summary>
+        public IReadOnlyDictionary<string, int> BaselineClasses { get; init; } = new Dictionary<string, int>();
+    }
 
     /// <summary>
     /// Writes every target in once behind the switch (see <see cref="MutationInjector.InjectSchema"/>)
@@ -813,17 +850,6 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         return false;
     }
 
-    /// <summary>
-    /// True when the main selection and every drift mode selected <paramref name="testClass"/>; a class
-    /// any of them left out is confirmed alone, so all of them are judged on the same failures.
-    /// </summary>
-    /// <param name="state">The mutant's selections.</param>
-    /// <param name="project">Normalized test project path.</param>
-    /// <param name="testClass">Failed test class.</param>
-    private static bool SelectedByAll(MutantRun state, string project, string testClass) =>
-        EvalSteps.IsSelected(state.Tests, project, testClass)
-        && state.Others.Values.All(d => EvalSteps.IsSelected(d.Tests, project, testClass));
-
     /// <summary>The classes among <paramref name="failed"/> (<c>Project: Class</c>) that <paramref name="tests"/> left out.</summary>
     /// <param name="tests">A selection.</param>
     /// <param name="failed">Confirmed failing classes.</param>
@@ -856,7 +882,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     private static Dictionary<string, string> ProjectsByName(List<ProjectNode> reached) =>
         reached.ToDictionary(static p => Path.GetFileNameWithoutExtension(p.Path), static p => p.Path, StringComparer.Ordinal);
 
-    /// <summary>Runs the tests against one mutant and compares the failures with TestDetta's selection.</summary>
+    /// <summary>Runs the tests against one mutant and judges the failures against TestDetta's selection (<see cref="MutantJudge"/>).</summary>
     /// <param name="target">The mutant.</param>
     /// <param name="context">What the mutants of the commit share.</param>
     /// <param name="index">1-based number of the mutant, for log files and the schema switch.</param>
@@ -870,7 +896,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         if (mutation.MutatedMethods == 0)
         {
             LogNotFound(target.Member.TypeName, target.Member.MemberName);
-            Store(target, new MutantOutcome(0, [], [], Evaluated(context.TestProjects)));
+            Store(target, new MutantOutcome(0, Evaluated(context.TestProjects)));
             return new SyntheticMutant(target, detected, 0, [], [], share, Inconclusive: false);
         }
 
@@ -889,83 +915,130 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             reached = context.TestProjects.FindAll(p => (reached.Contains(p) || seeing!.Contains(p)) && !notBuilt.Contains(p));
         }
 
-        var runner = compiled?.Executor ?? executor;
-        var scope = new MutantScope(reached, index, mutation, runner) { Control = executor };
-
-        // A mutant whose full run crashed or hung does so again, and only what TestDetta left out can
-        // hold a miss: the full run, which mostly waits for its timeout, is not repeated.
-        if (_cache?.Find(target) is { FullRunIncomplete: true } known && EvaluatedAll(known, context.TestProjects))
+        // Runs stored for this mutant before are what they were: only the runs today's selection needs and the
+        // cache lacks are made.
+        var generator = _generatorTests.ContainsKey(target);
+        var earlier = _cache?.Find(target) is { } found && found.MutatedMethods == mutation.MutatedMethods && (found.ConsumersCompiled || !generator)
+            ? found.Runs
+            : new Dictionary<string, StoredRun>(StringComparer.Ordinal);
+        Store(target, new MutantOutcome(mutation.MutatedMethods, Evaluated(context.TestProjects))
         {
-            LogFullRunSkipped(index);
-            return WithBuildFailures(OutsideAndStore(target, state with { Reached = reached }, scope, context), notBuilt, state);
-        }
+            Reached = [.. reached.Select(Relative)],
+            NotBuilt = [.. notBuilt.Select(Relative)],
+            Runs = earlier,
+        });
 
-        // A project that wrote no report this time died with the mutant in place, like a crash.
-        var run = runner.RunAll(reached, $"synthetic-{index}", mutation.Environment);
-        if (!run.Complete)
-        {
-            return WithBuildFailures(OutsideAndStore(target, state with { Reached = reached }, scope, context), notBuilt, state);
-        }
-
-        // A project that does not build is a failure no rerun changes: not confirmed alone.
-        var killed = notBuilt.ConvertAll(static p => DoesNotBuild(p));
-        var unbuiltMissed = notBuilt.Where(p => !SelectedByAll(state, p.Path, GeneratorMutants.DoesNotBuild)).Select(static p => DoesNotBuild(p)).ToList();
-        var unselected = new List<string>();
-        foreach (var (project, failed) in run.FailedByProject)
-        {
-            var before = context.Baseline.FailedByProject.GetValueOrDefault(project) ?? new HashSet<string>();
-            foreach (var testClass in failed.Where(c => !before.Contains(c)).Order(StringComparer.Ordinal))
-            {
-                var name = $"{Path.GetFileNameWithoutExtension(project)}: {testClass}";
-                killed.Add(name);
-                if (!SelectedByAll(state, project, testClass))
-                {
-                    unselected.Add(name);
-                }
-            }
-        }
-
-        var failedBeforeConfirming = new List<string>(killed);
-        var alone = new Dictionary<string, bool>(StringComparer.Ordinal);
-        if (unselected.Count > 0)
-        {
-            unselected = Confirm(unselected, scope, killed, alone);
-        }
-
-        foreach (var unbuilt in unbuiltMissed)
-        {
-            alone[unbuilt] = true;
-            unselected.Add(unbuilt);
-        }
-
-        Store(target, new MutantOutcome(mutation.MutatedMethods, failedBeforeConfirming, alone, Evaluated(context.TestProjects)));
-        var projects = ProjectsByName([.. reached, .. notBuilt]);
-        var missed = LeftOut(tests, unselected, projects);
-        LogMutant(index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, share);
-        return new SyntheticMutant(target, detected, mutation.MutatedMethods, killed, missed, share, Inconclusive: false)
-        {
-            Others = OtherOutcomes(state, unselected, projects),
-        };
+        var scope = new MutantScope(reached, index, mutation, compiled?.Executor ?? executor) { Control = executor };
+        var runs = new ExecutorRuns(this, target, scope, earlier);
+        var judgement = Judge(runs, state, Judged(reached, state, context.Baseline, context.BaselineClasses), Judged(notBuilt, state, context.Baseline, context.BaselineClasses));
+        return Result(target, state, mutation.MutatedMethods, judgement, [.. reached, .. notBuilt], reused: false);
     }
 
     /// <summary>
-    /// <see cref="RunOutsideSelection"/>, and stores that the full run did not complete. When nothing
-    /// TestDetta left out was missed, the selection is stored with it: the same selection next time
-    /// leaves out the same classes, so the run is not repeated either.
+    /// The mutant's result from its stored runs and the current selection, without running a test: the judging is
+    /// applied to the stored runs (<see cref="MutantJudge"/>). Null when it needs a run the cache does not have (today's
+    /// selection leaves out other classes, a run without the mutant was never made or did not complete), a reached
+    /// project is no longer evaluated, or a project evaluated now was left out when the outcome was stored; the mutant
+    /// is then run, and only the missing runs are made.
     /// </summary>
     /// <param name="target">The mutant.</param>
-    /// <param name="state">The mutant's state.</param>
-    /// <param name="scope">The applied mutant and the worker it runs in.</param>
-    /// <param name="context">What the mutants of the commit share.</param>
-    private SyntheticMutant OutsideAndStore(SyntheticTarget target, MutantRun state, MutantScope scope, MutantContext context)
+    /// <param name="stored">What the tests did against it.</param>
+    /// <param name="state">The mutant's analysis and the evaluated test projects.</param>
+    /// <param name="baseline">The run without mutants the stored runs are compared with.</param>
+    /// <param name="candidates">Test projects of the commit, to find a project that did not build with the mutant.</param>
+    private SyntheticMutant? FromCache(SyntheticTarget target, MutantOutcome stored, MutantRun state, Baseline baseline, List<ProjectNode> candidates)
     {
-        var result = RunOutsideSelection(target, state, scope);
-        Store(target, new MutantOutcome(scope.Mutation.MutatedMethods, [], [], Evaluated(context.TestProjects))
+        if (!EvaluatedAll(stored, state.Reached))
         {
-            FullRunIncomplete = true,
-            NothingMissedWith = !result.Inconclusive && result.MissedClasses.Count == 0 ? SelectionKey(state.Tests) : null,
-        });
-        return result;
+            // Recorded while a project evaluated now was left out: the project's failures are not in the outcome.
+            return null;
+        }
+
+        if (stored.MutatedMethods == 0)
+        {
+            LogNotFound(target.Member.TypeName, target.Member.MemberName);
+            return new SyntheticMutant(target, state.Detected, 0, [], [], state.Share, Inconclusive: false) { Reused = true };
+        }
+
+        var evaluated = state.Reached.ToDictionary(Relative, StringComparer.Ordinal);
+        var all = candidates.ToDictionary(Relative, StringComparer.Ordinal);
+        if (stored.Reached.Count == 0 && stored.NotBuilt.Count == 0
+            || stored.Reached.Exists(p => !evaluated.ContainsKey(p))
+            || stored.NotBuilt.Exists(p => !all.ContainsKey(p)))
+        {
+            return null;
+        }
+
+        var reached = stored.Reached.ConvertAll(p => evaluated[p]);
+        var notBuilt = stored.NotBuilt.ConvertAll(p => all[p]);
+        Judgement judgement;
+        try
+        {
+            judgement = Judge(new StoredRuns(this, stored), state, Judged(reached, state, baseline.Outcome, baseline.ClassesByProject), Judged(notBuilt, state, baseline.Outcome, baseline.ClassesByProject));
+        }
+        catch (RunNeededException)
+        {
+            return null;
+        }
+
+        LogReused(state.Index);
+        return Result(target, state, stored.MutatedMethods, judgement, [.. reached, .. notBuilt], reused: true);
+    }
+
+    /// <summary>Judges one mutant with <paramref name="runs"/>; a class another selector left out is confirmed whatever the verdict.</summary>
+    /// <param name="runs">Makes or finds the runs.</param>
+    /// <param name="state">The mutant's selections.</param>
+    /// <param name="reached">The test projects it reaches.</param>
+    /// <param name="notBuilt">Test projects that do not build with it.</param>
+    private static Judgement Judge(IMutantRuns runs, MutantRun state, List<JudgedProject> reached, List<JudgedProject> notBuilt) =>
+        new MutantJudge(runs, (project, testClass) => state.Others.Values.All(d => EvalSteps.IsSelected(d.Tests, project, testClass)))
+            .Judge(reached, notBuilt);
+
+    /// <summary>The projects a mutant reaches, with TestDetta's decision and the baseline the judging needs.</summary>
+    /// <param name="projects">The projects.</param>
+    /// <param name="state">The mutant's selections.</param>
+    /// <param name="baseline">The run without mutants.</param>
+    /// <param name="classes">Test classes in the baseline's report of each project.</param>
+    private List<JudgedProject> Judged(List<ProjectNode> projects, MutantRun state, TestRunOutcome baseline, IReadOnlyDictionary<string, int> classes) =>
+        projects.ConvertAll(p => new JudgedProject(
+            p,
+            Relative(p),
+            state.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, p.Path, StringComparison.Ordinal)),
+            baseline.FailedByProject.GetValueOrDefault(p.Path) ?? new HashSet<string>(StringComparer.Ordinal),
+            classes.GetValueOrDefault(p.Path)));
+
+    /// <summary>The mutant's result from its judgement; the other selectors are judged on the same failures when they are named by class.</summary>
+    /// <param name="target">The mutant.</param>
+    /// <param name="state">The mutant's selections.</param>
+    /// <param name="mutatedMethods">Compiled methods the mutant changes.</param>
+    /// <param name="judgement">What its runs showed.</param>
+    /// <param name="projects">The projects it reached or that did not build with it, to resolve <c>Project</c> in <c>Project: Class</c>.</param>
+    /// <param name="reused">True when no test ran for it now.</param>
+    private SyntheticMutant Result(SyntheticTarget target, MutantRun state, int mutatedMethods, Judgement judgement, List<ProjectNode> projects, bool reused)
+    {
+        LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, judgement.Killed.Count, judgement.Missed.Count, state.Share);
+        if (judgement.CaughtByCrash)
+        {
+            LogCaughtByCrash(state.Index, target.Member.TypeName, target.Member.MemberName);
+        }
+
+        if (judgement.Inconclusive)
+        {
+            LogInconclusive(state.Index, judgement.Note ?? string.Empty);
+        }
+
+        var byName = ProjectsByName(projects);
+        return new SyntheticMutant(target, state.Detected, mutatedMethods, judgement.Killed, judgement.Missed, state.Share, judgement.Inconclusive)
+        {
+            CaughtByCrash = judgement.CaughtByCrash,
+            Reused = reused,
+            Note = judgement.Note,
+            NotCounted = judgement.NotCounted,
+            // A crash proves nothing about which classes another selector left out.
+            Others = judgement.ByClasses && !judgement.Inconclusive
+                ? OtherOutcomes(state, [.. judgement.Failures], byName)
+                : [],
+        };
     }
 
     /// <summary>Stores a test outcome, marked when the mutant's generator consumers were compiled with it.</summary>
@@ -974,25 +1047,114 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     private void Store(SyntheticTarget target, MutantOutcome outcome) =>
         _cache?.Store(target, outcome with { ConsumersCompiled = _generatorTests.ContainsKey(target) });
 
-    /// <summary>The killed class of a test project that does not build with a generator mutant.</summary>
-    /// <param name="project">The test project.</param>
-    private static string DoesNotBuild(ProjectNode project) => $"{Path.GetFileNameWithoutExtension(project.Path)}: {GeneratorMutants.DoesNotBuild}";
+    /// <summary>
+    /// Runs without any mutant made in this evaluation, by what they ran (<see cref="RunAsk.Key"/>), complete ones only:
+    /// every mutant of a commit shares the same build, so they hold for all of them (the cache keeps them across
+    /// evaluations).
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ProjectRun> _controls = new(StringComparer.Ordinal);
+
+    /// <summary>A stored run without any mutant, from this evaluation or the cache; null when none is known.</summary>
+    /// <param name="key">What it ran.</param>
+    private ProjectRun? KnownControl(string key) =>
+        _controls.TryGetValue(key, out var run) ? run : _cache?.Control(key)?.ToRun();
 
     /// <summary>
-    /// <paramref name="result"/> of a run outside the selection, with the test projects that did not build
-    /// with the mutant as killed, and as missed where the selection ran nothing of them.
+    /// The runs of one mutant's judgement from its stored outcome and the stored runs without any mutant; a run neither
+    /// holds throws <see cref="RunNeededException"/>, so the mutant is run.
     /// </summary>
-    /// <param name="result">The mutant's result.</param>
-    /// <param name="notBuilt">Test projects that did not build with it.</param>
-    /// <param name="state">The mutant's selections.</param>
-    private static SyntheticMutant WithBuildFailures(SyntheticMutant result, List<ProjectNode> notBuilt, MutantRun state) =>
-        notBuilt.Count == 0 ? result : result with
+    /// <param name="evaluator">The evaluation, for the runs without any mutant.</param>
+    /// <param name="stored">The mutant's stored outcome.</param>
+    private sealed class StoredRuns(SyntheticEvaluator evaluator, MutantOutcome stored) : IMutantRuns
+    {
+        /// <inheritdoc />
+        public ProjectRun Run(RunAsk ask)
         {
-            KilledClasses = [.. result.KilledClasses, .. notBuilt.Select(DoesNotBuild)],
-            MissedClasses = [.. result.MissedClasses, .. notBuilt.Where(p => !EvalSteps.IsSelected(state.Tests, p.Path, GeneratorMutants.DoesNotBuild)).Select(DoesNotBuild)],
-            Inconclusive = false,
-            CaughtByCrash = false,
-        };
+            var key = ask.Key;
+            if (ask.WithMutant)
+            {
+                return stored.Runs.TryGetValue(key, out var run) ? run.ToRun() : throw new RunNeededException(ask);
+            }
+
+            return evaluator.KnownControl(key) ?? throw new RunNeededException(ask);
+        }
+    }
+
+    /// <summary>
+    /// The runs of one mutant's judgement, made in the worker's copy: a run stored before is taken as it is, any
+    /// other is made and stored (with the mutant: in the mutant's outcome; without: for every mutant, when it completed).
+    /// </summary>
+    /// <param name="evaluator">The evaluation.</param>
+    /// <param name="target">The mutant.</param>
+    /// <param name="scope">The applied mutant and the executors of its runs.</param>
+    /// <param name="stored">Runs with the mutant stored before, by key; runs made now are added.</param>
+    private sealed class ExecutorRuns(SyntheticEvaluator evaluator, SyntheticTarget target, MutantScope scope, Dictionary<string, StoredRun> stored) : IMutantRuns
+    {
+        /// <inheritdoc />
+        public ProjectRun Run(RunAsk ask)
+        {
+            var key = ask.Key;
+            if (ask.WithMutant && stored.TryGetValue(key, out var known))
+            {
+                return known.ToRun();
+            }
+
+            if (!ask.WithMutant && evaluator.KnownControl(key) is { } control)
+            {
+                return control;
+            }
+
+            var label = ask.Label.Length == 0 ? $"synthetic-{scope.Index}" : $"synthetic-{scope.Index}-{ask.Label}";
+            var invocation = evaluator.Invocation(ask);
+            TestRunOutcome outcome;
+            if (ask.WithMutant)
+            {
+                outcome = scope.Executor.RunSelected([invocation], label, scope.Mutation.Environment);
+            }
+            else
+            {
+                using (scope.Mutation.Lift())
+                {
+                    outcome = (scope.Control ?? scope.Executor).RunSelected([invocation], label, environment: null);
+                }
+            }
+
+            var none = new HashSet<string>(StringComparer.Ordinal);
+            var run = outcome.Projects.GetValueOrDefault(ask.Project.Node.Path) ?? new ProjectRun(false, "the run left no result", none, none, 0);
+            if (ask.WithMutant)
+            {
+                var entry = StoredRun.From(run, ask.Part);
+                stored[key] = entry;
+                evaluator._cache?.StoreRun(target, key, entry);
+            }
+            else if (run.Complete)
+            {
+                evaluator._controls[key] = run;
+                evaluator._cache?.StoreControl(key, StoredRun.From(run, ask.Part));
+            }
+
+            return run;
+        }
+    }
+
+    /// <summary>The <c>dotnet test</c> invocation of a judged run: the whole project, only some classes, or all but some.</summary>
+    /// <param name="ask">The run.</param>
+    private TestInvocation Invocation(RunAsk ask)
+    {
+        var project = ask.Project.Node;
+        if (ask.Part == RunPart.Except)
+        {
+            var location = DotnetTestLocation.For(workspace.RepoRoot, project.Path);
+            var arguments = location.TestArguments(workspace.RepoRoot, project.Path);
+            arguments.AddRange(TestFilter.Arguments(ask.Classes, exclude: true, TestFilter.SyntaxFor(project, location.Mode)));
+            return new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "the classes TestDetta left out"), arguments, location);
+        }
+
+        var selection = ask.Part == RunPart.Whole
+            ? new TestProjectSelection(project, TestRunMode.All, [], "the whole project")
+            : new TestProjectSelection(project, TestRunMode.Filtered, ask.Classes, "judging a mutant");
+        return TestInvocationBuilder.Build([selection], workspace.RepoRoot, [])[0];
+    }
 
     /// <summary>
     /// Builds the test projects that see what a mutant's generator writes, with the mutant on, in a new
@@ -1079,129 +1241,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         public void Dispose() => WorkerCopies.Remove(root);
     }
 
-    /// <summary>
-    /// A fingerprint of a selection: per test project, whether it runs all, some (which) or none of its
-    /// classes. Two selections with the same fingerprint leave out the same classes.
-    /// </summary>
-    /// <param name="tests">The selection.</param>
-    private static string SelectionKey(IReadOnlyList<TestProjectSelection> tests)
-    {
-        var text = new System.Text.StringBuilder();
-        foreach (var test in tests.OrderBy(static t => t.Project.Path, StringComparer.Ordinal))
-        {
-            text.Append(Path.GetFileNameWithoutExtension(test.Project.Path)).Append('|').Append(test.Mode).Append('|');
-            foreach (var testClass in test.TestClasses.Order(StringComparer.Ordinal))
-            {
-                text.Append(testClass).Append(',');
-            }
-
-            text.Append('\n');
-        }
-
-        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text.ToString())));
-    }
-
     /// <summary>True when every project evaluated now was evaluated when <paramref name="stored"/> was recorded.</summary>
     /// <param name="stored">A stored outcome.</param>
     /// <param name="projects">Test projects evaluated now.</param>
     private static bool EvaluatedAll(MutantOutcome stored, List<ProjectNode> projects) =>
         stored.Evaluated is { } evaluated && projects.TrueForAll(p => evaluated.Contains(Path.GetFileNameWithoutExtension(p.Path), StringComparer.Ordinal));
-
-    /// <summary>
-    /// The mutant's result from a stored test outcome and the current selection, without running a
-    /// test: the stored failures are checked against what TestDetta selects now, and the confirmation
-    /// rules of <see cref="Confirm"/> are applied to stored answers. Null when an answer is missing
-    /// (a class missed now was selected when the outcome was stored), a failing class belongs to a
-    /// project that is no longer evaluated, or a project evaluated now was left out when the outcome
-    /// was stored; the mutant is then run.
-    /// </summary>
-    /// <param name="target">The mutant.</param>
-    /// <param name="stored">What the tests did against it.</param>
-    /// <param name="state">The mutant's analysis and the evaluated test projects.</param>
-    private SyntheticMutant? FromCache(SyntheticTarget target, MutantOutcome stored, MutantRun state)
-    {
-        if (!EvaluatedAll(stored, state.Reached))
-        {
-            // Recorded while a project evaluated now was left out (or before that was stored): the
-            // project's failures are not in the outcome.
-            return null;
-        }
-
-        if (stored.FullRunIncomplete)
-        {
-            // Only the run outside the selection says anything; it is known for the selection it ran with.
-            if (stored.NothingMissedWith is not { } key || key != SelectionKey(state.Tests))
-            {
-                return null;
-            }
-
-            LogReused(state.Index);
-            LogCaughtByCrash(state.Index, target.Member.TypeName, target.Member.MemberName);
-            return new SyntheticMutant(target, state.Detected, stored.MutatedMethods, [], [], state.Share, Inconclusive: false) { CaughtByCrash = true, Reused = true };
-        }
-
-        if (stored.MutatedMethods == 0)
-        {
-            LogNotFound(target.Member.TypeName, target.Member.MemberName);
-            return new SyntheticMutant(target, state.Detected, 0, [], [], state.Share, Inconclusive: false) { Reused = true };
-        }
-
-        var projects = ProjectsByName(state.Reached);
-        var killed = new List<string>(stored.Failed);
-        var missed = new List<string>();
-        foreach (var failed in stored.Failed)
-        {
-            var separator = failed.IndexOf(": ", StringComparison.Ordinal);
-            if (separator < 0 || !projects.TryGetValue(failed[..separator], out var project))
-            {
-                return null;
-            }
-
-            if (!SelectedByAll(state, project, failed[(separator + 2)..]))
-            {
-                missed.Add(failed);
-            }
-        }
-
-        if (missed.Exists(m => !stored.FailsAloneWithMutant.ContainsKey(m)))
-        {
-            return null;
-        }
-
-        var confirmed = missed.FindAll(m => stored.FailsAloneWithMutant[m]);
-        if (confirmed.Exists(c => KnownFailsAlone(c) is null))
-        {
-            return null;
-        }
-
-        foreach (var unconfirmed in missed.Where(m => !stored.FailsAloneWithMutant[m]))
-        {
-            LogUnconfirmed(state.Index, unconfirmed);
-            killed.Remove(unconfirmed);
-        }
-
-        foreach (var broken in confirmed.Where(c => KnownFailsAlone(c) == true))
-        {
-            LogFailsWithoutMutant(state.Index, broken);
-            killed.Remove(broken);
-        }
-
-        var unselected = confirmed.FindAll(c => KnownFailsAlone(c) == false);
-        missed = LeftOut(state.Tests, unselected, projects);
-        LogReused(state.Index);
-        LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
-        return new SyntheticMutant(target, state.Detected, stored.MutatedMethods, killed, missed, state.Share, Inconclusive: false)
-        {
-            Reused = true,
-            Others = OtherOutcomes(state, unselected, projects),
-        };
-    }
-
-    /// <summary>Whether a class fails alone without any mutant, from this run or the cache; null when unknown.</summary>
-    /// <param name="testClass">Test class (<c>Project: Class</c>).</param>
-    private bool? KnownFailsAlone(string testClass) =>
-        testClass.EndsWith(": " + GeneratorMutants.DoesNotBuild, StringComparison.Ordinal) ? false
-        : _failsAlone.TryGetValue(testClass, out var fails) ? fails : _cache?.FailsAlone(testClass);
 
     /// <summary>One mutant's state while it is evaluated.</summary>
     /// <param name="Tests">TestDetta's decision per affected test project.</param>
@@ -1215,64 +1259,6 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         public IReadOnlyDictionary<OtherSelector, OtherSelection> Others { get; init; } = new Dictionary<OtherSelector, OtherSelection>();
     }
 
-    /// <summary>
-    /// After a full run crashed or hung, runs only what TestDetta left out, with the mutant in place. A miss
-    /// can only be there: if it passes, the failure was in the selection and the mutant counts as
-    /// caught; classes that fail are confirmed alone like any miss; a second crash or hang leaves the
-    /// mutant inconclusive. A project TestDetta runs completely has nothing left out.
-    /// </summary>
-    /// <param name="target">The mutated member.</param>
-    /// <param name="state">The mutant's state.</param>
-    /// <param name="scope">The applied mutant and the worker it runs in.</param>
-    private SyntheticMutant RunOutsideSelection(SyntheticTarget target, MutantRun state, MutantScope scope)
-    {
-        var mutation = scope.Mutation;
-        var mutatedMethods = mutation.MutatedMethods;
-        var invocations = new List<TestInvocation>();
-        foreach (var project in state.Reached)
-        {
-            var decision = state.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, project.Path, StringComparison.Ordinal));
-            if (decision?.Mode == TestRunMode.All)
-            {
-                continue;
-            }
-
-            var location = DotnetTestLocation.For(workspace.RepoRoot, project.Path);
-            var arguments = location.TestArguments(workspace.RepoRoot, project.Path);
-            if (decision is { Mode: TestRunMode.Filtered, TestClasses.Count: > 0 })
-            {
-                arguments.AddRange(TestFilter.Arguments(decision.TestClasses, exclude: true, TestFilter.SyntaxFor(project, location.Mode)));
-            }
-
-            invocations.Add(new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "outside the selection"), arguments, location));
-        }
-
-        // No report is no evidence that what TestDetta left out passed.
-        var outside = scope.Executor.RunSelected(invocations, $"synthetic-{state.Index}-outside", mutation.Environment);
-        if (!outside.Complete)
-        {
-            return new SyntheticMutant(target, state.Detected, mutatedMethods, [], [], state.Share, Inconclusive: true);
-        }
-
-        var failed = outside.FailedByProject
-            .SelectMany(p => p.Value.Select(c => $"{Path.GetFileNameWithoutExtension(p.Key)}: {c}"))
-            .Order(StringComparer.Ordinal)
-            .ToList();
-        if (failed.Count == 0)
-        {
-            LogCaughtByCrash(state.Index, target.Member.TypeName, target.Member.MemberName);
-            return new SyntheticMutant(target, state.Detected, mutatedMethods, [], [], state.Share, Inconclusive: false) { CaughtByCrash = true };
-        }
-
-        var killed = new List<string>(failed);
-        var missed = Confirm(failed, scope, killed, new Dictionary<string, bool>(StringComparer.Ordinal));
-        LogMutant(state.Index, target.Member.TypeName, target.Member.MemberName, killed.Count, missed.Count, state.Share);
-        return new SyntheticMutant(target, state.Detected, mutatedMethods, killed, missed, state.Share, Inconclusive: false)
-        {
-            CaughtByCrash = killed.Count == 0,
-        };
-    }
-
     /// <summary>The mutant a miss is confirmed for.</summary>
     /// <param name="Reached">Test projects the mutant can reach.</param>
     /// <param name="Index">Number of the mutant, for log files.</param>
@@ -1282,118 +1268,6 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         /// <summary>Runs the control runs without the mutant: the worker's clone when the mutant was compiled into a copy of it.</summary>
         public TestExecutor? Control { get; init; }
-    }
-
-    /// <summary>
-    /// Whether a test class fails when it runs alone without any mutant, by <c>Project: Class</c>.
-    /// Every mutant of a commit shares the same build, so the answer holds for all of them.
-    /// </summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _failsAlone = new(StringComparer.Ordinal);
-
-    /// <summary>
-    /// Runs the missed classes again, alone, with the mutant still in place, and keeps only those that
-    /// fail again. A class can fail in the full run without depending on the change: a timing-sensitive
-    /// test on a busy machine, or a class that runs after a failing one which left shared state behind
-    /// (a global option it never restored). TestDetta selected the class that really fails in that case, so
-    /// counting the others as misses would blame TestDetta for the suite's order dependence. A class that
-    /// passes alone is dropped from the killed ones too. A class that fails alone also fails alone
-    /// without the mutant (NLog: tests that pass only after others set things up), so the classes that
-    /// fail again are run once more with the mutant lifted, and those failing there too are dropped.
-    /// </summary>
-    /// <param name="missed">Missed classes of the first run (<c>Project: Class</c>).</param>
-    /// <param name="scope">The mutant and the projects it reaches.</param>
-    /// <param name="killed">Killed classes of the first run; unconfirmed ones are removed in place.</param>
-    /// <param name="alone">Receives, for a complete run alone, whether each missed class failed again.</param>
-    private List<string> Confirm(List<string> missed, MutantScope scope, List<string> killed, Dictionary<string, bool> alone)
-    {
-        var again = RunAlone(missed, scope, $"synthetic-{scope.Index}-confirm", scope.Mutation.Environment);
-        if (again.Complete)
-        {
-            foreach (var testClass in missed)
-            {
-                alone[testClass] = again.Failed.Contains(testClass);
-            }
-        }
-
-        var confirmed = missed.FindAll(again.Failed.Contains);
-        foreach (var unconfirmed in missed.Where(m => !again.Failed.Contains(m)))
-        {
-            LogUnconfirmed(scope.Index, unconfirmed);
-            killed.Remove(unconfirmed);
-        }
-
-        foreach (var testClass in confirmed)
-        {
-            if (!_failsAlone.ContainsKey(testClass) && _cache?.FailsAlone(testClass) is { } cached)
-            {
-                _failsAlone[testClass] = cached;
-            }
-        }
-
-        var unknown = confirmed.FindAll(c => !_failsAlone.ContainsKey(c));
-        if (unknown.Count > 0)
-        {
-            RunOutcome control;
-            using (scope.Mutation.Lift())
-            {
-                control = RunAlone(unknown, scope with { Executor = scope.Control ?? scope.Executor }, $"synthetic-{scope.Index}-control", environment: null);
-            }
-
-            // A control run that crashed proves nothing; the miss stands and the class is asked again next time.
-            if (control.Complete)
-            {
-                foreach (var testClass in unknown)
-                {
-                    _failsAlone[testClass] = control.Failed.Contains(testClass);
-                    _cache?.StoreFailsAlone(testClass, _failsAlone[testClass]);
-                }
-            }
-        }
-
-        foreach (var broken in confirmed.Where(c => _failsAlone.GetValueOrDefault(c)))
-        {
-            LogFailsWithoutMutant(scope.Index, broken);
-            killed.Remove(broken);
-        }
-
-        return confirmed.FindAll(c => !_failsAlone.GetValueOrDefault(c));
-    }
-
-    /// <summary>Failed classes of a run of some classes alone, and whether the run was complete.</summary>
-    /// <param name="Failed">Failed classes as <c>Project: Class</c>.</param>
-    /// <param name="Complete">Every run wrote a report and no host crashed.</param>
-    private sealed record RunOutcome(HashSet<string> Failed, bool Complete);
-
-    /// <summary>Runs <paramref name="classes"/> (<c>Project: Class</c>) alone, each project filtered to its own.</summary>
-    /// <param name="classes">Classes to run.</param>
-    /// <param name="scope">The mutant: the test projects the classes may belong to and the worker that runs them.</param>
-    /// <param name="label">Name for log files.</param>
-    /// <param name="environment">Environment that switches the mutant on; null for none.</param>
-    private RunOutcome RunAlone(List<string> classes, MutantScope scope, string label, IReadOnlyDictionary<string, string>? environment)
-    {
-        var selections = new List<TestProjectSelection>();
-        foreach (var project in scope.Reached)
-        {
-            var prefix = Path.GetFileNameWithoutExtension(project.Path) + ": ";
-            var own = classes.Where(m => m.StartsWith(prefix, StringComparison.Ordinal)).Select(m => m[prefix.Length..]).ToList();
-            if (own.Count > 0)
-            {
-                selections.Add(new TestProjectSelection(project, TestRunMode.Filtered, own, "confirming a miss"));
-            }
-        }
-
-        var invocations = TestInvocationBuilder.Build(selections, workspace.RepoRoot, []);
-        var run = scope.Executor.RunSelected(invocations, label, environment);
-        var failed = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (project, classesFailed) in run.FailedByProject)
-        {
-            foreach (var testClass in classesFailed)
-            {
-                failed.Add($"{Path.GetFileNameWithoutExtension(project)}: {testClass}");
-            }
-        }
-
-        return new RunOutcome(failed, run.Complete);
     }
 
     /// <summary>
@@ -1540,8 +1414,11 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     private static HashSet<CoveredMethod> CoveredMembers(Dictionary<string, CoverageMap> maps) => Selections.CoveredMembers(maps.Values);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Mutant {Index} {TypeName}.{MemberName}: the full run crashed or hung, everything TestDetta left out passed; caught")]
+        Message = "Mutant {Index} {TypeName}.{MemberName}: a part TestDetta ran crashed or hung only with the mutant, twice; caught")]
     private partial void LogCaughtByCrash(int index, string typeName, string memberName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: inconclusive: {Note}")]
+    private partial void LogInconclusive(int index, string note);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sampled {Count} member(s), {Covered} of them covered")]
     private partial void LogSampled(int count, int covered);
@@ -1550,11 +1427,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         Message = "Mutant {Index} {TypeName}.{MemberName}: {Killed} class(es) failed, {Missed} not selected, {Share:P0} of classes selected")]
     private partial void LogMutant(int index, string typeName, string memberName, int killed, int missed, double share);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: {TestClass} fails alone without the mutant too; not counted")]
-    private partial void LogFailsWithoutMutant(int index, string testClass);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Mutant {Index}: {TestClass} failed in the full run but passed alone; not counted")]
-    private partial void LogUnconfirmed(int index, string testClass);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName}.{MemberName} is in no test output; not run")]
     private partial void LogNotFound(string typeName, string memberName);
@@ -1568,8 +1441,6 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     [LoggerMessage(Level = LogLevel.Information, Message = "Reusing {Count} stored mutant outcome(s); only the selection is computed for them")]
     private partial void LogCacheOpened(int count);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {Index}: its full run crashed or hung before; only what TestDetta left out runs")]
-    private partial void LogFullRunSkipped(int index);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Mutant {Index}: test outcome reused from the cache")]
     private partial void LogReused(int index);

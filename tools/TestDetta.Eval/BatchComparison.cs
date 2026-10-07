@@ -93,6 +93,12 @@ internal static class BatchComparison
     private static IEnumerable<string> Findings(BatchSummary.RepositoryTotals before, BatchSummary.RepositoryTotals now, bool sameCommit)
     {
         var name = Cell(now.Entry.Name);
+        var rulesBefore = before.Judging ?? BatchSummary.LenientRules;
+        if (now.Judging is { } rules && !string.Equals(rules, rulesBefore, StringComparison.Ordinal))
+        {
+            yield return $"{name}: judged {Cell(rules)}, the previous run {Cell(rulesBefore)}: misses, catches and inconclusive mutants are not comparable";
+        }
+
         if (before.Status == "done" && now.Status != "done")
         {
             yield return $"{name}: {Cell(now.Status)} (was done)";

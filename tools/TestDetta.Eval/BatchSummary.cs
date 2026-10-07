@@ -67,18 +67,48 @@ internal static class BatchSummary
 
         /// <summary>Average share dotnet-affected itself ran for the same mutants; null when it was not compared.</summary>
         public double? DotnetAffectedShare { get; init; }
+
+        /// <summary>
+        /// Synthetic mutants the runs could not judge (docs/evaluation.md, "Judging"); counted as misses in the
+        /// worst-case bound. Null for summaries written before it was counted.
+        /// </summary>
+        public int? Inconclusive { get; init; }
+
+        /// <summary>The judging rules of the synthetic report; <see cref="LenientRules"/> for reports written before the rules were named.</summary>
+        public string? Judging { get; init; }
+
+        /// <summary>Recorded test classes in the maps of the synthetic evaluation; null when unknown.</summary>
+        public int? TestClasses { get; init; }
+
+        /// <summary>Recorded test classes per map, by test project name; empty when unknown.</summary>
+        public IReadOnlyList<MapCount> Maps { get; init; } = [];
+
+        /// <summary>What went wrong that a reader of the numbers must know (docs/evaluation.md, "Incidents").</summary>
+        public IReadOnlyList<string> Incidents { get; init; } = [];
     }
+
+    /// <summary>The judging of synthetic reports written before the rules were named: up to and including round runs-full-1006.</summary>
+    internal const string LenientRules = "lenient (up to runs-full-1006)";
 
     /// <summary>Writes <c>summary.md</c> and returns its text.</summary>
     /// <param name="directory">Corpus output directory.</param>
     /// <param name="corpus">The corpus.</param>
     /// <param name="only">Names of the repositories the run evaluates; empty for all. Others are not counted.</param>
-    public static string Write(string directory, Corpus corpus, IReadOnlySet<string>? only = null)
+    /// <param name="previous">
+    /// Directory or <c>summary.json</c> of the previous round (<c>--compare</c>), whose recorded classes per repository
+    /// and map a drop is measured against; null for none.
+    /// </param>
+    public static string Write(string directory, Corpus corpus, IReadOnlySet<string>? only = null, string? previous = null)
     {
         var totals = corpus.Repositories
             .Where(r => only is not { Count: > 0 } || only.Contains(r.Name))
             .Select(r => Read(directory, r))
             .ToList();
+        if (previous is not null)
+        {
+            totals = WithDrops(totals, previous);
+        }
+
         var text = Markdown(totals);
         File.WriteAllText(Path.Combine(directory, "summary.md"), text);
         File.WriteAllText(Path.Combine(directory, "summary.json"), Json(totals));
@@ -122,11 +152,85 @@ internal static class BatchSummary
                 ProjectLevelShare = Optional(r, "projectLevelShare")?.GetDouble(),
                 ProjectLevelMissed = Optional(r, "projectLevelMissed")?.GetInt32(),
                 DotnetAffectedShare = Optional(r, "dotnetAffectedShare")?.GetDouble(),
+                Inconclusive = Optional(r, "inconclusive")?.GetInt32(),
+                Judging = Optional(r, "judging")?.GetString(),
+                TestClasses = Optional(r, "testClasses")?.GetInt32(),
+                Maps = Optional(r, "maps") is { } maps ? ReadMaps(maps) : [],
+                Incidents = Optional(r, "incidents") is { } incidents ? [.. incidents.EnumerateArray().Select(static i => i.GetString()!)] : [],
             });
         }
 
         return totals;
     }
+
+    /// <summary>The <c>maps</c> array of a synthetic report or a summary.</summary>
+    /// <param name="maps">The array.</param>
+    private static List<MapCount> ReadMaps(JsonElement maps) =>
+        [.. maps.EnumerateArray().Select(static m => new MapCount(
+            m.GetProperty("project").GetString()!,
+            m.GetProperty("classes").GetInt32(),
+            Optional(m, "failed")?.GetInt32()))];
+
+    /// <summary>
+    /// <paramref name="totals"/> with an incident for every repository whose maps recorded fewer test classes than in
+    /// the previous round, in total or in one map: a recording that lost classes decides more by name, and a change in
+    /// the numbers may come from there rather than from the selection. Previous summaries without class counts are
+    /// read from the previous round's own synthetic reports, when the directory holds them.
+    /// </summary>
+    /// <param name="totals">This round's totals.</param>
+    /// <param name="previous">Directory or <c>summary.json</c> of the previous round.</param>
+    internal static List<RepositoryTotals> WithDrops(List<RepositoryTotals> totals, string previous)
+    {
+        var before = (ReadSummary(previous) ?? []).ToDictionary(static t => t.Entry.Name, StringComparer.OrdinalIgnoreCase);
+        var directory = Directory.Exists(previous) ? previous : Path.GetDirectoryName(Path.GetFullPath(previous))!;
+        var result = new List<RepositoryTotals>(totals.Count);
+        foreach (var now in totals)
+        {
+            var drops = new List<string>();
+            var old = before.GetValueOrDefault(now.Entry.Name);
+            var (oldClasses, oldMaps) = (old?.TestClasses, old?.Maps ?? []);
+            if (oldClasses is null || oldMaps.Count == 0)
+            {
+                // A summary written before class counts were kept: the repository's report says them.
+                using var report = ReadJson(Path.Combine(directory, now.Entry.Name, "synthetic.json"));
+                if (report is { } synthetic)
+                {
+                    oldClasses ??= Optional(synthetic.RootElement, "testClasses")?.GetInt32();
+                    oldMaps = oldMaps.Count > 0 ? oldMaps : Optional(synthetic.RootElement, "maps") is { } maps ? ReadMaps(maps) : [];
+                }
+            }
+
+            if (now.TestClasses is { } classes && oldClasses is { } earlier && classes < earlier)
+            {
+                drops.Add($"{now.Entry.Name}: the maps recorded {classes} test classes, {earlier} in the previous round{SameCommit(old, now)}");
+            }
+
+            foreach (var map in now.Maps)
+            {
+                if (oldMaps.FirstOrDefault(m => string.Equals(m.Project, map.Project, StringComparison.Ordinal)) is { } was && map.Classes < was.Classes)
+                {
+                    drops.Add($"{now.Entry.Name}: {map.Project} recorded {map.Classes} test classes, {was.Classes} in the previous round{SameCommit(old, now)}");
+                }
+            }
+
+            foreach (var gone in oldMaps.Where(m => now.Maps.Count > 0 && !now.Maps.Any(n => string.Equals(n.Project, m.Project, StringComparison.Ordinal))))
+            {
+                drops.Add($"{now.Entry.Name}: {gone.Project} has no map, it had one with {gone.Classes} test classes in the previous round{SameCommit(old, now)}");
+            }
+
+            result.Add(drops.Count == 0 ? now : now with { Incidents = [.. now.Incidents, .. drops] });
+        }
+
+        return result;
+    }
+
+    /// <summary>" at the same commit", or the commits when the repository moved, for a drop's text.</summary>
+    /// <param name="before">The previous round's totals, or null.</param>
+    /// <param name="now">This round's.</param>
+    private static string SameCommit(RepositoryTotals? before, RepositoryTotals now) =>
+        before?.Sha is not { } old || now.Sha is not { } current ? string.Empty
+        : string.Equals(old, current, StringComparison.Ordinal) ? " at the same commit"
+        : $" (commit {old[..Math.Min(7, old.Length)]} then, {current[..Math.Min(7, current.Length)]} now)";
 
     /// <summary>The totals as JSON, one object per repository.</summary>
     /// <param name="totals">One entry per evaluated repository.</param>
@@ -137,6 +241,7 @@ internal static class BatchSummary
         {
             json.WriteStartObject();
             json.WriteString("testdettaCommit", EvalBuild.Commit);
+            json.WriteString("judging", Judging(totals));
             json.WriteStartArray("repositories");
             foreach (var t in totals)
             {
@@ -172,6 +277,43 @@ internal static class BatchSummary
                     json.WriteNumber("dotnetAffectedShare", Math.Round(toolShare, 4));
                 }
 
+                if (t.Inconclusive is { } inconclusive)
+                {
+                    json.WriteNumber("inconclusive", inconclusive);
+                }
+
+                json.WriteString("judging", t.Judging);
+                if (t.TestClasses is { } testClasses)
+                {
+                    json.WriteNumber("testClasses", testClasses);
+                }
+
+                json.WriteStartArray("maps");
+                foreach (var map in t.Maps)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("project", map.Project);
+                    json.WriteNumber("classes", map.Classes);
+                    if (map.Failed is { } failed)
+                    {
+                        json.WriteNumber("failed", failed);
+                    }
+                    else
+                    {
+                        json.WriteNull("failed");
+                    }
+
+                    json.WriteEndObject();
+                }
+
+                json.WriteEndArray();
+                json.WriteStartArray("incidents");
+                foreach (var incident in t.Incidents)
+                {
+                    json.WriteStringValue(incident);
+                }
+
+                json.WriteEndArray();
                 json.WriteNumber("commits", t.Commits);
                 json.WriteStartArray("missedMutants");
                 foreach (var name in t.MissedNames)
@@ -202,7 +344,11 @@ internal static class BatchSummary
             : Directory.Exists(folder) ? "running"
             : "not run";
 
-        int killing = 0, missed = 0, syntheticKilling = 0, commits = 0, reused = 0;
+        int killing = 0, missed = 0, syntheticKilling = 0, commits = 0, reused = 0, inconclusive = 0;
+        string? judging = null;
+        int? testClasses = null;
+        List<MapCount> maps = [];
+        List<string> incidents = [];
         double selected = 0, fullSeconds = 0, selectedSeconds = 0, seconds = 0;
         string? sha = null, testdettaCommit = null, toolchain = null;
         double? precision = null;
@@ -217,6 +363,10 @@ internal static class BatchSummary
             testdettaCommit = (Optional(synthetic.RootElement, "testdettaCommit") ?? Optional(synthetic.RootElement, "siftCommit"))?.GetString();
             toolchain = Optional(synthetic.RootElement, "toolchain")?.GetString();
             seconds = Optional(synthetic.RootElement, "seconds")?.GetDouble() ?? 0;
+            judging = Optional(synthetic.RootElement, "judging")?.GetString() ?? LenientRules;
+            testClasses = Optional(synthetic.RootElement, "testClasses")?.GetInt32();
+            maps = Optional(synthetic.RootElement, "maps") is { } recorded ? ReadMaps(recorded) : [];
+            incidents = Optional(synthetic.RootElement, "incidents") is { } found ? [.. found.EnumerateArray().Select(i => $"{entry.Name}: {i.GetString()}")] : [];
             var failing = new List<(double, int)>();
             if (synthetic.RootElement.GetProperty("error").GetString() is { } syntheticError)
             {
@@ -227,7 +377,7 @@ internal static class BatchSummary
                 // A clean result without data is no result: no test project found, or no library to change.
                 status = "no data: nothing to change";
             }
-            else if (synthetic.RootElement.TryGetProperty("testClasses", out var recorded) && recorded.GetInt32() == 0)
+            else if (synthetic.RootElement.TryGetProperty("testClasses", out var classCount) && classCount.GetInt32() == 0)
             {
                 status = "no coverage: decided by name only";
             }
@@ -236,7 +386,13 @@ internal static class BatchSummary
             {
                 reused += Optional(mutant, "reused")?.GetBoolean() == true ? 1 : 0;
                 var caughtByCrash = mutant.TryGetProperty("caughtByCrash", out var crash) && crash.GetBoolean();
-                if (mutant.GetProperty("inconclusive").GetBoolean() || (mutant.GetProperty("killed").GetArrayLength() == 0 && !caughtByCrash))
+                if (mutant.GetProperty("inconclusive").GetBoolean())
+                {
+                    inconclusive++;
+                    continue;
+                }
+
+                if (mutant.GetProperty("killed").GetArrayLength() == 0 && !caughtByCrash)
                 {
                     continue;
                 }
@@ -315,6 +471,24 @@ internal static class BatchSummary
             ProjectLevelShare = projectLevelMutants == 0 ? null : projectLevel / projectLevelMutants,
             ProjectLevelMissed = projectLevelMutants == 0 ? null : projectLevelMissed,
             DotnetAffectedShare = dotnetAffectedMutants == 0 ? null : dotnetAffected / dotnetAffectedMutants,
+            Inconclusive = syntheticReport is null ? null : inconclusive,
+            Judging = judging,
+            TestClasses = testClasses,
+            Maps = maps,
+            Incidents = incidents,
+        };
+    }
+
+    /// <summary>The judging rules of the round: those of every repository, or each with its repositories when they differ.</summary>
+    /// <param name="totals">One entry per repository.</param>
+    private static string Judging(List<RepositoryTotals> totals)
+    {
+        var rules = totals.Where(static t => t.Judging is not null).GroupBy(static t => t.Judging!, StringComparer.Ordinal).ToList();
+        return rules.Count switch
+        {
+            0 => "none (no synthetic report)",
+            1 => rules[0].Key,
+            _ => "mixed: " + string.Join("; ", rules.Select(static g => $"{g.Key} for {string.Join(", ", g.Select(static t => t.Entry.Name))}")),
         };
     }
 
@@ -356,8 +530,18 @@ internal static class BatchSummary
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Repositories: {totals.Count(static t => t.Status == "done")} done, {totals.Count(static t => t.Status.StartsWith("failed", StringComparison.Ordinal))} failed, " +
             $"{totals.Count(static t => t.Status is "running" or "not run")} running or not run, of {totals.Count}");
+        var inconclusive = totals.Sum(static t => t.Inconclusive ?? 0);
+        text.AppendLine(CultureInfo.InvariantCulture, $"- Judging: {Judging(totals)} (docs/evaluation.md, \"Judging\")");
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- **Missed: {missed} of {killing} failing mutants**; 95% upper bound of the miss rate: {MissRate.UpperBound(missed, killing):P2}");
+        text.AppendLine(CultureInfo.InvariantCulture,
+            $"- Inconclusive: {inconclusive} mutant(s); worst case, every one of them a miss: {missed + inconclusive} of {killing + inconclusive}, " +
+            $"upper bound {MissRate.UpperBound(missed + inconclusive, killing + inconclusive):P2}");
+        var incidents = totals.SelectMany(static t => t.Incidents).ToList();
+        if (incidents.Count > 0)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture, $"- **Incidents: {incidents.Count}** (listed below; each makes a selection fall back to names, so its numbers are not what a working recording gives)");
+        }
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Synthetic changes selected {Average(totals.Sum(static t => t.Selected), totals.Sum(static t => t.SyntheticKilling)):P0} of the recorded test classes on average");
         var compared = totals.Where(static t => t.ProjectLevelShare is not null && t.SyntheticKilling > 0).ToList();
@@ -401,14 +585,25 @@ internal static class BatchSummary
         text.AppendLine();
         text.AppendLine("## By repository");
         text.AppendLine();
-        text.AppendLine("| Repository | Tags | Status | Failing mutants | Missed | Selected | Project level | History commits | History saved |");
-        text.AppendLine("|---|---|---|---|---|---|---|---|---|");
+        text.AppendLine("| Repository | Tags | Status | Failing mutants | Missed | Inconclusive | Selected | Project level | History commits | History saved |");
+        text.AppendLine("|---|---|---|---|---|---|---|---|---|---|");
         foreach (var t in totals)
         {
             var saved = t.FullSeconds > 0 ? (1 - (t.SelectedSeconds / t.FullSeconds)).ToString("P0", CultureInfo.InvariantCulture) : "–";
             var share = t.SyntheticKilling > 0 ? Average(t.Selected, t.SyntheticKilling).ToString("P0", CultureInfo.InvariantCulture) : "–";
             text.AppendLine(CultureInfo.InvariantCulture,
-                $"| {Cell(t.Entry.Name)} | {Cell(string.Join(", ", t.Entry.Tags ?? []))} | {Cell(t.Status)} | {t.Killing} | {t.Missed} | {share} | {(t.ProjectLevelShare is { } level ? level.ToString("P0", CultureInfo.InvariantCulture) : "–")} | {t.Commits} | {saved} |");
+                $"| {Cell(t.Entry.Name)} | {Cell(string.Join(", ", t.Entry.Tags ?? []))} | {Cell(t.Status)} | {t.Killing} | {t.Missed} | {(t.Inconclusive is { } open ? open.ToString(CultureInfo.InvariantCulture) : "–")} | {share} | {(t.ProjectLevelShare is { } level ? level.ToString("P0", CultureInfo.InvariantCulture) : "–")} | {t.Commits} | {saved} |");
+        }
+
+        if (incidents.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine("## Incidents");
+            text.AppendLine();
+            foreach (var incident in incidents)
+            {
+                text.AppendLine(CultureInfo.InvariantCulture, $"- {Cell(incident)}");
+            }
         }
 
         var misses = totals.Where(static t => t.MissedNames.Count > 0).ToList();
