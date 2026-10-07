@@ -347,8 +347,13 @@ domain mapping; Porkbun holds the CNAME). Scripts in `deploy/license-service/`:
   secrets only; the database `licenses` is created. The Cloud SQL instance (`testdetta-licenses`, Postgres 17,
   smallest shared-core tier, backups and point-in-time recovery, deletion protection, encrypted connections
   only), the Artifact Registry repository and the service account were made by hand the same day.
-- `deploy.sh`: Cloud Build builds the image (the upload is limited to what the Dockerfile copies,
-  `.gcloudignore`), tagged with the commit; Cloud Run runs it with at most 2 instances, none when idle.
+- `deploy.sh`: Cloud Build builds the image as the account `license-builder` (new projects leave the
+  default compute account without roles; it may read the uploaded source, write to the one repository and
+  write logs), the upload limited to what the Dockerfile copies (`.gcloudignore`), tagged with the commit;
+  Cloud Run runs it with at most 2 instances, none when idle. The organization allows IAM members of its
+  own domain only, so the public endpoint comes from turning Cloud Run's invoker check off rather than
+  granting `allUsers`; the service answers unproven requests with 404 and rate-limits them. Cloud Run's
+  front end answers `/healthz` itself, so that route never reaches the service there (backlog).
 - Secrets are made by a person and never printed: the signing key is generated straight into Secret Manager
   (`license-signing-key-td-2026-10`, key id `td-2026-10`), and the connection string with a random password
   (`license-connection-string`). Cloud Run mounts both as files, the key outside `TESTDETTA_SECRETS`.
