@@ -36,8 +36,8 @@ public sealed record LicenseMail(string To, string Subject, string Text)
             On a machine without CI secrets: td license install <license>
             To check it: td license status
 
-            When seats or repositories change, you receive the new license the same way. Reply to this
-            e-mail if anything does not work.
+            When seats or repositories change, you receive the new license the same way.
+            Reply to this e-mail if anything does not work.
             """;
         return new LicenseMail(to, $"Your TestDetta license {record.Id}", text);
     }
