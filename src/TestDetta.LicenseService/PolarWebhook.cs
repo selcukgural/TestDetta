@@ -60,31 +60,36 @@ public static partial class PolarWebhook
         var webhookId = "polar:" + id;
         if (await store.WebhookHandledAsync(webhookId, context.RequestAborted))
         {
+            LogRepeated(logger, id);
             return Results.Ok();
         }
 
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
         var type = root.GetProperty("type").GetString() ?? "";
+        string? licenseId = null;
+        var outcome = WebhookOutcome.Ignored;
         if (type.StartsWith("subscription.", StringComparison.Ordinal))
         {
             var subscription = root.GetProperty("data");
-            await ApplyAsync(subscription, type, store, logger, context.RequestAborted);
+            licenseId = LicenseId(subscription);
+            outcome = await ApplyAsync(subscription, type, store, logger, context.RequestAborted);
 
             // After the record is saved and before the webhook counts as handled: a send that fails for
             // now leaves the event to Polar's retries, which find the record saved and send again.
             try
             {
-                await delivery.DeliverAsync(LicenseId(subscription), CustomerEmail(subscription), context.RequestAborted);
+                await delivery.DeliverAsync(licenseId, CustomerEmail(subscription), context.RequestAborted);
             }
             catch (Exception e) when (e is HttpRequestException || e is TaskCanceledException && !context.RequestAborted.IsCancellationRequested)
             {
-                LogDeliveryFailed(logger, LicenseId(subscription));
+                LogDeliveryFailed(logger, licenseId);
                 return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
             }
         }
 
-        await store.MarkWebhookHandledAsync(webhookId, context.RequestAborted);
+        await store.MarkWebhookHandledAsync(webhookId, type, licenseId, outcome, context.RequestAborted);
+        LogHandled(logger, id, type, licenseId ?? "-", outcome);
         return Results.Ok();
     }
 
@@ -175,13 +180,13 @@ public static partial class PolarWebhook
         return false;
     }
 
-    /// <summary>Rebuilds the record of the subscription from its current state.</summary>
+    /// <summary>Rebuilds the record of the subscription from its current state; returns what that did.</summary>
     /// <param name="subscription">The <c>data</c> of the event: a Polar subscription.</param>
     /// <param name="type">The event type, for the audit.</param>
     /// <param name="store">License records.</param>
     /// <param name="logger">Receives records that need attention.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
-    private static async Task ApplyAsync(JsonElement subscription, string type, LicenseStore store, ILogger logger, CancellationToken cancellationToken)
+    private static async Task<WebhookOutcome> ApplyAsync(JsonElement subscription, string type, LicenseStore store, ILogger logger, CancellationToken cancellationToken)
     {
         var licenseId = LicenseId(subscription);
         var status = subscription.GetProperty("status").GetString();
@@ -190,7 +195,7 @@ public static partial class PolarWebhook
         // A checkout that never completed pays for nothing: no license unless one exists already.
         if (existing is null && status is "incomplete" or "incomplete_expired")
         {
-            return;
+            return WebhookOutcome.Unpaid;
         }
 
         var seats = subscription.TryGetProperty("seats", out var seatsValue) && seatsValue.ValueKind == JsonValueKind.Number ? seatsValue.GetInt32() : 0;
@@ -198,7 +203,7 @@ public static partial class PolarWebhook
         {
             // The Polar product must be seat-based; an admin fixes the product and the record.
             await NeedsAttentionAsync(store, logger, licenseId, $"polar {type}: the subscription has no seat count", cancellationToken);
-            return;
+            return WebhookOutcome.NeedsAttention;
         }
 
         var scopes = Scopes(subscription);
@@ -224,7 +229,9 @@ public static partial class PolarWebhook
             ended,
             "polar");
 
-        await store.SaveAsync(record, type, $"polar {type}: status {status}, {seats} seats, until {periodEnd:yyyy-MM-dd}", Date(subscription, "modified_at"), cancellationToken);
+        return await store.SaveAsync(record, type, $"polar {type}: status {status}, {seats} seats, until {periodEnd:yyyy-MM-dd}", Date(subscription, "modified_at"), cancellationToken)
+            ? WebhookOutcome.Saved
+            : WebhookOutcome.Stale;
     }
 
     /// <summary>
@@ -285,6 +292,12 @@ public static partial class PolarWebhook
     /// <param name="name">Property name.</param>
     private static DateTimeOffset? Date(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetDateTimeOffset() : null;
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Polar webhook {WebhookId} ({Type}) for license {LicenseId}: {Outcome}")]
+    private static partial void LogHandled(ILogger logger, string webhookId, string type, string licenseId, WebhookOutcome outcome);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Polar webhook {WebhookId} was handled before; nothing done")]
+    private static partial void LogRepeated(ILogger logger, string webhookId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Polar webhook rejected: signature or timestamp does not check out")]
     private static partial void LogRejected(ILogger logger);

@@ -286,6 +286,12 @@ Still to do in phase 2:
 - **Delivery.** Each `webhook-id` is handled once. It is marked handled after it is applied, so a
   failure in between is left to Polar's retries (up to 10). The body limit is raised to 256 KiB for
   this endpoint only.
+- **Trace.** `processed_webhooks` keeps each delivery's event type, license id and outcome (`Saved`,
+  `Stale` for an older state than the stored one, `Unpaid`, `NeedsAttention`, `Ignored` for events other
+  than `subscription.*`), and the same goes to the log at Information; a repeated delivery is logged
+  too. This answers "Polar shows 200, what happened?" without the body, which carries the customer's
+  name and address: neither is stored nor logged, not even masked, since the subscription id finds the
+  customer in Polar.
 - **State.** Every `subscription.*` event carries the whole subscription, so the record is rebuilt
   from its current state, keyed `P-<subscription id>`. The write is conditional on Polar's
   `modified_at` being newer, in one statement, so late or simultaneous events never restore an older

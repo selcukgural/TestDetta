@@ -49,6 +49,11 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
                 at timestamptz not null default now(),
                 primary key (license_id, content_key)
             );
+            -- Step 4: what each handled webhook did, without its body (which carries the customer's name and
+            -- address). Rows from before stay null.
+            alter table processed_webhooks add column if not exists type text;
+            alter table processed_webhooks add column if not exists license_id text;
+            alter table processed_webhooks add column if not exists outcome text;
             """);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -91,16 +96,24 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
     }
 
     /// <summary>
-    /// Records that the webhook <paramref name="webhookId"/> was handled. Called after it was applied,
-    /// so a failure in between leaves it to the provider's retry; applying twice is harmless, since
-    /// provider states are written conditionally.
+    /// Records that the webhook <paramref name="webhookId"/> was handled and what it did. Called after it was
+    /// applied, so a failure in between leaves it to the provider's retry; applying twice is harmless, since
+    /// provider states are written conditionally. Only the event type, the license and the outcome are
+    /// kept, enough to answer "the provider says delivered, what happened?" without personal data.
     /// </summary>
     /// <param name="webhookId">The provider's webhook id.</param>
+    /// <param name="type">The event type, e.g. <c>subscription.updated</c>.</param>
+    /// <param name="licenseId">The license the event is about; null when it is about none.</param>
+    /// <param name="outcome">What handling did.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
-    public async Task MarkWebhookHandledAsync(string webhookId, CancellationToken cancellationToken)
+    public async Task MarkWebhookHandledAsync(string webhookId, string type, string? licenseId, WebhookOutcome outcome, CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand("insert into processed_webhooks (id) values ($1) on conflict (id) do nothing");
+        await using var command = dataSource.CreateCommand(
+            "insert into processed_webhooks (id, type, license_id, outcome) values ($1, $2, $3, $4) on conflict (id) do nothing");
         command.Parameters.Add(new NpgsqlParameter { Value = webhookId });
+        command.Parameters.Add(new NpgsqlParameter { Value = type });
+        command.Parameters.Add(new NpgsqlParameter { Value = (object?)licenseId ?? DBNull.Value, NpgsqlDbType = NpgsqlDbType.Text });
+        command.Parameters.Add(new NpgsqlParameter { Value = outcome.ToString() });
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

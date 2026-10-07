@@ -350,6 +350,41 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         Assert.Contains("attention: polar subscription.updated: the subscription has no seat count", (await Admin("show", "--id", "P-sub-1")).Err + string.Join('\n', await Audit("P-sub-1")), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Each_handled_delivery_keeps_its_type_license_and_outcome_without_personal_data()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+
+        (await Deliver(client, Subscription(type: "subscription.created", modified: "2026-10-03T12:00:00Z"), "msg-1")).Dispose();
+        (await Deliver(client, Subscription(modified: "2026-10-03T10:00:00Z"), "msg-2")).Dispose();
+        (await Deliver(client, Subscription(seats: null, modified: "2026-10-03T13:00:00Z"), "msg-3")).Dispose();
+        (await Deliver(client, Subscription(status: "incomplete").Replace("sub-1", "sub-2", StringComparison.Ordinal), "msg-4")).Dispose();
+        (await Deliver(client, Subscription(type: "order.created"), "msg-5")).Dispose();
+        using var repeated = await Deliver(client, Subscription(seats: 9, modified: "2026-10-03T14:00:00Z"), "msg-1");
+
+        Assert.Equal(HttpStatusCode.OK, repeated.StatusCode);
+        await using var source = NpgsqlDataSource.Create(_connection);
+        await using var command = source.CreateCommand("select id, type, coalesce(license_id, '-'), outcome from processed_webhooks order by id");
+        await using var reader = await command.ExecuteReaderAsync();
+        List<string> rows = [];
+        while (await reader.ReadAsync())
+        {
+            rows.Add($"{reader.GetString(0)} {reader.GetString(1)} {reader.GetString(2)} {reader.GetString(3)}");
+        }
+
+        Assert.Equal(
+            [
+                "polar:msg-1 subscription.created P-sub-1 Saved",
+                "polar:msg-2 subscription.updated P-sub-1 Stale",
+                "polar:msg-3 subscription.updated P-sub-1 NeedsAttention",
+                "polar:msg-4 subscription.updated P-sub-2 Unpaid",
+                "polar:msg-5 order.created - Ignored",
+            ],
+            rows);
+        Assert.Equal(5, (await Record())!.Seats);
+    }
+
     private async Task<IReadOnlyList<string>> Audit(string id)
     {
         await using var source = NpgsqlDataSource.Create(_connection);
