@@ -14,6 +14,24 @@ if (args is ["admin", .. var adminArgs])
     return await AdminCommand.RunAsync(adminArgs, ServiceSettings.From(configuration), Console.Out, Console.Error);
 }
 
+// The daily trial job (reminders, then forgetting what the privacy policy says goes), run by a scheduled
+// Cloud Run job from the same image.
+if (args is ["trials", "daily"])
+{
+    var configuration = SecretFiles.Add(new ConfigurationBuilder()
+        .AddJsonFile("appsettings.json", optional: true)
+        .AddEnvironmentVariables(), Environment.GetEnvironmentVariable(SecretFiles.Variable))
+        .Build();
+    var jobSettings = ServiceSettings.From(configuration);
+    using var loggers = LoggerFactory.Create(static logging => logging.AddSimpleConsole(static console => console.SingleLine = true));
+    await using var jobData = NpgsqlDataSource.Create(jobSettings.ConnectionString);
+    var jobTrials = new TrialStore(jobData);
+    await jobTrials.EnsureSchemaAsync(CancellationToken.None);
+    using var http = new HttpClient { BaseAddress = ResendMailer.ApiBase, Timeout = TimeSpan.FromSeconds(15) };
+    var jobMailer = jobSettings.ResendApiKey is null ? null : new ResendMailer(http, jobSettings, loggers.CreateLogger<ResendMailer>());
+    return await new TrialDaily(jobTrials, jobMailer, loggers.CreateLogger<TrialDaily>()).RunAsync(CancellationToken.None);
+}
+
 var builder = WebApplication.CreateBuilder(args);
 SecretFiles.Add(builder.Configuration, Environment.GetEnvironmentVariable(SecretFiles.Variable));
 var settings = ServiceSettings.From(builder.Configuration);
@@ -52,6 +70,15 @@ builder.Services.AddTransient(static services => new LicenseDelivery(
     services.GetRequiredService<LicenseIssuer>(),
     services.GetService<ILicenseMailer>(),
     services.GetRequiredService<ILogger<LicenseDelivery>>()));
+builder.Services.AddSingleton<TrialStore>();
+builder.Services.AddSingleton(static services => new TrialChallenge(
+    services.GetRequiredService<SigningKey>().DeriveKey(TrialEndpoint.ChallengePurpose),
+    services.GetRequiredService<ServiceSettings>().TrialProofBits));
+// Only the site's own pages may call the trial endpoints from a browser; nothing else has CORS.
+builder.Services.AddCors(cors => cors.AddPolicy("trials", policy => policy
+    .WithOrigins([.. settings.TrialOrigins])
+    .WithMethods("GET", "POST")
+    .WithHeaders("Content-Type")));
 builder.Services.AddSingleton(static services => TrustedKeys.From(services.GetRequiredService<SigningKey>(), services.GetRequiredService<ServiceSettings>()));
 builder.Services.AddRateLimiter(limiter =>
 {
@@ -64,11 +91,16 @@ builder.Services.AddRateLimiter(limiter =>
             _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.PerAddressPerMinute, Window = TimeSpan.FromMinutes(1) })),
         PartitionedRateLimiter.Create<HttpContext, string>(context => context.Request.RouteValues["id"] is string id
             ? RateLimitPartition.GetFixedWindowLimiter("license:" + id, _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.PerLicensePerHour, Window = TimeSpan.FromHours(1) })
+            : RateLimitPartition.GetNoLimiter("other")),
+        // Trial requests: a few per client address (IPv6 by /64) per hour, on top of the daily ceiling over all trials.
+        PartitionedRateLimiter.Create<HttpContext, string>(context => HttpMethods.IsPost(context.Request.Method) && context.Request.Path.StartsWithSegments("/v1/trials")
+            ? RateLimitPartition.GetFixedWindowLimiter("trial:" + ClientPartition.Of(context.Connection.RemoteIpAddress), _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromHours(1) })
             : RateLimitPartition.GetNoLimiter("other")));
 });
 
 var app = builder.Build();
 await app.Services.GetRequiredService<LicenseStore>().EnsureSchemaAsync(CancellationToken.None);
+await app.Services.GetRequiredService<TrialStore>().EnsureSchemaAsync(CancellationToken.None);
 if (settings.TrustedProxies.Count > 0)
 {
     // First: the rate limiter partitions by the client's address, and HSTS is only sent on requests that
@@ -97,11 +129,14 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
+app.UseCors();
 app.UseRateLimiter();
 // Not /healthz: Cloud Run's front end answers some paths ending in "z" itself, so that never reaches the service.
 app.MapGet("/v1/health", static () => Results.Text("ok"));
 app.MapGet("/v1/licenses/{id}", RefreshEndpoint.HandleAsync);
 app.MapPost("/webhooks/polar", PolarWebhook.HandleAsync);
+app.MapGet("/v1/trials/challenge", TrialEndpoint.Challenge).RequireCors("trials");
+app.MapPost("/v1/trials", TrialEndpoint.RequestAsync).RequireCors("trials");
 await app.RunAsync();
 return 0;
 

@@ -21,10 +21,14 @@ SQL=$P:$R:testdetta-licenses
 case "${1:-production}" in
   production)
     SERVICE=license-service SA=license-service@$P.iam.gserviceaccount.com
-    PREFIX=license KEY_ID=td-2026-10 DOMAIN=license.testdetta.com ;;
+    PREFIX=license KEY_ID=td-2026-10 DOMAIN=license.testdetta.com
+    # Trials open at launch, with the trusted key (TRIALS=true deploy.sh production then).
+    TRIALS=${TRIALS:-false} TRIAL_ORIGINS=https://testdetta.com ;;
   sandbox)
     SERVICE=license-service-sandbox SA=license-sandbox@$P.iam.gserviceaccount.com
-    PREFIX=license-sandbox KEY_ID=td-sandbox-1 DOMAIN= ;;
+    PREFIX=license-sandbox KEY_ID=td-sandbox-1 DOMAIN=
+    # The sandbox takes trials from the live site and from a local build of it (node build.mjs --serve).
+    TRIALS=true TRIAL_ORIGINS=https://testdetta.com,http://localhost:4321 ;;
   *) echo "usage: deploy.sh [production|sandbox]" >&2; exit 2 ;;
 esac
 
@@ -48,6 +52,8 @@ if exists "$PREFIX-resend-api-key"; then
   MAIL_FROM=${MAIL_FROM:-TestDetta <licenses@testdetta.com>} MAIL_REPLY_TO=${MAIL_REPLY_TO:-support@testdetta.com}
   SECRETS="$SECRETS,/secrets/resend/Licenses__ResendApiKey=$PREFIX-resend-api-key:latest"
   ENV="$ENV|Licenses__MailFrom=$MAIL_FROM${MAIL_REPLY_TO:+|Licenses__MailReplyTo=$MAIL_REPLY_TO}"
+  # Trials need e-mail: the license goes to the address, which is how the address is checked.
+  ENV="$ENV|Licenses__TrialsEnabled=$TRIALS|Licenses__TrialOrigins=$TRIAL_ORIGINS"
 fi
 
 gcloud builds submit . --project $P --region $R --config deploy/license-service/cloudbuild.yaml --substitutions "_IMAGE=$IMAGE" \
@@ -74,6 +80,14 @@ if [ -z "$BASE" ]; then
   gcloud run services update $SERVICE --project $P --region $R --update-env-vars "Licenses__PublicBaseUrl=$BASE"
 fi
 echo "$SERVICE: $BASE"
+
+# The daily trial job (reminders, then forgetting addresses 7 days after a trial ends): the same image and
+# settings, run as `trials daily` by Cloud Scheduler (setup.sh). The service scales to zero and has no clock.
+gcloud run jobs deploy $SERVICE-trials --project $P --region $R --image "$IMAGE" \
+  --service-account "$SA" --set-cloudsql-instances "$SQL" \
+  --set-secrets "$SECRETS" \
+  --set-env-vars "^|^$ENV|Licenses__PublicBaseUrl=$BASE" \
+  --args trials,daily --tasks 1 --max-retries 1 --task-timeout 10m --cpu 1 --memory 512Mi
 
 # Production's domain: once, after the first deploy. Porkbun then needs the CNAME record this prints
 # (license -> ghs.googlehosted.com); Google issues the certificate when the record resolves.

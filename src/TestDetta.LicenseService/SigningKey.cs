@@ -33,6 +33,25 @@ public sealed class SigningKey : IDisposable
     /// <summary>The public part, as SubjectPublicKeyInfo: what TestDetta embeds to verify licenses.</summary>
     public byte[] PublicKey => _key.ExportSubjectPublicKeyInfo();
 
+    /// <summary>
+    /// A 32-byte secret for <paramref name="purpose"/>, derived from the private key with HKDF-SHA256, so the
+    /// service needs no further secret for its HMACs (trial challenges, e-mail hashes). Every instance holding
+    /// the key derives the same value; a new signing key gives new values, which starts those HMACs afresh.
+    /// </summary>
+    /// <param name="purpose">What the secret is for; different purposes give unrelated secrets.</param>
+    public byte[] DeriveKey(string purpose)
+    {
+        var secret = _key.ExportParameters(includePrivateParameters: true).D!;
+        try
+        {
+            return HKDF.DeriveKey(HashAlgorithmName.SHA256, secret, 32, info: System.Text.Encoding.UTF8.GetBytes(purpose));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(secret);
+        }
+    }
+
     /// <summary>Signs <paramref name="claims"/>, whose key id must be <see cref="KeyId"/>.</summary>
     /// <param name="claims">What the license grants.</param>
     public string Sign(LicenseClaims claims) => License.Sign(claims, _key);

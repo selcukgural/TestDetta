@@ -81,7 +81,7 @@ public sealed partial class LicenseDelivery(LicenseStore store, LicenseIssuer is
 
     /// <summary>True for a single plain address; anything else (lists, display names, line breaks) is not sent to.</summary>
     /// <param name="address">The address from the event.</param>
-    private static bool IsDeliverable([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? address) =>
+    internal static bool IsDeliverable([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? address) =>
         address is { Length: > 0 and <= MaxAddressLength }
         && MailAddress.TryCreate(address, out var parsed)
         && parsed.Address == address;

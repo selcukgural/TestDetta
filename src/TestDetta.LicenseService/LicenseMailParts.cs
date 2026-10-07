@@ -38,10 +38,11 @@ public sealed record LicenseMailParts(
     public static LicenseMailParts For(LicenseRecord record, string license)
     {
         var until = (record.PeriodEnd + LicenseIssuer.Slack(record.Kind)).ToString("d MMM yyyy", CultureInfo.InvariantCulture);
-        var validUntil = record.Kind switch
+        var validUntil = (record.Kind, record.Source) switch
         {
-            LicenseKind.Subscription => $"{until}, then renewed by itself while the subscription runs",
-            LicenseKind.Trial => $"{until}, the end of the trial; a subscription brings a new license by e-mail",
+            (LicenseKind.Subscription, _) => $"{until}, then renewed by itself while the subscription runs",
+            (LicenseKind.Trial, "trial") => $"{until}, the end of the trial; to keep going, subscribe at testdetta.com/pricing",
+            (LicenseKind.Trial, _) => $"{until}, the end of the trial; a subscription brings a new license by e-mail",
             _ => until,
         };
         var seller = record.Source == "polar"
