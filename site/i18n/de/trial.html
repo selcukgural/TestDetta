@@ -1,0 +1,38 @@
+<!-- title: Kostenlos testen; description: Testen Sie {{name}} {{trialDays}} Tage lang auf Ihren privaten Repositorys, ohne Kreditkarte.; source: 9d9961b9d911 -->
+<div class="wrap legal prose trial">
+<h1>{{name}} {{trialDays}} Tage testen</h1>
+<p class="lead">Keine Kreditkarte, kein Verkaufsgespräch. Geben Sie an, wohin die Lizenz gehen soll und welche Repositorys sie abdeckt; sie kommt innerhalb einer Minute per E-Mail.</p>
+
+<form class="trial-form" data-trial data-endpoint="{{trialEndpoint}}" data-open="{{trialsOpen}}" novalidate
+  data-msg-working="Ihre Anfrage wird vorbereitet…"
+  data-msg-sending="Wird gesendet…"
+  data-msg-accepted="Erledigt. Wenn diese Adresse und diese Repositorys eine Testphase erhalten können, ist die Lizenz auf dem Weg in Ihr Postfach. Sie kommt von licenses@{{domain}}; sehen Sie auch im Spam-Ordner nach, falls sie nicht erscheint."
+  data-msg-email="Bitte geben Sie eine einzige E-Mail-Adresse an, etwa dev@acme.com."
+  data-msg-repositories="Bitte nennen Sie jedes Repository-Muster mit Host und Owner, etwa github.com/acme/* oder git.acme.corp/team/app."
+  data-msg-terms="Bitte akzeptieren Sie die Bedingungen, um eine Lizenz zu erhalten."
+  data-msg-challenge="Die Anfrage hat zu lange gedauert und ist abgelaufen. Bitte senden Sie sie erneut."
+  data-msg-paused="Für heute haben wir so viele Testphasen vergeben, wie wir können. Bitte versuchen Sie es morgen erneut."
+  data-msg-retry="Die Lizenz-E-Mail konnte gerade nicht gesendet werden. Bitte versuchen Sie es in ein paar Minuten erneut."
+  data-msg-error="Etwas ist schiefgegangen. Bitte versuchen Sie es erneut oder schreiben Sie an {{supportEmail}}.">
+  <label for="trial-email"><span>Geschäftliche E-Mail</span>
+    <input id="trial-email" type="email" name="email" autocomplete="email" maxlength="254" required></label>
+  <label for="trial-repositories"><span>Repositorys</span>
+    <textarea id="trial-repositories" name="repositories" rows="3" maxlength="2000" placeholder="github.com/acme/*" required></textarea>
+    <small>Zuerst Host und Owner, etwa <code>github.com/acme/*</code> oder <code>git.acme.corp/team/app</code>. Mehrere trennen Sie mit Kommas oder Zeilenumbrüchen.</small></label>
+  <label class="trial-consent" for="trial-terms"><input id="trial-terms" type="checkbox" name="terms" required>
+    <span>Ich akzeptiere die <a href="/legal/terms/">Bedingungen</a> und habe die <a href="/legal/privacy/">Datenschutzerklärung</a> gelesen.</span></label>
+  <button class="button" type="submit">Testlizenz zusenden</button>
+  <p class="trial-status" role="status" aria-live="polite"></p>
+  <p class="trial-closed">Testphasen starten mit dem Launch. Bis dahin braucht {{name}} gar keine Lizenz: <a href="/docs/">legen Sie los</a> oder probieren Sie den <a href="/docs/cli/#shadow">Shadow-Modus</a> an Ihren eigenen Pull Requests.</p>
+</form>
+
+<h2>Was die Testphase umfasst</h2>
+<ul>
+  <li>{{trialDays}} Tage lang alle Funktionen auf den genannten Repositorys, für bis zu 50 aktive Committer.</li>
+  <li>Eine Testphase pro Organisation und pro E-Mail-Adresse in 12 Monaten.</li>
+  <li>Eine einzige Erinnerung per E-Mail 3 Tage vor dem Ende, sofern Sie bis dahin kein Abonnement abgeschlossen haben.</li>
+  <li>Danach führt {{name}} wieder jeden Test aus, wie zuvor. In Ihrer Pipeline geht nichts kaputt.</li>
+  <li>Öffentliche Repositorys brauchen nie eine Lizenz.</li>
+</ul>
+<p>Um nach der Testphase weiterzumachen, <a href="/pricing/">schließen Sie ein Abonnement ab</a> und ersetzen die Testlizenz durch die neue. Was wir zu Ihrer Testphase speichern und wie lange, steht in der <a href="/legal/privacy/">Datenschutzerklärung</a>.</p>
+</div>

@@ -637,3 +637,22 @@ pre.editor-code { margin: 0; padding: 14px 0; background: none; border: 0; borde
   .main-nav .button-small { display: none; }
   .prose table.match { display: block; overflow-x: auto; }
 }
+
+/* Trial form: the calculator's input style; the closed note replaces the fields until trials open. */
+.trial-form { display: grid; gap: 16px; max-width: 560px; margin: 28px 0 8px; padding: 26px 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+.trial-form label { display: grid; gap: 6px; font-size: 0.92rem; font-weight: 600; min-width: 0; }
+.trial-form input[type="email"], .trial-form textarea { width: 100%; padding: 10px 12px; font: 1rem var(--font); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; resize: vertical; }
+.trial-form input:focus, .trial-form textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.trial-form small { font-weight: 400; color: var(--text-soft); font-size: 0.85rem; }
+.trial-form .trial-consent { display: flex; align-items: flex-start; gap: 10px; font-weight: 400; }
+.trial-form .trial-consent input { margin-top: 4px; accent-color: var(--accent); }
+.trial-form .button { justify-self: start; }
+.trial-form .button:disabled { opacity: 0.6; cursor: progress; }
+.trial-status { margin: 0; min-height: 1.4em; font-size: 0.95rem; }
+.trial-status:empty { display: none; }
+.trial-status[data-kind="ok"] { color: var(--ok); font-weight: 600; }
+.trial-status[data-kind="error"] { color: var(--diff-del); }
+.trial-status[data-kind="busy"] { color: var(--text-soft); }
+.trial-closed { margin: 0; color: var(--text-soft); }
+.trial-form[data-open="true"] .trial-closed { display: none; }
+.trial-form:not([data-open="true"]) > label, .trial-form:not([data-open="true"]) > .button, .trial-form:not([data-open="true"]) > .trial-status { display: none; }

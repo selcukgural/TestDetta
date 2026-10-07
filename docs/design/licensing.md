@@ -170,7 +170,7 @@ A small web service, the only holder of the signing key.
 - **Cancellation and refunds:** no further renewal is issued, and the license runs out at
   `validUntil`. There is no instant revocation offline, by design.
 - **Trials:** sign-up with an email, verified before a key is issued. One trial per scope, and the
-  service throttles per address and per scope.
+  service throttles per address and per scope. As built: "Trials (as built)" below.
 - Requests to it never carry personal data from the customer's repositories.
 
 ## CLI
@@ -395,6 +395,44 @@ secrets exist (`<prefix>-polar-webhook-secret`, `<prefix>-resend-api-key`, with 
 The key's public half is not in `LicenseKeys.Trusted` yet: adding it makes such licenses verify and starts
 refresh requests, while the site says no license verifies before launch. It goes in with launch, together
 with that text.
+
+## Trials (as built, 2026-10-07)
+
+The site's trial needs no card (owner's decision, 2026-10-07: Polar's trials always take a card, so its
+products carry no trial; a purchase pays from day one).
+
+- **Flow.** `/trial/` (five languages, `site/src/assets/trial.js`) fetches `GET /v1/trials/challenge`, solves
+  the proof of work while the visitor types and posts `{email, repositories, challenge, nonce}` to
+  `POST /v1/trials` (`TrialEndpoint`). The service checks the address (one plain address), the patterns
+  (`TrialScopes`: host and owner first, no wildcard in either, at most 10) and the proof, reserves the trial,
+  saves a `T-<random>` record (kind trial, 50 seats, the patterns, 30 days, source `trial`, licensee
+  "Trial for <first owner>") and e-mails it with the license mail. Sending the license to the address is
+  the address check. A mail that does not go out revokes the record and releases the reservation, so a
+  retry works.
+- **Proof of work** (`TrialChallenge`, no third party): a token `<seconds>.<random>.<HMAC>` under a key
+  derived from the signing key (HKDF, `SigningKey.DeriveKey`), good for 15 minutes and once
+  (`trial_challenges`); the nonce must give a SHA-256 with 17 leading zero bits (`TrialProofBits`), a few
+  seconds in a browser.
+- **Limits.** One trial per owner key (`github.com/acme`) and per address in 12 months, checked and
+  reserved in one transaction under an advisory lock (`TrialStore.ReserveAsync`); a daily ceiling over all
+  trials (`TrialsPerDay`, 50), reserved before any mail is sent, answering 503 `paused`; 5 requests per
+  client address (IPv6 by /64) per hour in memory.
+- **No enumeration.** Every well-formed request gets 202 `accepted` after at least 2 s
+  (`TrialMinimumResponse`), whether a license went out or the address or owner had one; malformed
+  requests get 400 with the field to fix, which says nothing about anyone else.
+- **Data.** The address is kept until 7 days after the trial ends, for the one reminder; then only its
+  HMAC (key derived from the signing key) and the owner keys stay, 12 months (rows go after 400 days).
+  The IP address is used by the rate limiter only. The license carries the patterns, never the address.
+  Logs name the trial id and the outcome. Privacy policy: "Starting a trial", five languages.
+- **Daily job.** `dotnet TestDetta.LicenseService.dll trials daily` (`TrialDaily`), deployed by `deploy.sh`
+  as the Cloud Run job `<service>-trials` and run at 07:00 Istanbul by Cloud Scheduler
+  (`schedule-trials.sh`, account `license-scheduler` with `run.invoker` on the job only): one reminder 3
+  days before the end (`TrialReminderMail`), never to an owner whose scopes a Polar license names, then
+  `PurgeAsync`.
+- **Switches.** `Licenses:TrialsEnabled` (needs the Resend key) and `Licenses:TrialOrigins` (CORS):
+  sandbox on, from `https://testdetta.com` and `http://localhost:4321`; production off until launch
+  (`TRIALS=true deploy.sh production`), with the site's `trialsOpen` in `site/site.json`, which shows
+  "Trials open at launch" until then. The site's CSP allows `connect-src https://license.testdetta.com`.
 
 ## Phases
 
