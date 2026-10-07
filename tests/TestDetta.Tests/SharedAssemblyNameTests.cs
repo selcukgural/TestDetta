@@ -13,8 +13,9 @@ namespace TestDetta.Tests;
 /// </summary>
 public sealed class SharedAssemblyNameTests : IDisposable
 {
-    // The graph lists deeper directories first: the second variant comes first, so a first-listed owner
-    // would leave the first variant's test project without its assemblies.
+    // Graph order depends on the file system (macOS lists the second variant first, Linux the first): a
+    // first-listed owner would leave one variant's test project without its assemblies, and the theory
+    // below checks both, so either order catches it.
     private const string First = "src/Lib.V1/Lib.V1.csproj";
     private const string Second = "src/Lib.V2.Roslyn/Lib.V2.Roslyn.csproj";
     private const string FirstTests = "tests/Lib.V1.Tests/Lib.V1.Tests.csproj";
@@ -87,8 +88,9 @@ public sealed class SharedAssemblyNameTests : IDisposable
         var graph = LoadGraph();
         var owners = new ProjectAssemblies(NullLogger.Instance).Owners(graph, _repo.Root);
 
-        Assert.Equal([Second, First], owners["Lib.dll"].Select(Relative));
-        Assert.Equal([SecondTests, FirstTests], owners["Lib.Tests.dll"].Select(Relative));
+        // Graph order differs between file systems (macOS, Linux); selection never relies on it.
+        Assert.Equal([First, Second], owners["Lib.dll"].Select(Relative).Order(StringComparer.Ordinal));
+        Assert.Equal([FirstTests, SecondTests], owners["Lib.Tests.dll"].Select(Relative).Order(StringComparer.Ordinal));
     }
 
     [Theory]
