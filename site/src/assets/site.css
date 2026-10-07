@@ -112,6 +112,7 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.9em; }
 .button-ghost { background: transparent; color: var(--text); border-color: var(--border); }
 .button-ghost:hover { background: var(--bg-soft); border-color: var(--border); }
 .button-small { padding: 6px 14px; font-size: 0.9rem; }
+.button[aria-disabled="true"] { opacity: 0.55; cursor: default; pointer-events: none; }
 .button-large { padding: 13px 24px; font-size: 1.02rem; }
 .button-light { background: var(--ink-text); color: var(--ink); border-color: var(--ink-text); }
 .button-light:hover { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--ink); }
