@@ -292,13 +292,28 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         (await Deliver(client, Subscription(seats: 5, modified: "2026-10-03T10:00:00Z"), "msg-1")).Dispose();
         Assert.Equal(7, (await Record())!.Seats);
 
-        // Polar sends a new subscription without modified_at: its creation time makes it the oldest state.
+        // Polar sends a new subscription without modified_at: the event's time still makes it the oldest state.
         (await Deliver(client, Subscription(seats: 3, type: "subscription.created", unmodified: true), "msg-3")).Dispose();
         Assert.Equal(7, (await Record())!.Seats);
 
         // The same delivery again, even with other content, is handled once.
         (await Deliver(client, Subscription(seats: 9, modified: "2026-10-03T13:00:00Z"), "msg-2")).Dispose();
         Assert.Equal(7, (await Record())!.Seats);
+    }
+
+    [Fact]
+    public async Task Events_of_one_checkout_without_modified_at_apply_in_the_order_polar_sent_them()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+
+        // As the sandbox sent them on 2026-10-07: created, active and updated within a second, none with modified_at.
+        (await Deliver(client, Subscription(status: "trialing", seats: 1, type: "subscription.created", modified: "2026-10-03T10:00:01Z", unmodified: true), "msg-1")).Dispose();
+        (await Deliver(client, Subscription(status: "active", seats: 2, type: "subscription.active", modified: "2026-10-03T10:00:02Z", unmodified: true), "msg-2")).Dispose();
+        (await Deliver(client, Subscription(status: "active", seats: 3, type: "subscription.updated", modified: "2026-10-03T10:00:03Z", unmodified: true), "msg-3")).Dispose();
+
+        var record = await Record();
+        Assert.Equal((3, LicenseKind.Subscription), (record!.Seats, record.Kind));
     }
 
     [Fact]

@@ -73,7 +73,7 @@ public static partial class PolarWebhook
         {
             var subscription = root.GetProperty("data");
             licenseId = LicenseId(subscription);
-            outcome = await ApplyAsync(subscription, type, store, logger, context.RequestAborted);
+            outcome = await ApplyAsync(root, store, logger, context.RequestAborted);
 
             // After the record is saved and before the webhook counts as handled: a send that fails for
             // now leaves the event to Polar's retries, which find the record saved and send again.
@@ -180,14 +180,15 @@ public static partial class PolarWebhook
         return false;
     }
 
-    /// <summary>Rebuilds the record of the subscription from its current state; returns what that did.</summary>
-    /// <param name="subscription">The <c>data</c> of the event: a Polar subscription.</param>
-    /// <param name="type">The event type, for the audit.</param>
+    /// <summary>Rebuilds the record of the event's subscription from its current state; returns what that did.</summary>
+    /// <param name="event">A <c>subscription.*</c> event: its <c>type</c>, <c>timestamp</c> and the subscription as <c>data</c>.</param>
     /// <param name="store">License records.</param>
     /// <param name="logger">Receives records that need attention.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
-    private static async Task<WebhookOutcome> ApplyAsync(JsonElement subscription, string type, LicenseStore store, ILogger logger, CancellationToken cancellationToken)
+    private static async Task<WebhookOutcome> ApplyAsync(JsonElement @event, LicenseStore store, ILogger logger, CancellationToken cancellationToken)
     {
+        var subscription = @event.GetProperty("data");
+        var type = @event.GetProperty("type").GetString() ?? "";
         var licenseId = LicenseId(subscription);
         var status = subscription.GetProperty("status").GetString();
         var existing = await store.GetAsync(licenseId, cancellationToken);
@@ -229,9 +230,11 @@ public static partial class PolarWebhook
             ended,
             "polar");
 
-        // Polar leaves modified_at null until a subscription first changes, so a created event carries none;
-        // without the creation time it would count as a manual change and overwrite any newer state.
-        var stateAt = Date(subscription, "modified_at") ?? Date(subscription, "created_at");
+        // The event's own time orders the states: Polar builds the payload when it emits the event, and leaves
+        // modified_at null for a while (created, active and updated of one checkout all carried none, sandbox
+        // 2026-10-07), so modified_at or created_at would make them equal and drop all but the first. A
+        // redelivery repeats the payload with its time, so it can never pass a newer state.
+        var stateAt = Date(@event, "timestamp") ?? Date(subscription, "modified_at") ?? Date(subscription, "created_at");
         return await store.SaveAsync(record, type, $"polar {type}: status {status}, {seats} seats, until {periodEnd:yyyy-MM-dd}", stateAt, cancellationToken)
             ? WebhookOutcome.Saved
             : WebhookOutcome.Stale;

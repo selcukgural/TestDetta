@@ -293,11 +293,12 @@ Still to do in phase 2:
   name and address: neither is stored nor logged, not even masked, since the subscription id finds the
   customer in Polar.
 - **State.** Every `subscription.*` event carries the whole subscription, so the record is rebuilt
-  from its current state, keyed `P-<subscription id>`. The write is conditional on Polar's
-  `modified_at` being newer, in one statement, so late or simultaneous events never restore an older
-  state. Polar leaves `modified_at` null until a subscription first changes, so a `subscription.created`
-  carries none; `created_at` stands in for it, otherwise a late or redelivered created event would
-  count as a manual change and overwrite a newer state (seen in the sandbox on 2026-10-07).
+  from its current state, keyed `P-<subscription id>`. The write is conditional on the state being
+  newer than the stored one, in one statement, so late or simultaneous events never restore an older
+  state. The state's time is the event's `timestamp` (Polar builds the payload when it emits the event,
+  and a redelivery repeats both), else `modified_at`, else `created_at`. Not `modified_at` first: Polar
+  leaves it null for a while, and the created, active and updated events of one sandbox checkout
+  (2026-10-07) all carried none, so every event after the first counted as stale.
 - **Mapping:**
   - seats come from the subscription's `seats`;
   - the period ends at `ends_at`, or else `current_period_end`; a subscription cancelled at period
