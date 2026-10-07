@@ -19,6 +19,9 @@ internal enum CliCommand
 
     /// <summary><c>td license install &lt;license&gt;</c>: store a license in <c>~/.testdetta/license</c>.</summary>
     LicenseInstall,
+
+    /// <summary><c>td audit</c>: break members of the team's code one at a time and check the selection caught every failure.</summary>
+    Audit,
 }
 
 /// <summary>Options every command shares: what to compare and how much to log.</summary>
@@ -163,6 +166,58 @@ internal sealed record RecordSettings(string Configuration, IReadOnlyList<string
     public bool NoBuild { get; init; }
 }
 
+/// <summary>
+/// Options of <c>td audit</c> (docs/design/audit.md). The audit stops at the first of: <see cref="TargetBroken"/>
+/// changes that broke tests, <see cref="MaxMutants"/> changes run, the <see cref="Budget"/> spent, the sample used up.
+/// </summary>
+internal sealed record AuditSettings
+{
+    /// <summary>
+    /// Default of <see cref="TargetBroken"/>: the graduation criterion of shadow mode, where 0 misses bound the miss
+    /// rate below 3% at 95% confidence (docs/design/shadow-mode.md).
+    /// </summary>
+    public const int DefaultTargetBroken = 100;
+
+    /// <summary>Default of <see cref="Budget"/>: a night's run on a CI runner, well inside a job's six-hour limit.</summary>
+    public static readonly TimeSpan DefaultBudget = TimeSpan.FromHours(4);
+
+    /// <summary>Stop once this many changes broke tests.</summary>
+    public int TargetBroken { get; init; } = DefaultTargetBroken;
+
+    /// <summary>Stop after this many changes ran tests; null for no limit.</summary>
+    public int? MaxMutants { get; init; }
+
+    /// <summary>Longest the audit may run before it starts no further change; null for no limit.</summary>
+    public TimeSpan? Budget { get; init; } = DefaultBudget;
+
+    /// <summary>Changes tested at once, each in its own working copy; every one runs test hosts, so memory grows with it.</summary>
+    public int Parallelism { get; init; } = 1;
+
+    /// <summary>Seed of the sample order.</summary>
+    public int Seed { get; init; } = 1;
+
+    /// <summary>Mutant kinds; each member gets one of them by a stable hash.</summary>
+    public IReadOnlySet<TestDetta.Mutants.MutantKind> Kinds { get; init; } = new HashSet<TestDetta.Mutants.MutantKind>
+    {
+        TestDetta.Mutants.MutantKind.Throw,
+        TestDetta.Mutants.MutantKind.ReturnDefault,
+        TestDetta.Mutants.MutantKind.FlipBranch,
+        TestDetta.Mutants.MutantKind.FieldValue,
+    };
+
+    /// <summary>The kinds as given on the command line, for the reproduction; <c>all</c> by default.</summary>
+    public string KindsText { get; init; } = "all";
+
+    /// <summary>Only these members (<c>Type.Member</c>), to reproduce a change of a report; empty for the whole sample.</summary>
+    public IReadOnlyList<string> Members { get; init; } = [];
+
+    /// <summary>Where the JSON report goes; null for <c>.testdetta/testdetta-audit.json</c> in the repository.</summary>
+    public string? Report { get; init; }
+
+    /// <summary>Where the work folder with the working copy goes; null for <c>/tmp</c> (the temp folder on Windows).</summary>
+    public string? WorkDirectory { get; init; }
+}
+
 /// <summary>Options of <c>td license</c>.</summary>
 /// <param name="Install">For <c>install</c>: a license string, or the path of a file holding one.</param>
 internal sealed record LicenseSettings(string? Install);
@@ -183,6 +238,9 @@ internal sealed record CliOptions(
     /// <summary>Options of <c>td license</c>; defaults for other commands.</summary>
     public LicenseSettings License { get; init; } = new(Install: null);
 
+    /// <summary>Options of <c>td audit</c>; defaults for other commands.</summary>
+    public AuditSettings Audit { get; init; } = new();
+
     /// <summary>Help text printed for <c>--help</c> and after a usage error.</summary>
     public const string Usage = """
         Usage:
@@ -191,6 +249,8 @@ internal sealed record CliOptions(
           td record [options]                Run all tests with coverage and store the map in .testdetta/coverage
           td license status [options]        Check the TestDetta license and show what it covers
           td license install <license|file>  Store a license in ~/.testdetta/license (when no CI secret can hold it)
+          td audit [options] [-- <args>]     Break members of your code one at a time (in a copy of the
+                                             working tree) and check the selection ran every test that failed
 
         Options:
           --base <ref>         Git ref to compare against (default: origin/main)
@@ -237,6 +297,21 @@ internal sealed record CliOptions(
                                0 or none means no limit. The full run itself has no limit.
           -- <args>            Pass the remaining arguments to every dotnet test, e.g. -- -c Release
 
+        td audit (needs no license and sends nothing; your sources and build output are never written):
+          --target-broken <n>  Stop once n changes broke tests (default: 100)
+          --max-mutants <n>    Stop after n changes ran tests (default: no limit)
+          --budget <time>      Start no change after this long (default: 4h; 0 or none: no limit)
+          --parallel <n>       Changes tested at once, each in its own copy (default: 1; memory grows with n)
+          --seed <n>           Seed of the sample order (default: 1)
+          --kinds <list>       throw, return-default, flip-branch, field-value or all (default: all)
+          --member <Type.Member>  Only this member (repeat for several), to reproduce a change of a report
+          --report <path>      JSON report (default: .testdetta/testdetta-audit.json)
+          --summary-file <path>  Append a Markdown summary, e.g. to $GITHUB_STEP_SUMMARY
+          --work-dir <dir>     Where the working copy goes (default: /tmp; the temp folder on Windows)
+          -- <args>            Pass the remaining arguments to every dotnet test, e.g. -- -c Release
+                               The working tree must have no uncommitted changes; every change is
+                               compared with HEAD, using the coverage maps as td test does.
+
         td record:
           -c, --configuration <name>  Build configuration (default: Debug)
           --project <path>     Record only this test project (relative to the repository root); repeat for several
@@ -248,7 +323,7 @@ internal sealed record CliOptions(
         License: set TESTDETTA_LICENSE (or TESTDETTA_LICENSE_FILE) in CI. Public repositories need none.
         Without a valid license every test runs; the build never fails because of it.
 
-        Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed.
+        Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed (td audit: a miss).
         """;
 
     /// <summary>Parses the whole command line, including the command name.</summary>
@@ -299,6 +374,10 @@ internal sealed record CliOptions(
                 options = options with { Command = CliCommand.Record };
                 break;
 
+            case ["audit", ..]:
+                options = options with { Command = CliCommand.Audit };
+                break;
+
             case []:
                 error = "Missing command";
                 return false;
@@ -314,9 +393,9 @@ internal sealed record CliOptions(
 
             if (arg == "--")
             {
-                if (options.Command != CliCommand.Test)
+                if (options.Command is not (CliCommand.Test or CliCommand.Audit))
                 {
-                    error = "'--' is only valid for td test";
+                    error = "'--' is only valid for td test and td audit";
                     return false;
                 }
 
@@ -389,11 +468,17 @@ internal sealed record CliOptions(
                 options = options with { Record = options.Record with { NoBuild = true } };
                 return true;
 
+            case "--base" when options.Command == CliCommand.Audit:
+                error = "td audit compares every change with HEAD; --base does not apply";
+                return false;
+
             case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback":
-            case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record:
+            case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record or CliCommand.Audit:
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
             case "--summary-file" or "--shadow-report" when options.Command == CliCommand.Test:
+            case "--summary-file" or "--target-broken" or "--max-mutants" or "--budget" or "--parallel" or "--seed" or "--kinds" or "--member" or "--report" or "--work-dir"
+                when options.Command == CliCommand.Audit:
             case "--shadow-rerun-timeout" or "--shadow-rerun-idle-timeout" or "--shadow-base-timeout" or "--shadow-base-idle-timeout" or "--shadow-classify-budget" when options.Command == CliCommand.Test:
                 break;
 
@@ -409,6 +494,11 @@ internal sealed record CliOptions(
         }
 
         var value = args[++i];
+        if (options.Command == CliCommand.Audit && arg is not ("--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--maps-dir"))
+        {
+            return TryParseAuditOption(arg, value, ref options, out error);
+        }
+
         switch (arg)
         {
             case "--base":
@@ -515,5 +605,91 @@ internal sealed record CliOptions(
                 options = options with { Analysis = options.Analysis with { LogLevel = level } };
                 return true;
         }
+    }
+
+    /// <summary>Parses the value of a <c>td audit</c> option.</summary>
+    /// <param name="arg">The option.</param>
+    /// <param name="value">Its value.</param>
+    /// <param name="options">Options so far; updated in place.</param>
+    /// <param name="error">A message for the user when the value is invalid.</param>
+    private static bool TryParseAuditOption(string arg, string value, ref CliOptions options, out string? error)
+    {
+        error = null;
+        var audit = options.Audit;
+        switch (arg)
+        {
+            case "--summary-file":
+                options = options with { Test = options.Test with { SummaryFile = value } };
+                return true;
+
+            case "--target-broken" or "--max-mutants" or "--parallel":
+                // More changes at once than a machine has cores only adds test hosts competing for memory.
+                var most = arg == "--parallel" ? 64 : 1_000_000;
+                if (!int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) || number < 1 || number > most)
+                {
+                    error = $"{arg} needs a number from 1 to {most.ToString(System.Globalization.CultureInfo.InvariantCulture)}, not {value}";
+                    return false;
+                }
+
+                audit = arg switch
+                {
+                    "--target-broken" => audit with { TargetBroken = number },
+                    "--max-mutants" => audit with { MaxMutants = number },
+                    _ => audit with { Parallelism = number },
+                };
+                break;
+
+            case "--seed":
+                if (!int.TryParse(value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var seed))
+                {
+                    error = $"--seed needs a whole number, not {value}";
+                    return false;
+                }
+
+                audit = audit with { Seed = seed };
+                break;
+
+            case "--budget":
+                if (!Durations.TryParseLimit(value, out var budget))
+                {
+                    error = $"--budget needs a time such as 90s, 15m, 4h or 1h30m, at most 168h (a plain number is minutes; 0 or none means no limit), not {value}";
+                    return false;
+                }
+
+                audit = audit with { Budget = budget };
+                break;
+
+            case "--kinds":
+                if (!TestDetta.Mutants.MutantKinds.TryParse(value, out var kinds, out error))
+                {
+                    error = $"--kinds: {error}";
+                    return false;
+                }
+
+                audit = audit with { Kinds = kinds, KindsText = value };
+                break;
+
+            case "--member":
+                // Matched whole against the sample's Type.Member, so a constructor is Shop.Calc..ctor.
+                if (value.IndexOf('.', StringComparison.Ordinal) <= 0 || value.EndsWith('.'))
+                {
+                    error = $"--member needs a type and a member such as Shop.Calc.Tax, not {value}";
+                    return false;
+                }
+
+                audit = audit with { Members = [.. audit.Members, value] };
+                break;
+
+            case "--report":
+                audit = audit with { Report = value };
+                break;
+
+            default:
+                audit = audit with { WorkDirectory = value };
+                break;
+        }
+
+        options = options with { Audit = audit };
+        return true;
     }
 }

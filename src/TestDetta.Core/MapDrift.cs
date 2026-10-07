@@ -44,6 +44,13 @@ public sealed record AnalysisOptions
     /// the repository again. A step that is running finishes first; none can.
     /// </summary>
     public CancellationToken Cancellation { get; init; }
+
+    /// <summary>
+    /// Files whose working-tree version is this text instead of what is on disk, by path relative to the repository
+    /// root with '/' separators; each counts as changed. <c>td audit</c> gives the analysis a change this way without
+    /// writing it into the team's sources (docs/design/audit.md); empty for every other caller.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> WorkingTreeOverlay { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
 }
 
 /// <summary>

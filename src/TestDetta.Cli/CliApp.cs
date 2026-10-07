@@ -63,6 +63,12 @@ internal static partial class CliApp
             return Shadow(options, loggerFactory, stdout, stderr);
         }
 
+        // Nor does the audit, which skips nothing either (docs/design/audit.md).
+        if (options.Command == CliCommand.Audit)
+        {
+            return Audit(options, loggerFactory, stdout);
+        }
+
         // The license refresh waits on the network while the analysis works; the check below waits for it.
         var refresh = LicenseGate.Refresh(options.Analysis.RepoPath, loggerFactory, host.Environment, host.Home);
 
@@ -163,6 +169,28 @@ internal static partial class CliApp
         }
 
         return new ShadowRun(loggerFactory, stdout, stderr).Run(options, new ShadowAnalysis(analysis, error, stopwatch.Elapsed.TotalSeconds, held.ToString()));
+    }
+
+    /// <summary>
+    /// Carries out <c>td audit</c> (<see cref="AuditRun"/>) without a license, cancelled by Ctrl+C or SIGTERM: the running
+    /// tests are killed, the work folder with the working copy is deleted and the partial report is written.
+    /// </summary>
+    /// <param name="options">Parsed command line.</param>
+    /// <param name="loggerFactory">Creates the loggers.</param>
+    /// <param name="stdout">Receives progress and the report.</param>
+    private static int Audit(CliOptions options, ILoggerFactory loggerFactory, TextWriter stdout)
+    {
+        using var cancel = new CancellationTokenSource();
+        void Stop(System.Runtime.InteropServices.PosixSignalContext context)
+        {
+            // The audit ends itself: the process must live on to restore and delete the copy.
+            context.Cancel = true;
+            cancel.Cancel();
+        }
+
+        using var interrupt = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGINT, Stop);
+        using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, Stop);
+        return new AuditRun(loggerFactory, stdout, new AuditHooks(), cancel.Token).Run(options);
     }
 
     /// <summary>

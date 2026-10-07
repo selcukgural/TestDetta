@@ -64,8 +64,11 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
         var root = git.TopLevel(repoPath);
         // TestDetta's own data (coverage maps) is never part of the code under test.
+        // A file of the overlay counts as changed whatever is on disk (docs/design/audit.md).
         var changed = git.ChangedFiles(root, baseRef)
             .Where(static f => !f.StartsWith(".testdetta/", StringComparison.Ordinal))
+            .Union(options.WorkingTreeOverlay.Keys, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
         var mergeBase = git.MergeBase(root, baseRef);
         options.Cancellation.ThrowIfCancellationRequested();
@@ -76,7 +79,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         var symbolSets = SymbolSetsOf(graph, root);
         var reader = new CodeChangeReader(git, new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()), loggerFactory.CreateLogger<CodeChangeReader>());
         var rootNamespaces = RootNamespaceOf(graph, root);
-        var codeChanges = reader.Read(root, mergeBase, changed, symbolSets, rootNamespaces);
+        var codeChanges = reader.Read(root, mergeBase, changed, symbolSets, rootNamespaces, options.WorkingTreeOverlay);
         var packageChanges = PackageChanges(git, root, mergeBase, null, changed);
         var impactAnalyzer = new ImpactAnalyzer(loggerFactory.CreateLogger<ImpactAnalyzer>());
         var impact = impactAnalyzer.Analyze(graph, root, changed, codeChanges, packageChanges);

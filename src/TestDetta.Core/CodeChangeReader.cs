@@ -18,13 +18,15 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     /// <param name="changedFiles">All changed paths relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
     /// <param name="symbolSets">The symbol sets the compiler uses for a file (relative path), from its projects; null when unknown.</param>
     /// <param name="rootNamespaces">The root namespace of the project compiling a file (Visual Basic); null for none.</param>
+    /// <param name="overlay">Working-tree text that stands in for a file on disk, by relative path (<see cref="AnalysisOptions.WorkingTreeOverlay"/>); null for none.</param>
     /// <returns>One entry per changed .cs or .vb file, in the order of <paramref name="changedFiles"/>.</returns>
     public IReadOnlyList<CodeChange> Read(
         string repoRoot,
         string baseRevision,
         IReadOnlyList<string> changedFiles,
         Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null,
-        Func<string, string>? rootNamespaces = null)
+        Func<string, string>? rootNamespaces = null,
+        IReadOnlyDictionary<string, string>? overlay = null)
     {
         var csharpFiles = new List<string>();
         foreach (var file in changedFiles)
@@ -46,7 +48,8 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
 
         foreach (var file in csharpFiles)
         {
-            changes.Add(detector.Detect(file, Text(oldContents, file), ReadWorkingTree(Path.Combine(repoRoot, file)), symbolSets?.Invoke(file) ?? [], rootNamespaces?.Invoke(file) ?? string.Empty));
+            var current = overlay is not null && overlay.TryGetValue(file, out var text) ? SourceText.From(text) : ReadWorkingTree(Path.Combine(repoRoot, file));
+            changes.Add(detector.Detect(file, Text(oldContents, file), current, symbolSets?.Invoke(file) ?? [], rootNamespaces?.Invoke(file) ?? string.Empty));
         }
 
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
