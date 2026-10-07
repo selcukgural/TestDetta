@@ -16,7 +16,8 @@ writeFileSync("x-profile-light.svg", profile(cream, ink, green));
 
 // Header: 1500x500. The avatar covers the bottom-left corner and phones crop top and bottom,
 // so text stays in x >= 90, y 120..360 and the grid in the right half.
-// The grid is the OpenTelemetry .NET run shown on the site: 274 test classes, 8 of them run.
+// The grid is the OpenTelemetry .NET run shown on the site: 274 test classes, 8 of them run. The times are
+// recorded test time (the site's example), not wall clock, and the caption says so.
 const total = 274, run = 8, cols = 23, pitch = 24, size = 19;
 let seed = 7;
 const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
@@ -36,7 +37,8 @@ const header = (bg, fg, accent, sub, off) => {
 <text ${font} font-weight="700" font-size="58" fill="${fg}" letter-spacing="-1.4"><tspan x="90" y="168">Run only the .NET tests</tspan><tspan x="90" y="238">your change can <tspan fill="${accent}">break.</tspan></tspan></text>
 <text x="92" y="300" ${font} font-size="26" fill="${sub}">Test impact analysis for .NET · testdetta.com</text>
 ${cells}
-<text x="${gx}" y="${gy + 12 * pitch + 30}" ${font} font-weight="600" font-size="22" fill="${accent}">8 of 274 test classes ran · 22.4 s instead of 5 m 59 s</text>
+<text x="${gx}" y="${gy + 12 * pitch + 30}" ${font} font-weight="600" font-size="22" fill="${accent}">8 of 274 test classes ran</text>
+<text x="${gx}" y="${gy + 12 * pitch + 58}" ${font} font-size="20" fill="${sub}">recorded test time: 22.4 s, not 5 m 59 s</text>
 </svg>`;
 };
 writeFileSync("x-header-light.svg", header(cream, ink, green, muted, cell));
@@ -61,7 +63,8 @@ const cover = (bg, fg, accent, sub, off) => {
 <text ${font} font-weight="700" font-size="30" fill="${fg}" letter-spacing="-0.6"><tspan x="310" y="72">Run only the .NET tests</tspan><tspan x="310" y="108">your change can <tspan fill="${accent}">break.</tspan></tspan></text>
 <text x="311" y="140" ${font} font-size="15" fill="${sub}">Test impact analysis for .NET · testdetta.com</text>
 ${cells}
-<text x="${gx}" y="${gy + lrows * lpitch + 18}" ${font} font-weight="600" font-size="13" fill="${accent}">8 of 274 test classes ran · 22.4 s instead of 5 m 59 s</text>
+<text x="${gx}" y="${gy + lrows * lpitch + 18}" ${font} font-weight="600" font-size="13" fill="${accent}">8 of 274 test classes ran</text>
+<text x="${gx}" y="${gy + lrows * lpitch + 34}" ${font} font-size="12" fill="${sub}">recorded test time: 22.4 s, not 5 m 59 s</text>
 </svg>`;
 };
 writeFileSync("linkedin-cover-light.svg", cover(cream, ink, green, muted, cell));
