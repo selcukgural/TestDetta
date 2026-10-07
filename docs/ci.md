@@ -32,15 +32,15 @@ TestDetta itself never uses the network for maps.
     license string yourself (docs/design/licensing.md).
 - **Exit codes:**
   - `0` success;
-  - `1` the analysis failed;
+  - `1` the analysis failed (`td audit`: it could not run or was cancelled);
   - `2` invalid command line;
-  - `3` tests failed.
+  - `3` tests failed (`td test`, `td record`), or a miss (`td audit`).
 - **Clean-up:** maps of old commits are only needed for 50 commits. Delete older folders with a
   scheduled job or a storage lifecycle rule.
 
 Install TestDetta as a .NET tool (`dotnet tool install --global <package>`; the package name is set at
 launch). Until then, build it from source with `dotnet build src/TestDetta.Cli -c Release -o testdetta-bin`
-and call `dotnet testdetta-bin/TestDetta.Cli.dll` wherever `testdetta` appears below.
+and call `dotnet testdetta-bin/TestDetta.Cli.dll` wherever `td` appears below.
 
 ## GitLab CI
 

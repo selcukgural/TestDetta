@@ -328,7 +328,7 @@ internal sealed record CliOptions(
         td record:
           -c, --configuration <name>  Build configuration (default: Debug)
           --project <path>     Record only this test project (relative to the repository root); repeat for several
-          -f, --framework <tfm>  Target framework to record, e.g. net10.0 (default: the first one)
+          -f, --framework <tfm>  Target framework to record, e.g. net10.0 (default: the first one that runs on this machine; .NET Framework only on Windows)
           --parallel <n>       Spread each project's test classes over n processes (default: 1).
                                The suite must tolerate several test processes at once.
           --no-build           Use the existing build output (built with the same -c) instead of building

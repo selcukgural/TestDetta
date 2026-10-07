@@ -302,9 +302,11 @@ runs:
         SKIP_MAP: ${{ steps.map.outputs.skip }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
+        # $1: why; $2: what happened before, "did not run" by default.
         plain() {
-          echo "::warning::TestDetta shadow mode did not run ($1); your tests run as plain dotnet test, and this run has no shadow result."
-          { echo "### TestDetta shadow run"; echo; echo "**TestDetta did not run: $1. Your tests ran as plain \`dotnet test\` with the same arguments; the job's result is that run's, and this run has no shadow result.**"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          what="${2:-TestDetta did not run}"
+          echo "::warning::$what ($1); your tests run as plain dotnet test, and this run has no shadow result."
+          { echo "### TestDetta shadow run"; echo; echo "**$what: $1. Your tests ran as plain \`dotnet test\` with the same arguments; the job's result is that run's, and this run has no shadow result.**"; echo; } >> "$GITHUB_STEP_SUMMARY"
           dotnet test -c "$CONFIGURATION" "${extra[@]}"
         }
         reason="${SKIP_HISTORY:-${SKIP_SETUP:-${SKIP_TOOL:-${SKIP_BASE:-$SKIP_MAP}}}}"
@@ -322,9 +324,11 @@ runs:
         if [ -n "$SHADOW_ANALYSIS_TIMEOUT" ]; then limits+=(--shadow-analysis-timeout "$SHADOW_ANALYSIS_TIMEOUT"); fi
         status=0
         dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" "${limits[@]}" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}" || status=$?
-        # 0 and 3 are the tests' own result (passed, failed); anything else means td ended without one.
+        # 0 and 3 are the tests' own result (passed, failed). Anything else: td ended without a result of the tests
+        # it can give (an error before they ran, or a process killed from outside, perhaps after they ran), so the
+        # tests run (again) as plain dotnet test.
         if [ "$status" = 0 ] || [ "$status" = 3 ]; then exit "$status"; fi
-        plain "td ended with exit code $status before it had a result of the tests"
+        plain "it ended with exit code $status without a result of the tests, so they may run a second time here" "TestDetta shadow mode ended without a result"
 
     # Unique per job and matrix leg: the job id, a hash of what tells legs apart, and the check run's id (or a
     # random part where the runner does not give one), so two legs of one run never ask for the same name.
@@ -344,8 +348,8 @@ runs:
         # Only characters every artifact name may hold.
         echo "name=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-200)" >> "$GITHUB_OUTPUT"
 
-    # Kept whether the tests passed or not: the roll-up over pull requests reads these artifacts. An upload that
-    # fails costs the artifact, never the job.
+    # Kept whether the tests passed or not, for a roll-up over pull requests (not built yet; docs/design/shadow-mode.md).
+    # An upload that fails costs the artifact, never the job.
     - name: Keep the shadow report
       if: always() && inputs.mode == 'shadow'
       continue-on-error: true
@@ -358,7 +362,8 @@ runs:
 
     # The audit (docs/design/audit.md): every change is written into a copy of the working tree under RUNNER_TEMP,
     # tested there and taken out again; the checkout and its build output are only read. No license is read and
-    # nothing is sent, so the license secret is not passed to this step. Meant for a schedule: it runs for hours.
+    # TestDetta itself sends nothing (the builds in the copy restore packages as the team's do), so the license
+    # secret is not passed to this step. Meant for a schedule: it runs for hours.
     - name: Audit the selection on your code
       if: inputs.mode == 'audit'
       shell: bash
