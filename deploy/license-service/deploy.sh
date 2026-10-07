@@ -8,6 +8,7 @@
 set -euo pipefail
 P=testdetta-510908 R=europe-west1
 SA=license-service@$P.iam.gserviceaccount.com
+BUILDER=license-builder@$P.iam.gserviceaccount.com
 SQL=$P:$R:testdetta-licenses
 KEY_ID=td-2026-10
 
@@ -17,7 +18,8 @@ if [ -n "$(git status --porcelain -- src/TestDetta.Core src/TestDetta.LicenseSer
 fi
 IMAGE=$R-docker.pkg.dev/$P/testdetta/license-service:$(git rev-parse --short=12 HEAD)
 
-gcloud builds submit . --project $P --region $R --config deploy/license-service/cloudbuild.yaml --substitutions "_IMAGE=$IMAGE"
+gcloud builds submit . --project $P --region $R --config deploy/license-service/cloudbuild.yaml --substitutions "_IMAGE=$IMAGE" \
+  --service-account "projects/$P/serviceAccounts/$BUILDER"
 gcloud run deploy license-service --project $P --region $R --image "$IMAGE" \
   --service-account "$SA" --add-cloudsql-instances "$SQL" \
   --set-secrets "/secrets/db/Licenses__ConnectionString=license-connection-string:latest,/keys/signing.pem=license-signing-key-$KEY_ID:1" \
