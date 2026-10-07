@@ -42,17 +42,38 @@ internal sealed partial class DotnetProcess(ILogger logger, string? executable =
     /// <param name="environment">Extra environment variables for the process.</param>
     /// <param name="output">Receives stdout and stderr of the process.</param>
     /// <param name="limits">How long it may run, how long its process tree may sit idle, and how much memory it may hold.</param>
-    /// <returns>The exit code, or <see cref="TimedOut"/> when it was killed for any limit.</returns>
+    /// <param name="cancel">Kills the process with its children (Ctrl+C, SIGTERM); <see cref="Cancelled"/> is then returned.</param>
+    /// <returns>The exit code, <see cref="TimedOut"/> when it was killed for any limit, or <see cref="Cancelled"/>.</returns>
     public int Run(
         IReadOnlyList<string> arguments,
         string workingDirectory,
         IReadOnlyDictionary<string, string> environment,
         TextWriter output,
-        RunLimits limits)
+        RunLimits limits,
+        CancellationToken cancel = default)
     {
+        if (cancel.IsCancellationRequested)
+        {
+            return Cancelled;
+        }
+
         using var process = Start(arguments, workingDirectory, environment);
         var reader = new LineReader(process, output.WriteLine);
-        if (!WaitWithin(process, limits))
+        bool within;
+        using (cancel.Register(() => Kill(process)))
+        {
+            within = WaitWithin(process, limits);
+        }
+
+        if (cancel.IsCancellationRequested)
+        {
+            Kill(process);
+            process.WaitForExit(Forever);
+            Drain(reader);
+            return Cancelled;
+        }
+
+        if (!within)
         {
             process.Kill(entireProcessTree: true);
             process.WaitForExit(Forever);
@@ -63,6 +84,23 @@ internal sealed partial class DotnetProcess(ILogger logger, string? executable =
         Drain(reader);
         LogFinished(process.ExitCode);
         return process.ExitCode;
+    }
+
+    /// <summary>What <see cref="Run(IReadOnlyList{string}, string, IReadOnlyDictionary{string, string}, TextWriter, RunLimits, CancellationToken)"/> returns for a process it killed because the run was cancelled.</summary>
+    public const int Cancelled = -2;
+
+    /// <summary>Kills a process with its children; one that has already exited is left alone.</summary>
+    /// <param name="process">The process.</param>
+    private static void Kill(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // It ended on its own in the meantime.
+        }
     }
 
     /// <summary>
@@ -168,14 +206,24 @@ internal sealed partial class DotnetProcess(ILogger logger, string? executable =
     /// <summary>Runs dotnet and returns its stdout.</summary>
     /// <param name="arguments">Arguments for the dotnet executable.</param>
     /// <param name="workingDirectory">Directory the process runs in.</param>
+    /// <param name="timeout">Longest it may run; it is then killed with its children and <see cref="TimeoutException"/> thrown. Null waits forever.</param>
     /// <exception cref="InvalidOperationException">The process exited with a non-zero code.</exception>
-    public string Capture(IReadOnlyList<string> arguments, string workingDirectory)
+    /// <exception cref="TimeoutException">It ran past <paramref name="timeout"/>.</exception>
+    public string Capture(IReadOnlyList<string> arguments, string workingDirectory, TimeSpan? timeout = null)
     {
         using var process = Start(arguments, workingDirectory, new Dictionary<string, string>());
         var stdout = new System.Text.StringBuilder();
         var stderr = new System.Text.StringBuilder();
         var reader = new LineReader(process, line => stdout.AppendLine(line), line => stderr.AppendLine(line));
-        process.WaitForExit(Forever);
+        if (!process.WaitForExit(timeout is { } limit ? (limit < TimeSpan.Zero ? TimeSpan.Zero : limit) : Forever))
+        {
+            Kill(process);
+            process.WaitForExit(Forever);
+            Drain(reader);
+            LogTimedOut((timeout ?? Forever).TotalSeconds);
+            throw new TimeoutException($"dotnet {string.Join(' ', arguments)} did not finish within {(timeout ?? Forever).TotalSeconds:0} s");
+        }
+
         Drain(reader);
         LogFinished(process.ExitCode);
 

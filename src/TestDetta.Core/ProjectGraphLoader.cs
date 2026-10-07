@@ -64,7 +64,19 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
         return graph;
     }
 
-    /// <summary>Walks the directory tree depth first, skipping <see cref="SkippedDirectories"/>.</summary>
+    /// <summary>
+    /// How the tree is walked: as <see cref="Directory.EnumerateFiles(string, string)"/> does (hidden folders included,
+    /// Windows wildcard matching), except that a folder that cannot be read (a container's data volume owned by
+    /// another user, say) is skipped instead of failing the whole analysis; no project there could be built either.
+    /// </summary>
+    private static readonly EnumerationOptions WalkOptions = new()
+    {
+        IgnoreInaccessible = true,
+        AttributesToSkip = 0,
+        MatchType = MatchType.Win32,
+    };
+
+    /// <summary>Walks the directory tree depth first, skipping <see cref="SkippedDirectories"/> and folders that cannot be read.</summary>
     /// <param name="root">Normalized directory to start from.</param>
     private IEnumerable<string> EnumerateProjectFiles(string root)
     {
@@ -73,7 +85,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
         while (pending.TryPop(out var dir))
         {
-            foreach (var file in Directory.EnumerateFiles(dir, "*.*proj"))
+            foreach (var file in Directory.EnumerateFiles(dir, "*.*proj", WalkOptions))
             {
                 if (ProjectExtensions.ContainsKey(Path.GetExtension(file)))
                 {
@@ -81,7 +93,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 }
             }
 
-            foreach (var sub in Directory.EnumerateDirectories(dir))
+            foreach (var sub in Directory.EnumerateDirectories(dir, "*", WalkOptions))
             {
                 if (SkippedDirectories.Contains(Path.GetFileName(sub)))
                 {

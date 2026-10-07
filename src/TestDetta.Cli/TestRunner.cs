@@ -37,12 +37,13 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
     /// <param name="invocations">What to run.</param>
     /// <param name="workingDirectory">Repository root; each invocation runs in its location under it.</param>
     /// <param name="stdout">Receives the forwarded test output and fallback warnings.</param>
-    public IReadOnlyList<TestRunResult> RunAll(IReadOnlyList<TestInvocation> invocations, string workingDirectory, TextWriter stdout)
+    /// <param name="cancel">Kills the running <c>dotnet test</c> with its children (Ctrl+C, SIGTERM in shadow mode).</param>
+    public IReadOnlyList<TestRunResult> RunAll(IReadOnlyList<TestInvocation> invocations, string workingDirectory, TextWriter stdout, CancellationToken cancel = default)
     {
         var results = new List<TestRunResult>(invocations.Count);
         foreach (var invocation in invocations)
         {
-            results.Add(RunWithFallback(invocation, invocation.Location.FullDirectory(workingDirectory), stdout));
+            results.Add(RunWithFallback(invocation, invocation.Location.FullDirectory(workingDirectory), stdout, cancel));
         }
 
         return results;
@@ -52,7 +53,8 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
     /// <param name="invocation">What to run.</param>
     /// <param name="workingDirectory">Directory the process runs in.</param>
     /// <param name="stdout">Receives the forwarded output.</param>
-    private TestRunResult RunWithFallback(TestInvocation invocation, string workingDirectory, TextWriter stdout)
+    /// <param name="cancel">Kills the running process.</param>
+    private TestRunResult RunWithFallback(TestInvocation invocation, string workingDirectory, TextWriter stdout, CancellationToken cancel)
     {
         var stopwatch = Stopwatch.StartNew();
         if (invocation.LegacyConfiguration is not null)
@@ -65,7 +67,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
             invocation = prepared;
         }
 
-        var (exitCode, matchedNothing, notATestProject) = Run(invocation.Arguments, workingDirectory, stdout);
+        var (exitCode, matchedNothing, notATestProject) = Run(invocation.Arguments, workingDirectory, stdout, cancel);
         if (notATestProject)
         {
             LogNotATestProject(invocation.Selection.Project.Path);
@@ -74,7 +76,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         }
 
         var filtered = invocation.Selection.Mode == TestRunMode.Filtered;
-        if (!filtered || !(matchedNothing || exitCode == TestingPlatformZeroTests))
+        if (!filtered || cancel.IsCancellationRequested || !(matchedNothing || exitCode == TestingPlatformZeroTests))
         {
             return new TestRunResult(invocation, exitCode, stopwatch.Elapsed, RanUnfiltered: false);
         }
@@ -92,7 +94,7 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
         }
 
         var unfiltered = invocation.UnfilteredArguments ?? WithoutFilter(invocation.Arguments);
-        (exitCode, _, _) = Run(unfiltered, workingDirectory, stdout);
+        (exitCode, _, _) = Run(unfiltered, workingDirectory, stdout, cancel);
         return new TestRunResult(invocation, exitCode, stopwatch.Elapsed, RanUnfiltered: true);
     }
 
@@ -167,16 +169,18 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
     /// <param name="arguments">Arguments for the dotnet executable.</param>
     /// <param name="workingDirectory">Directory the process runs in.</param>
     /// <param name="stdout">Receives the forwarded output.</param>
+    /// <param name="cancel">Kills the process with its children; the exit code is then the killed process's.</param>
     /// <exception cref="InvalidOperationException">The dotnet executable could not be started.</exception>
-    public int RunCommand(IReadOnlyList<string> arguments, string workingDirectory, TextWriter stdout) =>
-        Run(arguments, workingDirectory, stdout).ExitCode;
+    public int RunCommand(IReadOnlyList<string> arguments, string workingDirectory, TextWriter stdout, CancellationToken cancel = default) =>
+        Run(arguments, workingDirectory, stdout, cancel).ExitCode;
 
     /// <summary>Runs dotnet once, forwarding stdout and stderr, and reports whether VSTest said the filter matched nothing.</summary>
     /// <param name="arguments">Arguments for the dotnet executable.</param>
     /// <param name="workingDirectory">Directory the process runs in.</param>
     /// <param name="stdout">Receives the forwarded output.</param>
+    /// <param name="cancel">Kills the process with its children.</param>
     /// <exception cref="InvalidOperationException">The dotnet executable could not be started.</exception>
-    private (int ExitCode, bool MatchedNothing, bool NotATestProject) Run(IReadOnlyList<string> arguments, string workingDirectory, TextWriter stdout)
+    private (int ExitCode, bool MatchedNothing, bool NotATestProject) Run(IReadOnlyList<string> arguments, string workingDirectory, TextWriter stdout, CancellationToken cancel)
     {
         var psi = new ProcessStartInfo(DotnetExecutable())
         {
@@ -211,7 +215,10 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        process.WaitForExit();
+        using (cancel.Register(() => Kill(process)))
+        {
+            process.WaitForExit();
+        }
 
         LogFinished(commandLine, process.ExitCode, stopwatch.ElapsedMilliseconds);
         return (process.ExitCode, matchedNothing, notATestProject);
@@ -229,6 +236,20 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
                 notATestProject |= line.Contains(NoTestProjects, StringComparison.Ordinal);
                 stdout.WriteLine(line);
             }
+        }
+    }
+
+    /// <summary>Kills a process with its children; one that has already exited is left alone.</summary>
+    /// <param name="process">The process.</param>
+    private static void Kill(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // It ended on its own in the meantime.
         }
     }
 

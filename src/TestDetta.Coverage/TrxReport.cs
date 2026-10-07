@@ -19,6 +19,18 @@ internal sealed record TrxOutcome(int Total, IReadOnlySet<string> FailedClasses,
     /// setup outside its tests, which reports do not time per class.
     /// </summary>
     public IReadOnlyDictionary<string, double> ClassSeconds { get; init; } = new Dictionary<string, double>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The failed tests of each class in <see cref="FailedClasses"/>, by the name the report gives them (TRX
+    /// <c>UnitTestResult/@testName</c>, NUnit <c>test-case/@fullname</c>), so two runs can be compared test by test:
+    /// a class with one test broken before a change and another broken by it fails in both, for different tests.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlySet<string>> FailedTests { get; init; } = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+
+    /// <summary>The failed tests of <paramref name="testClass"/>; empty when none failed.</summary>
+    /// <param name="testClass">Runtime class name.</param>
+    public IReadOnlySet<string> FailedTestsOf(string testClass) =>
+        FailedTests.TryGetValue(testClass, out var tests) ? tests : new HashSet<string>(StringComparer.Ordinal);
 }
 
 /// <summary>What one TRX file says about the run that wrote it (<see cref="TrxReport.Facts"/>).</summary>
@@ -67,6 +79,7 @@ internal static class TrxReport
         var executed = new HashSet<string>(StringComparer.Ordinal);
         var reported = new HashSet<string>(StringComparer.Ordinal);
         var seconds = new Dictionary<string, double>(StringComparer.Ordinal);
+        var failedTests = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         var reports = files.Length;
         foreach (var file in nunitFiles)
         {
@@ -100,6 +113,7 @@ internal static class TrxReport
                 if (result == "Failed")
                 {
                     failed.Add(testClass);
+                    AddFailedTest(failedTests, testClass, testCase.Attribute("fullname")?.Value ?? testCase.Attribute("name")?.Value ?? testClass);
                 }
             }
         }
@@ -148,11 +162,32 @@ internal static class TrxReport
                 if (outcome == "Failed")
                 {
                     failed.Add(testClass);
+                    AddFailedTest(failedTests, testClass, result.Attribute("testName")?.Value ?? testId);
                 }
             }
         }
 
-        return new TrxOutcome(total, failed, executed) { ReportedClasses = reported, ClassSeconds = seconds };
+        return new TrxOutcome(total, failed, executed)
+        {
+            ReportedClasses = reported,
+            ClassSeconds = seconds,
+            FailedTests = failedTests.ToDictionary(static p => p.Key, static IReadOnlySet<string> (p) => p.Value, StringComparer.Ordinal),
+        };
+    }
+
+    /// <summary>Adds a failed test to its class's set.</summary>
+    /// <param name="failedTests">Failed tests per class.</param>
+    /// <param name="testClass">Runtime class name.</param>
+    /// <param name="test">The test's name in the report.</param>
+    private static void AddFailedTest(Dictionary<string, HashSet<string>> failedTests, string testClass, string test)
+    {
+        if (!failedTests.TryGetValue(testClass, out var tests))
+        {
+            tests = new HashSet<string>(StringComparer.Ordinal);
+            failedTests[testClass] = tests;
+        }
+
+        tests.Add(test);
     }
 
     /// <summary>

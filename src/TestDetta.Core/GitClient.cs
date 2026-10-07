@@ -59,11 +59,125 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
     /// <exception cref="InvalidOperationException">git failed.</exception>
     public void AddWorktree(string repoRoot, string path, string commit) => Run(repoRoot, "worktree", "add", "--detach", "--quiet", path, commit);
 
-    /// <summary>Removes a worktree <see cref="AddWorktree"/> made, with whatever its build left in it.</summary>
+    /// <summary>
+    /// <see cref="AddWorktree(string, string, string)"/> within a time limit and cancellable: a checkout of a large
+    /// repository can take minutes, and shadow mode's classification budget covers it. When the limit passes or
+    /// <paramref name="cancel"/> fires, git is killed and an exception thrown; what it left (the folder, its
+    /// registration under <c>.git/worktrees</c>) is for the caller to remove with <see cref="RemoveWorktree"/> or
+    /// <see cref="PruneWorktrees"/>.
+    /// </summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="path">Directory of the new worktree; must not exist.</param>
+    /// <param name="commit">Commit to check out.</param>
+    /// <param name="limit">Longest the checkout may take; null for no limit.</param>
+    /// <param name="cancel">Stops the checkout.</param>
+    /// <exception cref="InvalidOperationException">git failed.</exception>
+    /// <exception cref="TimeoutException">The checkout ran past <paramref name="limit"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancel"/> fired.</exception>
+    public void AddWorktree(string repoRoot, string path, string commit, TimeSpan? limit, CancellationToken cancel)
+    {
+        cancel.ThrowIfCancellationRequested();
+        var psi = CreateStartInfo(repoRoot, ["worktree", "add", "--detach", "--quiet", path, commit]);
+        var commandLine = string.Join(' ', psi.ArgumentList);
+        LogRunning(commandLine, repoRoot);
+        var stopwatch = Stopwatch.StartNew();
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start git.");
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        var stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
+        bool exited;
+        using (cancel.Register(() => Kill(process)))
+        {
+            exited = process.WaitForExit(limit is { } time ? (time < TimeSpan.Zero ? TimeSpan.Zero : time) : Timeout.InfiniteTimeSpan);
+        }
+
+        if (!exited)
+        {
+            Kill(process);
+            process.WaitForExit();
+        }
+
+        var stderr = stderrTask.GetAwaiter().GetResult().Trim();
+        _ = stdoutTask.GetAwaiter().GetResult();
+        LogFinished(commandLine, process.ExitCode, stopwatch.ElapsedMilliseconds, 0);
+        cancel.ThrowIfCancellationRequested();
+        if (!exited)
+        {
+            throw new TimeoutException($"git {commandLine} did not finish within {limit!.Value.TotalSeconds:0} s");
+        }
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"git {commandLine} failed: {stderr}");
+        }
+    }
+
+    /// <summary>
+    /// Forgets worktrees whose folder is gone (<c>git worktree prune</c>), so one whose removal failed, or a
+    /// checkout that was stopped half way, leaves no entry under <c>.git/worktrees</c> once its folder is deleted.
+    /// </summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <exception cref="InvalidOperationException">git failed.</exception>
+    public void PruneWorktrees(string repoRoot) => Run(repoRoot, "worktree", "prune");
+
+    /// <summary>Kills a process with its children; one that has already exited is left alone.</summary>
+    /// <param name="process">The process.</param>
+    private static void Kill(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // It ended on its own in the meantime.
+        }
+    }
+
+    /// <summary>
+    /// Removes a worktree <see cref="AddWorktree(string, string, string)"/> made, with whatever its build left in it;
+    /// forced twice, so a checkout that was stopped half way (git keeps it locked as "initializing") goes too.
+    /// </summary>
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="path">Directory of the worktree.</param>
     /// <exception cref="InvalidOperationException">git failed.</exception>
-    public void RemoveWorktree(string repoRoot, string path) => Run(repoRoot, "worktree", "remove", "--force", path);
+    public void RemoveWorktree(string repoRoot, string path) => Run(repoRoot, "worktree", "remove", "--force", "--force", path);
+
+    /// <summary>
+    /// Removes a worktree whatever state it is in: <see cref="RemoveWorktree"/>, and when git cannot, its folder and
+    /// then every registration under <c>.git/worktrees</c> whose folder is gone (<see cref="PruneWorktrees"/>). Never
+    /// throws; true when nothing is left.
+    /// </summary>
+    /// <param name="repoRoot">Repository root directory.</param>
+    /// <param name="path">Directory of the worktree.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Clean-up after a failure or a cancellation: it must not throw over the error it follows.")]
+    public bool DiscardWorktree(string repoRoot, string path)
+    {
+        try
+        {
+            RemoveWorktree(repoRoot, path);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogDiscardFailed(path, ex.Message);
+        }
+
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+
+            PruneWorktrees(repoRoot);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogDiscardFailed(path, ex.Message);
+            return false;
+        }
+    }
 
     /// <summary>Files that differ between two commits; renames count as a delete and an add.</summary>
     /// <param name="repoRoot">Repository root directory.</param>
@@ -332,6 +446,9 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
 
         return lines;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The worktree {Path} could not be removed: {Reason}")]
+    private partial void LogDiscardFailed(string path, string reason);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Running git {CommandLine} in {WorkingDirectory}")]
     private partial void LogRunning(string commandLine, string workingDirectory);
