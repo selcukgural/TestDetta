@@ -1,4 +1,4 @@
-<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: ec87645519ae -->
+<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: 5e0d26276ed1 -->
 <h1>Licencia</h1>
 <p class="lead">Los repositorios públicos usan {{name}} gratis. Los repositorios privados pasan una cadena de licencia al CI. Un problema de licencia nunca hace fallar una compilación: sin una licencia válida se ejecutan todas las pruebas, como antes de {{name}}.</p>
 <div class="callout"><p><strong>Hasta el lanzamiento</strong>, las licencias todavía no se venden ni se aplican: {{name}} comprueba la licencia e informa de lo que encontró, como se describe aquí (<code>td license status</code> añade "Not enforced yet"), pero selecciona pruebas diga lo que diga la comprobación, y ninguna licencia se verifica ni se puede instalar hasta que el servicio de licencias tenga su primera clave.</p></div>
@@ -27,7 +27,7 @@
 <p>Solo <code>td affected</code>, <code>td test</code> (no <code>td test --shadow</code>) y <code>td license status</code> leen la licencia. <code>td record</code>, <code>td test --shadow</code> y <code>td audit</code> ejecutan todas las pruebas de todos modos y no necesitan ninguna.</p>
 
 <h2>Cómo comprobarla</h2>
-<p><code>td license status</code> muestra qué cubre la licencia encontrada: su validez, los repositorios que cubre y el número de committers activos, sin datos personales. El mismo estado aparece en el registro, en el job summary y en la salida JSON siempre que importa: válida, a punto de caducar, por encima de los puestos, caducada, ámbito incorrecto, no válida o ausente.</p>
+<p><code>td license status</code> muestra qué cubre la licencia encontrada: su validez, los repositorios que cubre y el número de committers activos, sin datos personales. El mismo estado aparece en el registro, en el job summary y en la salida JSON siempre que importa: válida, a punto de caducar, por encima de los puestos, aún no válida, caducada, ámbito incorrecto, no válida o ausente.</p>
 <pre><code>td license status</code></pre>
 
 <h2>Máquinas sin secretos de CI</h2>
@@ -37,10 +37,10 @@
 
 <h2>Renovación automática</h2>
 <p>Una licencia incluye la dirección desde la que se renueva. Como máximo una vez al día por máquina, {{name}} obtiene la versión actual y la guarda en <code>~/.testdetta/license</code>, así que las renovaciones y los puestos añadidos llegan sin tocar tus secretos. La solicitud envía la licencia en una cabecera y nada de tu repositorio. Se ejecuta a la vez que el análisis, con un tiempo de espera de 6 segundos, y cualquier fallo se ignora. Un fallo que puede ser pasajero (sin respuesta, un tiempo de espera agotado, un error del servidor) se reintenta al cabo de una hora, así que una red bloqueada cuesta como mucho unos segundos por hora, casi siempre ocultos tras el análisis; define <code>TESTDETTA_LICENSE_REFRESH=off</code> donde no se pueda acceder al servicio. Se respeta <code>HTTPS_PROXY</code>. La hora del último intento se guarda en <code>~/.testdetta/license-refresh</code>, así que en los runners de CI que empiezan con un directorio personal vacío la actualización se ejecuta una vez por job.</p>
-<p>En una red que no puede acceder al servicio de licencias, define <code>TESTDETTA_LICENSE_REFRESH=off</code> y sustituye tú mismo la cadena de licencia cuando recibas una nueva.</p>
+<p>La licencia de una suscripción llega como mucho 40 días por delante y solo se renueva así: mientras la suscripción sigue, cada actualización entrega una licencia que de nuevo llega 40 días por delante, de modo que una CI que actualiza no lo nota. Una copia que no puede acceder al servicio de licencias caduca como mucho a los 40 días, con avisos en los últimos 14. Para una red que no puede acceder al servicio de licencias, elige el <a href="/pricing/">plan anual</a>: su archivo de licencia vale para todo el periodo y defines <code>TESTDETTA_LICENSE_REFRESH=off</code>.</p>
 
 <h2>Qué repositorios cubre una licencia</h2>
-<p>Una licencia indica los repositorios que cubre, como <code>github.com/acme/*</code>. {{name}} los compara con el remoto <code>origin</code> del repositorio. Las credenciales incrustadas en la URL del remoto, habituales con Jenkins, se eliminan antes de la comparación y nunca se registran.</p>
+<p>Una licencia indica los repositorios que cubre, como <code>github.com/acme/*</code> (todos los repositorios de <code>acme</code>) o <code>github.com/acme/app</code> (uno). Lo que escribes en la compra o en el formulario de prueba se convierte a esta forma: una URL o un remoto SSH pasa a host y ruta, y una organización sola (<code>github.com/acme</code>) cubre todos sus repositorios. {{name}} los compara con el remoto <code>origin</code> del repositorio. Las credenciales incrustadas en la URL del remoto, habituales con Jenkins, se eliminan antes de la comparación y nunca se registran.</p>
 <p>Cuando el remoto no nombra el repositorio que cubre la licencia, por ejemplo en un mirror local, define <code>TESTDETTA_LICENSE_SCOPE</code>:</p>
 <pre><code>TESTDETTA_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
 

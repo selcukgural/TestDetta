@@ -1,4 +1,4 @@
-<!-- title: Precios; description: Gratis para repositorios públicos, {{trialDays}} días gratis para los privados y después un precio por committer activo.; source: f6510a3da063 -->
+<!-- title: Precios; description: Gratis para repositorios públicos, {{trialDays}} días gratis para los privados y después un precio por committer activo.; source: 3ee952cc6c0e -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -31,11 +31,15 @@
         <ul>
           <li>Repositorios privados en cualquier CI</li>
           <li>Mapas de cobertura, drift bridge y job summaries</li>
-          <li>Un 20 % de margen sobre tus puestos, y 30 días de aviso antes de que cambie nada</li>
+          <li>Un 20 % de margen sobre tus puestos, y 30 días de plazo antes de que pasarte de ellos cambie nada</li>
           <li>La licencia se renueva sola en el CI</li>
           <li>Soporte por correo electrónico</li>
         </ul>
-        <a class="button" href="/trial/">Empieza la prueba gratis</a>
+        <div class="plan-actions">
+          <a class="button" href="{{checkoutUrl}}" data-checkout data-open="{{checkoutOpen}}">Suscríbete</a>
+          <a class="button button-ghost" href="/trial/">Empieza la prueba gratis</a>
+          <p class="checkout-hint" data-checkout data-open="{{checkoutOpen}}">En la compra, indica tus repositorios: <code>github.com/tu-org</code> cubre todos los repositorios de la organización.</p>
+        </div>
       </div>
       <div class="plan">
         <h2>Sin conexión y empresas</h2>
@@ -98,7 +102,7 @@
     </details>
     <details>
       <summary>¿Qué pasa cuando caduca la licencia?</summary>
-      <p>Los avisos empiezan 14 días antes. Después de la fecha de fin se vuelven a ejecutar todas las pruebas, exactamente como antes de instalar {{name}}. Las compilaciones siguen pasando o fallando por sí mismas.</p>
+      <p>Mientras pagas, no caduca: {{name}} obtiene la licencia actual cada día. Si cancelas, la licencia sigue funcionando hasta el final del periodo pagado, más 7 días. Los avisos empiezan 14 días antes de la fecha de fin; después se vuelven a ejecutar todas las pruebas, exactamente como antes de instalar {{name}}. Las compilaciones siguen pasando o fallando por sí mismas.</p>
     </details>
     <details>
       <summary>¿{{name}} envía nuestro código a algún sitio?</summary>
@@ -106,7 +110,15 @@
     </details>
     <details>
       <summary>¿Quién gestiona los pagos y las facturas?</summary>
-      <p>{{seller}} es nuestro merchant of record: cobra el pago, aplica el impuesto sobre las ventas o el IVA que corresponda y emite las facturas. Tu licencia llega por correo electrónico justo después de la compra.</p>
+      <p>{{seller}} es nuestro merchant of record: cobra el pago, aplica el impuesto sobre las ventas o el IVA que corresponda y emite las facturas. Tu licencia llega por correo electrónico justo después de la compra, para los repositorios que indiques allí.</p>
+    </details>
+    <details>
+      <summary>¿Qué ponemos como repositorios en la compra?</summary>
+      <p>Los repositorios que debe cubrir la licencia, como host y ruta, separados por comas o saltos de línea: <code>github.com/tu-org</code> para todos los repositorios de una organización, <code>github.com/tu-org/app</code> para uno, <code>gitlab.com/grupo/subgrupo</code> para un grupo de GitLab. También vale una URL completa. Si no podemos leer lo que escribiste, te escribimos antes de que pase nada más.</p>
+    </details>
+    <details>
+      <summary>¿Cómo añadimos puestos, cambiamos los repositorios o cancelamos?</summary>
+      <p>Tu recibo de {{seller}} enlaza a su portal de clientes, donde cambias el método de pago, descargas facturas y cancelas. Para añadir puestos o cambiar los repositorios, escribe a <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>; la nueva licencia llega por correo electrónico y la CI la recoge sola en un día.</p>
     </details>
     <details>
       <summary>¿Podemos obtener un reembolso?</summary>

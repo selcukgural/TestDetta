@@ -142,7 +142,8 @@ Actions, through the `license` input from a secret. Only `affected`, `test` (not
 launch the license is checked and reported but not enforced: tests are selected whatever it says,
 and no license verifies or can be installed yet. `td license status` shows what a license covers.
 Once licensing is switched on at launch, without a valid license every test runs; the build never
-fails because of it. Machines that cannot reach the license service set
+fails because of it. A subscription's license runs at most 40 days ahead and renews itself through the
+daily refresh; machines that cannot reach the license service use an annual license file and set
 `TESTDETTA_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).
 
 ## Other CI systems

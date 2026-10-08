@@ -31,11 +31,15 @@
         <ul>
           <li>Private repositories on any CI</li>
           <li>Coverage maps, drift bridge and job summaries</li>
-          <li>20% headroom over your seats, and 30 days' warning before anything changes</li>
+          <li>20% headroom over your seats, and 30 days' notice before going over them changes anything</li>
           <li>License renews itself in CI</li>
           <li>Email support</li>
         </ul>
-        <a class="button" href="/trial/">Start a free trial</a>
+        <div class="plan-actions">
+          <a class="button" href="{{checkoutUrl}}" data-checkout data-open="{{checkoutOpen}}">Subscribe</a>
+          <a class="button button-ghost" href="/trial/">Start a free trial</a>
+          <p class="checkout-hint" data-checkout data-open="{{checkoutOpen}}">At checkout, name your repositories: <code>github.com/your-org</code> covers every repository of the organization.</p>
+        </div>
       </div>
       <div class="plan">
         <h2>Offline &amp; enterprise</h2>
@@ -98,7 +102,7 @@
     </details>
     <details>
       <summary>What happens when the license expires?</summary>
-      <p>Warnings start 14 days before. After the end date every test runs again, exactly as before you installed {{name}}. Builds keep passing or failing on their own merits.</p>
+      <p>While you pay, it does not: {{name}} fetches the current license every day. If you cancel, the license runs to the end of the period you paid for, plus 7 days. Warnings start 14 days before the end date; after it every test runs again, exactly as before you installed {{name}}. Builds keep passing or failing on their own merits.</p>
     </details>
     <details>
       <summary>Does {{name}} send our code anywhere?</summary>
@@ -106,7 +110,15 @@
     </details>
     <details>
       <summary>Who handles payment and invoices?</summary>
-      <p>{{seller}} is our merchant of record: it takes payment, charges the right sales tax or VAT, and issues invoices. Your license arrives by email right after checkout.</p>
+      <p>{{seller}} is our merchant of record: it takes payment, charges the right sales tax or VAT, and issues invoices. Your license arrives by email right after checkout, for the repositories you name there.</p>
+    </details>
+    <details>
+      <summary>What do we enter as repositories at checkout?</summary>
+      <p>The repositories the license should cover, as host and path, separated by commas or new lines: <code>github.com/your-org</code> for every repository of an organization, <code>github.com/your-org/app</code> for one, <code>gitlab.com/group/subgroup</code> for a GitLab group. A full URL works too. If we cannot read what you entered, we write to you before anything else happens.</p>
+    </details>
+    <details>
+      <summary>How do we add seats, change repositories or cancel?</summary>
+      <p>Your receipt from {{seller}} links to its customer portal, where you change the payment method, download invoices and cancel. To add seats or change the repositories, write to <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>; the new license arrives by email, and CI picks it up by itself within a day.</p>
     </details>
     <details>
       <summary>Can we get a refund?</summary>

@@ -1,4 +1,4 @@
-<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: ec87645519ae -->
+<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: 5e0d26276ed1 -->
 <h1>Lisans</h1>
 <p class="lead">Açık depolar {{name}}'yı ücretsiz kullanır. Özel depolar CI'a bir lisans dizesi iletir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: geçerli bir lisans olmadan, tıpkı {{name}}'dan önceki gibi tüm testler çalışır.</p>
 <div class="callout"><p><strong>Lansmana kadar</strong> lisanslar henüz satılmıyor ve uygulanmıyor: {{name}} lisansı burada anlatıldığı gibi kontrol eder ve ne bulduğunu bildirir (<code>td license status</code> "Not enforced yet" ekler), ancak kontrol ne derse desin testleri seçer; lisans servisi ilk anahtarına sahip olana kadar hiçbir lisans doğrulanamaz ya da kurulamaz.</p></div>
@@ -27,7 +27,7 @@
 <p>Lisansı yalnızca <code>td affected</code>, <code>td test</code> (<code>td test --shadow</code> değil) ve <code>td license status</code> okur. <code>td record</code>, <code>td test --shadow</code> ve <code>td audit</code> zaten tüm testleri çalıştırır ve lisansa ihtiyaç duymaz.</p>
 
 <h2>Kontrol etmek</h2>
-<p><code>td license status</code>, bulunan lisansın neyi kapsadığını gösterir: geçerliliğini, kapsadığı depoları ve aktif committer sayısını, kişisel veri olmadan. Aynı durum, önemli olduğu her an log'da, job summary'de ve JSON çıktısında görünür: geçerli, yakında sona erecek, koltuk sayısı aşıldı, süresi doldu, yanlış kapsam, geçersiz ya da bulunamadı.</p>
+<p><code>td license status</code>, bulunan lisansın neyi kapsadığını gösterir: geçerliliğini, kapsadığı depoları ve aktif committer sayısını, kişisel veri olmadan. Aynı durum, önemli olduğu her an log'da, job summary'de ve JSON çıktısında görünür: geçerli, yakında sona erecek, koltuk sayısı aşıldı, henüz geçerli değil, süresi doldu, yanlış kapsam, geçersiz ya da bulunamadı.</p>
 <pre><code>td license status</code></pre>
 
 <h2>CI secret'ı olmayan makineler</h2>
@@ -37,10 +37,10 @@
 
 <h2>Otomatik yenileme</h2>
 <p>Bir lisans, yenilendiği adresi kendi içinde taşır. {{name}} makine başına günde en fazla bir kez güncel sürümü indirir ve <code>~/.testdetta/license</code> içinde tutar; böylece yenilemeler ve eklenen koltuklar secret'larınıza dokunmadan gelir. İstek, lisansı bir header içinde gönderir ve deponuzdan hiçbir şey göndermez. Analizle aynı anda çalışır, zaman aşımı 6 saniyedir ve her hata yok sayılır. Geçebilecek bir hata (yanıt yok, zaman aşımı, sunucu hatası) bir saat sonra yeniden denenir; böylece engellenmiş bir ağ saatte en fazla birkaç saniyeye mal olur ve bu süre çoğunlukla analizin arkasında kalır. Servise ulaşılamayan yerlerde <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın. <code>HTTPS_PROXY</code> dikkate alınır. Son denemenin zamanı <code>~/.testdetta/license-refresh</code> içinde tutulur; bu yüzden boş bir ana dizinle başlayan CI runner'larında yenileme job başına bir kez çalışır.</p>
-<p>Lisans servisine erişemeyen bir ağda <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın ve yeni bir lisans aldığınızda lisans dizesini kendiniz değiştirin.</p>
+<p>Bir aboneliğin lisansı en fazla 40 gün ileriyi kapsar ve yalnızca bu yolla yenilenir: abonelik sürdükçe her yenileme yine 40 gün ileriyi kapsayan bir lisans verir, bu yüzden yenileme yapabilen bir CI bunu fark etmez. Lisans servisine ulaşamayan bir kopya en geç 40 gün sonra sona erer ve son 14 günde uyarı verir. Lisans servisine erişemeyen bir ağ için <a href="/pricing/">Yıllık planı</a> seçin: lisans dosyası tüm dönem boyunca geçerlidir ve <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlarsınız.</p>
 
 <h2>Bir lisansın kapsadığı depolar</h2>
-<p>Bir lisans, kapsadığı depoları adlandırır, örneğin <code>github.com/acme/*</code>. {{name}} bunları deponun <code>origin</code> remote'uyla eşleştirir. Remote URL'sine gömülü kimlik bilgileri (Jenkins'te yaygındır) eşleştirmeden önce çıkarılır ve hiçbir zaman loglanmaz.</p>
+<p>Bir lisans, kapsadığı depoları adlandırır, örneğin <code>github.com/acme/*</code> (<code>acme</code>'nin tüm depoları) ya da <code>github.com/acme/app</code> (tek bir depo). Ödeme sırasında ya da deneme formunda yazdığınız bu biçime çevrilir: bir URL ya da SSH remote'u ana makine ve yola dönüşür, tek başına bir kuruluş (<code>github.com/acme</code>) tüm depolarını kapsar. {{name}} bunları deponun <code>origin</code> remote'uyla eşleştirir. Remote URL'sine gömülü kimlik bilgileri (Jenkins'te yaygındır) eşleştirmeden önce çıkarılır ve hiçbir zaman loglanmaz.</p>
 <p>Remote, lisansın kapsadığı depoyu adlandırmıyorsa (örneğin yerel bir mirror), <code>TESTDETTA_LICENSE_SCOPE</code> ayarlayın:</p>
 <pre><code>TESTDETTA_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
 

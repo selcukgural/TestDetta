@@ -1,4 +1,4 @@
-<!-- title: Fiyatlandırma; description: Açık depolar için ücretsiz, özel depolar için {{trialDays}} gün ücretsiz, ardından aktif committer başına fiyatlandırma.; source: f6510a3da063 -->
+<!-- title: Fiyatlandırma; description: Açık depolar için ücretsiz, özel depolar için {{trialDays}} gün ücretsiz, ardından aktif committer başına fiyatlandırma.; source: 3ee952cc6c0e -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -31,11 +31,15 @@
         <ul>
           <li>Herhangi bir CI üzerinde özel depolar</li>
           <li>Kapsam haritaları, drift bridge ve job summary'ler</li>
-          <li>Koltuk sayınızın %20 üzerinde pay ve herhangi bir değişiklikten 30 gün önce uyarı</li>
+          <li>Koltuk sayınızın %20 üzerinde pay; aşım bir şeyi değiştirmeden önce 30 gün süre</li>
           <li>Lisans CI içinde kendini yeniler</li>
           <li>E-posta desteği</li>
         </ul>
-        <a class="button" href="/trial/">Ücretsiz denemeyi başlat</a>
+        <div class="plan-actions">
+          <a class="button" href="{{checkoutUrl}}" data-checkout data-open="{{checkoutOpen}}">Abone ol</a>
+          <a class="button button-ghost" href="/trial/">Ücretsiz denemeyi başlat</a>
+          <p class="checkout-hint" data-checkout data-open="{{checkoutOpen}}">Ödeme sırasında depolarınızı yazın: <code>github.com/kurulusunuz</code> kuruluşun tüm depolarını kapsar.</p>
+        </div>
       </div>
       <div class="plan">
         <h2>Çevrimdışı ve kurumsal</h2>
@@ -98,7 +102,7 @@
     </details>
     <details>
       <summary>Lisansın süresi dolunca ne olur?</summary>
-      <p>Uyarılar 14 gün önceden başlar. Bitiş tarihinden sonra, tıpkı {{name}}'yı kurmadan önceki gibi tüm testler yeniden çalışır. Derlemeler kendi durumlarına göre başarılı ya da başarısız olmaya devam eder.</p>
+      <p>Ödeme yaptığınız sürece dolmaz: {{name}} güncel lisansı her gün alır. Aboneliği iptal ederseniz lisans, ödediğiniz dönemin sonundan 7 gün sonrasına kadar çalışır. Uyarılar bitiş tarihinden 14 gün önce başlar; bu tarihten sonra, tıpkı {{name}}'yı kurmadan önceki gibi tüm testler yeniden çalışır. Derlemeler kendi durumlarına göre başarılı ya da başarısız olmaya devam eder.</p>
     </details>
     <details>
       <summary>{{name}} kodumuzu herhangi bir yere gönderiyor mu?</summary>
@@ -106,7 +110,15 @@
     </details>
     <details>
       <summary>Ödeme ve faturalarla kim ilgileniyor?</summary>
-      <p>{{seller}} satış aracımızdır (merchant of record): ödemeyi alır, doğru satış vergisini veya KDV'yi uygular ve faturaları düzenler. Lisansınız, ödemeden hemen sonra e-postayla gelir.</p>
+      <p>{{seller}} satış aracımızdır (merchant of record): ödemeyi alır, doğru satış vergisini veya KDV'yi uygular ve faturaları düzenler. Lisansınız, ödemeden hemen sonra, orada belirttiğiniz depolar için e-postayla gelir.</p>
+    </details>
+    <details>
+      <summary>Ödeme sırasında depo olarak ne yazmalıyız?</summary>
+      <p>Lisansın kapsaması gereken depoları, ana makine ve yol olarak, virgül ya da satır sonuyla ayırarak yazın: bir kuruluşun tüm depoları için <code>github.com/kurulusunuz</code>, tek bir depo için <code>github.com/kurulusunuz/uygulama</code>, bir GitLab grubu için <code>gitlab.com/grup/altgrup</code>. Tam bir URL de olur. Yazdığınızı okuyamazsak başka bir şey olmadan önce size yazarız.</p>
+    </details>
+    <details>
+      <summary>Koltuk eklemek, depoları değiştirmek ya da iptal etmek için ne yapmalıyız?</summary>
+      <p>{{seller}} tarafından gönderilen makbuz, ödeme yöntemini değiştirebileceğiniz, faturaları indirebileceğiniz ve aboneliği iptal edebileceğiniz müşteri portalına bağlantı verir. Koltuk eklemek ya da depoları değiştirmek için <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> adresine yazın; yeni lisans e-postayla gelir ve CI onu bir gün içinde kendiliğinden alır.</p>
     </details>
     <details>
       <summary>İade alabilir miyiz?</summary>

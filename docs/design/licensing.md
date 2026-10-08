@@ -50,7 +50,9 @@ A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into 
   never in a repository or in CI. TestDetta embeds the public keys by key id (`kid`), so a key can be
   rotated: new TestDetta versions trust the new key, and licenses are reissued under it.
 - **Kinds:**
-  - `subscription`: valid for the billing period plus 7 days, renewed by refresh;
+  - `subscription`: valid for the billing period plus 7 days, renewed by refresh, and never more than 40 days
+    ahead of its signing (`LicenseIssuer.MaxAhead`, 2026-10-08), so a yearly plan's string cannot outlive a
+    refund or revocation by months;
   - `annual`: offline customers, valid for the term plus 30 days;
   - `trial`: 30 days, one per scope.
 - **Scopes** are patterns over normalised git remote URLs: host and path, without scheme, user,
@@ -168,7 +170,9 @@ A small web service, the only holder of the signing key.
 - **Customer portal:** the current license string, a download as a file, scopes, seats, and
   "add seats" (to the provider's checkout).
 - **Cancellation and refunds:** no further renewal is issued, and the license runs out at
-  `validUntil`. There is no instant revocation offline, by design.
+  `validUntil`, at most 40 days after its last refresh for a subscription. There is no instant revocation
+  offline, by design. A full refund (`order.refunded`, status `refunded`) revokes the subscription's license
+  for good; a partial one is flagged for an admin.
 - **Trials:** sign-up with an email, verified before a key is issued. One trial per scope, and the
   service throttles per address and per scope. As built: "Trials (as built)" below.
 - Requests to it never carry personal data from the customer's repositories.
@@ -239,8 +243,19 @@ as a file and never baked in or passed as a variable). Hosting: Cloud Run (see "
   must be genuine (current or retired key) and for the same id; it may have expired. Unknown,
   revoked, mismatched and unproven requests get the same 404. The response is `no-store`. There is
   a rate limit per client address and per license, and the request body is limited to 16 KiB.
-- **Admin:** `dotnet TestDetta.LicenseService.dll admin issue|update|revoke|show|list|public-key`, run
-  from a shell on the host. There is no admin web UI. `public-key` prints what goes into
+- **Admin:** `dotnet TestDetta.LicenseService.dll admin issue|update|revoke|restore|send|show|attention|list|public-key`.
+  In production and the sandbox it runs as the Cloud Run job `<service>-admin` (deploy.sh deploys it from
+  the same image and secrets), through `deploy/license-service/admin.sh production|sandbox <command> …`, which
+  runs it, prints its output from the project's logs and deletes the execution. There is no admin web UI.
+  - `issue` refuses an existing id; `update` on a provider's record only sets `--scope` (seats and the
+    period come from the provider), and those scopes are kept over the checkout's on every later event
+    (`scopes_override`);
+  - `revoke` is kept over the provider's later events (`admin_revoked`), as a full refund is; `restore` lifts it;
+  - `send --id --to --note` e-mails the current license; the address is not stored, but it stays in the
+    project's Admin Activity audit log as the job's argument (Google keeps those 400 days), so to keep none,
+    send the string from `show` by hand;
+  - `attention [--days n]` lists what needs an admin (checkouts without a usable scope, refused e-mails,
+    refunds), newest first. `public-key` prints what goes into
   `LicenseKeys.Trusted`.
 - **Tests:** `tests/TestDetta.LicenseService.Tests` against a real Postgres, one database per test,
   through the real HTTP pipeline; sabotage-checked. CI runs a Postgres service container
@@ -310,11 +325,24 @@ Still to do in phase 2:
   - an incomplete checkout makes no license;
   - `past_due` and `paused` change nothing by themselves (owner's decision, 2026-10-07): the license
     runs to the end of the paid period and is not renewed beyond it; Polar's later `unpaid` or
-    `revoked` stops it, `resumed` carries the new period;
+    `revoked` stops it, `resumed` carries the new period. Not verified: if Polar moves
+    `current_period_end` on before the renewal is paid, the license follows it until `unpaid` arrives;
+    `LicenseIssuer.MaxAhead` bounds that to 40 days;
   - the licensee is the customer's name or billing name, never the email, which would end up in the
-    license string.
-- **Needs attention** (a warning plus an `attention` audit entry): a subscription without a seat
-  count (the product must be seat-based), or without a scope.
+    license string;
+  - the scopes are the checkout's `scope` field as customers type it, normalised by `ScopePatterns`
+    (2026-10-08; the trial form uses the same rules): a URL or SSH remote becomes `host/path` without
+    `.git`, a host and owner alone (`github.com/acme`) become `github.com/acme/*` (which also matches the
+    bare owner), and a pattern must name a host with a dot and an owner without wildcards, so no checkout
+    can license `*/*` or a whole host. Unreadable patterns are left out and flagged; the rest are kept
+    (at most 50). Before this, `github.com/acme` was kept as typed and matched no repository at all;
+  - once an admin set the scopes (`admin update --scope`), later events keep them;
+  - `order.refunded`: a full refund revokes the subscription's license for good (as `admin revoke`
+    does, so later subscription events cannot bring it back) and is flagged; a partial refund is only
+    flagged. Polar's webhook must send `order.refunded` for this (launch checklist).
+- **Needs attention** (a warning plus an `attention` audit entry, listed by `admin attention`): a
+  subscription without a seat count (the product must be seat-based), without a usable scope or with
+  unreadable ones, a refund.
 
 ### Delivery by e-mail (2026-10-04)
 
@@ -332,7 +360,7 @@ later; e-mail is enough for the first sales.
 - **Failures.** Network errors, 429 and 5xx make the webhook answer 503 without marking it handled,
   so Polar delivers it again; the record is saved already and the retry sends the mail. Any other
   refusal (an invalid address, an unverified domain) is not retried: it is audited as `attention`
-  and an admin sends the license from `admin show`. An event without a usable address (one plain
+  and an admin sends the license with `admin send` (or by hand from `admin show`). An event without a usable address (one plain
   address) is audited the same way.
 - **Personal data.** The address comes from the event (`customer.email`) and is neither stored nor
   logged; logs and audit name the license id only.
@@ -348,8 +376,8 @@ later; e-mail is enough for the first sales.
 - **Settings.** `Licenses:ResendApiKey` (a key with sending access to the sender's domain only,
   separate from any mailbox's key), `Licenses:MailFrom` (required with the key) and optionally
   `Licenses:MailReplyTo`. Without the key, delivery is off and logged at debug level.
-- Licenses issued with `admin issue` are not e-mailed: the admin has no address from an event and
-  sends the string from `admin show` with the invoice.
+- Licenses issued with `admin issue` are not e-mailed by themselves: the admin has no address from an
+  event, and sends them with `admin send` or the string from `admin show` with the invoice.
 
 **Polar production (2026-10-08):** organization `testdetta` set up like the sandbox: country Türkiye, logo,
 social links, default tax behavior Exclusive, the `scope` custom field (text area, "Repositories"), and two

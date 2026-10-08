@@ -1,4 +1,4 @@
-<!-- title: 料金; description: パブリックリポジトリは無料、プライベートリポジトリは {{trialDays}} 日間無料で、その後はアクティブなコミッター単位の料金です。; source: f6510a3da063 -->
+<!-- title: 料金; description: パブリックリポジトリは無料、プライベートリポジトリは {{trialDays}} 日間無料で、その後はアクティブなコミッター単位の料金です。; source: 3ee952cc6c0e -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -31,11 +31,15 @@
         <ul>
           <li>あらゆる CI 上のプライベートリポジトリ</li>
           <li>カバレッジマップ、ドリフトブリッジ、ジョブサマリー</li>
-          <li>シート数に対して 20% の余裕があり、何かが変わる前に 30 日間の猶予付きで警告</li>
+          <li>シート数に対して 20% の余裕があり、超過が影響する前に 30 日間の猶予</li>
           <li>ライセンスは CI 内で自動更新</li>
           <li>メールサポート</li>
         </ul>
-        <a class="button" href="/trial/">無料トライアルを始める</a>
+        <div class="plan-actions">
+          <a class="button" href="{{checkoutUrl}}" data-checkout data-open="{{checkoutOpen}}">購入する</a>
+          <a class="button button-ghost" href="/trial/">無料トライアルを始める</a>
+          <p class="checkout-hint" data-checkout data-open="{{checkoutOpen}}">購入時にリポジトリを入力してください。<code>github.com/your-org</code> で組織のすべてのリポジトリが対象になります。</p>
+        </div>
       </div>
       <div class="plan">
         <h2>オフライン &amp; エンタープライズ</h2>
@@ -98,7 +102,7 @@
     </details>
     <details>
       <summary>ライセンスの期限が切れるとどうなりますか？</summary>
-      <p>期限の 14 日前から警告が表示されます。終了日を過ぎると、{{name}} を導入する前とまったく同じように、すべてのテストが再び実行されます。ビルドの成否は、これまでどおりビルド自体の結果で決まります。</p>
+      <p>お支払いが続く限り期限切れにはなりません。{{name}} は毎日最新のライセンスを取得します。解約した場合、ライセンスは支払い済み期間の終了から 7 日後まで有効です。終了日の 14 日前から警告が表示され、終了日を過ぎると、{{name}} を導入する前とまったく同じように、すべてのテストが再び実行されます。ビルドの成否は、これまでどおりビルド自体の結果で決まります。</p>
     </details>
     <details>
       <summary>{{name}} はコードをどこかに送信しますか？</summary>
@@ -106,7 +110,15 @@
     </details>
     <details>
       <summary>支払いと請求書は誰が扱いますか？</summary>
-      <p>{{seller}} が当社の販売代理人（Merchant of Record）として、支払いの受け取り、適切な売上税または VAT の請求、請求書の発行を行います。ライセンスは購入手続きの直後にメールで届きます。</p>
+      <p>{{seller}} が当社の販売代理人（Merchant of Record）として、支払いの受け取り、適切な売上税または VAT の請求、請求書の発行を行います。ライセンスは購入手続きの直後に、そこで入力したリポジトリを対象としてメールで届きます。</p>
+    </details>
+    <details>
+      <summary>購入時にリポジトリとして何を入力すればよいですか？</summary>
+      <p>ライセンスの対象にするリポジトリを、ホストとパスの形で、カンマまたは改行で区切って入力します。組織のすべてのリポジトリなら <code>github.com/your-org</code>、1 つなら <code>github.com/your-org/app</code>、GitLab のグループなら <code>gitlab.com/group/subgroup</code> です。完全な URL でも構いません。入力内容を読み取れない場合は、ほかの処理を行う前にご連絡します。</p>
+    </details>
+    <details>
+      <summary>シートの追加、リポジトリの変更、解約はどうすればよいですか？</summary>
+      <p>{{seller}} からの領収書に顧客ポータルへのリンクがあり、支払い方法の変更、請求書のダウンロード、解約ができます。シートの追加やリポジトリの変更は <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> までご連絡ください。新しいライセンスがメールで届き、CI は 1 日以内に自動で取り込みます。</p>
     </details>
     <details>
       <summary>返金を受けられますか？</summary>

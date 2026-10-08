@@ -317,7 +317,7 @@ internal static partial class CliApp
         stdout.WriteLine($"  {status.Message}");
         if (status.Claims is { } license)
         {
-            stdout.WriteLine($"  id {license.Id}, plan {license.Plan}, {license.Kind}, {license.Seats} seats, valid {license.ValidFrom:yyyy-MM-dd} to {license.ValidUntil:yyyy-MM-dd}");
+            stdout.WriteLine($"  id {license.Id}, {license.Licensee}, plan {license.Plan}, {license.Kind}, {license.Seats} seats, valid {license.ValidFrom:yyyy-MM-dd} to {license.ValidUntil:yyyy-MM-dd}");
             stdout.WriteLine($"  scopes: {string.Join(", ", license.Scopes)}");
         }
 

@@ -27,7 +27,7 @@
 <p>Only <code>td affected</code>, <code>td test</code> (not <code>td test --shadow</code>) and <code>td license status</code> read the license. <code>td record</code>, <code>td test --shadow</code> and <code>td audit</code> run every test anyway and need none.</p>
 
 <h2>Checking it</h2>
-<p><code>td license status</code> shows what the license found covers: its validity, the repositories it covers and the active committer count, without personal data. The same state appears in the log, the job summary and the JSON output whenever it matters: valid, expiring soon, over seats, expired, wrong scope, invalid or missing.</p>
+<p><code>td license status</code> shows what the license found covers: its validity, the repositories it covers and the active committer count, without personal data. The same state appears in the log, the job summary and the JSON output whenever it matters: valid, expiring soon, over seats, not valid yet, expired, wrong scope, invalid or missing.</p>
 <pre><code>td license status</code></pre>
 
 <h2>Machines without CI secrets</h2>
@@ -37,10 +37,10 @@
 
 <h2>Automatic renewal</h2>
 <p>A license carries the address it renews from. At most once a day per machine, {{name}} fetches the current version and keeps it in <code>~/.testdetta/license</code>, so renewals and added seats arrive without touching your secrets. The request sends the license in a header and nothing from your repository. It runs while the analysis does, with a 6-second timeout, and any failure is ignored. A failure that may pass (no answer, a timeout, a server error) is tried again after an hour, so a blocked network costs at most a few seconds an hour, mostly hidden behind the analysis; set <code>TESTDETTA_LICENSE_REFRESH=off</code> where the service cannot be reached. <code>HTTPS_PROXY</code> is honoured. The time of the last attempt is kept in <code>~/.testdetta/license-refresh</code>, so on CI runners that start with an empty home directory the refresh runs once per job.</p>
-<p>On a network that cannot reach the license service, set <code>TESTDETTA_LICENSE_REFRESH=off</code> and replace the license string yourself when you receive a new one.</p>
+<p>A subscription's license runs at most 40 days ahead and is renewed only this way: while the subscription runs, every refresh hands out a license that again runs 40 days ahead, so a CI that refreshes never notices. A copy that cannot reach the license service runs out after at most 40 days, with warnings in the last 14. For a network that cannot reach the license service, take the <a href="/pricing/">Annual plan</a>: its license file runs for the whole term, and you set <code>TESTDETTA_LICENSE_REFRESH=off</code>.</p>
 
 <h2>Which repositories a license covers</h2>
-<p>A license names the repositories it covers, such as <code>github.com/acme/*</code>. {{name}} matches them against the repository's <code>origin</code> remote. Credentials embedded in the remote URL, common with Jenkins, are stripped before matching and never logged.</p>
+<p>A license names the repositories it covers, such as <code>github.com/acme/*</code> (every repository of <code>acme</code>) or <code>github.com/acme/app</code> (one). What you enter at checkout or in the trial form is turned into this form: a URL or SSH remote becomes host and path, and an organization alone (<code>github.com/acme</code>) covers all its repositories. {{name}} matches them against the repository's <code>origin</code> remote. Credentials embedded in the remote URL, common with Jenkins, are stripped before matching and never logged.</p>
 <p>When the remote does not name the repository the license covers, a local mirror for example, set <code>TESTDETTA_LICENSE_SCOPE</code>:</p>
 <pre><code>TESTDETTA_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
 

@@ -9,7 +9,7 @@
 <ul>
   <li><strong>Committers.</strong> To check the seat count, {{name}} counts distinct commit author emails locally. Emails and names are never sent, stored by us, or written to logs.</li>
   <li><strong>License check.</strong> The license is verified offline, with a public key built into {{name}}.</li>
-  <li><strong>License refresh.</strong> At most once a day per machine (once per job on CI runners that start with an empty home directory), {{name}} asks our license service for the current version of your license. The request carries the license itself (which names the licensee, seats and repository scopes) and, like any network request, your IP address. The address is used only to limit request rates and is not stored. Set <code>TESTDETTA_LICENSE_REFRESH=off</code> to turn refresh off entirely.</li>
+  <li><strong>License refresh.</strong> At most once a day per machine (once per job on CI runners that start with an empty home directory), {{name}} asks our license service for the current version of your license. The request carries the license itself (which names the licensee, seats and repository scopes) and, like any network request, your IP address. The address is used to limit request rates; the service itself does not store it, and Google Cloud, which hosts the service, keeps it in its request logs for 30 days. Set <code>TESTDETTA_LICENSE_REFRESH=off</code> to turn refresh off entirely.</li>
 </ul>
 
 <h2>Buying a license</h2>
@@ -28,7 +28,7 @@
   <li>send one reminder 3 days before the trial ends, unless you have subscribed by then;</li>
   <li>allow one trial per organization and per address in 12 months. For this we keep a keyed hash of the address, which cannot be turned back into it, and the organizations you named.</li>
 </ul>
-<p>Your IP address limits how many requests can come from one place. It is not stored.</p>
+<p>Your IP address limits how many requests can come from one place. The service does not store it; Google Cloud's request logs keep it for 30 days.</p>
 
 <h2>Support</h2>
 <p>When you email us, we keep the conversation in our mailbox to help you and to answer later questions. Our email provider processes those messages on our behalf.</p>
@@ -48,7 +48,7 @@
 <ul>
   <li>License records: for the life of the license and as long as tax and accounting law requires afterwards.</li>
   <li>Support email: as long as needed to help you, then deleted on request.</li>
-  <li>Trial email addresses: until 7 days after the trial ends. The hash of the address and the organizations: 12 months from the start of the trial.</li>
+  <li>Trial email addresses: until 7 days after the trial ends. The hash of the address and the organizations: 13 months from the start of the trial (the 12 months above, and a margin before they are deleted).</li>
 </ul>
 
 <h2>Your rights</h2>

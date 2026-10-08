@@ -4,23 +4,65 @@ The steps that turn selling on, in order. Each one changes something live, so ea
 the same day. State before launch (2026-10-08): Polar production approved (account review, identity, payout
 account), products and checkout link made, webhook and Resend key in Secret Manager, production service deployed
 (trials off), and one end-to-end purchase verified (100 % code: checkout, webhooks, license record, license e-mail,
-cancellation webhook).
+cancellation webhook). The pre-launch review of the same day (licensed and unlicensed use end to end) added the
+"Before launch day" steps and the distribution steps below.
 
-1. **Trust the production key.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted` (derived from the
-   secret with `openssl pkey -pubout`; the private key is never printed), set `LicenseKeys.Enforced` as decided,
-   update the site's text that says no license verifies before launch (five languages), release.
-2. **Test the license in CI (owner, 2026-10-08: must not be skipped).** With the released `td`, put a real license
+## Before launch day (owner)
+
+- [ ] **Deploy the license service** with the review's fixes (commit 759c064 and later: checkout scopes normalised
+      and checked, admin scopes and revocations kept over Polar's events, full refunds revoke, subscription licenses
+      at most 40 days ahead, the admin job): `deploy/license-service/deploy.sh production`. Verified on the sandbox
+      the same day. Then `deploy/license-service/admin.sh production attention` must answer, and
+      `admin.sh production show --id P-90ec174e-…` must show the test license's scopes as `github.com/selcukgural/*`
+      (fix them with `admin.sh production update --id … --scope github.com/selcukgural --note …` if not).
+- [ ] **Polar webhook:** add the `order.refunded` event to the production webhook, next to `subscription.*`.
+- [ ] **Polar checkout field `scope`:** its help text shows the format, for example "github.com/your-org for all its
+      repositories, or github.com/your-org/app".
+- [ ] **Production Resend key:** `admin.sh production send --id P-90ec174e-… --to <an address you read> --note "key check"`
+      delivers the license mail. The sandbox key was found invalid on 2026-10-08 (Resend: "API key is invalid");
+      replace it before testing on the sandbox again.
+- [ ] **nuget.org:** organization `TestDetta`, prefix reservation asked of `account@nuget.org`, Trusted Publishing
+      policy (owner `TestDetta`, repository `selcukgural/TestDetta`, `release.yml`, environment `nuget`). The policy
+      was made on 2026-10-08 and is only temporarily active (private repository) until about 2026-10-15; if launch
+      is later, reactivate it first, or the release cannot log in to nuget.org (nothing is published then).
+- [x] GitHub: environment `nuget` (tags `v*`), variable `NUGET_USER`, public repository `TestDetta/action`
+      (2026-10-08). Any pushed `v*.*.*` tag now publishes.
+
+## Launch day
+
+1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
+   (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
+   printed), set `LicenseKeys.Enforced = true`, and merge the `launch` branch: every text that says no license
+   verifies before launch, in five languages, the CLI help, `action.yml`, README and docs. CI green.
+2. **Release 0.1.0.** `git tag v0.1.0 && git push origin v0.1.0`; `release.yml` tests, publishes `TestDetta` to
+   nuget.org and uploads the action bundle. Copy the bundle into `TestDetta/action`, commit, tag `v0.1.0` and
+   `v0`, and publish the release to the Marketplace from GitHub's release page (owner: it asks for the
+   Marketplace agreement). Then replace `<owner>/testdetta@<sha>` with `TestDetta/action@<that commit> # v0.1.0`
+   and `<package>` with `TestDetta` on the site (five languages), in README and docs/ci.md.
+3. **Test the license in CI (owner, 2026-10-08: must not be skipped).** With the released `td`, put a real license
    (the owner's test license `P-90ec174e-…` runs until 2026-11-08) in a repository's `TESTDETTA_LICENSE` secret
    and run the Action: `td license status` must show the signature verified, the scope (`github.com/selcukgural/*`)
    matching the repository, the seat count, and a refresh through `license.testdetta.com`. Also run it locally with
-   `td license install <file>`.
-3. **Open the checkout.** Put the checkout link
-   (`https://buy.polar.sh/polar_cl_7qgdSlOlLdrZJ1PE6WY3OnEADd2Z8cCkdw5yT0ED0uR`) into `site/site.json`
-   `checkoutUrl`, deploy the site, and click through from the pricing page.
-4. **Open trials.** `TRIALS=true deploy/license-service/deploy.sh production`, `site.json` `trialsOpen: true`, then
-   one trial from the live site to an address the owner reads.
-5. **Watch the first day.** The service's logs (webhooks "Saved", mails sent, no warnings) and Resend's delivery
-   page.
+   `td license install <file>`. Without the secret, the same job must run every test and say why.
+4. **Open the checkout.** `site/site.json` `checkoutOpen: "true"` (the link is in `checkoutUrl` already), deploy
+   the site, and click through from the pricing page in every language.
+5. **Open trials.** `TRIALS=true deploy/license-service/deploy.sh production`, `site.json` `trialsOpen: "true"`, then
+   one trial from the live site to an address the owner reads, with the repositories typed as a customer would
+   (`github.com/your-org`).
+6. **Watch the first days.** `admin.sh production attention` every morning (a checkout whose scopes could not be
+   read waits for the owner to write to the buyer and fix them), the service's logs (webhooks "Saved", mails sent,
+   no warnings) and Resend's delivery page.
+
+## After launch (known, not blocking)
+
+- An imprint page with a postal address (expected by German-speaking visitors), and one copyright holder across the
+  footer, `dist/LICENSE.txt` and the terms.
+- Trials: per-owner caps against one request blocking ten owners, an admin command to clear an owner key, an alert
+  when the daily ceiling is reached.
+- An alert on `attention` audit entries, instead of the morning `admin attention`.
+- A product allowlist for Polar events, before any other product (a free tier, a donation) is added.
+- Signing key rotation: releases trust keys by id, so a rotation needs a release that trusts the new key well before
+  the service signs with it; trial hashes derive from the signing key and reset with it.
 
 Done before launch: the sandbox has its own Cloud SQL instance (2026-10-08), so no sandbox credential reaches the
 production database.

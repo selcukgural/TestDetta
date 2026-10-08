@@ -228,6 +228,10 @@ section { padding: 80px 0; }
 .plan h2 { margin: 0; font-size: 1.15rem; }
 .plan .price { font-size: 2.6rem; font-weight: 750; letter-spacing: -0.03em; margin: 14px 0 0; line-height: 1; }
 .plan .price small { font-size: 1rem; font-weight: 500; color: var(--text-soft); letter-spacing: 0; }
+/* The subscribe button and its hint show once checkout opens (site.json checkoutOpen), like the trial form. */
+.plan [data-checkout]:not([data-open="true"]) { display: none; }
+.plan .plan-actions { display: flex; flex-direction: column; gap: 10px; }
+.plan .checkout-hint { margin: 0; color: var(--text-soft); font-size: 0.85rem; }
 .plan .price-note { color: var(--text-soft); font-size: 0.92rem; margin: 6px 0 18px; min-height: 2.8em; }
 .plan ul { list-style: none; padding: 0; margin: 0 0 24px; flex: 1; }
 .plan li { padding: 6px 0 6px 26px; position: relative; }

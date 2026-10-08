@@ -1,4 +1,4 @@
-<!-- title: Preise; description: Kostenlos für öffentliche Repositorys, {{trialDays}} Tage kostenlos für private, danach Abrechnung pro aktivem Committer.; source: f6510a3da063 -->
+<!-- title: Preise; description: Kostenlos für öffentliche Repositorys, {{trialDays}} Tage kostenlos für private, danach Abrechnung pro aktivem Committer.; source: 3ee952cc6c0e -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
@@ -31,11 +31,15 @@
         <ul>
           <li>Private Repositorys auf jeder CI</li>
           <li>Coverage-Maps, Drift-Bridge und Job Summaries</li>
-          <li>20 % Spielraum über Ihre Seats hinaus und 30 Tage Vorwarnung, bevor sich etwas ändert</li>
+          <li>20 % Spielraum über Ihre Seats hinaus und 30 Tage Frist, bevor eine Überschreitung etwas ändert</li>
           <li>Die Lizenz erneuert sich in der CI selbst</li>
           <li>Support per E-Mail</li>
         </ul>
-        <a class="button" href="/trial/">Kostenlos testen</a>
+        <div class="plan-actions">
+          <a class="button" href="{{checkoutUrl}}" data-checkout data-open="{{checkoutOpen}}">Abonnieren</a>
+          <a class="button button-ghost" href="/trial/">Kostenlos testen</a>
+          <p class="checkout-hint" data-checkout data-open="{{checkoutOpen}}">Geben Sie beim Kauf Ihre Repositories an: <code>github.com/ihre-org</code> deckt alle Repositories der Organisation ab.</p>
+        </div>
       </div>
       <div class="plan">
         <h2>Offline &amp; Enterprise</h2>
@@ -98,7 +102,7 @@
     </details>
     <details>
       <summary>Was passiert, wenn die Lizenz abläuft?</summary>
-      <p>Die Warnungen beginnen 14 Tage vorher. Nach dem Enddatum laufen wieder alle Tests, genau wie vor der Installation von {{name}}. Builds bestehen oder scheitern weiterhin aus eigenen Gründen.</p>
+      <p>Solange Sie zahlen, nicht: {{name}} holt jeden Tag die aktuelle Lizenz. Wenn Sie kündigen, läuft die Lizenz bis zum Ende des bezahlten Zeitraums plus 7 Tage. Die Warnungen beginnen 14 Tage vor dem Enddatum; danach laufen wieder alle Tests, genau wie vor der Installation von {{name}}. Builds bestehen oder scheitern weiterhin aus eigenen Gründen.</p>
     </details>
     <details>
       <summary>Sendet {{name}} unseren Code irgendwohin?</summary>
@@ -106,7 +110,15 @@
     </details>
     <details>
       <summary>Wer wickelt Zahlung und Rechnungen ab?</summary>
-      <p>{{seller}} ist unser Merchant of Record: Das Unternehmen nimmt die Zahlung entgegen, berechnet die korrekte Umsatz- bzw. Mehrwertsteuer und stellt die Rechnungen aus. Ihre Lizenz erhalten Sie direkt nach dem Kauf per E-Mail.</p>
+      <p>{{seller}} ist unser Merchant of Record: Das Unternehmen nimmt die Zahlung entgegen, berechnet die korrekte Umsatz- bzw. Mehrwertsteuer und stellt die Rechnungen aus. Ihre Lizenz erhalten Sie direkt nach dem Kauf per E-Mail, für die Repositories, die Sie dort angeben.</p>
+    </details>
+    <details>
+      <summary>Was geben wir beim Kauf als Repositories an?</summary>
+      <p>Die Repositories, die die Lizenz abdecken soll, als Host und Pfad, getrennt durch Kommas oder Zeilenumbrüche: <code>github.com/ihre-org</code> für alle Repositories einer Organisation, <code>github.com/ihre-org/app</code> für eines, <code>gitlab.com/gruppe/untergruppe</code> für eine GitLab-Gruppe. Eine vollständige URL funktioniert ebenfalls. Können wir Ihre Angabe nicht lesen, schreiben wir Ihnen, bevor irgendetwas anderes geschieht.</p>
+    </details>
+    <details>
+      <summary>Wie fügen wir Seats hinzu, ändern Repositories oder kündigen?</summary>
+      <p>Ihre Quittung von {{seller}} verlinkt auf dessen Kundenportal, in dem Sie die Zahlungsmethode ändern, Rechnungen herunterladen und kündigen. Um Seats hinzuzufügen oder die Repositories zu ändern, schreiben Sie an <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>; die neue Lizenz kommt per E-Mail, und die CI übernimmt sie innerhalb eines Tages von selbst.</p>
     </details>
     <details>
       <summary>Können wir eine Erstattung erhalten?</summary>

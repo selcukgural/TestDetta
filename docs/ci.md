@@ -29,8 +29,9 @@ TestDetta itself never uses the network for maps.
     Azure DevOps and Bitbucket do not tell TestDetta, so there every repository needs one.
   - Until licensing is switched on at launch, none is needed: tests are selected with or without one.
     After that, without a valid license every test runs, and the build never fails because of it.
-  - On a network that cannot reach the license service, set `TESTDETTA_LICENSE_REFRESH=off` and renew the
-    license string yourself (docs/design/licensing.md).
+  - A subscription's license runs at most 40 days ahead and renews only through the daily refresh. On a
+    network that cannot reach the license service, use an annual license (its file runs for the whole term)
+    and set `TESTDETTA_LICENSE_REFRESH=off` (docs/design/licensing.md).
 - **Exit codes:**
   - `0` success;
   - `1` the analysis failed (`td audit`: it could not run or was cancelled);

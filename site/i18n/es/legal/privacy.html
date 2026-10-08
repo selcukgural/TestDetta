@@ -1,4 +1,4 @@
-<!-- title: Política de privacidad; description: Qué recopilan {{name}} y este sitio web, y qué no recopilan nunca.; source: 3d939c026096 -->
+<!-- title: Política de privacidad; description: Qué recopilan {{name}} y este sitio web, y qué no recopilan nunca.; source: 2bd48425080a -->
 <div class="wrap legal prose">
 <h1>Política de privacidad</h1>
 <p class="muted">Esta traducción se ofrece por comodidad; en caso de discrepancia, prevalece la versión en inglés.</p>
@@ -10,7 +10,7 @@
 <ul>
   <li><strong>Committers.</strong> Para comprobar el número de puestos, {{name}} cuenta localmente las direcciones de correo distintas de los autores de commits. Los correos y los nombres nunca se envían, ni los almacenamos nosotros, ni se escriben en los registros.</li>
   <li><strong>Comprobación de la licencia.</strong> La licencia se verifica sin conexión, con una clave pública integrada en {{name}}.</li>
-  <li><strong>Actualización de la licencia.</strong> Como máximo una vez al día por máquina (una vez por job en los runners de CI que empiezan con un directorio personal vacío), {{name}} pide a nuestro servicio de licencias la versión actual de tu licencia. La solicitud incluye la propia licencia (que indica el licenciatario, los puestos y los ámbitos de repositorio) y, como cualquier solicitud de red, tu dirección IP. La dirección se usa solo para limitar la frecuencia de solicitudes y no se almacena. Define <code>TESTDETTA_LICENSE_REFRESH=off</code> para desactivar la actualización por completo.</li>
+  <li><strong>Actualización de la licencia.</strong> Como máximo una vez al día por máquina (una vez por job en los runners de CI que empiezan con un directorio personal vacío), {{name}} pide a nuestro servicio de licencias la versión actual de tu licencia. La solicitud incluye la propia licencia (que indica el licenciatario, los puestos y los ámbitos de repositorio) y, como cualquier solicitud de red, tu dirección IP. La dirección se usa para limitar la frecuencia de solicitudes; el servicio no la almacena, y Google Cloud, que aloja el servicio, la conserva 30 días en sus registros de solicitudes. Define <code>TESTDETTA_LICENSE_REFRESH=off</code> para desactivar la actualización por completo.</li>
 </ul>
 
 <h2>Compra de una licencia</h2>
@@ -29,7 +29,7 @@
   <li>enviar un único recordatorio 3 días antes de que acabe la prueba, salvo que ya te hayas suscrito;</li>
   <li>permitir una prueba por organización y por dirección en 12 meses. Para ello guardamos un hash con clave de la dirección, que no permite recuperarla, y las organizaciones que indicaste.</li>
 </ul>
-<p>Tu dirección IP limita cuántas solicitudes pueden llegar desde un mismo lugar. No se guarda.</p>
+<p>Tu dirección IP limita cuántas solicitudes pueden llegar desde un mismo lugar. El servicio no la guarda; los registros de solicitudes de Google Cloud la conservan 30 días.</p>
 
 <h2>Soporte</h2>
 <p>Cuando nos escribes, conservamos la conversación en nuestro buzón para ayudarte y responder a preguntas posteriores. Nuestro proveedor de correo procesa esos mensajes en nuestro nombre.</p>
@@ -49,7 +49,7 @@
 <ul>
   <li>Registros de licencias: durante la vigencia de la licencia y, después, tanto tiempo como exija la legislación fiscal y contable.</li>
   <li>Correo de soporte: el tiempo necesario para ayudarte; después se elimina si lo solicitas.</li>
-  <li>Direcciones de correo de las pruebas: hasta 7 días después de que acabe la prueba. El hash de la dirección y las organizaciones: 12 meses desde el inicio de la prueba.</li>
+  <li>Direcciones de correo de las pruebas: hasta 7 días después de que acabe la prueba. El hash de la dirección y las organizaciones: 13 meses desde el inicio de la prueba (los 12 meses de arriba y un margen antes de borrarlos).</li>
 </ul>
 
 <h2>Tus derechos</h2>
