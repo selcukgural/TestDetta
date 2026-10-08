@@ -1,5 +1,5 @@
 name: TestDetta
-description: Run only the .NET tests a change affects on pull requests, record coverage maps on the default branch, and audit the selection on your own code.
+description: Run only the .NET tests a change can affect, record coverage maps, and audit the selection on your own code.
 branding:
   icon: filter
   color: blue

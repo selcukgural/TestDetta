@@ -52,6 +52,14 @@ public sealed class ActionShadowTests
         Assert.Contains("name: ${{ steps.artifact.outputs.name }}", upload, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_description_fits_the_Marketplace_limit_of_125_characters()
+    {
+        var line = Action.Split('\n').Single(static line => line.StartsWith("description: ", StringComparison.Ordinal));
+
+        Assert.InRange(line["description: ".Length..].TrimEnd().Length, 1, 124);
+    }
+
     /// <summary>The text of one step of the Action, from its name to the next step.</summary>
     private static string Step(string name)
     {
