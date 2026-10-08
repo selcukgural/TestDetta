@@ -1,5 +1,5 @@
 TestDetta
-Copyright (c) 2026 TestDetta. All rights reserved.
+Copyright (c) 2026 Selçuk Güral. All rights reserved.
 
 TestDetta is commercial software. Its use is governed by the Terms of Service at
 https://testdetta.com/legal/terms/. Public repositories may use it free of charge; private

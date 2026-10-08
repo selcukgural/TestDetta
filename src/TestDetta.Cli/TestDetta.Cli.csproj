@@ -8,7 +8,9 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <PackageId>TestDetta</PackageId>
     <RootNamespace>TestDetta.Cli</RootNamespace>
-    <Authors>TestDetta</Authors>
+    <!-- The maker and rights holder is a person until there is a company (the terms name the same licensor). -->
+    <Authors>Selçuk Güral</Authors>
+    <Copyright>Copyright (c) 2026 Selçuk Güral</Copyright>
     <Description>Run only the .NET tests a change can affect: test impact analysis from your git diff, project graph and per-test-class coverage, inside your CI.</Description>
     <PackageTags>testing;test-impact-analysis;ci;dotnet-tool;xunit;nunit;mstest;tunit</PackageTags>
     <PackageProjectUrl>https://testdetta.com</PackageProjectUrl>
