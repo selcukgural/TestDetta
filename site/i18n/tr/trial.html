@@ -1,4 +1,4 @@
-<!-- title: Ücretsiz deneme; description: {{name}}'yı özel depolarınızda {{trialDays}} gün boyunca kartsız deneyin.; source: 2f43a6a99f96 -->
+<!-- title: Ücretsiz deneme; description: {{name}}'yı özel depolarınızda {{trialDays}} gün boyunca kartsız deneyin.; source: 5edfbb7b2c10 -->
 <div class="wrap legal prose trial">
 <h1>{{name}}'yı özel depolarınızda {{trialDays}} gün deneyin</h1>
 <p class="lead">Kart yok, satış görüşmesi yok. Lisansın gideceği adresi ve kapsayacağı depoları yazın; lisans bir dakika içinde e-postanıza gelir.</p>
@@ -7,9 +7,9 @@
 <form class="trial-form" data-trial data-endpoint="{{trialEndpoint}}" data-open="{{trialsOpen}}" novalidate
   data-msg-working="İsteğiniz hazırlanıyor…"
   data-msg-sending="Gönderiliyor…"
-  data-msg-accepted="Tamam. Bu adres ve bu depolar deneme alabiliyorsa lisans gelen kutunuza doğru yolda. licenses@{{domain}} adresinden gelir; göremezseniz spam klasörüne de bakın."
+  data-msg-accepted="Tamam. Bu adres ve bu depolar deneme alabiliyorsa lisans gelen kutunuza doğru yolda. licenses@{{domain}} adresinden gelir; göremezseniz spam klasörüne de bakın. On dakika içinde gelmezse {{supportEmail}} adresine yazın."
   data-msg-email="Lütfen tek bir e-posta adresi yazın, örneğin dev@acme.com."
-  data-msg-repositories="Lütfen her depo desenini sunucu ve sahibiyle yazın, örneğin github.com/acme/* ya da git.acme.corp/team/app."
+  data-msg-repositories="Lütfen her depo desenini sunucu ve sahibiyle yazın, örneğin github.com/acme/* ya da git.acme.corp/team/app; en fazla üç sahip."
   data-msg-terms="Lisans almak için lütfen koşulları kabul edin."
   data-msg-challenge="İstek çok uzun sürdü ve süresi doldu. Lütfen yeniden gönderin."
   data-msg-paused="Bugün verebileceğimiz kadar deneme verdik. Lütfen yarın yeniden deneyin."
@@ -19,7 +19,7 @@
     <input id="trial-email" type="email" name="email" autocomplete="email" maxlength="254" required></label>
   <label for="trial-repositories"><span>Depolar</span>
     <textarea id="trial-repositories" name="repositories" rows="3" maxlength="2000" placeholder="github.com/acme/*" required></textarea>
-    <small>Önce sunucu ve sahip: <code>github.com/acme/*</code> ya da <code>git.acme.corp/team/app</code> gibi. Birden fazlasını virgülle ya da yeni satırla ayırın.</small></label>
+    <small>Önce sunucu ve sahip: <code>github.com/acme/*</code> ya da <code>git.acme.corp/team/app</code> gibi. Birden fazlasını virgülle ya da yeni satırla ayırın. Bir deneme en fazla üç sahibi kapsar.</small></label>
   <label class="trial-consent" for="trial-terms"><input id="trial-terms" type="checkbox" name="terms" required>
     <span><a href="/legal/terms/">Koşulları</a> kabul ediyorum ve <a href="/legal/privacy/">gizlilik politikasını</a> okudum.</span></label>
   <button class="button" type="submit">Bana deneme lisansı gönder</button>

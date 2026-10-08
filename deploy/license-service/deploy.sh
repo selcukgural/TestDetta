@@ -22,7 +22,10 @@ case "${1:-production}" in
     SERVICE=license-service SA=license-service@$P.iam.gserviceaccount.com
     PREFIX=license KEY_ID=td-2026-10 DOMAIN=license.testdetta.com SQL=$P:$R:testdetta-licenses
     # Trials open at launch, with the trusted key (TRIALS=true deploy.sh production then).
-    TRIALS=${TRIALS:-false} TRIAL_ORIGINS=https://testdetta.com ;;
+    TRIALS=${TRIALS:-false} TRIAL_ORIGINS=https://testdetta.com
+    # TestDetta Team (monthly) and (yearly), the products live on Polar since 2026-10-08: only their
+    # subscriptions make licenses, so a product added later (a free plan, say) cannot mint one by accident.
+    POLAR_PRODUCTS=${POLAR_PRODUCTS:-2861717e-907b-4355-9d8f-c408b6d5647a 9d3624d9-ebe2-4769-8707-1b3d657dfb6d} ;;
   sandbox)
     SERVICE=license-service-sandbox SA=license-sandbox@$P.iam.gserviceaccount.com
     # Its own Cloud SQL instance (2026-10-08): no sandbox credential can reach the production database.
@@ -47,7 +50,8 @@ ENV="TESTDETTA_SECRETS=/secrets|Licenses__KeyId=$KEY_ID|Licenses__KeyFile=/keys/
 if exists "$PREFIX-polar-webhook-secret"; then
   SECRETS="$SECRETS,/secrets/polar/Licenses__PolarWebhookSecret=$PREFIX-polar-webhook-secret:latest"
 fi
-# The Polar products whose subscriptions make licenses (POLAR_PRODUCTS="<id> <id>"); unset takes every product.
+# The Polar products whose subscriptions make licenses (POLAR_PRODUCTS="<id> <id>", set above for production);
+# unset, as on the sandbox, takes every product.
 if [ -n "${POLAR_PRODUCTS:-}" ]; then
   ENV="$ENV|Licenses__PolarProducts=$POLAR_PRODUCTS"
 fi

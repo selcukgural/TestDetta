@@ -7,6 +7,7 @@
   "blueskyHandle": "testdetta.com",
   "githubOrg": "TestDetta",
   "seller": "Polar Software, Inc.",
+  "sellerTerms": "https://polar.sh/legal/checkout-buyer-terms",
   "licensor": "Selçuk Güral",
   "licensorCountry": "Türkiye",
   "priceMonthly": "15",

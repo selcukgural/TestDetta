@@ -304,6 +304,8 @@ public sealed class TrialTests : IAsyncLifetime
     [InlineData("github.com//acme", null)]
     [InlineData("*.com/acme/*", null)]
     [InlineData("github.com/ac*/x", null)]
+    [InlineData("github.com/a/*, github.com/b/*, gitlab.com/c/*", "github.com/a github.com/b gitlab.com/c")]
+    [InlineData("github.com/a/*, github.com/b/*, gitlab.com/c/*, gitlab.com/d/*", null)]
     public void Trial_scopes_name_a_host_and_an_owner_without_wildcards(string text, string? owners) =>
         Assert.Equal(owners, TrialScopes.Parse(text) is { } scopes ? string.Join(' ', scopes.Owners) : null);
 

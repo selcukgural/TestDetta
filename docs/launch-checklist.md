@@ -52,28 +52,26 @@ at `cb38ce9` with tag `v0.1.1`, the site and README pinned to it.
    and run the Action: `td license status` must show the signature verified, the scope (`github.com/selcukgural/*`)
    matching the repository, the seat count, and a refresh through `license.testdetta.com`. Also run it locally with
    `td license install <file>`. Without the secret, the same job must run every test and say why.
-4. **Open the checkout.** First pin the products: their ids from Polar (Products → each product → its id) go into
-   every later production deploy as `POLAR_PRODUCTS="<monthly id> <yearly id>" deploy/license-service/deploy.sh production`
-   (an unset variable takes every product again, so keep the ids in this checklist once known). Then `site/site.json` `checkoutOpen: "true"` (the link is in `checkoutUrl` already),
+4. **Open the checkout.** The products are pinned: `deploy.sh production` passes the monthly and yearly ids itself
+   (2026-10-08); check that the deployed revision has `Licenses__PolarProducts`. Then `site/site.json` `checkoutOpen: "true"` (the link is in `checkoutUrl` already),
    deploy the site, and click through from the pricing page in every language.
 5. **Open trials.** `TRIALS=true TRIALS_PER_DAY=10 deploy/license-service/deploy.sh production` (a low daily ceiling
    while trials are new; `admin.sh production trial-release` frees an owner whose name someone else used), `site.json` `trialsOpen: "true"`, then
    one trial from the live site to an address the owner reads, with the repositories typed as a customer would
    (`github.com/your-org`).
-6. **Watch the first days.** `admin.sh production attention` every morning (a checkout whose scopes could not be
+6. **Watch the first days.** Alerts by mail first: after the deploy that logs with severities,
+   `deploy/license-service/alerts.sh production <address>` (warnings and errors, refused trials). Then `admin.sh production attention` every morning (a checkout whose scopes could not be
    read waits for the owner to write to the buyer and fix them), the service's logs (webhooks "Saved", mails sent,
    no warnings) and Resend's delivery page.
 
 ## After launch (known, not blocking)
 
-- An imprint page with a postal address (expected by German-speaking visitors), and one copyright holder across the
-  footer, `dist/LICENSE.txt` and the terms.
-- Trials: per-owner caps against one request blocking ten owners, an admin command to clear an owner key, an alert
-  when the daily ceiling is reached.
-- An alert on `attention` audit entries, instead of the morning `admin attention`.
-- A product allowlist for Polar events, before any other product (a free tier, a donation) is added.
+- An imprint page with a postal address (expected by German-speaking visitors), once there is a company.
 - Signing key rotation: releases trust keys by id, so a rotation needs a release that trusts the new key well before
   the service signs with it; trial hashes derive from the signing key and reset with it.
 
 Done before launch: the sandbox has its own Cloud SQL instance (2026-10-08), so no sandbox credential reaches the
-production database.
+production database. Also 2026-10-08: one copyright holder (the owner) across the footer, `LICENSE.txt` and the terms;
+the Polar product allowlist, set by `deploy.sh production`; trials name at most three owners, `admin trial-release
+--owner` frees one, and `alerts.sh` mails warnings (the daily ceiling, `attention` entries, undelivered licenses) and
+refused trials; the terms link Polar's buyer terms.

@@ -7,9 +7,9 @@
 <form class="trial-form" data-trial data-endpoint="{{trialEndpoint}}" data-open="{{trialsOpen}}" novalidate
   data-msg-working="Preparing your request…"
   data-msg-sending="Sending…"
-  data-msg-accepted="Done. If this address and these repositories can get a trial, the license is on its way to your inbox. It comes from licenses@{{domain}}; check your spam folder if you do not see it."
+  data-msg-accepted="Done. If this address and these repositories can get a trial, the license is on its way to your inbox. It comes from licenses@{{domain}}; check your spam folder if you do not see it. Nothing after ten minutes? Write to {{supportEmail}}."
   data-msg-email="Please enter one email address, such as dev@acme.com."
-  data-msg-repositories="Please name each repository pattern with its host and owner, such as github.com/acme/* or git.acme.corp/team/app."
+  data-msg-repositories="Please name each repository pattern with its host and owner, such as github.com/acme/* or git.acme.corp/team/app, for at most three owners."
   data-msg-terms="Please accept the terms to get a license."
   data-msg-challenge="The request took too long and expired. Please send it again."
   data-msg-paused="We have handed out as many trials as we can today. Please try again tomorrow."
@@ -19,7 +19,7 @@
     <input id="trial-email" type="email" name="email" autocomplete="email" maxlength="254" required></label>
   <label for="trial-repositories"><span>Repositories</span>
     <textarea id="trial-repositories" name="repositories" rows="3" maxlength="2000" placeholder="github.com/acme/*" required></textarea>
-    <small>Host and owner first, as in <code>github.com/acme/*</code> or <code>git.acme.corp/team/app</code>. Separate several with commas or new lines.</small></label>
+    <small>Host and owner first, as in <code>github.com/acme/*</code> or <code>git.acme.corp/team/app</code>. Separate several with commas or new lines. A trial covers up to three owners.</small></label>
   <label class="trial-consent" for="trial-terms"><input id="trial-terms" type="checkbox" name="terms" required>
     <span>I accept the <a href="/legal/terms/">terms</a> and have read the <a href="/legal/privacy/">privacy policy</a>.</span></label>
   <button class="button" type="submit">Send me a trial license</button>

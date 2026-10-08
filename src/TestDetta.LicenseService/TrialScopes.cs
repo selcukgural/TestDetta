@@ -14,16 +14,23 @@ public sealed record TrialScopes(IReadOnlyList<string> Patterns, IReadOnlyList<s
     public const int MaxPatterns = 10;
 
     /// <summary>
+    /// Most owners one trial may name. Every owner a trial names is blocked from another trial for 12 months, so
+    /// one request naming many owners would lock them all out; three cover a team whose code lives under a few
+    /// organizations, and support can release an owner someone else blocked.
+    /// </summary>
+    public const int MaxOwners = 3;
+
+    /// <summary>
     /// Reads patterns separated by commas, spaces or new lines, as the checkout field takes them, normalised by
     /// <see cref="ScopePatterns"/> (a URL or SSH remote becomes <c>host/path</c>, a bare owner gets <c>/*</c>).
     /// Null when any pattern is malformed, names no owner, puts a wildcard in the host or owner, or there are
-    /// none or too many: the form then asks for them again.
+    /// none, too many patterns or more than <see cref="MaxOwners"/> owners: the form then asks for them again.
     /// </summary>
     /// <param name="text">What the visitor typed.</param>
     public static TrialScopes? Parse(string? text)
     {
         var parsed = ScopePatterns.Parse(text, ScopeRules.Customer);
-        return parsed.Rejected.Count == 0 && parsed.Patterns.Count is > 0 and <= MaxPatterns
+        return parsed.Rejected.Count == 0 && parsed.Patterns.Count is > 0 and <= MaxPatterns && parsed.Owners.Count <= MaxOwners
             ? new TrialScopes(parsed.Patterns, parsed.Owners)
             : null;
     }

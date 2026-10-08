@@ -315,8 +315,9 @@ Still to do in phase 2:
   test vector. A failure returns 401, logs a warning, and nothing is stored. Without
   `Licenses:PolarWebhookSecret` the endpoint answers 404.
 - **Products.** `Licenses:PolarProducts` (`POLAR_PRODUCTS="<id> <id>" deploy.sh`) lists the products whose
-  subscriptions and refunds count; empty takes every product. Set it before the organization sells anything
-  else. A signed event in another shape (a field missing or of another kind) is handled as ignored and
+  subscriptions and refunds count; empty takes every product. `deploy.sh production` sets the two live products
+  (TestDetta Team monthly and yearly) itself since 2026-10-08, so no deploy can leave it out; the sandbox takes
+  every product. A signed event in another shape (a field missing or of another kind) is handled as ignored and
   logged, instead of failing until Polar gives up.
 - **Delivery.** Each `webhook-id` is handled once. It is marked handled after it is applied, so a
   failure in between is left to Polar's retries (up to 10). The body limit is raised to 256 KiB for
@@ -452,6 +453,16 @@ revoking `CONNECT` would not have been enough. The production instance now holds
 the sandbox's earlier test records were not moved. The Polar webhook secret and the Resend key are mounted once their
 secrets exist (`<prefix>-polar-webhook-secret`, `<prefix>-resend-api-key`, with `MAIL_FROM` set).
 
+### Logs and alerts (2026-10-08)
+
+On Cloud Run (`K_SERVICE` or `CLOUD_RUN_JOB` set) the service, the trial job and the admin job log one JSON line
+per entry (`CloudLogFormatter`: `severity`, `message`, `logger`), so Cloud Logging keeps the level; the default
+console formatter wrote the category and the message as two lines without one. Elsewhere logs stay single plain
+lines. `alerts.sh <env> <address>` (re-runnable) makes an e-mail channel and two log-based alert policies, at
+most one mail an hour each: every warning or error of the service and its two jobs (only stdout and stderr, not
+the request log, where a refresh of an unknown license is a 404 warning), and every trial refused because the
+address or an owner had one. Run it after the first deploy that has the formatter.
+
 The key's public half went into `LicenseKeys.Trusted` at launch, together with the site's texts that had said
 no license verifies before launch.
 
@@ -463,7 +474,7 @@ products carry no trial; a purchase pays from day one).
 - **Flow.** `/trial/` (five languages, `site/src/assets/trial.js`) fetches `GET /v1/trials/challenge`, solves
   the proof of work while the visitor types and posts `{email, repositories, challenge, nonce}` to
   `POST /v1/trials` (`TrialEndpoint`). The service checks the address (one plain address), the patterns
-  (`TrialScopes`: host and owner first, no wildcard in either, at most 10) and the proof, reserves the trial,
+  (`TrialScopes`: host and owner first, no wildcard in either, at most 10 patterns naming at most 3 owners) and the proof, reserves the trial,
   saves a `T-<random>` record (kind trial, 50 seats, the patterns, 30 days, source `trial`, licensee
   "Trial for <first owner>") and e-mails it with the license mail. Sending the license to the address is
   the address check. A mail that does not go out revokes the record and releases the reservation, so a
@@ -475,7 +486,10 @@ products carry no trial; a purchase pays from day one).
 - **Limits.** One trial per owner key (`github.com/acme`) and per address in 12 months, checked and
   reserved in one transaction under an advisory lock (`TrialStore.ReserveAsync`); a daily ceiling over all
   trials (`TrialsPerDay`, 50), reserved before any mail is sent, answering 503 `paused`; 5 requests per
-  client address (IPv6 by /64) per hour in memory.
+  client address (IPv6 by /64) per hour in memory. Since one request blocks every owner it names, a trial
+  names at most 3 (2026-10-08, was 10 through the pattern cap); someone else's request can still block an owner,
+  so the site's answer tells a visitor with no mail after ten minutes to write to support, the alert below
+  reports refusals, and `admin trial-release --owner` frees the owner.
 - **No enumeration.** Every well-formed request gets 202 `accepted` after at least 2 s
   (`TrialMinimumResponse`), whether a license went out or the address or owner had one; malformed
   requests get 400 with the field to fix, which says nothing about anyone else.

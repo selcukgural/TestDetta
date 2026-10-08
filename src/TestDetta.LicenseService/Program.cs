@@ -23,7 +23,7 @@ if (args is ["trials", "daily"])
         .AddEnvironmentVariables(), Environment.GetEnvironmentVariable(SecretFiles.Variable))
         .Build();
     var jobSettings = ServiceSettings.From(configuration);
-    using var loggers = LoggerFactory.Create(static logging => logging.AddSimpleConsole(static console => console.SingleLine = true));
+    using var loggers = LoggerFactory.Create(static logging => CloudLogFormatter.AddServiceConsole(logging));
     await using var jobData = NpgsqlDataSource.Create(jobSettings.ConnectionString);
     var jobTrials = new TrialStore(jobData);
     await jobTrials.EnsureSchemaAsync(CancellationToken.None);
@@ -33,6 +33,8 @@ if (args is ["trials", "daily"])
 }
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+CloudLogFormatter.AddServiceConsole(builder.Logging);
 SecretFiles.Add(builder.Configuration, Environment.GetEnvironmentVariable(SecretFiles.Variable));
 var settings = ServiceSettings.From(builder.Configuration);
 

@@ -1,4 +1,4 @@
-<!-- title: Kostenlos testen; description: Testen Sie {{name}} {{trialDays}} Tage lang auf Ihren privaten Repositorys, ohne Kreditkarte.; source: 2f43a6a99f96 -->
+<!-- title: Kostenlos testen; description: Testen Sie {{name}} {{trialDays}} Tage lang auf Ihren privaten Repositorys, ohne Kreditkarte.; source: 5edfbb7b2c10 -->
 <div class="wrap legal prose trial">
 <h1>{{name}} {{trialDays}} Tage auf Ihren privaten Repositorys testen</h1>
 <p class="lead">Keine Kreditkarte, kein Verkaufsgespräch. Geben Sie an, wohin die Lizenz gehen soll und welche Repositorys sie abdeckt; sie kommt innerhalb einer Minute per E-Mail.</p>
@@ -7,9 +7,9 @@
 <form class="trial-form" data-trial data-endpoint="{{trialEndpoint}}" data-open="{{trialsOpen}}" novalidate
   data-msg-working="Ihre Anfrage wird vorbereitet…"
   data-msg-sending="Wird gesendet…"
-  data-msg-accepted="Erledigt. Wenn diese Adresse und diese Repositorys eine Testphase erhalten können, ist die Lizenz auf dem Weg in Ihr Postfach. Sie kommt von licenses@{{domain}}; sehen Sie auch im Spam-Ordner nach, falls sie nicht erscheint."
+  data-msg-accepted="Erledigt. Wenn diese Adresse und diese Repositorys eine Testphase erhalten können, ist die Lizenz auf dem Weg in Ihr Postfach. Sie kommt von licenses@{{domain}}; sehen Sie auch im Spam-Ordner nach, falls sie nicht erscheint. Nach zehn Minuten noch nichts? Schreiben Sie an {{supportEmail}}."
   data-msg-email="Bitte geben Sie eine einzige E-Mail-Adresse an, etwa dev@acme.com."
-  data-msg-repositories="Bitte nennen Sie jedes Repository-Muster mit Host und Owner, etwa github.com/acme/* oder git.acme.corp/team/app."
+  data-msg-repositories="Bitte nennen Sie jedes Repository-Muster mit Host und Owner, etwa github.com/acme/* oder git.acme.corp/team/app, für höchstens drei Owner."
   data-msg-terms="Bitte akzeptieren Sie die Bedingungen, um eine Lizenz zu erhalten."
   data-msg-challenge="Die Anfrage hat zu lange gedauert und ist abgelaufen. Bitte senden Sie sie erneut."
   data-msg-paused="Für heute haben wir so viele Testphasen vergeben, wie wir können. Bitte versuchen Sie es morgen erneut."
@@ -19,7 +19,7 @@
     <input id="trial-email" type="email" name="email" autocomplete="email" maxlength="254" required></label>
   <label for="trial-repositories"><span>Repositorys</span>
     <textarea id="trial-repositories" name="repositories" rows="3" maxlength="2000" placeholder="github.com/acme/*" required></textarea>
-    <small>Zuerst Host und Owner, etwa <code>github.com/acme/*</code> oder <code>git.acme.corp/team/app</code>. Mehrere trennen Sie mit Kommas oder Zeilenumbrüchen.</small></label>
+    <small>Zuerst Host und Owner, etwa <code>github.com/acme/*</code> oder <code>git.acme.corp/team/app</code>. Mehrere trennen Sie mit Kommas oder Zeilenumbrüchen. Eine Testphase deckt bis zu drei Owner ab.</small></label>
   <label class="trial-consent" for="trial-terms"><input id="trial-terms" type="checkbox" name="terms" required>
     <span>Ich akzeptiere die <a href="/legal/terms/">Bedingungen</a> und habe die <a href="/legal/privacy/">Datenschutzerklärung</a> gelesen.</span></label>
   <button class="button" type="submit">Testlizenz zusenden</button>
