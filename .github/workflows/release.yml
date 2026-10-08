@@ -85,7 +85,8 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           url="https://api.nuget.org/v3-flatcontainer/testdetta/$version/testdetta.$version.nupkg"
-          for attempt in $(seq 1 40); do
+          # nuget.org validates and indexes a new package before serving it: up to an hour, the first time especially.
+          for attempt in $(seq 1 120); do
             if curl -fsSL "$url" -o package.nupkg; then break; fi
             echo "not indexed yet ($attempt)"; sleep 30
           done
