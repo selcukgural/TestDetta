@@ -19,7 +19,11 @@ public sealed class TrialStore(NpgsqlDataSource dataSource)
     /// <param name="cancellationToken">Cancels the call.</param>
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand("""
+        // Two instances and the daily job may start at once; the lock makes the steps run one after another.
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            select pg_advisory_xact_lock(73110018);
             create table if not exists trials (
                 id text primary key,
                 email_hash bytea not null,
@@ -34,8 +38,9 @@ public sealed class TrialStore(NpgsqlDataSource dataSource)
                 id text primary key,
                 at timestamptz not null default now()
             );
-            """);
+            """, connection, transaction);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>True the first time the challenge <paramref name="id"/> is used; a replay gets false.</summary>
@@ -98,6 +103,20 @@ public sealed class TrialStore(NpgsqlDataSource dataSource)
         return TrialReservation.Reserved;
     }
 
+    /// <summary>
+    /// Lets the owner <paramref name="owner"/> (<c>github.com/acme</c>) have a trial again: takes it out of every
+    /// earlier trial's owners, for an admin to undo a trial someone else asked for in that owner's name (the form
+    /// cannot check who owns a repository). Returns how many trials named it.
+    /// </summary>
+    /// <param name="owner">An owner key, host and owner, lower-cased.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task<int> ReleaseOwnerAsync(string owner, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("update trials set owners = array_remove(owners, $1) where $1 = any(owners)");
+        command.Parameters.Add(new NpgsqlParameter { Value = owner });
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     /// <summary>Gives a reservation back when its license could not be e-mailed, so the visitor can try again.</summary>
     /// <param name="id">Trial id.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
@@ -110,7 +129,8 @@ public sealed class TrialStore(NpgsqlDataSource dataSource)
 
     /// <summary>
     /// Trials that end within <paramref name="ahead"/> of now, were not reminded yet and still have an
-    /// address, leaving out owners that bought a license since (a Polar license whose scopes name them).
+    /// address, leaving out owners that bought a license since (a paid license, from Polar or an invoice, whose
+    /// scopes name them).
     /// </summary>
     /// <param name="ahead">How far before its end a trial is reminded.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
@@ -121,7 +141,7 @@ public sealed class TrialStore(NpgsqlDataSource dataSource)
             where t.email is not null and t.reminded_at is null and t.ends_at > now() and t.ends_at <= now() + $1
               and not exists (
                 select 1 from licenses l, unnest(l.scopes) s
-                where l.source = 'polar' and not l.revoked
+                where l.source <> 'trial' and not l.revoked
                   and split_part(s, '/', 1) || '/' || split_part(s, '/', 2) = any(t.owners))
             order by t.ends_at
             """);

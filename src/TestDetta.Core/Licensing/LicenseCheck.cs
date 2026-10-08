@@ -25,38 +25,53 @@ public static class LicenseCheck
     public const int OverSeatsDays = 30;
 
     /// <summary>
-    /// The license to use of those found: the first genuine one decides which license it is, and of
-    /// its genuine versions (the CI secret, a refreshed or installed copy) the newest signed counts.
+    /// The genuine licenses found, one per license id in the order their id first appears, each the newest signed
+    /// of its versions (the CI secret, a refreshed or installed copy). Empty, with the first one's reason, when none
+    /// is genuine.
+    /// </summary>
+    /// <param name="licenses">License strings in order of precedence.</param>
+    /// <param name="trustedKeys">Public keys by key id.</param>
+    /// <param name="error">Why none is genuine; null when one is.</param>
+    public static IReadOnlyList<(string Text, LicenseClaims Claims)> Candidates(IReadOnlyList<string> licenses, IReadOnlyDictionary<string, byte[]> trustedKeys, out string? error)
+    {
+        error = null;
+        var newest = new List<(string Text, LicenseClaims Claims)>();
+        foreach (var text in licenses)
+        {
+            if (License.Verify(text, trustedKeys, out var reason) is not { } claims)
+            {
+                error ??= reason;
+                continue;
+            }
+
+            var index = newest.FindIndex(n => n.Claims.Id == claims.Id);
+            if (index < 0)
+            {
+                newest.Add((License.Normalize(text), claims));
+            }
+            else if (claims.Issued > newest[index].Claims.Issued)
+            {
+                newest[index] = (License.Normalize(text), claims);
+            }
+        }
+
+        if (newest.Count > 0)
+        {
+            error = null;
+        }
+
+        return newest;
+    }
+
+    /// <summary>
+    /// The first of <see cref="Candidates"/>: the license the first genuine string names, in its newest version.
     /// Null, with the first one's reason, when none is genuine.
     /// </summary>
     /// <param name="licenses">License strings in order of precedence.</param>
     /// <param name="trustedKeys">Public keys by key id.</param>
     /// <param name="error">Why none is genuine; null when one is.</param>
-    public static (string Text, LicenseClaims Claims)? Best(IReadOnlyList<string> licenses, IReadOnlyDictionary<string, byte[]> trustedKeys, out string? error)
-    {
-        error = null;
-        var genuine = new List<(string Text, LicenseClaims Claims)>();
-        foreach (var text in licenses)
-        {
-            if (License.Verify(text, trustedKeys, out var reason) is { } claims)
-            {
-                genuine.Add((License.Normalize(text), claims));
-            }
-            else
-            {
-                error ??= reason;
-            }
-        }
-
-        if (genuine.Count == 0)
-        {
-            return null;
-        }
-
-        error = null;
-        var id = genuine[0].Claims.Id;
-        return genuine.Where(g => g.Claims.Id == id).MaxBy(static g => g.Claims.Issued);
-    }
+    public static (string Text, LicenseClaims Claims)? Best(IReadOnlyList<string> licenses, IReadOnlyDictionary<string, byte[]> trustedKeys, out string? error) =>
+        Candidates(licenses, trustedKeys, out error) is [var first, ..] ? first : null;
 
     /// <summary>
     /// What a message adds when the license does not cover the run: "; every test runs" once the
@@ -82,12 +97,36 @@ public static class LicenseCheck
             return new LicenseStatus(LicenseState.Missing, $"no TestDetta license found (set TESTDETTA_LICENSE or TESTDETTA_LICENSE_FILE){runs}", null, null);
         }
 
-        if (Best(input.Licenses, trustedKeys, out var error) is not { } best)
+        var candidates = Candidates(input.Licenses, trustedKeys, out var error);
+        if (candidates.Count == 0)
         {
             return new LicenseStatus(LicenseState.Invalid, $"the TestDetta license is not valid: {error}{runs}", null, null);
         }
 
-        var claims = best.Claims;
+        // An old license left in the CI secret must not hide a current one installed or refreshed next to it: the
+        // first that covers the run counts; when none does, the first one's reason is reported.
+        LicenseStatus? first = null;
+        foreach (var candidate in candidates)
+        {
+            var status = Evaluate(input, candidate.Claims, enforced);
+            if (status.AllowsSelection)
+            {
+                return status;
+            }
+
+            first ??= status;
+        }
+
+        return first!;
+    }
+
+    /// <summary>Checks one genuine license against the run: scope, dates and active committers.</summary>
+    /// <param name="input">What was found.</param>
+    /// <param name="claims">The license's verified claims.</param>
+    /// <param name="enforced">Whether the license decides the run.</param>
+    private static LicenseStatus Evaluate(LicenseCheckInput input, LicenseClaims claims, bool enforced)
+    {
+        var runs = EveryTestRuns(enforced);
 
         if (input.Identity is null)
         {

@@ -176,6 +176,21 @@ public sealed class LicensingTests : IDisposable
     }
 
     [Fact]
+    public void An_old_license_left_in_the_secret_does_not_hide_a_current_one_next_to_it()
+    {
+        var old = License.Sign(Claims(daysLeft: -5) with { Id = "L-old" }, _key);
+        var current = License.Sign(Claims() with { Id = "L-new" }, _key);
+        var other = License.Sign(Claims(scope: "github.com/other/*") with { Id = "L-other" }, _key);
+        var five = Enumerable.Range(1, 5).Select(i => new CommitAuthor(Now.AddDays(-i), $"dev{i}@acme.com", $"Dev {i}")).ToList();
+        LicenseStatus Run(params string[] licenses) =>
+            LicenseCheck.Check(new LicenseCheckInput(licenses, "github.com/acme/app", five, Now, false), Trusted, enforced: true);
+
+        Assert.Equal((LicenseState.Valid, "L-new"), (Run(old, current).State, Run(old, current).Claims!.Id));
+        // When none covers the run, the first one's reason is reported.
+        Assert.Equal((LicenseState.Expired, "L-old"), (Run(old, other).State, Run(old, other).Claims!.Id));
+    }
+
+    [Fact]
     public void Inputs_come_from_the_environment_files_and_git_without_the_network()
     {
         _repo.Write("a.txt", "a");

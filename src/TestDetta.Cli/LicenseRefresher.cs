@@ -43,7 +43,7 @@ internal sealed partial class LicenseRefresher(HttpMessageHandler handler, Func<
     public async Task RefreshAsync(IReadOnlyList<string> licenses, IReadOnlyDictionary<string, byte[]> trustedKeys)
     {
         if (string.Equals(environment("TESTDETTA_LICENSE_REFRESH"), "off", StringComparison.OrdinalIgnoreCase)
-            || LicenseCheck.Best(licenses, trustedKeys, out _) is not { } current
+            || Current(LicenseCheck.Candidates(licenses, trustedKeys, out _), clock.GetUtcNow()) is not { } current
             || current.Claims.Refresh is not { Scheme: "https" } refresh
             || !Due())
         {
@@ -77,8 +77,15 @@ internal sealed partial class LicenseRefresher(HttpMessageHandler handler, Func<
                 return;
             }
 
-            // Written next to its final place and moved, so a reader never sees half a license.
+            // Written next to its final place and moved, so a reader never sees half a license. Never over another
+            // license installed there (td license install): that one may be the license that covers the run.
             var path = LicenseInputs.InstalledPath(home);
+            if (File.Exists(path) && License.Verify(File.ReadAllText(path), trustedKeys, out _) is { } installed && installed.Id != newer.Id)
+            {
+                LogNotStored(logger, newer.Id, installed.Id);
+                return;
+            }
+
             var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await File.WriteAllTextAsync(temporary, text);
             File.Move(temporary, path, overwrite: true);
@@ -93,6 +100,25 @@ internal sealed partial class LicenseRefresher(HttpMessageHandler handler, Func<
                 await RetrySoonAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// The license to refresh: the first that has not run out, else the first. An old license left in the CI secret
+    /// would otherwise be refreshed instead of the current one installed next to it.
+    /// </summary>
+    /// <param name="candidates">The genuine licenses found, in order (<see cref="LicenseCheck.Candidates"/>).</param>
+    /// <param name="now">The current time.</param>
+    private static (string Text, LicenseClaims Claims)? Current(IReadOnlyList<(string Text, LicenseClaims Claims)> candidates, DateTimeOffset now)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Claims.ValidUntil > now)
+            {
+                return candidate;
+            }
+        }
+
+        return candidates is [var first, ..] ? first : null;
     }
 
     /// <summary>
@@ -136,6 +162,9 @@ internal sealed partial class LicenseRefresher(HttpMessageHandler handler, Func<
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "License refresh: stored {Id}, valid until {ValidUntil:yyyy-MM-dd}")]
     private static partial void LogRefreshed(ILogger logger, string id, DateTimeOffset validUntil);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "License refresh: {Id} not stored, since ~/.testdetta/license holds another license ({Installed})")]
+    private static partial void LogNotStored(ILogger logger, string id, string installed);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "License refresh failed; the license in hand is used")]
     private static partial void LogFailed(ILogger logger, Exception exception);

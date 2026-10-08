@@ -61,8 +61,13 @@ public sealed class LicenseServiceTests : IAsyncLifetime
 
     private Dictionary<string, byte[]> Trusted => new() { ["k1"] = _key.ExportSubjectPublicKeyInfo() };
 
-    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600, int perAddressPerMinute = 60, string? trustedProxies = null, ILicenseMailer? mailer = null, int forwardedHops = 1) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+    private WebApplicationFactory<Program> Service(int perLicensePerHour = 600, int perAddressPerMinute = 60, string? trustedProxies = null, ILicenseMailer? mailer = null, int forwardedHops = 1, string? polarProducts = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
     {
+        if (polarProducts is not null)
+        {
+            host.UseSetting("Licenses:PolarProducts", polarProducts);
+        }
+
         host.UseSetting("Licenses:ForwardedHops", forwardedHops.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (mailer is not null)
         {
@@ -106,7 +111,8 @@ public sealed class LicenseServiceTests : IAsyncLifetime
                 ends_at = endsAt,
                 ended_at = endedAt,
                 customer = new { name = "Acme Corp", email },
-                product = new { name = "TestDetta Team" },
+                product_id = "prod-team",
+                product = new { id = "prod-team", name = "TestDetta Team" },
                 custom_field_data = scope is null ? null : new Dictionary<string, string> { ["scope"] = scope },
             },
         });
@@ -897,5 +903,53 @@ public sealed class LicenseServiceTests : IAsyncLifetime
 
         Assert.Equal(2, code);
         Assert.Contains("exists; change it with admin update", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Only_the_listed_products_make_licenses()
+    {
+        using var service = Service(polarProducts: "prod-other prod-team-yearly");
+        using var client = service.CreateClient();
+
+        using var response = await Deliver(client, Subscription(type: "subscription.created"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(await Record());
+    }
+
+    [Fact]
+    public async Task A_signed_event_in_another_shape_is_handled_as_ignored_instead_of_failing_forever()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+
+        using var response = await Deliver(client, """{"type":"subscription.updated","data":{"status":"active"}}""");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var source = NpgsqlDataSource.Create(_connection);
+        await using var command = source.CreateCommand("select type, outcome from processed_webhooks where id = 'polar:msg-1'");
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(("malformed", "Ignored"), (reader.GetString(0), reader.GetString(1)));
+    }
+
+    [Fact]
+    public async Task A_paid_license_never_e_mailed_is_listed_for_an_admin()
+    {
+        var mailer = new FakeMailer();
+        mailer.Next.Enqueue(static () => throw new HttpRequestException("provider down"));
+        using var service = Service(mailer: mailer);
+        using var client = service.CreateClient();
+        (await Deliver(client, Subscription(type: "subscription.created"))).Dispose();
+        await using (var source = NpgsqlDataSource.Create(_connection))
+        {
+            // Polar's retries ran out an hour ago.
+            await using var backdate = source.CreateCommand("update licenses set updated_at = now() - interval '2 hours'");
+            await backdate.ExecuteNonQueryAsync();
+        }
+
+        var (_, attention, _) = await Admin("attention");
+
+        Assert.Contains("P-sub-1: paid but never e-mailed; send it with admin send --id P-sub-1", attention, StringComparison.Ordinal);
     }
 }

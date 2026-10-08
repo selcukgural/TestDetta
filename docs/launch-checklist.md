@@ -50,9 +50,12 @@ The Trusted Publishing policy needed the scope "Push new packages and package ve
    and run the Action: `td license status` must show the signature verified, the scope (`github.com/selcukgural/*`)
    matching the repository, the seat count, and a refresh through `license.testdetta.com`. Also run it locally with
    `td license install <file>`. Without the secret, the same job must run every test and say why.
-4. **Open the checkout.** `site/site.json` `checkoutOpen: "true"` (the link is in `checkoutUrl` already), deploy
-   the site, and click through from the pricing page in every language.
-5. **Open trials.** `TRIALS=true deploy/license-service/deploy.sh production`, `site.json` `trialsOpen: "true"`, then
+4. **Open the checkout.** First pin the products: their ids from Polar (Products → each product → its id) go into
+   every later production deploy as `POLAR_PRODUCTS="<monthly id> <yearly id>" deploy/license-service/deploy.sh production`
+   (an unset variable takes every product again, so keep the ids in this checklist once known). Then `site/site.json` `checkoutOpen: "true"` (the link is in `checkoutUrl` already),
+   deploy the site, and click through from the pricing page in every language.
+5. **Open trials.** `TRIALS=true TRIALS_PER_DAY=10 deploy/license-service/deploy.sh production` (a low daily ceiling
+   while trials are new; `admin.sh production trial-release` frees an owner whose name someone else used), `site.json` `trialsOpen: "true"`, then
    one trial from the live site to an address the owner reads, with the repositories typed as a customer would
    (`github.com/your-org`).
 6. **Watch the first days.** `admin.sh production attention` every morning (a checkout whose scopes could not be

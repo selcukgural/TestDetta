@@ -85,7 +85,19 @@ public static partial class TrialEndpoint
             return Results.Json(new TrialAnswer("paused"), TrialJson.Default.TrialAnswer, statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (reservation == TrialReservation.Reserved && !await IssueAsync(new TrialIssue(id, email, scopes, now, endsAt), services, context.RequestAborted))
+        bool issued;
+        try
+        {
+            issued = reservation != TrialReservation.Reserved || await IssueAsync(new TrialIssue(id, email, scopes, now, endsAt), services, context.RequestAborted);
+        }
+        catch
+        {
+            // Anything else (the database, say) must not keep the owner and address blocked for a year.
+            await trials.ReleaseAsync(id, CancellationToken.None);
+            throw;
+        }
+
+        if (!issued)
         {
             await trials.ReleaseAsync(id, context.RequestAborted);
             await AnswerNoSoonerAsync(started, settings.TrialMinimumResponse, context.RequestAborted);

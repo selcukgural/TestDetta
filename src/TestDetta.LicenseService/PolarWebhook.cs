@@ -68,32 +68,48 @@ public static partial class PolarWebhook
             return Results.Ok();
         }
 
-        using var document = JsonDocument.Parse(body);
-        var root = document.RootElement;
-        var type = root.GetProperty("type").GetString() ?? "";
+        string type;
         string? licenseId = null;
         var outcome = WebhookOutcome.Ignored;
-        if (type == "order.refunded")
+        try
         {
-            (licenseId, outcome) = await RefundAsync(root.GetProperty("data"), store, logger, context.RequestAborted);
-        }
-        else if (type.StartsWith("subscription.", StringComparison.Ordinal))
-        {
-            var subscription = root.GetProperty("data");
-            licenseId = LicenseId(subscription);
-            outcome = await ApplyAsync(root, store, logger, context.RequestAborted);
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            type = root.GetProperty("type").GetString() ?? "";
+            if (!ForListedProduct(root, settings))
+            {
+                LogOtherProduct(logger, id, type);
+            }
+            else if (type == "order.refunded")
+            {
+                (licenseId, outcome) = await RefundAsync(root.GetProperty("data"), store, logger, context.RequestAborted);
+            }
+            else if (type.StartsWith("subscription.", StringComparison.Ordinal))
+            {
+                var subscription = root.GetProperty("data");
+                licenseId = LicenseId(subscription);
+                outcome = await ApplyAsync(root, store, logger, context.RequestAborted);
 
-            // After the record is saved and before the webhook counts as handled: a send that fails for
-            // now leaves the event to Polar's retries, which find the record saved and send again.
-            try
-            {
-                await delivery.DeliverAsync(licenseId, CustomerEmail(subscription), context.RequestAborted);
+                // After the record is saved and before the webhook counts as handled: a send that fails for
+                // now leaves the event to Polar's retries, which find the record saved and send again.
+                try
+                {
+                    await delivery.DeliverAsync(licenseId, CustomerEmail(subscription), context.RequestAborted);
+                }
+                catch (Exception e) when (e is HttpRequestException || e is TaskCanceledException && !context.RequestAborted.IsCancellationRequested)
+                {
+                    LogDeliveryFailed(logger, licenseId);
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                }
             }
-            catch (Exception e) when (e is HttpRequestException || e is TaskCanceledException && !context.RequestAborted.IsCancellationRequested)
-            {
-                LogDeliveryFailed(logger, licenseId);
-                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-            }
+        }
+        catch (Exception e) when (e is KeyNotFoundException or JsonException or FormatException or InvalidOperationException { Source: "System.Text.Json" })
+        {
+            // Signed by Polar but not the shape this code reads (a field missing or of another kind): retrying
+            // cannot change that, so it is handled as ignored and logged for an admin instead of failing forever.
+            LogMalformed(logger, id, e.GetType().Name);
+            type = "malformed";
+            outcome = WebhookOutcome.Ignored;
         }
 
         await store.MarkWebhookHandledAsync(webhookId, type, licenseId, outcome, context.RequestAborted);
@@ -300,6 +316,26 @@ public static partial class PolarWebhook
     private static string Cents(JsonElement order, string name) =>
         order.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt64().ToString(CultureInfo.InvariantCulture) : "?";
 
+    /// <summary>
+    /// True when the event is about a product in <see cref="ServiceSettings.PolarProducts"/>, or the list is empty
+    /// (every product). A subscription names its product as <c>product_id</c> (or <c>product.id</c>), an order as
+    /// <c>product_id</c>; an event that names none passes.
+    /// </summary>
+    /// <param name="event">The event.</param>
+    /// <param name="settings">Service settings.</param>
+    private static bool ForListedProduct(JsonElement @event, ServiceSettings settings)
+    {
+        if (settings.PolarProducts.Count == 0 || !@event.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        var product = data.TryGetProperty("product_id", out var productId) && productId.ValueKind == JsonValueKind.String ? productId.GetString()
+            : data.TryGetProperty("product", out var nested) && nested.ValueKind == JsonValueKind.Object && nested.TryGetProperty("id", out var nestedId) ? nestedId.GetString()
+            : null;
+        return product is null || settings.PolarProducts.Contains(product, StringComparer.Ordinal);
+    }
+
     /// <summary>What the customer typed in the checkout field <see cref="ScopeField"/>; null when nothing.</summary>
     /// <param name="subscription">A Polar subscription.</param>
     private static string? ScopeText(JsonElement subscription) =>
@@ -372,6 +408,12 @@ public static partial class PolarWebhook
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Polar webhook rejected: signature or timestamp does not check out")]
     private static partial void LogRejected(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Polar webhook {WebhookId} ({Type}) is for a product not in Licenses:PolarProducts; ignored")]
+    private static partial void LogOtherProduct(ILogger logger, string webhookId, string type);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Polar webhook {WebhookId} is signed but not in the expected shape ({Error}); handled as ignored")]
+    private static partial void LogMalformed(ILogger logger, string webhookId, string error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "License {LicenseId} saved but not e-mailed yet; Polar will deliver the event again")]
     private static partial void LogDeliveryFailed(ILogger logger, string licenseId);

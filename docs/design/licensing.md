@@ -256,7 +256,10 @@ as a file and never baked in or passed as a variable). Hosting: Cloud Run (see "
     project's Admin Activity audit log as the job's argument (Google keeps those 400 days), so to keep none,
     send the string from `show` by hand;
   - `attention [--days n]` lists what needs an admin (checkouts without a usable scope, refused e-mails,
-    refunds), newest first. `public-key` prints what goes into
+    refunds), newest first, then paid licenses never e-mailed (an e-mail outage longer than Polar's
+    retries; `LicenseStore.UndeliveredAsync`);
+  - `trial-release --owner <host/owner> --note` lets an owner have a trial again, for an owner whose name
+    someone else used in the trial form (which cannot check who owns a repository). `public-key` prints what goes into
   `LicenseKeys.Trusted`.
 - **Tests:** `tests/TestDetta.LicenseService.Tests` against a real Postgres, one database per test,
   through the real HTTP pipeline; sabotage-checked. CI runs a Postgres service container
@@ -280,9 +283,12 @@ day (`~/.testdetta/license-refresh`), started next to the analysis with a 6-seco
 until 2026-10-05, too short for a service starting from idle); transient failures retry after an hour. It is `https` only and
 honours `TESTDETTA_LICENSE_REFRESH=off` and `HTTPS_PROXY`. The license goes in the header only. A
 response is stored in `~/.testdetta/license` only when it is a genuine, newer version (`issued`) of the
-same license; every failure is ignored. Licenses carry `issued`. Of the genuine versions found (the
-CI secret, the refreshed copy), the newest of the first license counts (`LicenseCheck.Best`). A
-seat reduction is a newer license with fewer seats. Before launch no key was trusted, so no request
+same license, and never over another license installed there (2026-10-08); every failure is ignored. The
+license refreshed is the first that has not run out, else the first. Licenses carry `issued`. Each license
+found counts in its newest genuine version (the CI secret, the refreshed or installed copy), and of several
+licenses the first that covers the run counts, so an old license left in the CI secret cannot hide a current
+one installed next to it; when none covers, the first one's reason is reported (`LicenseCheck.Candidates`,
+`Check`, 2026-10-08). A seat reduction is a newer license with fewer seats. Before launch no key was trusted, so no request
 was ever sent.
 
 Still to do in phase 2:
@@ -301,6 +307,10 @@ Still to do in phase 2:
   and the timestamp must be within 5 minutes. It is checked against the specification's published
   test vector. A failure returns 401, logs a warning, and nothing is stored. Without
   `Licenses:PolarWebhookSecret` the endpoint answers 404.
+- **Products.** `Licenses:PolarProducts` (`POLAR_PRODUCTS="<id> <id>" deploy.sh`) lists the products whose
+  subscriptions and refunds count; empty takes every product. Set it before the organization sells anything
+  else. A signed event in another shape (a field missing or of another kind) is handled as ignored and
+  logged, instead of failing until Polar gives up.
 - **Delivery.** Each `webhook-id` is handled once. It is marked handled after it is applied, so a
   failure in between is left to Polar's retries (up to 10). The body limit is raised to 256 KiB for
   this endpoint only.

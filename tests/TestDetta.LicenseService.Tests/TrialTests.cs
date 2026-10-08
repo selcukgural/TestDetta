@@ -264,9 +264,14 @@ public sealed class TrialTests : IAsyncLifetime
         await trials.ReserveAsync(new TrialRequest("T-later", [2], "later@beta.io", ["github.com/beta"], now.AddDays(20)), 50, CancellationToken.None);
         await trials.ReserveAsync(new TrialRequest("T-bought", [3], "bought@gamma.dev", ["github.com/gamma"], now.AddDays(1)), 50, CancellationToken.None);
         await trials.ReserveAsync(new TrialRequest("T-ended", [4], "ended@delta.dev", ["github.com/delta"], now.AddDays(-8)), 50, CancellationToken.None);
+        await trials.ReserveAsync(new TrialRequest("T-invoiced", [5], "invoiced@epsilon.dev", ["github.com/epsilon"], now.AddDays(1)), 50, CancellationToken.None);
         await new LicenseStore(source).SaveAsync(
             new LicenseRecord("P-1", "Gamma", "Team", LicenseKind.Subscription, 3, ["github.com/gamma/*"], now, now.AddDays(30), false, "polar"),
             "subscription.created", "test", now, CancellationToken.None);
+        // A license bought by invoice counts as bought too.
+        await new LicenseStore(source).SaveAsync(
+            new LicenseRecord("L-2026-1", "Epsilon", "Team", LicenseKind.Annual, 3, ["github.com/epsilon/*"], now, now.AddDays(365), false, "manual"),
+            "issue", "test", CancellationToken.None);
         var mailer = new FakeMailer();
         var job = new TrialDaily(trials, mailer, NullLogger<TrialDaily>.Instance);
 
@@ -287,7 +292,7 @@ public sealed class TrialTests : IAsyncLifetime
             }
         }
 
-        Assert.Equal(["T-bought", "T-later", "T-soon"], withAddress);
+        Assert.Equal(["T-bought", "T-invoiced", "T-later", "T-soon"], withAddress);
     }
 
     [Theory]
@@ -301,6 +306,45 @@ public sealed class TrialTests : IAsyncLifetime
     [InlineData("github.com/ac*/x", null)]
     public void Trial_scopes_name_a_host_and_an_owner_without_wildcards(string text, string? owners) =>
         Assert.Equal(owners, TrialScopes.Parse(text) is { } scopes ? string.Join(' ', scopes.Owners) : null);
+
+    [Fact]
+    public async Task An_owner_alone_in_the_form_gets_a_trial_for_all_its_repositories()
+    {
+        var mailer = new FakeMailer();
+        using var service = Service(mailer);
+        using var client = service.CreateClient();
+
+        var (status, _) = await Ask(client, "dev@acme.com", "https://github.com/Acme");
+
+        Assert.Equal(HttpStatusCode.Accepted, status);
+        var (mail, _) = Assert.Single(mailer.Sent);
+        var license = mail.Text.Split('\n').Select(static l => l.Trim()).Single(l => License.Verify(l, Trusted, out _) is not null);
+        Assert.Equal(["github.com/acme/*"], License.Verify(license, Trusted, out _)!.Scopes);
+    }
+
+    [Fact]
+    public async Task An_admin_lets_an_owner_whose_name_someone_else_used_have_a_trial_again()
+    {
+        using (var service = Service(new FakeMailer()))
+        {
+            service.CreateClient().Dispose(); // creates the schema
+        }
+
+        await using var source = NpgsqlDataSource.Create(_connection);
+        var trials = new TrialStore(source);
+        var ends = DateTimeOffset.UtcNow.AddDays(30);
+        await trials.ReserveAsync(new TrialRequest("T-squat", [1], "someone@else.io", ["github.com/acme", "github.com/beta"], ends), 50, CancellationToken.None);
+        Assert.Equal(TrialReservation.HadOne, await trials.ReserveAsync(new TrialRequest("T-acme", [2], "dev@acme.com", ["github.com/acme"], ends), 50, CancellationToken.None));
+
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+        var settings = new ServiceSettings(_connection, "k1", _keyFile, new Uri("https://license.example/"));
+        Assert.Equal(0, await AdminCommand.RunAsync(["trial-release", "--owner", "GitHub.com/Acme/", "--note", "the owner wrote"], settings, stdout, stderr));
+
+        Assert.Contains("github.com/acme can have a trial again (1 earlier trial(s) named it)", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Equal(TrialReservation.Reserved, await trials.ReserveAsync(new TrialRequest("T-acme", [2], "dev@acme.com", ["github.com/acme"], ends), 50, CancellationToken.None));
+        Assert.Equal(TrialReservation.HadOne, await trials.ReserveAsync(new TrialRequest("T-beta", [3], "dev@beta.io", ["github.com/beta"], ends), 50, CancellationToken.None));
+    }
 
     /// <summary>Keeps what would be e-mailed; <see cref="Next"/> decides the outcome of the coming sends.</summary>
     private sealed class FakeMailer : ILicenseMailer

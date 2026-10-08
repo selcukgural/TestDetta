@@ -22,7 +22,8 @@ public static class AdminCommand
         admin restore --id <id> --note <why>    lifts a revocation made by admin revoke or a refund
         admin send --id <id> --to <address> --note <why>   e-mails the current license (the address is not kept)
         admin show --id <id>        the record, its audit trail and the current license string
-        admin attention [--days <n>]   what needs an admin in the last n days (default 14)
+        admin attention [--days <n>]   what needs an admin in the last n days (default 14), and paid licenses never e-mailed
+        admin trial-release --owner <host/owner> --note <why>   lets an owner have a trial again
         admin list
         admin public-key            the key id and public key to embed in TestDetta (LicenseKeys.Trusted)
         """;
@@ -69,6 +70,7 @@ public static class AdminCommand
                 "send" => await SendAsync(options, new AdminContext(store, issuer, settings, mailer), stdout, stderr),
                 "show" => await ShowAsync(options, store, issuer, stdout, stderr),
                 "attention" => await AttentionAsync(options, store, stdout),
+                "trial-release" => await TrialReleaseAsync(options, new TrialStore(dataSource), store, stdout),
                 "list" => await ListAsync(store, stdout),
                 _ => await UnknownAsync(args[0], stderr),
             };
@@ -243,6 +245,34 @@ public static class AdminCommand
         }
 
         await stdout.WriteLineAsync(entries.Count == 0 ? $"nothing needs attention in the last {days} days" : $"{entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} in the last {days} days");
+        foreach (var id in await store.UndeliveredAsync(CancellationToken.None))
+        {
+            await stdout.WriteLineAsync($"{id}: paid but never e-mailed; send it with admin send --id {id} --to <the buyer's address from Polar>");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Lets an owner have a trial again (<see cref="TrialStore.ReleaseOwnerAsync"/>): for an owner whose name someone
+    /// else used in the trial form. The trial license already sent stays as it is.
+    /// </summary>
+    /// <param name="options">Parsed options.</param>
+    /// <param name="trials">Trial reservations.</param>
+    /// <param name="store">License records, for the audit.</param>
+    /// <param name="stdout">Receives results.</param>
+    private static async Task<int> TrialReleaseAsync(Dictionary<string, List<string>> options, TrialStore trials, LicenseStore store, TextWriter stdout)
+    {
+        var owner = One(options, "owner").Trim().Trim('/').ToLowerInvariant();
+        if (owner.Split('/') is not [{ Length: > 0 }, { Length: > 0 }])
+        {
+            throw new FormatException($"--owner must be a host and an owner, such as github.com/acme, not {owner}");
+        }
+
+        await trials.EnsureSchemaAsync(CancellationToken.None);
+        var released = await trials.ReleaseOwnerAsync(owner, CancellationToken.None);
+        await store.AuditAsync("trial-owner:" + owner, "trial-release", $"{One(options, "note")} ({released} trial(s) named it)", CancellationToken.None);
+        await stdout.WriteLineAsync($"{owner} can have a trial again ({released} earlier trial(s) named it).");
         return 0;
     }
 

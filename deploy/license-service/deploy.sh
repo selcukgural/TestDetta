@@ -47,13 +47,18 @@ ENV="TESTDETTA_SECRETS=/secrets|Licenses__KeyId=$KEY_ID|Licenses__KeyFile=/keys/
 if exists "$PREFIX-polar-webhook-secret"; then
   SECRETS="$SECRETS,/secrets/polar/Licenses__PolarWebhookSecret=$PREFIX-polar-webhook-secret:latest"
 fi
+# The Polar products whose subscriptions make licenses (POLAR_PRODUCTS="<id> <id>"); unset takes every product.
+if [ -n "${POLAR_PRODUCTS:-}" ]; then
+  ENV="$ENV|Licenses__PolarProducts=$POLAR_PRODUCTS"
+fi
 if exists "$PREFIX-resend-api-key"; then
   # Replies go to the support inbox: the mail tells buyers to reply when something does not work.
   MAIL_FROM=${MAIL_FROM:-TestDetta <licenses@testdetta.com>} MAIL_REPLY_TO=${MAIL_REPLY_TO:-support@testdetta.com}
   SECRETS="$SECRETS,/secrets/resend/Licenses__ResendApiKey=$PREFIX-resend-api-key:latest"
   ENV="$ENV|Licenses__MailFrom=$MAIL_FROM${MAIL_REPLY_TO:+|Licenses__MailReplyTo=$MAIL_REPLY_TO}"
   # Trials need e-mail: the license goes to the address, which is how the address is checked.
-  ENV="$ENV|Licenses__TrialsEnabled=$TRIALS|Licenses__TrialOrigins=$TRIAL_ORIGINS"
+  # A low daily ceiling while trials are new (TRIALS_PER_DAY=10 deploy.sh production); the service's default is 50.
+  ENV="$ENV|Licenses__TrialsEnabled=$TRIALS|Licenses__TrialOrigins=$TRIAL_ORIGINS${TRIALS_PER_DAY:+|Licenses__TrialsPerDay=$TRIALS_PER_DAY}"
 fi
 
 gcloud builds submit . --project $P --region $R --config deploy/license-service/cloudbuild.yaml --substitutions "_IMAGE=$IMAGE" \

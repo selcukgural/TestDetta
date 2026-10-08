@@ -15,7 +15,11 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
     /// <param name="cancellationToken">Cancels the call.</param>
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand("""
+        // Two instances, the trial job and the admin job may start at once; the lock runs the steps one at a time.
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            select pg_advisory_xact_lock(73110019);
             create table if not exists licenses (
                 id text primary key,
                 licensee text not null,
@@ -58,8 +62,9 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
             -- set by hand (a mistyped checkout field) and a revocation (a refund).
             alter table licenses add column if not exists scopes_override text[];
             alter table licenses add column if not exists admin_revoked boolean not null default false;
-            """);
+            """, connection, transaction);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>The record with <paramref name="id"/>, or null.</summary>
@@ -350,6 +355,31 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// Paid licenses that were never e-mailed although they could be: from a provider, not revoked, with scopes,
+    /// last changed more than an hour ago, and no delivery recorded. A long outage of the e-mail provider outlasts
+    /// the provider's webhook retries and leaves exactly these; <c>admin send</c> delivers them.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task<IReadOnlyList<string>> UndeliveredAsync(CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("""
+            select id from licenses l
+            where source not in ('manual', 'trial') and not revoked and cardinality(scopes) > 0
+              and updated_at < now() - interval '1 hour'
+              and not exists (select 1 from license_deliveries d where d.license_id = l.id)
+            order by updated_at
+            """);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var ids = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            ids.Add(reader.GetString(0));
+        }
+
+        return ids;
     }
 
     /// <summary>The audit entries of one license, oldest first, as <c>action: detail</c>.</summary>

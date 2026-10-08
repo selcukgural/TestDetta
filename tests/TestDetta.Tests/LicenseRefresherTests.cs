@@ -52,6 +52,32 @@ public sealed class LicenseRefresherTests : IDisposable
     }
 
     [Fact]
+    public async Task The_current_license_is_refreshed_and_another_installed_one_is_never_overwritten()
+    {
+        var expired = License.Sign(new LicenseClaims("L-old", "k1", "team", LicenseKind.Subscription, "Acme", 5, ["github.com/acme/*"],
+            Start.AddDays(-60), Start.AddDays(-1), new Uri("https://license.example/v1/licenses/L-old")) { Issued = Start.AddDays(-40) }, _key);
+        var current = Sign(5, Start.AddDays(-5));
+        var newer = Sign(7, Start.AddDays(-1));
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(newer) });
+        Directory.CreateDirectory(Path.GetDirectoryName(LicenseInputs.InstalledPath(_home))!);
+        await File.WriteAllTextAsync(LicenseInputs.InstalledPath(_home), current);
+
+        // The CI secret still holds a license that ran out; the installed one is current and is the one refreshed.
+        await new LicenseRefresher(handler, name => _variables.GetValueOrDefault(name), _home, _clock, NullLogger.Instance)
+            .RefreshAsync([expired, current], Trusted);
+        Assert.Equal("https://license.example/v1/licenses/L-1", Assert.Single(handler.Requests).RequestUri!.ToString());
+        Assert.Equal(newer, Stored);
+
+        // A refresh of one license never replaces another one installed there.
+        var installed = Sign(9, Start, id: "L-2", refresh: "https://license.example/v1/licenses/L-2");
+        await File.WriteAllTextAsync(LicenseInputs.InstalledPath(_home), installed);
+        _clock.Now = Start.AddDays(1);
+        await Refresh(handler, current);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(installed, Stored);
+    }
+
+    [Fact]
     public async Task Off_or_not_https_never_calls()
     {
         var handler = new Handler(_ => throw new InvalidOperationException("must not be called"));

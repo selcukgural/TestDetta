@@ -16,6 +16,13 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
     /// <summary>The Polar webhook endpoint's secret (<c>whsec_...</c>); null turns the endpoint off.</summary>
     public string? PolarWebhookSecret { get; init; }
 
+    /// <summary>
+    /// The Polar product ids whose subscriptions make licenses; empty takes every product of the organization.
+    /// Set it before the organization sells anything else (a free tier, a donation), whose subscriptions would
+    /// otherwise become licenses.
+    /// </summary>
+    public IReadOnlyList<string> PolarProducts { get; init; } = [];
+
     /// <summary>Resend API key with sending access to the sender's domain; null turns license e-mails off.</summary>
     public string? ResendApiKey { get; init; }
 
@@ -98,6 +105,7 @@ public sealed record ServiceSettings(string ConnectionString, string KeyId, stri
             ForwardedHops = Math.Max(1, section.GetValue("ForwardedHops", 1)),
             TrialsEnabled = section.GetValue("TrialsEnabled", false) && resendApiKey is not null,
             TrialOrigins = [.. (section["TrialOrigins"] ?? "").Split([',', ' '], StringSplitOptions.RemoveEmptyEntries)],
+            PolarProducts = [.. (section["PolarProducts"] ?? "").Split([',', ' '], StringSplitOptions.RemoveEmptyEntries)],
             TrialsPerDay = section.GetValue("TrialsPerDay", 50),
             TrialSeats = section.GetValue("TrialSeats", 50),
             TrialDays = section.GetValue("TrialDays", 30),
