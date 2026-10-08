@@ -381,6 +381,10 @@ ASP.NET Core app with integration tests like AfterApply.
 - F# and VB code is not analysed; affected F#/VB projects and their dependents run completely. (Since 2026-10-06 both are analysed like C#: docs/design/vb-fsharp-support.md.)
 - Test projects are also recognised by a `*.Tests`/`*.Test` name; false positives are skipped at
   run time.
+- **State one test class leaves for the next** (NLog, 2026-10-08): a class that reads what an earlier class set
+  (NLog's global configuration) takes another path alone; the map records the path of the recorded order, so a
+  change to the other path can miss it (1 of 2,562 in the final round, `LogManagerTests`). Accepted for v1
+  (owner): the naive signal (`leakedReads`) flags 67 % of the corpus's classes. docs/design/order-dependent-state.md.
 - **A catch-all shard that ends with an unexpected exit code makes the map unusable** (EF Core, 2026-10-08,
   also in runs-full-1006). `td record --parallel` ends with a shard for the classes the source index did not
   find; it normally matches no test, and the testing platform's "zero tests" exit code 8 is accepted. Under

@@ -1,7 +1,7 @@
 # State one test class leaves for the next (proposal, 2026-10-08)
 
-Status: **measuring** (owner, 2026-10-08: measure first). The recorder writes `leakedReads` into the map (below);
-selection does not read it.
+Status: **decided for v1: option 1, accept and document** (owner, 2026-10-08, after the measurement below). The
+recorder keeps writing `leakedReads` into the map; selection does not read it.
 
 ## What happened
 
@@ -67,3 +67,18 @@ A read by another test class is noted (`NoteLeakedRead`) and written as `leakedR
 (`CoverageRecorder.LeakedReads`) and the map keeps them per class (`CoverageMap.LeakedReads`, optional, format 2).
 Fields the recorder does not track (value types such as NLog's `_configLoaded`) are not seen; NLog's `_config` is.
 Next: re-record the corpus and count, per map, the classes with leaked reads.
+
+## Result (2026-10-08, all 43 corpus repositories re-recorded)
+
+5,865 of 8,765 test classes (67 %) read a value another test class's code left in a tracked field: AutoMapper 98 %,
+Newtonsoft.Json 97 %, Markdig 94 %, Meziantou.Analyzer 93 %, Roslynator 93 %, NLog 87 %; none in Argu, Carter, CliWrap,
+GuardClauses and Scrutor. Most are harmless: lazy singletons and shared helpers built with `_x ??= new X()` in plain
+code (a `ResourceManager`, AutoMapper's license, Meziantou's `DiagnosticReporter`), which every class would build the
+same way alone and which `builtValues` already credits. The signal cannot tell those from NLog's case, where the
+reader takes another path when the field is unset. So option 2 would select two thirds of the classes for many
+changes, and option 3 would record two thirds of the classes again in their own process. In the corpus the case
+hid 1 of 2,562 failing mutants, and the full run in the recorded order does not fail the class either.
+
+**Decision (owner, 2026-10-08):** option 1 for v1. The limitation is on the site's limitations page (five
+languages) and in docs/evaluation.md. A narrower signal (a reader whose path depends on whether the field is set)
+waits until a user meets it.

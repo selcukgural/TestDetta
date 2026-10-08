@@ -1,4 +1,4 @@
-<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: 3087df798b38 -->
+<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: e26f7079da42 -->
 <h1>Limitaciones</h1>
 <p class="lead">Donde {{name}} no puede ver algo, selecciona más. Esta página enumera esos casos, para que sepas cuándo una selección es más amplia de lo necesario, y los pocos casos en los que un patrón escrito a mano puede ocultar una prueba.</p>
 
@@ -14,6 +14,9 @@
 <h2>Código que se ejecuta una vez por proceso</h2>
 <p>Las cachés, los singletons diferidos y la construcción del modelo de EF se ejecutan una vez por proceso de prueba y se atribuyen a la primera clase de prueba que los desencadena. Los cambios en código que se ejecutó dentro de un constructor estático o de una llamada que llena una caché (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>), se rastrean en su lugar por nombre. Un valor guardado en un campo, como un singleton diferido (<code>_x ??= new X()</code>), se atribuye a cada clase de prueba que lee el campo.</p>
 <div class="callout"><p>Una caché escrita a mano, como un <code>Dictionary</code> consultado con <code>TryGetValue</code>, todavía puede ocultar a quienes la usan. Sigue ejecutando el conjunto completo en la rama predeterminada; el registro ya lo hace.</p></div>
+
+<h2>Estado que una clase de prueba deja a la siguiente</h2>
+<p>Una clase de prueba puede comportarse de otra forma según lo que una clase anterior del mismo proceso dejó atrás, como una configuración global que fijó y nunca restableció. El mapa registra el camino que siguió la clase en el orden grabado, así que un cambio en el código que ejecutaría sola o en otro orden puede no seleccionarla. La ejecución completa en el mismo orden tampoco la hace fallar. En el corpus esto ocultó un cambio de 2.562 (<code>LogManagerTests</code> de NLog). Las pruebas que restablecen el estado compartido en su preparación lo evitan.</p>
 
 <h2>Archivos de proyecto</h2>
 <p>Los archivos de proyecto los evalúa MSBuild (una llamada a <code>dotnet msbuild</code>, almacenada en caché en <code>.testdetta/cache</code>) para obtener referencias, elementos compilados e incrustados, nombres de ensamblado y frameworks de destino, en la configuración predeterminada y sin restore.</p>

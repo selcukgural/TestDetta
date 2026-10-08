@@ -15,6 +15,9 @@
 <p>Caches, lazy singletons and EF model building run once per test process, and are credited to the first test class that triggers them. Changes to code that ran inside a static constructor or a cache-filling call (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>), are traced by name instead. A value kept in a field, such as a lazy singleton (<code>_x ??= new X()</code>), is credited to every test class that reads the field.</p>
 <div class="callout"><p>A cache written by hand, such as a <code>Dictionary</code> checked with <code>TryGetValue</code>, can still hide its users. Keep running the full suite on the default branch; recording does that.</p></div>
 
+<h2>State one test class leaves for the next</h2>
+<p>A test class can behave differently depending on what an earlier class in the same process left behind, such as a global configuration it set and never reset. The map records the path the class took in the recorded order, so a change to the code it would run alone or in another order may not select it. The full run in the same order does not fail it either. In the corpus this hid one change in 2,562 (NLog's <code>LogManagerTests</code>). Tests that reset shared state in their setup avoid it.</p>
+
 <h2>Project files</h2>
 <p>Project files are evaluated by MSBuild (one <code>dotnet msbuild</code> call, cached in <code>.testdetta/cache</code>) for references, compiled and embedded items, assembly names and target frameworks, in the default configuration and without a restore.</p>
 <ul>

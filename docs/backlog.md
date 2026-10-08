@@ -24,6 +24,9 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- **Order-dependent state between test classes** (NLog `LogManagerTests`, 1 of 2,562): accepted for v1 (owner,
+  2026-10-08); a narrower signal than `leakedReads` (67 % of classes) when a user meets it.
+  docs/design/order-dependent-state.md.
 - **Catch-all recording shard with an unexpected exit code** (EF Core under the .NET 11 preview SDK, exit 5 with
   "Zero tests ran" and no report): the map is not used, selection falls back to names (EF Core 89 %). Owner,
   2026-10-08: no EF Core-specific fix; a general one (verify with `--list-tests`, per runner, that the shard's
