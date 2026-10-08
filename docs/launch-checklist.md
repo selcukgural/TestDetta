@@ -30,6 +30,12 @@ cancellation webhook). The pre-launch review of the same day (licensed and unlic
 
 ## Launch day
 
+Done 2026-10-08 (stage 1, quiet release; checkout, trials and the Marketplace listing still closed): steps 1 to 3.
+Production key trusted and enforcement on (bb1a0a4), `TestDetta` 0.1.0 on nuget.org (owned by the `TestDetta`
+organization), `TestDetta/action` 0.1.0 at `35e57ee` with tags `v0.1.0` and `v0`, the site pinned to it, and the
+license tested in CI with `.github/workflows/license-check.yml` (run 37835407956: valid with refresh, missing without).
+The Trusted Publishing policy needed the scope "Push new packages and package versions" for the first package.
+
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
    printed), set `LicenseKeys.Enforced = true`, and merge the `launch` branch: every text that says no license
