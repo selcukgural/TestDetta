@@ -399,9 +399,11 @@ domain mapping; Porkbun holds the CNAME). Scripts in `deploy/license-service/`:
 
 `deploy.sh sandbox` deploys `license-service-sandbox` for Polar's sandbox: its own database
 (`licenses_sandbox`), service account (`license-sandbox`) and signing key (`td-sandbox-1`), which no release
-ever trusts, so a test purchase can never become a working license. It shares the Cloud SQL instance, whose
-users can reach every database on it; before launch the sandbox user loses access to `licenses`, or the
-sandbox moves to its own instance. The Polar webhook secret and the Resend key are mounted once their
+ever trusts, so a test purchase can never become a working license. Since 2026-10-08 it has its own Cloud SQL instance,
+`testdetta-licenses-sandbox` (Postgres 17, smallest tier, encrypted connections only, no backups: test data only):
+on the shared instance every user gcloud makes is a `cloudsqlsuperuser` member and could reach `licenses`, so
+revoking `CONNECT` would not have been enough. The production instance now holds only `licenses` and its user;
+the sandbox's earlier test records were not moved. The Polar webhook secret and the Resend key are mounted once their
 secrets exist (`<prefix>-polar-webhook-secret`, `<prefix>-resend-api-key`, with `MAIL_FROM` set).
 
 The key's public half is not in `LicenseKeys.Trusted` yet: adding it makes such licenses verify and starts

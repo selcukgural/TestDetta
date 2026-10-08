@@ -22,4 +22,5 @@ cancellation webhook).
 5. **Watch the first day.** The service's logs (webhooks "Saved", mails sent, no warnings) and Resend's delivery
    page.
 
-Before launch, still open: the Cloud SQL isolation of the sandbox user (docs/design/licensing.md, "Hosting").
+Done before launch: the sandbox has its own Cloud SQL instance (2026-10-08), so no sandbox credential reaches the
+production database.

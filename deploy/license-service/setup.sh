@@ -1,6 +1,7 @@
 #!/bin/bash
 # One-time setup of the license service's Google Cloud resources (docs/design/licensing.md, "Hosting").
-# Already done by hand on 2026-10-07: the APIs, the Cloud SQL instance testdetta-licenses, the Artifact
+# Already done by hand on 2026-10-07: the APIs, the Cloud SQL instance testdetta-licenses (the sandbox has its own,
+# testdetta-licenses-sandbox, since 2026-10-08), the Artifact
 # Registry repository testdetta, the service account license-service, and the build account license-builder
 # (deploy.sh builds with it: new projects leave the default compute account without roles), which has
 # storage.objectViewer on the gs://<project>_cloudbuild bucket, artifactregistry.writer on the repository
