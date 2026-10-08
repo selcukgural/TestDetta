@@ -21,7 +21,8 @@ ADDRESS="${2:?usage: alerts.sh [production|sandbox] <address>}"
 
 gcloud services enable monitoring.googleapis.com --project $P
 
-SOURCE="(resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$SERVICE\" OR resource.type=\"cloud_run_job\" AND (resource.labels.job_name=\"$SERVICE-trials\" OR resource.labels.job_name=\"$SERVICE-admin\")) AND (log_id(\"run.googleapis.com/stdout\") OR log_id(\"run.googleapis.com/stderr\"))"
+# Every group in parentheses: in the Logging query language OR binds tighter than AND.
+SOURCE="((resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$SERVICE\") OR (resource.type=\"cloud_run_job\" AND (resource.labels.job_name=\"$SERVICE-trials\" OR resource.labels.job_name=\"$SERVICE-admin\"))) AND (log_id(\"run.googleapis.com/stdout\") OR log_id(\"run.googleapis.com/stderr\"))"
 
 # The Monitoring REST API directly: gcloud's channel and policy commands are beta and alpha components, which a
 # fresh gcloud install lacks and installs only interactively.
