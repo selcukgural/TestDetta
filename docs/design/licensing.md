@@ -351,6 +351,12 @@ later; e-mail is enough for the first sales.
 - Licenses issued with `admin issue` are not e-mailed: the admin has no address from an event and
   sends the string from `admin show` with the invoice.
 
+**Polar production (2026-10-08):** organization `testdetta` set up like the sandbox: country Türkiye, logo,
+social links, default tax behavior Exclusive, the `scope` custom field (text area, "Repositories"), and two
+seat-based products without a trial, each with `scope` as a required checkout field: TestDetta Team (monthly)
+$15 per seat per month and TestDetta Team (yearly) $144 per seat per year. Open: the webhook (step 3; the
+owner creates it and puts its secret straight into `license-polar-webhook-secret`), then `deploy.sh production`.
+
 **To go live in Polar** (no change needed before then):
 1. Make the product seat-based.
 2. Add a checkout custom field with the key `scope`, where customers enter their repositories
