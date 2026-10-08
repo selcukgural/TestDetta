@@ -15,8 +15,8 @@ cancellation webhook). The pre-launch review of the same day (licensed and unlic
       the same day. Then `deploy/license-service/admin.sh production attention` must answer, and
       `admin.sh production show --id P-90ec174e-…` must show the test license's scopes as `github.com/selcukgural/*`
       (fix them with `admin.sh production update --id … --scope github.com/selcukgural --note …` if not).
-- [ ] **Polar webhook:** add the `order.refunded` event to the production webhook, next to `subscription.*`.
-- [ ] **Polar checkout field `scope`:** its help text shows the format, for example "github.com/your-org for all its
+- [x] **Polar webhook:** add the `order.refunded` event to the production webhook, next to `subscription.*`.
+- [x] **Polar checkout field `scope`:** its help text shows the format, for example "github.com/your-org for all its
       repositories, or github.com/your-org/app".
 - [ ] **Production Resend key:** `admin.sh production send --id P-90ec174e-… --to <an address you read> --note "key check"`
       delivers the license mail. The sandbox key was found invalid on 2026-10-08 (Resend: "API key is invalid");
@@ -52,7 +52,7 @@ at `cb38ce9` with tag `v0.1.1`, the site and README pinned to it.
    and run the Action: `td license status` must show the signature verified, the scope (`github.com/selcukgural/*`)
    matching the repository, the seat count, and a refresh through `license.testdetta.com`. Also run it locally with
    `td license install <file>`. Without the secret, the same job must run every test and say why.
-4. **Open the checkout.** The products are pinned: `deploy.sh production` passes the monthly and yearly ids itself
+4. **Open the checkout.** Done 2026-10-09 (owner confirmed the `order.refunded` webhook event and the `scope` help text first). The products are pinned: `deploy.sh production` passes the monthly and yearly ids itself
    (2026-10-08); check that the deployed revision has `Licenses__PolarProducts`. Then `site/site.json` `checkoutOpen: "true"` (the link is in `checkoutUrl` already),
    deploy the site, and click through from the pricing page in every language.
 5. **Open trials.** `TRIALS=true TRIALS_PER_DAY=10 deploy/license-service/deploy.sh production` (a low daily ceiling
