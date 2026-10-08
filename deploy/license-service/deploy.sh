@@ -16,17 +16,17 @@
 set -euo pipefail
 P=testdetta-510908 R=europe-west1
 BUILDER=license-builder@$P.iam.gserviceaccount.com
-SQL=$P:$R:testdetta-licenses
 
 case "${1:-production}" in
   production)
     SERVICE=license-service SA=license-service@$P.iam.gserviceaccount.com
-    PREFIX=license KEY_ID=td-2026-10 DOMAIN=license.testdetta.com
+    PREFIX=license KEY_ID=td-2026-10 DOMAIN=license.testdetta.com SQL=$P:$R:testdetta-licenses
     # Trials open at launch, with the trusted key (TRIALS=true deploy.sh production then).
     TRIALS=${TRIALS:-false} TRIAL_ORIGINS=https://testdetta.com ;;
   sandbox)
     SERVICE=license-service-sandbox SA=license-sandbox@$P.iam.gserviceaccount.com
-    PREFIX=license-sandbox KEY_ID=td-sandbox-1 DOMAIN=
+    # Its own Cloud SQL instance (2026-10-08): no sandbox credential can reach the production database.
+    PREFIX=license-sandbox KEY_ID=td-sandbox-1 DOMAIN= SQL=$P:$R:testdetta-licenses-sandbox
     # The sandbox takes trials from the live site and from a local build of it (node build.mjs --serve).
     TRIALS=true TRIAL_ORIGINS=https://testdetta.com,http://localhost:4321 ;;
   *) echo "usage: deploy.sh [production|sandbox]" >&2; exit 2 ;;
@@ -68,7 +68,7 @@ else
   BASE=${BASE:+$BASE/}
 fi
 gcloud run deploy $SERVICE --project $P --region $R --image "$IMAGE" \
-  --service-account "$SA" --add-cloudsql-instances "$SQL" \
+  --service-account "$SA" --set-cloudsql-instances "$SQL" \
   --set-secrets "$SECRETS" \
   --set-env-vars "^|^$ENV|Licenses__PublicBaseUrl=${BASE:-https://example.invalid/}" \
   --no-invoker-iam-check --ingress all --min-instances 0 --max-instances 2 \
