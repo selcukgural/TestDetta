@@ -24,6 +24,11 @@ that report numbers (value reporting) only once the numbers are proven right.
 - Round 2 turns on every mutant kind (`--mutant-kinds all`; return-default, flip-branch and
   field-value exist since 1d54474).
 ## Known gaps behind shipped fixes
+- **Catch-all recording shard with an unexpected exit code** (EF Core under the .NET 11 preview SDK, exit 5 with
+  "Zero tests ran" and no report): the map is not used, selection falls back to names (EF Core 89 %). Owner,
+  2026-10-08: no EF Core-specific fix; a general one (verify with `--list-tests`, per runner, that the shard's
+  filter matches nothing) only when a user reports it or .NET 11 makes it common. Workaround: record without
+  `--parallel`. docs/evaluation.md, "Known limitations".
 - ~~**A test that loads a project's assembly by its path missed changes it sees through reflection**~~
   (done 2026-10-06, AspNetCoreOData `PublicApiTest`, a static field value changed): such classes are now
   selected for any change to that project, and an initializer change counts as a change of its

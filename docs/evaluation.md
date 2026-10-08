@@ -381,6 +381,15 @@ ASP.NET Core app with integration tests like AfterApply.
 - F# and VB code is not analysed; affected F#/VB projects and their dependents run completely. (Since 2026-10-06 both are analysed like C#: docs/design/vb-fsharp-support.md.)
 - Test projects are also recognised by a `*.Tests`/`*.Test` name; false positives are skipped at
   run time.
+- **A catch-all shard that ends with an unexpected exit code makes the map unusable** (EF Core, 2026-10-08,
+  also in runs-full-1006). `td record --parallel` ends with a shard for the classes the source index did not
+  find; it normally matches no test, and the testing platform's "zero tests" exit code 8 is accepted. Under
+  EF Core's .NET 11 preview SDK `dotnet test` ends that shard with exit code 5 ("Zero tests ran", a handshake
+  failure) and no report. A failed shard without a report makes `Untrusted` return null, so the map is not used
+  and selection falls back to names: all 13 EF Core test projects, 89 % of the classes selected. Safe (it only
+  costs time), and the general fix (check with `--list-tests` that the shard's filter matches no test, for every
+  runner) waits until a user meets it outside the preview (owner, 2026-10-08). Recording without `--parallel`
+  has no catch-all shard.
 - Repositories that run Microsoft's code coverage in every test run (Polly: `--coverage` in
   `eng/Test.targets`) abort at test host exit while TestDetta records (exit 134, `BadImageFormatException`).
   The maps are complete (each shard writes its results before the abort), but `td record` reports
