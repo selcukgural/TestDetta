@@ -354,8 +354,12 @@ later; e-mail is enough for the first sales.
 **Polar production (2026-10-08):** organization `testdetta` set up like the sandbox: country Türkiye, logo,
 social links, default tax behavior Exclusive, the `scope` custom field (text area, "Repositories"), and two
 seat-based products without a trial, each with `scope` as a required checkout field: TestDetta Team (monthly)
-$15 per seat per month and TestDetta Team (yearly) $144 per seat per year. Open: the webhook (step 3; the
-owner creates it and puts its secret straight into `license-polar-webhook-secret`), then `deploy.sh production`.
+$15 per seat per month and TestDetta Team (yearly) $144 per seat per year. Webhook made by the owner, its secret in
+`license-polar-webhook-secret` (read access for `license-service` only); `deploy.sh production` and
+`schedule-trials.sh production` run the same day (revision 00005, trials still off). Checkout link "Site pricing page
+(monthly + yearly)", both products, success URL `/docs/license/`, return URL `/pricing/`; it goes into `site.json`
+`checkoutUrl` at launch. Open before launch: Polar account review (identity, payout account), and a
+`license-resend-api-key` secret, without which production e-mails no license.
 
 **To go live in Polar** (no change needed before then):
 1. Make the product seat-based.
