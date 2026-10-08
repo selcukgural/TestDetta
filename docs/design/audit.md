@@ -175,13 +175,17 @@ change's before it counts as caught, by the same runs from the other side.
   failing exit code, a report that says the run was aborted, or a run of the whole project that reports fewer
   classes than the baseline did) runs again without the change, the same invocation:
   - the selection ran **nothing** in that project (skipped, not affected): the run of the whole project is the part
-    left out. Completing without the change makes the change a **miss** (an entry for the part, since no class can
-    be named); not completing there either, **inconclusive**.
+    left out. Completing without the change, the run is repeated with the change: not completing again makes the
+    change a **miss** (an entry for the part, since no class can be named); a repeat that completes is judged by its
+    failures, and the change is **inconclusive** at least (a crash that did not come back proves no miss and rules
+    none out; 2026-10-08, after a test host that died once under load made a mutant of a member nothing calls a
+    miss). Not completing without the change, **inconclusive**.
   - it ran the **whole project**: nothing is left out, so no miss is possible here. The run is repeated with the
     change; not completing again, and completing without the change, is **caught** (`caughtByCrash`); a repeat
     that completes is judged by its failures (none: not counted).
   - it ran **some classes**: the classes it left out run apart with the change (within the user's filter): not
-    completing there and completing without the change is a **miss**; their failures are judged as above. When
+    completing there, completing without the change and not completing with it a second time is a **miss**; a
+    repeat that completes leaves the change **inconclusive** and its failures are judged as above. When
     no miss showed there, the classes it ran run apart the same way: not completing with the change and
     completing without it is **caught**, failures are judged as above. When neither part fails apart, the
     change is **inconclusive** (a crash only when both run together).

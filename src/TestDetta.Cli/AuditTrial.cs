@@ -314,7 +314,8 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
     /// part is run again on its own, and a part that does not complete with the change runs once more without it:
     /// <list type="bullet">
     /// <item>the selection ran nothing here: the whole run, which did not complete, runs without the change; completing
-    /// then makes the change a miss (the part the selection left out breaks with it), not completing inconclusive;</item>
+    /// then, the run is repeated with the change, and not completing again makes the change a miss (the part the
+    /// selection left out breaks with it; see <see cref="LeftOutAgain"/>); not completing without it, inconclusive;</item>
     /// <item>it ran everything: the run is repeated with the change; not completing again, and completing without it,
     /// is a catch; a repeat that completes is judged by its failures (none: not counted);</item>
     /// <item>it ran some classes: first the classes it left out, as for nothing; then, when no miss showed there, the
@@ -361,14 +362,12 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
                 case PartKind.Stopped:
                     return control.Note;
                 case PartKind.Crashes:
-                    verdict.Miss(CrashClass(scope, false, $"the run did not complete with the change ({full.Problem}) and completes without it; the selection ran none of this project"));
-                    break;
+                    return LeftOutAgain(scope, context.UserArguments, whole: true, pending,
+                        $"the run did not complete with the change ({full.Problem}), nor again, and completes without it; the selection ran none of this project");
                 default:
                     verdict.Doubt($"{project.Relative}: {control.Note}");
-                    break;
+                    return null;
             }
-
-            return null;
         }
 
         if (Excluding(classes, project) is not { } leftOutArguments || Within(classes, project) is not { } selectedArguments)
@@ -383,8 +382,8 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
             case PartKind.Stopped:
                 return left.Note;
             case PartKind.Crashes:
-                verdict.Miss(CrashClass(scope, false, $"the run did not complete with the change ({full.Problem}); the classes the selection left out, run apart, do not complete with it ({left.Note}) and complete without it"));
-                return null;
+                return LeftOutAgain(scope, leftOutArguments, whole: false, pending,
+                    $"the run did not complete with the change ({full.Problem}); the classes the selection left out, run apart, do not complete with it ({left.Note}), nor again, and complete without it");
             case PartKind.Inconclusive:
                 verdict.Doubt($"{project.Relative}: {full.Problem}; the classes the selection left out: {left.Note}");
                 return null;
@@ -852,6 +851,43 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
             ProjectReason = decision?.Reason ?? NotAffected,
             MapCommit = context.Maps.TryGetValue(project.Project.Path, out var map) ? map.Commit : null,
         };
+    }
+
+    /// <summary>
+    /// A part the selection left out that did not complete with the change and completed without it runs once more with
+    /// the change. Not completing again, the change breaks it: a miss. Completing, the first run's crash did not come
+    /// back (a test host that died of the machine's load, not of the change, as a mutant of a member nothing calls
+    /// showed in the corpus on 2026-10-08), so it proves no miss; nor does the repeat prove there is none, so the change
+    /// is inconclusive, and the repeat's own failures are judged like any complete run's.
+    /// </summary>
+    /// <param name="scope">The project and the change.</param>
+    /// <param name="arguments">The part's arguments.</param>
+    /// <param name="whole">True when the part is the whole project, as the baseline ran it.</param>
+    /// <param name="pending">Receives the classes the selection ran that failed.</param>
+    /// <param name="missNote">What the runs showed, for the miss.</param>
+    /// <returns>Why the change stopped, or null.</returns>
+    private string? LeftOutAgain(Scope scope, IReadOnlyList<string> arguments, bool whole,
+        List<(AuditProject, TestProjectSelection?, List<string>)> pending, string missNote)
+    {
+        var again = Run(scope, arguments, whole ? "again" : "left-out-again");
+        if (whole)
+        {
+            again = Whole(scope.Project, again);
+        }
+
+        if (Stopped(again) is { } stopped)
+        {
+            return stopped;
+        }
+
+        if (!again.Complete)
+        {
+            scope.Verdict.Miss(CrashClass(scope, false, missNote));
+            return null;
+        }
+
+        scope.Verdict.Doubt($"{scope.Project.Relative}: the classes the selection left out did not complete once with the change and completed when run again");
+        return New(scope.Project, again).Count > 0 ? Failures(scope, again, pending) : null;
     }
 
     /// <summary>

@@ -21,22 +21,43 @@ public sealed class AuditJudgingTests : IDisposable
     [Fact]
     public void A_project_the_selection_skipped_that_hangs_with_the_change_and_completes_without_it_is_a_miss()
     {
-        var mutant = Judge(Skipped(), (label, with) => label == "m1-full" && with ? Hung() : Ok());
+        var mutant = Judge(Skipped(), static (_, with) => with ? Hung() : Ok());
 
         Assert.Equal(AuditOutcome.Missed, mutant.Outcome);
         var miss = Assert.Single(mutant.Broken);
         Assert.True(miss.Crash);
         Assert.False(miss.Selected);
         Assert.Equal(AuditClass.LeftOutPart, miss.Name);
-        Assert.Contains("completes without it", miss.Note, StringComparison.Ordinal);
-        Assert.Equal([("m1-full", true), ("m1-full-without", false)], _calls.Select(static c => (c.Label, c.WithChange)));
+        Assert.Contains("nor again, and completes without it", miss.Note, StringComparison.Ordinal);
+        Assert.Equal([("m1-full", true), ("m1-full-without", false), ("m1-again", true)], _calls.Select(static c => (c.Label, c.WithChange)));
+    }
+
+    [Fact]
+    public void A_crash_in_a_project_the_selection_skipped_that_does_not_come_back_is_inconclusive_not_a_miss()
+    {
+        // The test host died once (the machine's load, say) and the repeat with the change passes: no miss is proven,
+        // none is ruled out.
+        var mutant = Judge(Skipped(), static (label, with) => label == "m1-full" && with ? Hung() : Ok());
+
+        Assert.Equal(AuditOutcome.Inconclusive, mutant.Outcome);
+        Assert.Empty(mutant.Broken);
+        Assert.Contains("did not complete once with the change and completed when run again", mutant.Note, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_crash_in_a_project_the_selection_skipped_whose_repeat_fails_a_class_is_judged_by_that_class()
+    {
+        var mutant = Judge(Skipped(), static (label, with) => with ? label switch { "m1-full" => Hung(), "m1-again" or "m1-alone" => Ok("T.B"), _ => Ok() } : Ok());
+
+        Assert.Equal(AuditOutcome.Missed, mutant.Outcome);
+        Assert.Equal("T.B", Assert.Single(mutant.Broken).Name);
     }
 
     [Fact]
     public void A_whole_project_run_that_reports_fewer_classes_than_the_baseline_is_incomplete_whatever_language_its_crash_message_was_in()
     {
         // The test host died after two of three classes; the report holds them, and the crash message was not recognized.
-        var mutant = Judge(Skipped(), (label, with) => label == "m1-full" && with ? Ok() with { Classes = 2 } : Ok(), baselineClasses: 3);
+        var mutant = Judge(Skipped(), static (_, with) => with ? Ok() with { Classes = 2 } : Ok(), baselineClasses: 3);
 
         Assert.Equal(AuditOutcome.Missed, mutant.Outcome);
         Assert.Contains("only 2 of the 3 test classes of the run without changes reported", Assert.Single(mutant.Broken).Note, StringComparison.Ordinal);
@@ -158,11 +179,22 @@ public sealed class AuditJudgingTests : IDisposable
     [Fact]
     public void Under_a_filter_a_crash_in_the_classes_left_out_is_a_miss()
     {
-        var mutant = Judge(Filtered("T.A"), (label, with) => with && label is "m1-full" or "m1-left-out" ? Hung() : Ok());
+        var mutant = Judge(Filtered("T.A"), static (label, with) => with && label is "m1-full" or "m1-left-out" or "m1-left-out-again" ? Hung() : Ok());
 
         Assert.Equal(AuditOutcome.Missed, mutant.Outcome);
         Assert.True(Assert.Single(mutant.Broken).Crash);
         Assert.Contains("FullyQualifiedName!~T.A.", _calls.Single(static c => c.Label == "m1-left-out").Arguments);
+        Assert.Contains("FullyQualifiedName!~T.A.", _calls.Single(static c => c.Label == "m1-left-out-again").Arguments);
+    }
+
+    [Fact]
+    public void Under_a_filter_a_crash_in_the_classes_left_out_that_does_not_come_back_is_inconclusive()
+    {
+        var mutant = Judge(Filtered("T.A"), static (label, with) => with && label is "m1-full" or "m1-left-out" ? Hung() : Ok());
+
+        Assert.Equal(AuditOutcome.Inconclusive, mutant.Outcome);
+        Assert.Empty(mutant.Broken);
+        Assert.DoesNotContain(_calls, static c => c.Label == "m1-selected");
     }
 
     [Fact]

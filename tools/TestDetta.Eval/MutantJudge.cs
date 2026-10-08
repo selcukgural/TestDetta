@@ -99,8 +99,9 @@ internal sealed record Judgement(IReadOnlyList<string> Killed, IReadOnlyList<str
 /// counts as a miss once it fails alone with the mutant and not alone without it (a run without it that cannot tell
 /// leaves the miss standing); a class it ran counts as caught only once it fails alone with the mutant and passes
 /// alone without it; a run that does not complete with the mutant runs again without it, and a part TestDetta left out
-/// that completes only without it is a miss, while a part it ran counts as caught only when it does not complete with
-/// the mutant a second time. A class whose run alone ran none of its tests is inconclusive, never "passed alone".
+/// that completes only without it is a miss once it does not complete with the mutant a second time either (a crash
+/// that does not come back is a doubt), while a part it ran counts as caught only when it does not complete with the
+/// mutant a second time. A class whose run alone ran none of its tests is inconclusive, never "passed alone".
 /// </summary>
 /// <param name="runs">Makes or finds the runs.</param>
 /// <param name="othersSelect">
@@ -110,7 +111,7 @@ internal sealed record Judgement(IReadOnlyList<string> Killed, IReadOnlyList<str
 internal sealed class MutantJudge(IMutantRuns runs, Func<string, string, bool> othersSelect)
 {
     /// <summary>The rules this class applies, as the reports and the outcome cache name them.</summary>
-    public const string Rules = "strict (2026-10-07)";
+    public const string Rules = "strict (2026-10-08)";
 
     /// <summary>Confirmed catches (selected) and misses (left out), as <c>Project: Class</c>.</summary>
     private readonly List<(string Name, bool Selected, bool Crash)> _broken = [];
@@ -242,8 +243,9 @@ internal sealed class MutantJudge(IMutantRuns runs, Func<string, string, bool> o
     /// <summary>
     /// A whole run that did not complete with the mutant. Each part runs again on its own, and a part that does not
     /// complete with the mutant runs once more without it: TestDetta ran nothing here (the whole run is the part left
-    /// out: completing without the mutant is a miss); it ran everything (the run is repeated with the mutant: not
-    /// completing again, and completing without it, is a catch); it ran some classes (first the classes it left out,
+    /// out: completing without the mutant and not completing with it a second time is a miss, see
+    /// <see cref="LeftOutAgain"/>); it ran everything (the run is repeated with the mutant: not completing again, and
+    /// completing without it, is a catch); it ran some classes (first the classes it left out,
     /// as for nothing, then, when no miss showed, the classes it ran, as for everything; when neither part fails on
     /// its own, the mutant is inconclusive).
     /// </summary>
@@ -279,25 +281,33 @@ internal sealed class MutantJudge(IMutantRuns runs, Func<string, string, bool> o
         if (decision is not { Mode: TestRunMode.Filtered, TestClasses: { Count: > 0 } classes })
         {
             // Skipped, not affected, or a filter of no class: the whole run is the part left out.
-            var control = Part(new RunAsk(project, RunPart.Whole, [], true, string.Empty), existing: full);
-            if (control.Kind == PartKind.Crashes)
-            {
-                Miss(project, AuditClass.LeftOutPart);
-            }
-            else
+            var whole = new RunAsk(project, RunPart.Whole, [], true, string.Empty);
+            var control = Part(whole, existing: full);
+            if (control.Kind == PartKind.Inconclusive)
             {
                 _doubt ??= $"{project.Name}: {control.Note}";
+                return;
+            }
+
+            if (LeftOutAgain(project, whole with { Label = "again" }, full.Problem) is { } repeated && New(project, repeated).Count > 0)
+            {
+                Failures(project, repeated, pending);
             }
 
             return;
         }
 
         var sorted = classes.Order(StringComparer.Ordinal).ToList();
-        var left = Part(new RunAsk(project, RunPart.Except, sorted, true, "left-out"), existing: null);
+        var leftOut = new RunAsk(project, RunPart.Except, sorted, true, "left-out");
+        var left = Part(leftOut, existing: null);
         switch (left.Kind)
         {
             case PartKind.Crashes:
-                Miss(project, AuditClass.LeftOutPart);
+                if (LeftOutAgain(project, leftOut with { Label = "left-out-again" }, left.Note) is { } repeated && New(project, repeated).Count > 0)
+                {
+                    Failures(project, repeated, pending);
+                }
+
                 return;
             case PartKind.Inconclusive:
                 _doubt ??= $"{project.Name}: {full.Problem}; the classes TestDetta left out: {left.Note}";
@@ -336,6 +346,36 @@ internal sealed class MutantJudge(IMutantRuns runs, Func<string, string, bool> o
         {
             _doubt ??= $"{project.Name}: the run did not complete with the mutant ({full.Problem}), but neither the classes TestDetta ran nor those it left out fail when run apart";
         }
+    }
+
+    /// <summary>
+    /// A part TestDetta left out that did not complete with the mutant and completed without it runs once more with the
+    /// mutant. Not completing again, the mutant breaks it: a miss. Completing, the first run's crash did not come back
+    /// (a test host that died of the machine's load, not of the mutant, as a mutant of a member nothing calls showed in
+    /// Meziantou.Analyzer on 2026-10-08), so it proves no miss; but nor does the repeat prove there is none, so the
+    /// mutant is inconclusive (a doubt goes against TestDetta: it counts in the worst-case bound), and the repeat's own
+    /// failures are judged like any complete run's.
+    /// </summary>
+    /// <param name="project">The project.</param>
+    /// <param name="again">The part with the mutant, as its repeat is labelled.</param>
+    /// <param name="problem">Why the first run did not complete.</param>
+    /// <returns>The complete repeat, or null when it did not complete (a miss).</returns>
+    private ProjectRun? LeftOutAgain(JudgedProject project, RunAsk again, string? problem)
+    {
+        var run = runs.Run(again with { Again = true });
+        if (again.Part == RunPart.Whole)
+        {
+            run = Whole(project, run);
+        }
+
+        if (!run.Complete)
+        {
+            Miss(project, AuditClass.LeftOutPart);
+            return null;
+        }
+
+        _doubt ??= $"{project.Name}: the classes TestDetta left out did not complete once with the mutant ({problem}) and completed when run again";
+        return run;
     }
 
     /// <summary>

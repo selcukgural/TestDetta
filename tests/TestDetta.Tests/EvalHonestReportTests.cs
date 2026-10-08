@@ -94,7 +94,7 @@ public sealed class EvalHonestReportTests : IDisposable
         var strict = lenient with { Judging = MutantJudge.Rules };
 
         Assert.Equal(BatchSummary.LenientRules, lenient.Judging);
-        Assert.Contains("judged strict (2026-10-07), the previous run lenient (up to runs-full-1006): misses, catches and inconclusive mutants are not comparable",
+        Assert.Contains($"judged {MutantJudge.Rules}, the previous run lenient (up to runs-full-1006): misses, catches and inconclusive mutants are not comparable",
             BatchComparison.Markdown([lenient], [strict]), StringComparison.Ordinal);
     }
 

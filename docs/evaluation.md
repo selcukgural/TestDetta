@@ -4,7 +4,7 @@
 
 Every doubt counts against TestDetta. The corpus evaluator (`tools/TestDetta.Eval`, `MutantJudge`) judges each
 mutant by the same rules as `td audit` (docs/design/audit.md, "Judging"); the summaries name them as
-`judging: strict (2026-10-07)`.
+`judging: strict (2026-10-08)` (the final round `runs-final-1007` was judged `strict (2026-10-07)`).
 
 **Rule change.** Up to and including round `runs-full-1006`, the evaluator was lenient in three ways: a crash or
 hang outside the selection made the mutant inconclusive and never a miss; a crash of the full run counted as caught
@@ -12,6 +12,14 @@ when the part the selection left out passed, without the selected part being run
 ran counted as caught from the full run alone, unconfirmed. The numbers published above (rounds 1 to 3, the F#
 round) were measured under those rules. They will be replaced by the next round's, measured under the strict rules
 below; until then they are marked as measured with the lenient judging.
+
+**Rule change 2026-10-08** (`strict (2026-10-08)`): a part the selection left out that did not complete with the
+mutant counted as a miss after one run; it now has to fail to complete a second time. In the final round
+(`runs-final-1007`) a mutant of `ConcurrentHashSet<T>.IsEmpty` in Meziantou.Analyzer, a member nothing calls, was
+a miss because one test host died after 1,880 of 5,398 tests while the machine ran two repositories; the same run
+without the mutant passed. A crash that does not come back proves no miss and rules none out, so the mutant is
+inconclusive: it counts in the worst-case bound. The outcome cache keeps its version (3): the stored runs are
+judged again, and only the repeats are new runs.
 
 **Judging.**
 
@@ -33,12 +41,14 @@ below; until then they are marked as measured with the lenient judging.
   (project level, drift modes, dotnet-tia) left them out; they stay among the failed classes for the precision figure.
 - A class whose run alone **ran none of its tests** makes the mutant inconclusive; it never counts as passed alone.
 - A full run that **does not complete** runs again without the mutant, by parts:
-  - the selection ran nothing in that project: completing without the mutant is a **miss** (the part left out breaks
-    with it); not completing there either, **inconclusive**;
+  - the selection ran nothing in that project: completing without the mutant, the run is repeated with it; not
+    completing again is a **miss** (the part left out breaks with it), a repeat that completes is judged by its
+    failures and leaves the mutant **inconclusive** at least; not completing without the mutant, **inconclusive**;
   - it ran the whole project: the run is repeated with the mutant; not completing again and completing without it
     is **caught by a crash**; a repeat that completes is judged by its failures;
-  - it ran some classes: the classes it left out run apart with the mutant (not completing there and completing
-    without it is a miss; their failures are judged as above); then the classes it ran (not completing there and
+  - it ran some classes: the classes it left out run apart with the mutant (not completing there, completing
+    without it and not completing with it a second time is a miss; a repeat that completes leaves the mutant
+    inconclusive; their failures are judged as above); then the classes it ran (not completing there and
     completing without it is caught); when neither part fails apart, **inconclusive**.
 - A mutant with a miss is **missed**; else with a doubt that could hide a miss, **inconclusive**; else with a
   confirmed catch, **caught**; else with an unconfirmed catch, **inconclusive**; else it did not break a test.

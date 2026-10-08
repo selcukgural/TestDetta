@@ -29,6 +29,43 @@ public sealed class EvalJudgingTests
     }
 
     [Fact]
+    public void A_hang_in_a_left_out_project_that_does_not_come_back_is_inconclusive_not_a_miss()
+    {
+        // Meziantou.Analyzer, 2026-10-08: a mutant of a member nothing calls, and the test host died once under load.
+        var judgement = Judge([Project("Left.Tests", Skipped("Left.Tests"))],
+            static ask => ask is { WithMutant: true, Part: RunPart.Whole, Again: false } ? Hung() : Ok());
+
+        Assert.True(judgement.Inconclusive);
+        Assert.Empty(judgement.Missed);
+        Assert.Contains("completed when run again", judgement.Note, StringComparison.Ordinal);
+        Assert.Contains(_asks, static a => a is { Part: RunPart.Whole, WithMutant: true, Again: true });
+    }
+
+    [Fact]
+    public void A_hang_in_a_left_out_project_whose_repeat_fails_a_class_is_judged_by_that_class()
+    {
+        var judgement = Judge([Project("Left.Tests", Skipped("Left.Tests"))], static ask => ask switch
+        {
+            { WithMutant: true, Part: RunPart.Whole, Again: false } => Hung(),
+            { WithMutant: true } => Ok("T.B"),
+            _ => Ok(),
+        });
+
+        Assert.Equal(["Left.Tests: T.B"], judgement.Missed);
+    }
+
+    [Fact]
+    public void A_hang_in_the_classes_left_out_of_a_filtered_project_that_does_not_come_back_is_inconclusive()
+    {
+        var judgement = Judge([Project("P.Tests", Filtered("P.Tests", "T.A"))],
+            static ask => ask is { WithMutant: true, Again: false, Part: RunPart.Whole or RunPart.Except } ? Hung() : Ok());
+
+        Assert.True(judgement.Inconclusive);
+        Assert.Empty(judgement.Missed);
+        Assert.DoesNotContain(_asks, static a => a.Label == "selected");
+    }
+
+    [Fact]
     public void A_hang_in_a_left_out_project_that_hangs_without_the_mutant_too_is_inconclusive()
     {
         var judgement = Judge([Project("Left.Tests", Skipped("Left.Tests"))], static ask => ask.Part == RunPart.Whole ? Hung() : Ok());
