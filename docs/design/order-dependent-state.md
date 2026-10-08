@@ -1,6 +1,7 @@
 # State one test class leaves for the next (proposal, 2026-10-08)
 
-Status: **proposal, needs the owner's decision.** Nothing here is implemented.
+Status: **measuring** (owner, 2026-10-08: measure first). The recorder writes `leakedReads` into the map (below);
+selection does not read it.
 
 ## What happened
 
@@ -57,3 +58,12 @@ First measure how common it is: count, per map in the corpus, the classes that r
 (a recorder-only change, no selection change), and how many of the corpus mutants such classes could hide. If it is
 rare (NLog's global `LogManager` and a few singletons), option 3 for those classes is cheap and precise. If it is
 common, option 2. Option 1 is the fallback, with the number stated next to the miss rate.
+
+## Measurement (implemented 2026-10-08)
+
+The tracker remembers, per tracked field, the test class whose test code stored the value it holds
+(`TestDettaTracker.NoteStore`; a store in a static constructor, a cache fill, at start-up or in a fixture clears it).
+A read by another test class is noted (`NoteLeakedRead`) and written as `leakedReads`; the recorder names the fields
+(`CoverageRecorder.LeakedReads`) and the map keeps them per class (`CoverageMap.LeakedReads`, optional, format 2).
+Fields the recorder does not track (value types such as NLog's `_configLoaded`) are not seen; NLog's `_config` is.
+Next: re-record the corpus and count, per map, the classes with leaked reads.

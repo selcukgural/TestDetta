@@ -185,6 +185,23 @@ public static class CoverageMapStore
             json.WriteEndArray();
         }
 
+        if (map.LeakedReads is { } leaked)
+        {
+            json.WriteStartObject("leakedReads"u8);
+            foreach (var (testClass, fields) in leaked.OrderBy(static l => l.Key, StringComparer.Ordinal))
+            {
+                json.WriteStartArray(testClass);
+                foreach (var field in fields)
+                {
+                    json.WriteStringValue(field);
+                }
+
+                json.WriteEndArray();
+            }
+
+            json.WriteEndObject();
+        }
+
         if (map.ClassLocations is { } locations)
         {
             WriteLocations(json, locations);
@@ -283,6 +300,12 @@ public static class CoverageMapStore
                 Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
                 InstrumentedProjects = root.TryGetProperty("instrumentedProjects", out var instrumented)
                     ? [.. instrumented.EnumerateArray().Select(static p => p.GetString()!)]
+                    : null,
+                LeakedReads = root.TryGetProperty("leakedReads", out var leaked)
+                    ? leaked.EnumerateObject().ToDictionary(
+                        static c => c.Name,
+                        static IReadOnlyList<string> (c) => [.. c.Value.EnumerateArray().Select(static f => f.GetString()!)],
+                        StringComparer.Ordinal)
                     : null,
                 Framework = root.TryGetProperty("framework", out var framework) ? framework.GetString() : null,
                 GeneratedFrameworks = root.TryGetProperty("generatedFrameworks", out var generatedFrameworks)

@@ -216,6 +216,14 @@ public sealed record CoverageMap(
     public IReadOnlyList<string>? InstrumentedProjects { get; init; }
 
     /// <summary>
+    /// Per test class, the tracked fields (<c>Type::Field</c>, sorted) it read while they held a value another test
+    /// class's code had stored: state one class left for the next (docs/design/order-dependent-state.md). Run alone or
+    /// in another order such a class finds the field unset and may run code the map never saw it run. Recorded to
+    /// measure how common that is; selection does not read it. Null for maps recorded before it was kept.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>>? LeakedReads { get; init; }
+
+    /// <summary>
     /// True when the map knows every class the runner reported, run or not, so a class outside them
     /// was not seen while recording rather than seen running nothing.
     /// </summary>

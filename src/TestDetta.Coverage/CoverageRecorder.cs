@@ -236,6 +236,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 GeneratedFrameworks = generatedFrameworks,
                 BuildInputs = buildInputs,
                 InstrumentedProjects = InstrumentedProjects(request.RepoRoot, owners, assemblies),
+                LeakedReads = LeakedReads(resultsFiles, instrumentation.Fields),
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
             };
@@ -1181,6 +1182,46 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
             return true;
         }
+    }
+
+    /// <summary>
+    /// The <c>leakedReads</c> of every process's results, merged per test class and named by field
+    /// (<see cref="CoverageMap.LeakedReads"/>).
+    /// </summary>
+    /// <param name="resultsFiles">Every process's results.</param>
+    /// <param name="fields">Tracked fields by index, as <c>Type::Field</c>.</param>
+    internal static Dictionary<string, IReadOnlyList<string>> LeakedReads(IReadOnlyList<string> resultsFiles, IReadOnlyList<string> fields)
+    {
+        var merged = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        foreach (var file in resultsFiles)
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(file));
+            if (!document.RootElement.TryGetProperty("leakedReads", out var element))
+            {
+                continue;
+            }
+
+            foreach (var testClass in element.EnumerateObject())
+            {
+                foreach (var index in testClass.Value.EnumerateArray())
+                {
+                    var field = index.GetInt32();
+                    if ((uint)field >= (uint)fields.Count)
+                    {
+                        continue;
+                    }
+
+                    if (!merged.TryGetValue(testClass.Name, out var names))
+                    {
+                        merged[testClass.Name] = names = new SortedSet<string>(StringComparer.Ordinal);
+                    }
+
+                    names.Add(fields[field]);
+                }
+            }
+        }
+
+        return merged.ToDictionary(static m => m.Key, static IReadOnlyList<string> (m) => [.. m.Value], StringComparer.Ordinal);
     }
 
     /// <summary>The <c>fieldBuilders</c> of one process's results; empty for results without them.</summary>

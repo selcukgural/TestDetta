@@ -135,6 +135,12 @@ public static class TestDettaTracker
     /// <summary>Guards the bucket dictionaries; the hit path never takes it.</summary>
     private static readonly object Gate = new();
 
+    /// <summary>
+    /// Per tracked field, the test class bucket whose test code stored the value it holds now; null when that value
+    /// came from a static constructor, a cache fill, start-up or a fixture, or nothing was stored yet. Sized on first use.
+    /// </summary>
+    private static Bucket?[]? _storeBuckets;
+
     /// <summary>Number of instrumented methods; field bits follow the method bits. Declared first: <see cref="Words"/> needs it.</summary>
     private static readonly int MethodCount = ReadCount(MethodCountVariable);
 
@@ -504,6 +510,11 @@ public static class TestDettaTracker
     {
         var id = MethodCount + field;
         var bucket = BucketForHit();
+        if (_storeBuckets is { } stores && (uint)field < (uint)stores.Length && stores[field] is { } storer
+            && !ReferenceEquals(storer, bucket) && !bucket.IsFixture && !ReferenceEquals(bucket, Startup))
+        {
+            NoteLeakedRead(bucket, field);
+        }
         Mark(bucket.Bits, id >> 6, 1L << (id & 63));
         if (IsBetweenTests(bucket))
         {
@@ -513,6 +524,45 @@ public static class TestDettaTracker
         // Into the ring as well: a value stored later on this thread was built from this one, so it
         // depends on what built this one (the recorder follows such field builders transitively).
         Remember(id);
+    }
+
+    /// <summary>
+    /// Remembers which test class's code stored the value <paramref name="field"/> holds now, for
+    /// <see cref="NoteLeakedRead"/>. A value stored in a static constructor or a cache fill, at start-up or in a fixture
+    /// is not a test's leftover: whoever needs it first builds the same value, which <see cref="Builders"/> covers.
+    /// </summary>
+    /// <param name="field">Field index assigned by the instrumenter.</param>
+    private static void NoteStore(int field)
+    {
+        var stores = _storeBuckets ??= new Bucket?[Math.Max(1, ReadCount(FieldCountVariable))];
+        if ((uint)field >= (uint)stores.Length)
+        {
+            return;
+        }
+
+        var bucket = BucketForHit();
+        stores[field] = _typeInitializerDepth != 0 || _cacheDepth != 0 || bucket.IsFixture || ReferenceEquals(bucket, Startup) ? null : bucket;
+    }
+
+    /// <summary>
+    /// Records that <paramref name="reader"/> read a value another test class's code left in <paramref name="field"/>
+    /// (docs/design/order-dependent-state.md): run alone or in another order the reader would find the field unset
+    /// and could take a path the map never saw. Measured only; selection does not read it yet.
+    /// </summary>
+    /// <param name="reader">The reading test class's bucket.</param>
+    /// <param name="field">Field index assigned by the instrumenter.</param>
+    private static void NoteLeakedRead(Bucket reader, int field)
+    {
+        var leaked = reader.LeakedFields;
+        if (leaked is null)
+        {
+            lock (Gate)
+            {
+                leaked = reader.LeakedFields ??= new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
+            }
+        }
+
+        leaked.TryAdd(field, 0);
     }
 
     /// <summary>
@@ -653,6 +703,7 @@ public static class TestDettaTracker
     /// <param name="method">Id of the method that stored the value.</param>
     public static void Stored(int field, int method)
     {
+        NoteStore(field);
         if (_recent is not { } recent)
         {
             return;
@@ -1345,6 +1396,7 @@ public static class TestDettaTracker
                 json.WriteEndObject();
                 WriteFileReads(json);
                 WriteOutputUses(json);
+                WriteLeakedReads(json);
                 WriteSeconds(json, "classSeconds", Classes);
                 WriteSeconds(json, "fixtureSeconds", Fixtures);
                 json.WriteNumber("startupSeconds", _startupSeconds);
@@ -1386,6 +1438,9 @@ public static class TestDettaTracker
 
         /// <summary>Names of the processes started and assemblies loaded; see <see cref="OutputUsed"/>.</summary>
         public HashSet<string> Outputs { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>Tracked fields this class read while they held a value another test class's code stored; see <see cref="NoteLeakedRead"/>.</summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<int, byte>? LeakedFields { get; set; }
 
         /// <summary>
         /// <see cref="Stopwatch"/> ticks during which this was the bucket entered last. Because
@@ -1583,6 +1638,33 @@ public static class TestDettaTracker
 
             json.WriteEndArray();
         }
+    }
+
+    /// <summary>
+    /// Writes <c>leakedReads</c>: per test class, the tracked fields (by index) it read while they held a value another
+    /// test class's code stored (<see cref="NoteLeakedRead"/>).
+    /// </summary>
+    /// <param name="json">Writer positioned inside the results object.</param>
+    private static void WriteLeakedReads(ResultsJsonWriter json)
+    {
+        json.WriteStartObject("leakedReads");
+        foreach (var bucket in Classes.Values)
+        {
+            if (bucket.LeakedFields is not { Count: > 0 } leaked)
+            {
+                continue;
+            }
+
+            json.WriteStartArray(bucket.Name);
+            foreach (var field in leaked.Keys.OrderBy(static f => f))
+            {
+                json.WriteNumberValue(field);
+            }
+
+            json.WriteEndArray();
+        }
+
+        json.WriteEndObject();
     }
 
     /// <summary>Seconds since this process started; 0 when the platform does not report a start time.</summary>
