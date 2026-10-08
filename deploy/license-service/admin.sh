@@ -39,7 +39,7 @@ done
 FAILED=$(gcloud run jobs executions describe "$EXEC" --project $P --region $R --format='value(status.failedCount)')
 
 # Logs reach Cloud Logging a few seconds after the task ends.
-FILTER="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$JOB\" AND labels.\"run.googleapis.com/execution_name\"=\"$EXEC\""
+FILTER="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$JOB\" AND labels.\"run.googleapis.com/execution_name\"=\"$EXEC\" AND (logName:\"stdout\" OR logName:\"stderr\")"
 for _ in $(seq 1 20); do
   OUT=$(gcloud logging read "$FILTER" --project $P --order=asc --format='value(textPayload)' --freshness=1h)
   [ -n "$OUT" ] && break

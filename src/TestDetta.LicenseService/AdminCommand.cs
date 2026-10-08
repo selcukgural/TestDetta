@@ -207,7 +207,8 @@ public static class AdminCommand
         }
 
         using var http = new HttpClient { BaseAddress = ResendMailer.ApiBase, Timeout = TimeSpan.FromSeconds(15) };
-        using var loggers = LoggerFactory.Create(static _ => { });
+        // The mailer's own log lines (Resend's status when it refuses) go to the job's output with the rest.
+        using var loggers = LoggerFactory.Create(static logging => logging.AddSimpleConsole(static console => console.SingleLine = true));
         var mailer = given ?? (settings.ResendApiKey is null ? null : new ResendMailer(http, settings, loggers.CreateLogger<ResendMailer>()));
         if (mailer is null)
         {
