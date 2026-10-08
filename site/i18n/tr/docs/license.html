@@ -1,4 +1,4 @@
-<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: e6a5b71b9c36 -->
+<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: 6914de869032 -->
 <h1>Lisans</h1>
 <p class="lead">Açık depolar {{name}}'yı ücretsiz kullanır. Özel depolar CI'a bir lisans dizesi iletir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: geçerli bir lisans olmadan, tıpkı {{name}}'dan önceki gibi tüm testler çalışır.</p>
 
@@ -46,6 +46,7 @@
 <h2>Aktif committer'lar</h2>
 <p>{{name}}, aktif committer başına aylık olarak fiyatlandırılır: analiz edilen commit'ten erişilebilen commit'ler arasında, son 30 günde yazarı olduğu en az bir commit bulunan her farklı commit yazarı. Yazarlar yerel olarak, <code>.mailmap</code> ile birleştirilmiş e-postaya göre sayılır ve hiçbir e-posta makinelerinizden çıkmaz. Dependabot, Renovate ve <code>github-actions</code> gibi botlar sayılmaz; kendi kalıplarınızı <code>.testdetta/license.json</code> dosyasına ekleyin:</p>
 <pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>Bir lisansın koltukları, kapsadığı tüm depoların aktif committer'larını birlikte kapsar. Hiçbir kimlik bilgisi makinelerinizden çıkmadığı için {{name}} yalnızca içinde çalıştığı depoyu sayabilir; bu yüzden sayımı ve uyarıları her seferinde tek bir depoya bakar. Koltukları bu depoların tamamındaki herkes için satın alın.</p>
 <p>Lisansın koltuk sayısının %20'sine kadar aşım (en az bir kişi) sorun değildir. Bunun üzerinde {{name}} 30 gün boyunca seçim yapmaya devam eder ve her özette uyarı verir; böylece koltuk eklemek için zaman olur. Ancak bu sürenin sonunda sayı hâlâ aşımdaysa, lisans yokmuş gibi tüm testler çalışır. Bkz. <a href="/pricing/">Fiyatlandırma</a>.</p>
 
 <div class="callout"><p>Asla kırmızı derleme yok: süresi dolmuş, bulunamayan ya da eşleşmeyen bir lisans, {{name}}'nın tüm testleri çalıştırmasına ve nedenini söylemesine yol açar. Job'u başarısız kılmaz.</p></div>

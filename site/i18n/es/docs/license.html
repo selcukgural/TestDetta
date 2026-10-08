@@ -1,4 +1,4 @@
-<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: e6a5b71b9c36 -->
+<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: 6914de869032 -->
 <h1>Licencia</h1>
 <p class="lead">Los repositorios públicos usan {{name}} gratis. Los repositorios privados pasan una cadena de licencia al CI. Un problema de licencia nunca hace fallar una compilación: sin una licencia válida se ejecutan todas las pruebas, como antes de {{name}}.</p>
 
@@ -46,6 +46,7 @@
 <h2>Committers activos</h2>
 <p>{{name}} tiene un precio por committer activo al mes: un autor de commits distinto con al menos un commit creado en los últimos 30 días, entre los commits alcanzables desde el commit analizado. Los autores se cuentan localmente, por correo unificado mediante <code>.mailmap</code>, y ningún correo sale de tus máquinas. No se cuentan bots como Dependabot, Renovate y <code>github-actions</code>; añade tus propios patrones en <code>.testdetta/license.json</code>:</p>
 <pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>Los puestos de una licencia cubren juntos a los committers activos de todos los repositorios que cubre. Como ninguna identidad sale de tus máquinas, {{name}} solo puede contar el repositorio en el que se ejecuta, así que su recuento y sus avisos miran un repositorio cada vez; compra puestos para todas las personas de todos ellos.</p>
 <p>Hasta un 20 % por encima de los puestos de la licencia (al menos una persona) no hay problema. Por encima de eso, {{name}} sigue seleccionando durante 30 días y avisa en cada resumen, para que haya tiempo de añadir puestos; solo si después el recuento sigue por encima se ejecutan todas las pruebas, como sin licencia. Consulta <a href="/pricing/">Precios</a>.</p>
 
 <div class="callout"><p>Nunca una compilación en rojo: una licencia caducada, ausente o que no coincide hace que {{name}} ejecute todas las pruebas y explique por qué. No hace fallar el job.</p></div>

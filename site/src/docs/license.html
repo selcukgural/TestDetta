@@ -46,6 +46,7 @@
 <h2>Active committers</h2>
 <p>{{name}} is priced per active committer per month: a distinct commit author with at least one commit authored in the last 30 days, among the commits reachable from the analysed commit. Authors are counted locally, by email folded through <code>.mailmap</code>, and no email leaves your machines. Bots such as Dependabot, Renovate and <code>github-actions</code> are not counted; add your own patterns in <code>.testdetta/license.json</code>:</p>
 <pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>A license's seats cover the active committers of all the repositories it covers together. Since no identity leaves your machines, {{name}} can only count the repository it runs in, so its count and warnings look at one repository at a time; buy seats for everyone across them.</p>
 <p>Up to 20% over the license's seats (at least one person) is fine. Above that, {{name}} keeps selecting for 30 days and warns in every summary, so there is time to add seats; only if the count is still over after that does every test run, as without a license. See <a href="/pricing/">Pricing</a>.</p>
 
 <div class="callout"><p>Never a red build: an expired, missing or mismatched license makes {{name}} run every test and say why. It does not fail the job.</p></div>

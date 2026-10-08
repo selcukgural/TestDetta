@@ -107,9 +107,16 @@ within the last 30 days, among the commits reachable from the analysed HEAD.
   A customer can add patterns in `.testdetta/license.json` (`"bots": [...]`). The list is shown in
   `td license status`, so it cannot hide people quietly.
 - **Per pipeline:** each run counts its own HEAD. Unmerged branches are counted by their own
-  pipelines. Across an organisation's repositories, the count is per repository. The
-  organisation-wide total is settled by a yearly declaration (true-up), which enterprise customers
-  are used to.
+  pipelines. Across an organisation's repositories, TestDetta's count is per repository, since no
+  identity leaves the machines.
+- **What a seat is (decided 2026-10-08, owner):** the seats cover the active committers of **all** the
+  repositories a license covers together, not each repository on its own. A team of 50 spread over 10
+  repositories of 5 committers each needs 50 seats, although every repository's own count shows 5. This
+  is written into the terms, the pricing page and the license documentation; TestDetta enforces only the
+  per-repository count it can see, and the rest is honest use, as for the rest of the license. Annual
+  (invoiced) customers settle the organisation-wide total by a yearly declaration (true-up). Rejected:
+  counting across repositories in the license service from hashed author identities, which would break
+  the promise that no author data leaves the customer's machines and would not work offline.
 - Author dates can be forged (`GIT_AUTHOR_DATE`), like any client-side check. That is accepted.
 
 ## Over the seat count (decided)

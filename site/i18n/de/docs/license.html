@@ -1,4 +1,4 @@
-<!-- title: Lizenz; layout: docs; description: Wie Sie die {{name}}-Lizenz an die CI übergeben, prüfen, was sie abdeckt, und wie sie sich erneuert.; source: e6a5b71b9c36 -->
+<!-- title: Lizenz; layout: docs; description: Wie Sie die {{name}}-Lizenz an die CI übergeben, prüfen, was sie abdeckt, und wie sie sich erneuert.; source: 6914de869032 -->
 <h1>Lizenz</h1>
 <p class="lead">Öffentliche Repositorys nutzen {{name}} kostenlos. Private Repositorys übergeben der CI einen Lizenzstring. Ein Lizenzproblem lässt nie einen Build fehlschlagen: Ohne gültige Lizenz laufen alle Tests, wie vor {{name}}.</p>
 
@@ -46,6 +46,7 @@
 <h2>Aktive Committer</h2>
 <p>{{name}} wird pro aktivem Committer und Monat abgerechnet: ein eindeutiger Commit-Autor mit mindestens einem in den letzten 30 Tagen verfassten Commit unter den Commits, die vom analysierten Commit aus erreichbar sind. Autoren werden lokal gezählt, anhand der über <code>.mailmap</code> zusammengeführten E-Mail-Adresse, und keine E-Mail-Adresse verlässt Ihre Rechner. Bots wie Dependabot, Renovate und <code>github-actions</code> werden nicht gezählt; eigene Muster fügen Sie in <code>.testdetta/license.json</code> hinzu:</p>
 <pre><code>{ "bots": ["ci-service-account"] }</code></pre>
+<p>Die Seats einer Lizenz decken die aktiven Committer aller von ihr abgedeckten Repositorys zusammen ab. Da keine Identität Ihre Rechner verlässt, kann {{name}} nur das Repository zählen, in dem es läuft; Anzahl und Warnungen beziehen sich daher immer auf ein einzelnes Repository. Kaufen Sie Seats für alle Personen in allen diesen Repositorys.</p>
 <p>Bis zu 20 % über den Seats der Lizenz (mindestens eine Person) sind in Ordnung. Darüber hinaus wählt {{name}} 30 Tage lang weiter aus und warnt in jeder Zusammenfassung, sodass Zeit bleibt, Seats hinzuzufügen; erst wenn die Anzahl danach immer noch darüber liegt, laufen alle Tests, wie ohne Lizenz. Siehe <a href="/pricing/">Preise</a>.</p>
 
 <div class="callout"><p>Nie ein roter Build: Eine abgelaufene, fehlende oder nicht passende Lizenz führt dazu, dass {{name}} alle Tests ausführt und den Grund nennt. Der Job schlägt dadurch nicht fehl.</p></div>
