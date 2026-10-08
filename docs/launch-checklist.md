@@ -55,7 +55,7 @@ at `cb38ce9` with tag `v0.1.1`, the site and README pinned to it.
 4. **Open the checkout.** Done 2026-10-09 (owner confirmed the `order.refunded` webhook event and the `scope` help text first). The products are pinned: `deploy.sh production` passes the monthly and yearly ids itself
    (2026-10-08); check that the deployed revision has `Licenses__PolarProducts`. Then `site/site.json` `checkoutOpen: "true"` (the link is in `checkoutUrl` already),
    deploy the site, and click through from the pricing page in every language.
-5. **Open trials.** `TRIALS=true TRIALS_PER_DAY=10 deploy/license-service/deploy.sh production` (a low daily ceiling
+5. **Open trials.** Done 2026-10-09 (rev 00010, ten a day). `TRIALS=true TRIALS_PER_DAY=10 deploy/license-service/deploy.sh production` (a low daily ceiling
    while trials are new; `admin.sh production trial-release` frees an owner whose name someone else used), `site.json` `trialsOpen: "true"`, then
    one trial from the live site to an address the owner reads, with the repositories typed as a customer would
    (`github.com/your-org`).

@@ -25,7 +25,7 @@
   "legalUpdated": "2026-10-08",
   "corpusMedianShare": "31%",
   "trialEndpoint": "https://license.testdetta.com/v1/trials",
-  "trialsOpen": "false",
+  "trialsOpen": "true",
   "corpusUpperBound": "0.19%",
   "corpusQuarterOrLess": "20",
   "corpusInconclusive": "2"
