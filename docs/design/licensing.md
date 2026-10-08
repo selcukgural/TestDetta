@@ -358,8 +358,10 @@ $15 per seat per month and TestDetta Team (yearly) $144 per seat per year. Webho
 `license-polar-webhook-secret` (read access for `license-service` only); `deploy.sh production` and
 `schedule-trials.sh production` run the same day (revision 00005, trials still off). Checkout link "Site pricing page
 (monthly + yearly)", both products, success URL `/docs/license/`, return URL `/pricing/`; it goes into `site.json`
-`checkoutUrl` at launch. Open before launch: Polar account review (identity, payout account), and a
-`license-resend-api-key` secret, without which production e-mails no license.
+`checkoutUrl` at launch. Later the same day: Polar's account review approved (identity, payout account), the
+`license-resend-api-key` secret added (revision 00006), and one end-to-end purchase with a one-use 100 % code
+verified the whole chain (webhooks, license record, license e-mail, cancellation). Launch steps:
+docs/launch-checklist.md.
 
 **To go live in Polar** (no change needed before then):
 1. Make the product seat-based.
