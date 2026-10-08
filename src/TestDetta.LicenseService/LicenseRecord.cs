@@ -26,4 +26,17 @@ public sealed record LicenseRecord(
     DateTimeOffset ValidFrom,
     DateTimeOffset PeriodEnd,
     bool Revoked,
-    string Source);
+    string Source)
+{
+    /// <summary>
+    /// True when an admin set <see cref="Scopes"/> (<c>admin update --scope</c>): a payment provider's later
+    /// events keep them instead of the checkout's, which is how a mistyped checkout field is corrected for good.
+    /// </summary>
+    public bool ScopesSetByAdmin { get; init; }
+
+    /// <summary>
+    /// True when an admin revoked the license or a full refund did: a payment provider's later events cannot
+    /// bring it back (only <c>admin restore</c> can).
+    /// </summary>
+    public bool RevokedByAdmin { get; init; }
+}

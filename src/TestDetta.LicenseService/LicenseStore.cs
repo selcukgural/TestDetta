@@ -54,6 +54,10 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
             alter table processed_webhooks add column if not exists type text;
             alter table processed_webhooks add column if not exists license_id text;
             alter table processed_webhooks add column if not exists outcome text;
+            -- Step 5: what an admin decided stays put when the payment provider's next event arrives: scopes
+            -- set by hand (a mistyped checkout field) and a revocation (a refund).
+            alter table licenses add column if not exists scopes_override text[];
+            alter table licenses add column if not exists admin_revoked boolean not null default false;
             """);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -64,7 +68,7 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
     public async Task<LicenseRecord?> GetAsync(string id, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(
-            "select id, licensee, plan, kind, seats, scopes, valid_from, period_end, revoked, source from licenses where id = $1");
+            "select id, licensee, plan, kind, seats, scopes, valid_from, period_end, revoked, source, scopes_override is not null, admin_revoked from licenses where id = $1");
         command.Parameters.Add(new NpgsqlParameter { Value = id });
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -82,7 +86,11 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
             reader.GetFieldValue<DateTimeOffset>(6),
             reader.GetFieldValue<DateTimeOffset>(7),
             reader.GetBoolean(8),
-            reader.GetString(9));
+            reader.GetString(9))
+        {
+            ScopesSetByAdmin = reader.GetBoolean(10),
+            RevokedByAdmin = reader.GetBoolean(11),
+        };
     }
 
     /// <summary>True when the webhook <paramref name="webhookId"/> was handled before: providers deliver an event more than once.</summary>
@@ -212,8 +220,11 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
             insert into licenses (id, licensee, plan, kind, seats, scopes, valid_from, period_end, revoked, source, source_modified_at, updated_at)
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
             on conflict (id) do update set licensee = excluded.licensee, plan = excluded.plan, kind = excluded.kind,
-                seats = excluded.seats, scopes = excluded.scopes, valid_from = excluded.valid_from,
-                period_end = excluded.period_end, revoked = excluded.revoked, source = excluded.source,
+                seats = excluded.seats, valid_from = excluded.valid_from, period_end = excluded.period_end, source = excluded.source,
+                -- A provider's state (source_modified_at set) never undoes an admin's decision.
+                scopes = case when excluded.source_modified_at is not null and licenses.scopes_override is not null
+                    then licenses.scopes_override else excluded.scopes end,
+                revoked = excluded.revoked or (excluded.source_modified_at is not null and licenses.admin_revoked),
                 source_modified_at = coalesce(excluded.source_modified_at, licenses.source_modified_at), updated_at = now()
             where excluded.source_modified_at is null or licenses.source_modified_at is null
                 or licenses.source_modified_at < excluded.source_modified_at
@@ -247,6 +258,98 @@ public sealed class LicenseStore(NpgsqlDataSource dataSource)
 
         await transaction.CommitAsync(cancellationToken);
         return true;
+    }
+
+    /// <summary>
+    /// Sets the scopes of <paramref name="id"/> by hand, with an audit entry: they replace the current ones and
+    /// stay when the payment provider's next event carries other scopes. False when there is no such record.
+    /// </summary>
+    /// <param name="id">License id.</param>
+    /// <param name="scopes">The scopes, already normalised (<see cref="ScopePatterns"/>).</param>
+    /// <param name="detail">Who did it and why.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public Task<bool> OverrideScopesAsync(string id, IReadOnlyList<string> scopes, string detail, CancellationToken cancellationToken) =>
+        AdminChangeAsync(
+            "update licenses set scopes = $2, scopes_override = $2, updated_at = now() where id = $1",
+            id,
+            new NpgsqlParameter { Value = scopes.ToArray(), NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text },
+            "scopes",
+            detail,
+            cancellationToken);
+
+    /// <summary>
+    /// Revokes <paramref name="id"/> for good (<paramref name="revoked"/> true: an admin's revocation or a full
+    /// refund), or lifts such a revocation (false), with an audit entry. A revocation made here outlives the
+    /// payment provider's later events, which would otherwise rebuild the record as active. False when there
+    /// is no such record.
+    /// </summary>
+    /// <param name="id">License id.</param>
+    /// <param name="revoked">True to revoke, false to restore.</param>
+    /// <param name="action">For the audit: <c>revoke</c>, <c>refund</c> or <c>restore</c>.</param>
+    /// <param name="detail">Who or what did it and why.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public Task<bool> SetRevokedAsync(string id, bool revoked, string action, string detail, CancellationToken cancellationToken) =>
+        AdminChangeAsync(
+            "update licenses set revoked = $2, admin_revoked = $2, updated_at = now() where id = $1",
+            id,
+            new NpgsqlParameter { Value = revoked },
+            action,
+            detail,
+            cancellationToken);
+
+    /// <summary>Runs one update of a record and its audit entry in a transaction; false when the record does not exist.</summary>
+    /// <param name="sql">The update, with the id as <c>$1</c> and <paramref name="value"/> as <c>$2</c>.</param>
+    /// <param name="id">License id.</param>
+    /// <param name="value">The new value.</param>
+    /// <param name="action">For the audit.</param>
+    /// <param name="detail">For the audit.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    private async Task<bool> AdminChangeAsync(string sql, string id, NpgsqlParameter value, string action, string detail, CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var update = new NpgsqlCommand(sql, connection, transaction))
+        {
+            update.Parameters.Add(new NpgsqlParameter { Value = id });
+            update.Parameters.Add(value);
+            if (await update.ExecuteNonQueryAsync(cancellationToken) == 0)
+            {
+                return false;
+            }
+        }
+
+        await using (var audit = new NpgsqlCommand("insert into audit (license_id, action, detail) values ($1, $2, $3)", connection, transaction))
+        {
+            audit.Parameters.Add(new NpgsqlParameter { Value = id });
+            audit.Parameters.Add(new NpgsqlParameter { Value = action });
+            audit.Parameters.Add(new NpgsqlParameter { Value = detail });
+            await audit.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// The <c>attention</c> audit entries since <paramref name="since"/>, newest first, as
+    /// <c>time license: detail</c>: what an admin must look at (a checkout without a usable scope, a refused
+    /// e-mail, a refund).
+    /// </summary>
+    /// <param name="since">Earliest entry.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task<IReadOnlyList<string>> AttentionSinceAsync(DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand(
+            "select at, license_id, detail from audit where action = 'attention' and at >= $1 order by at desc, id desc");
+        command.Parameters.Add(new NpgsqlParameter { Value = since.UtcDateTime, NpgsqlDbType = NpgsqlDbType.TimestampTz });
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var entries = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            entries.Add($"{reader.GetFieldValue<DateTimeOffset>(0):yyyy-MM-dd HH:mm} {reader.GetString(1)}: {reader.GetString(2)}");
+        }
+
+        return entries;
     }
 
     /// <summary>The audit entries of one license, oldest first, as <c>action: detail</c>.</summary>

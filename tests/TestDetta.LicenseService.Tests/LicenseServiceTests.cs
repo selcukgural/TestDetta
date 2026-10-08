@@ -180,7 +180,7 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
         Assert.Equal(7, License.Verify(await response.Content.ReadAsStringAsync(), Trusted, out _)!.Seats);
-        Assert.Contains("update: added two seats (seats 5 -> 7, until 2027-10-01 -> 2027-10-01)", (await Admin("show", "--id", "L-1")).Out, StringComparison.Ordinal);
+        Assert.Contains("update: added two seats (seats 5 -> 7, until 2027-10-01 -> 2027-10-01, scopes github.com/acme/*, git.acme.corp/*)", (await Admin("show", "--id", "L-1")).Out, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -734,5 +734,168 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         var (code, publicKey, _) = await Admin("public-key");
         Assert.Equal(0, code);
         Assert.Equal($"k1 {Convert.ToBase64String(_key.ExportSubjectPublicKeyInfo())}", publicKey);
+    }
+
+    private async Task<(int Code, string Out, string Err)> AdminWith(ILicenseMailer mailer, params string[] args)
+    {
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+        var code = await AdminCommand.RunAsync(args, Settings(), stdout, stderr, mailer);
+        return (code, stdout.ToString().Trim(), stderr.ToString());
+    }
+
+    private static string Refund(string status = "refunded", int refunded = 1500, string subscription = "sub-1") =>
+        System.Text.Json.JsonSerializer.Serialize(new
+        {
+            type = "order.refunded",
+            timestamp = "2026-10-10T00:00:00Z",
+            data = new { id = "order-1", status, subscription_id = subscription, refunded_amount = refunded, total_amount = 1500, customer = new { email = "billing@acme.com" } },
+        });
+
+    [Theory]
+    [InlineData("github.com/acme", "github.com/acme/*")]
+    [InlineData("GitHub.com/Acme/", "github.com/acme/*")]
+    [InlineData("https://github.com/Acme/App.git", "github.com/acme/app")]
+    [InlineData("https://user:token@github.com/acme", "github.com/acme/*")]
+    [InlineData("git@github.com:acme/app.git", "github.com/acme/app")]
+    [InlineData("github.com/acme/*, github.com/acme/tools", "github.com/acme/* github.com/acme/tools")]
+    [InlineData("gitlab.com/group/sub/*", "gitlab.com/group/sub/*")]
+    [InlineData("*/*", "")]
+    [InlineData("github.com/*", "")]
+    [InlineData("github.com", "")]
+    [InlineData("gitserver/acme", "")]
+    [InlineData("github.com/ac!me", "")]
+    public void Customer_scopes_become_patterns_that_match_what_was_meant(string text, string patterns) =>
+        Assert.Equal(patterns, string.Join(' ', ScopePatterns.Parse(text, ScopeRules.Customer).Patterns));
+
+    [Theory]
+    [InlineData("git.acme.corp/*", "git.acme.corp/*")]
+    [InlineData("git.acme.corp", "git.acme.corp/*")]
+    [InlineData("gitserver/acme", "gitserver/acme/*")]
+    [InlineData("*/*", "")]
+    public void Admin_scopes_may_name_a_whole_internal_host(string text, string patterns) =>
+        Assert.Equal(patterns, string.Join(' ', ScopePatterns.Parse(text, ScopeRules.Admin).Patterns));
+
+    [Fact]
+    public void A_bare_owner_scope_matches_its_repositories_and_the_owner_itself()
+    {
+        var scope = Assert.Single(ScopePatterns.Parse("github.com/acme", ScopeRules.Customer).Patterns);
+
+        Assert.True(RepositoryIdentity.Matches("github.com/acme/app", scope));
+        Assert.True(RepositoryIdentity.Matches("github.com/acme", scope));
+        Assert.False(RepositoryIdentity.Matches("github.com/acmecorp/app", scope));
+    }
+
+    [Fact]
+    public async Task Checkout_scopes_are_normalised_and_unreadable_ones_are_left_to_an_admin()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+
+        (await Deliver(client, Subscription(scope: "https://github.com/Acme", type: "subscription.created"), "msg-1")).Dispose();
+        (await Deliver(client, Subscription(scope: "*/*\ngithub.com/acme/app", type: "subscription.created").Replace("sub-1", "sub-2", StringComparison.Ordinal), "msg-2")).Dispose();
+
+        Assert.Equal(["github.com/acme/*"], (await Record())!.Scopes);
+        Assert.Equal(["github.com/acme/app"], (await Record("P-sub-2"))!.Scopes);
+        Assert.DoesNotContain("attention", string.Join('\n', await Audit("P-sub-1")), StringComparison.Ordinal);
+        Assert.Contains("attention: polar subscription.created: repository scopes not understood: '*/*'; kept: 'github.com/acme/app'", string.Join('\n', await Audit("P-sub-2")), StringComparison.Ordinal);
+        var (_, attention, _) = await Admin("attention");
+        Assert.Contains("P-sub-2: polar subscription.created: repository scopes not understood", attention, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Scopes_and_revocations_set_by_an_admin_outlive_polars_later_events()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+        (await Deliver(client, Subscription(scope: "github.com/acme-typo", type: "subscription.created"), "msg-1")).Dispose();
+
+        Assert.Equal(2, (await Admin("update", "--id", "P-sub-1", "--seats", "9", "--note", "n")).Code);
+        var (code, license, _) = await Admin("update", "--id", "P-sub-1", "--scope", "github.com/Acme", "--note", "customer wrote, typo at checkout");
+        Assert.Equal(0, code);
+        Assert.Equal(["github.com/acme/*"], License.Verify(license, Trusted, out _)!.Scopes);
+
+        // A renewal carries the checkout's field again; the admin's scopes stay.
+        (await Deliver(client, Subscription(scope: "github.com/acme-typo", seats: 6, modified: "2026-11-01T00:00:00Z"), "msg-2")).Dispose();
+        var renewed = (await Record())!;
+        Assert.Equal(6, renewed.Seats);
+        Assert.Equal(["github.com/acme/*"], renewed.Scopes);
+
+        Assert.Equal(0, (await Admin("revoke", "--id", "P-sub-1", "--note", "refund by hand")).Code);
+        (await Deliver(client, Subscription(modified: "2026-11-02T00:00:00Z"), "msg-3")).Dispose();
+        Assert.True((await Record())!.Revoked);
+        using (var refused = await Refresh(client, "P-sub-1", license))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        }
+
+        Assert.Equal(0, (await Admin("restore", "--id", "P-sub-1", "--note", "mistake")).Code);
+        using var restored = await Refresh(client, "P-sub-1", license);
+        Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+        Assert.Contains("set by an admin", (await Admin("show", "--id", "P-sub-1")).Out, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_full_refund_revokes_for_good_and_a_partial_one_is_left_to_an_admin()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+        (await Deliver(client, Subscription(type: "subscription.created"), "msg-1")).Dispose();
+        (await Deliver(client, Subscription(type: "subscription.created").Replace("sub-1", "sub-2", StringComparison.Ordinal), "msg-2")).Dispose();
+
+        using var full = await Deliver(client, Refund(), "msg-3");
+        using var partial = await Deliver(client, Refund("partially_refunded", 500, "sub-2"), "msg-4");
+        (await Deliver(client, Subscription(modified: "2026-11-01T00:00:00Z"), "msg-5")).Dispose();
+
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.OK], [full.StatusCode, partial.StatusCode]);
+        Assert.True((await Record())!.Revoked);
+        Assert.False((await Record("P-sub-2"))!.Revoked);
+        Assert.Contains("refund: polar order.refunded: full refund (1500 of 1500 cents refunded)", string.Join('\n', await Audit("P-sub-1")), StringComparison.Ordinal);
+        Assert.Contains("attention: polar order.refunded: partial refund (500 of 1500 cents refunded)", string.Join('\n', await Audit("P-sub-2")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_subscription_license_runs_at_most_forty_days_ahead_and_the_refresh_keeps_it_current()
+    {
+        using var service = Service();
+        using var client = service.CreateClient();
+        (await Deliver(client, Subscription(type: "subscription.created", periodEnd: "2027-10-01T00:00:00Z"), "msg-1")).Dispose();
+
+        var (_, show, _) = await Admin("show", "--id", "P-sub-1");
+        var claims = License.Verify(show.Split('\n')[^1].Trim(), Trusted, out _)!;
+
+        Assert.InRange(claims.ValidUntil - claims.Issued, TimeSpan.FromDays(40) - TimeSpan.FromMinutes(1), TimeSpan.FromDays(40));
+        // An annual license is for offline use and keeps its whole term.
+        var (_, annual, _) = await IssueAcme();
+        Assert.Equal(2027, License.Verify(annual, Trusted, out _)!.ValidUntil.Year);
+    }
+
+    [Fact]
+    public async Task An_admin_resends_the_license_without_the_address_being_kept()
+    {
+        await IssueAcme();
+        var mailer = new FakeMailer();
+
+        var (code, _, _) = await AdminWith(mailer, "send", "--id", "L-1", "--to", "it@acme.com", "--note", "lost the first mail");
+        var (badCode, _, _) = await AdminWith(mailer, "send", "--id", "L-1", "--to", "it@acme.com, x@y.z", "--note", "n");
+
+        Assert.Equal((0, 2), (code, badCode));
+        var (mail, _) = Assert.Single(mailer.Sent);
+        Assert.Equal("it@acme.com", mail.To);
+        Assert.Equal("L-1", License.Verify(LicenseIn(mail), Trusted, out _)!.Id);
+        var audit = string.Join('\n', await Audit("L-1"));
+        Assert.Contains("deliver: license e-mailed by an admin: lost the first mail", audit, StringComparison.Ordinal);
+        Assert.DoesNotContain("it@acme.com", audit, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Issuing_over_an_existing_license_is_refused()
+    {
+        await IssueAcme();
+
+        var (code, _, error) = await IssueAcme();
+
+        Assert.Equal(2, code);
+        Assert.Contains("exists; change it with admin update", error, StringComparison.Ordinal);
     }
 }

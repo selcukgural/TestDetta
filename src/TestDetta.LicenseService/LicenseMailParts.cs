@@ -40,7 +40,8 @@ public sealed record LicenseMailParts(
         var until = (record.PeriodEnd + LicenseIssuer.Slack(record.Kind)).ToString("d MMM yyyy", CultureInfo.InvariantCulture);
         var validUntil = (record.Kind, record.Source) switch
         {
-            (LicenseKind.Subscription, _) => $"{until}, then renewed by itself while the subscription runs",
+            // The string itself runs at most LicenseIssuer.MaxAhead ahead; the refresh keeps it current.
+            (LicenseKind.Subscription, _) => $"{until}, renewed by itself while the subscription runs (TestDetta fetches the current license daily; a copy that cannot reach the license service runs up to {LicenseIssuer.MaxAhead.Days} days)",
             (LicenseKind.Trial, "trial") => $"{until}, the end of the trial; to keep going, subscribe at testdetta.com/pricing",
             (LicenseKind.Trial, _) => $"{until}, the end of the trial; a subscription brings a new license by e-mail",
             _ => until,

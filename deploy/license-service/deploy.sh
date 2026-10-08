@@ -89,6 +89,15 @@ gcloud run jobs deploy $SERVICE-trials --project $P --region $R --image "$IMAGE"
   --set-env-vars "^|^$ENV|Licenses__PublicBaseUrl=$BASE" \
   --args trials,daily --tasks 1 --max-retries 1 --task-timeout 10m --cpu 1 --memory 512Mi
 
+# The admin job: `admin ...` (AdminCommand) with the service's database, signing key and Resend key, run by
+# admin.sh with the command's arguments, since Cloud Run has no shell to run it from. Never retried: an admin
+# command that failed is looked at, not repeated.
+gcloud run jobs deploy $SERVICE-admin --project $P --region $R --image "$IMAGE" \
+  --service-account "$SA" --set-cloudsql-instances "$SQL" \
+  --set-secrets "$SECRETS" \
+  --set-env-vars "^|^$ENV|Licenses__PublicBaseUrl=$BASE" \
+  --args admin,list --tasks 1 --max-retries 0 --task-timeout 5m --cpu 1 --memory 512Mi
+
 # Production's domain: once, after the first deploy. Porkbun then needs the CNAME record this prints
 # (license -> ghs.googlehosted.com); Google issues the certificate when the record resolves.
 if [ -n "$DOMAIN" ]; then

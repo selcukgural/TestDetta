@@ -13,7 +13,8 @@ namespace TestDetta.LicenseService;
 /// (secrets made after 2026-09-08). A request whose signature or timestamp does not check out gets 401
 /// and nothing of it is stored. A webhook id is handled once. Every subscription event carries the whole
 /// subscription, so the record is rebuilt from its current state, and a state older than the stored one
-/// (events arrive late or at once) is ignored by a conditional write.
+/// (events arrive late or at once) is ignored by a conditional write. <c>order.refunded</c> revokes the license
+/// of a fully refunded subscription; other events are acknowledged and ignored.
 /// </summary>
 public static partial class PolarWebhook
 {
@@ -25,6 +26,9 @@ public static partial class PolarWebhook
 
     /// <summary>Name of the checkout custom field in which a customer gives the repositories to license.</summary>
     public const string ScopeField = "scope";
+
+    /// <summary>Most scopes one checkout may give; more is flagged for an admin, who can set any number.</summary>
+    public const int MaxScopes = 50;
 
     /// <summary>Handles one delivery.</summary>
     /// <param name="context">The request.</param>
@@ -69,7 +73,11 @@ public static partial class PolarWebhook
         var type = root.GetProperty("type").GetString() ?? "";
         string? licenseId = null;
         var outcome = WebhookOutcome.Ignored;
-        if (type.StartsWith("subscription.", StringComparison.Ordinal))
+        if (type == "order.refunded")
+        {
+            (licenseId, outcome) = await RefundAsync(root.GetProperty("data"), store, logger, context.RequestAborted);
+        }
+        else if (type.StartsWith("subscription.", StringComparison.Ordinal))
         {
             var subscription = root.GetProperty("data");
             licenseId = LicenseId(subscription);
@@ -207,10 +215,21 @@ public static partial class PolarWebhook
             return WebhookOutcome.NeedsAttention;
         }
 
-        var scopes = Scopes(subscription);
-        if (scopes.Count == 0 && existing is not { Scopes.Count: > 0 })
+        // What the customer typed, normalised; a scope that matches no repository would make the paid license run
+        // every test without anyone noticing, so anything unreadable is flagged for an admin (admin update --scope).
+        var parsed = ScopePatterns.Parse(ScopeText(subscription), ScopeRules.Customer);
+        var scopes = parsed.Patterns.Take(MaxScopes).ToList();
+        // Once an admin set the scopes, they stay (LicenseStore.SaveAsync) and the checkout's no longer matter.
+        if (existing is not { ScopesSetByAdmin: true })
         {
-            await NeedsAttentionAsync(store, logger, licenseId, $"polar {type}: no repository scope was given at checkout", cancellationToken);
+            if (parsed.Rejected.Count > 0 || parsed.Patterns.Count > MaxScopes)
+            {
+                await NeedsAttentionAsync(store, logger, licenseId, $"polar {type}: repository scopes not understood: {Quote(parsed.Rejected)}{(parsed.Patterns.Count > MaxScopes ? $"; more than {MaxScopes} given" : "")}; kept: {Quote(scopes)}", cancellationToken);
+            }
+            else if (scopes.Count == 0 && existing is not { Scopes.Count: > 0 })
+            {
+                await NeedsAttentionAsync(store, logger, licenseId, $"polar {type}: no repository scope was given at checkout", cancellationToken);
+            }
         }
 
         // Canceled at period end still runs to the end of what was paid; ended (revoked, refunded,
@@ -241,15 +260,61 @@ public static partial class PolarWebhook
     }
 
     /// <summary>
-    /// The scopes a customer gave in the checkout field <see cref="ScopeField"/>: patterns separated by
-    /// commas, spaces or new lines, lower-cased.
+    /// <c>order.refunded</c>: an order of a subscription was refunded. A full refund revokes the subscription's
+    /// license for good (<see cref="LicenseStore.SetRevokedAsync"/>), since the customer has their money back while
+    /// Polar may keep the subscription running; the license string already handed out still runs to its
+    /// <c>validUntil</c>, which <see cref="LicenseIssuer.MaxAhead"/> keeps near. Either way an admin is told,
+    /// since a refund of an older order, or a partial one, may call for something else
+    /// (<c>admin restore</c>, <c>admin update</c>).
     /// </summary>
+    /// <param name="order">The refunded order.</param>
+    /// <param name="store">License records.</param>
+    /// <param name="logger">Receives what needs attention.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    private static async Task<(string? LicenseId, WebhookOutcome Outcome)> RefundAsync(JsonElement order, LicenseStore store, ILogger logger, CancellationToken cancellationToken)
+    {
+        if (!order.TryGetProperty("subscription_id", out var subscriptionId) || subscriptionId.GetString() is not { Length: > 0 } subscription)
+        {
+            return (null, WebhookOutcome.Ignored);
+        }
+
+        var licenseId = "P-" + subscription;
+        var status = order.TryGetProperty("status", out var value) ? value.GetString() : null;
+        var amounts = $"{Cents(order, "refunded_amount")} of {Cents(order, "total_amount")} cents refunded";
+        if (status != "refunded")
+        {
+            await NeedsAttentionAsync(store, logger, licenseId, $"polar order.refunded: partial refund ({amounts}); the license keeps running", cancellationToken);
+            return (licenseId, WebhookOutcome.NeedsAttention);
+        }
+
+        var revoked = await store.SetRevokedAsync(licenseId, revoked: true, "refund", $"polar order.refunded: full refund ({amounts})", cancellationToken);
+        await NeedsAttentionAsync(store, logger, licenseId, revoked
+            ? $"polar order.refunded: full refund ({amounts}); the license is revoked (admin restore lifts it)"
+            : $"polar order.refunded: full refund ({amounts}) of a subscription without a license", cancellationToken);
+        return (licenseId, WebhookOutcome.NeedsAttention);
+    }
+
+    /// <summary>An amount in cents from an order, or "?" when it carries none.</summary>
+    /// <param name="order">An order.</param>
+    /// <param name="name">Property name.</param>
+    private static string Cents(JsonElement order, string name) =>
+        order.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt64().ToString(CultureInfo.InvariantCulture) : "?";
+
+    /// <summary>What the customer typed in the checkout field <see cref="ScopeField"/>; null when nothing.</summary>
     /// <param name="subscription">A Polar subscription.</param>
-    private static List<string> Scopes(JsonElement subscription) =>
+    private static string? ScopeText(JsonElement subscription) =>
         subscription.TryGetProperty("custom_field_data", out var fields) && fields.ValueKind == JsonValueKind.Object
         && fields.TryGetProperty(ScopeField, out var value) && value.ValueKind == JsonValueKind.String
-            ? [.. value.GetString()!.Split([',', ' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(static s => s.Trim().ToLowerInvariant())]
-            : [];
+            ? value.GetString()
+            : null;
+
+    /// <summary>Patterns for an audit entry, each quoted and cut short, so the entry stays readable whatever was typed.</summary>
+    /// <param name="patterns">Patterns or rejected text.</param>
+    private static string Quote(IEnumerable<string> patterns)
+    {
+        var quoted = string.Join(", ", patterns.Take(MaxScopes).Select(static p => $"'{(p.Length > 80 ? p[..80] + "…" : p)}'"));
+        return quoted.Length == 0 ? "none" : quoted;
+    }
 
     /// <summary>The id of the license record a Polar subscription makes.</summary>
     /// <param name="subscription">A Polar subscription.</param>

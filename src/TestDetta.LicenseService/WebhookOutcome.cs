@@ -16,9 +16,9 @@ public enum WebhookOutcome
     /// <summary>A checkout that never completed, for a license that does not exist yet: no record.</summary>
     Unpaid,
 
-    /// <summary>The event cannot make a license (no seat count); an admin must fix it, see the audit.</summary>
+    /// <summary>An admin must look (no seat count, a refund); the audit says what (<c>admin attention</c>).</summary>
     NeedsAttention,
 
-    /// <summary>Not an event the service acts on (not <c>subscription.*</c>).</summary>
+    /// <summary>Not an event the service acts on (neither <c>subscription.*</c> nor <c>order.refunded</c>).</summary>
     Ignored,
 }
