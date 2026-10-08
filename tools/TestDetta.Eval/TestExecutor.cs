@@ -214,6 +214,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 var output = Outputs.TryGetValue(project.Path, out var directory) ? directory : string.Empty;
                 List<string> arguments = [.. baseArguments, .. TestReports.Arguments(location.Mode, output, results, reportName)];
                 var logPath = Path.Combine(context.LogDirectory, $"{id:000}-{label}-{Path.GetFileNameWithoutExtension(project.Path)}.log");
+                var leftovers = OutputLeftovers.Before(OutputIn(project));
                 var started = Stopwatch.GetTimestamp();
                 using (var log = File.CreateText(logPath))
                 {
@@ -223,6 +224,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 
                 Cleanup();
                 TestReports.Collect(location.Mode, context.RepoRoot, reportName, results);
+                RemoveLeftovers(leftovers, label, project.Path);
                 outcome = TrxReport.Read(results);
                 reportProblem = TestRunCompleteness.ReportProblem(results);
                 if (exitCode == DotnetProcess.TimedOut)
@@ -269,6 +271,50 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         return new TestRunOutcome(stopwatch.Elapsed.TotalSeconds, total, failed, unreported, aborted) { Crashed = crashedProjects, Projects = projects };
     }
 
+    /// <summary>
+    /// The test project's output folder in the tree this executor runs in: <see cref="Outputs"/> names the clone's, and a
+    /// worker copy has the same folder at the same place under its own root. Null when it is not known or lies outside
+    /// the clone.
+    /// </summary>
+    /// <param name="project">Normalized test project path.</param>
+    private string? OutputIn(ProjectNode project)
+    {
+        if (!Outputs.TryGetValue(project.Path, out var output))
+        {
+            return null;
+        }
+
+        var relative = Path.GetRelativePath(_state.Clone ?? context.RepoRoot, output);
+        return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? null : Path.Combine(context.RepoRoot, relative);
+    }
+
+    /// <summary>
+    /// Removes what a run left in the test project's output folder, so no later run, with or without the mutant, sees
+    /// it (<see cref="OutputLeftovers"/>).
+    /// </summary>
+    /// <param name="leftovers">The folder's files before the run; null when the folder is not known.</param>
+    /// <param name="label">The run's label.</param>
+    /// <param name="project">Normalized test project path.</param>
+    private void RemoveLeftovers(OutputLeftovers? leftovers, string label, string project)
+    {
+        if (leftovers is null)
+        {
+            return;
+        }
+
+        var (removed, kept) = leftovers.RemoveNew();
+        if (logger.IsEnabled(LogLevel.Debug) && removed.Count > 0)
+        {
+            var files = string.Join(", ", removed.Take(5));
+            LogLeftoversRemoved(label, project, removed.Count, files);
+        }
+
+        if (kept.Count > 0)
+        {
+            LogLeftoversKept(label, project, string.Join(", ", kept.Take(5)));
+        }
+    }
+
     /// <summary>Time limit of a run of <paramref name="project"/>; a generous fixed one before the project ran once.</summary>
     /// <param name="project">Normalized test project path.</param>
     private TimeSpan? Timeout(string project) =>
@@ -313,6 +359,12 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Label}: the test host of {Project} crashed (attempt {Attempt})")]
     private partial void LogCrashed(string label, string project, int attempt);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Label}: removed {Count} file(s) the run of {Project} left in its output folder: {Files}")]
+    private partial void LogLeftoversRemoved(string label, string project, int count, string files);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Label}: the run of {Project} left files in its output folder that could not be removed: {Files}")]
+    private partial void LogLeftoversKept(string label, string project, string files);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "The {Label} command exited with {ExitCode}")]
     private partial void LogShell(string label, int exitCode);

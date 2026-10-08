@@ -62,6 +62,13 @@ one without (the second is shared by every mutant that fails the same classes of
 outcome cache). A mutant whose full run crashes or hangs costs one more run of the part the selection ran, which waits
 for its time limit again when it hangs.
 
+**Leftovers in the output folder (2026-10-08).** Every run is made without a build, and the files it leaves in
+the test project's output folder are deleted after it (`OutputLeftovers`, `TestExecutor`; `td audit` does the
+same). In the final round NLog's `LogFactoryTests.SecondaryLogFactoryDoesNotTakePrimaryLogFactoryLock` wrote
+`NLog.config` there, the mutant of `XmlParser.IsValidXmlNameChar` crashed the host before the test deleted it, and
+every later run auto-loaded that file: three classes failed alone with the mutant and passed alone without it, a
+miss made by the polluted folder. Runs stored before this change may carry such leftovers.
+
 **Outcome cache.** From cache version 3 every run is stored raw, under what it ran (project, whole / only some classes /
 all but some, the mutant on or off), with its completeness; a later round judges again from the stored runs and makes
 only the runs a changed selection asks for (docs/design/eval-result-cache.md). Nothing of a version 2 cache is reused:

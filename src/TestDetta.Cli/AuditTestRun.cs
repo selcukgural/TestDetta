@@ -108,6 +108,9 @@ internal sealed class AuditTestRun(AuditWorkspace workspace, CancellationToken c
 
             command = Inserted(command, report);
             var before = Snapshot(userResults);
+
+            // Only a run without a build: a build writes the output folder, and its files must stay.
+            var leftovers = request.NoBuild ? OutputLeftovers.Before(outputDirectory) : null;
             var log = Path.Combine(results, "run.log");
             var stopwatch = Stopwatch.StartNew();
             int exitCode;
@@ -132,6 +135,10 @@ internal sealed class AuditTestRun(AuditWorkspace workspace, CancellationToken c
 
             var crashed = TestRunCompleteness.HasCrashLine(File.ReadLines(log));
             var outcome = Collect(location.Mode, request.Copy, reportName, results, userResults, before);
+
+            // What the run left in the output folder (a file a crashed host never deleted) must not reach the next
+            // change's runs; see OutputLeftovers.
+            leftovers?.RemoveNew();
             if (outcome is null)
             {
                 return new AuditRunOutcome(none, false, $"wrote no test report (exit code {exitCode})") { Seconds = seconds };

@@ -318,6 +318,9 @@ for both (`AuditJudgingTests`, `EvalJudgingTests`).
   `flip-branch` on a member without a two-way branch, a `return-default` on a by-reference return), or whose
   assembly only unaudited projects hold, is **not reached**: listed, not counted. A member Cecil cannot rewrite is
   not reached too, with the error; a file error while rewriting or restoring stops the audit (`stopReason: error`).
+- **Leftovers**: after every run without a build, the files it left in the project's output folder are deleted
+  (`OutputLeftovers`): a test that writes a file there and loses its cleanup to a crashed host would otherwise
+  change every later change's runs (NLog's `NLog.config`, 2026-10-08).
 - **Time limits**: a change's run may take `max(2 min, 5 × baseline × workers)`; the budget does not cut it, so a
   change that started finishes (an audit can run past `--budget` by up to one change's runs; leave that room
   under a CI job's timeout). No idle limit: a hung test host is killed at its time limit. `AuditRun.Progress` notes
