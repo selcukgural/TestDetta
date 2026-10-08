@@ -116,7 +116,7 @@ foreach (var project in SelectTestProjects(graph, root, projects))
     {
       title: "td test başlar ve lisans arka planda kontrol edilir", nodes: ["cipr", "td", "lic"], edges: ["start", "license"],
       who: "<code>CliApp.Run(args, stdout, stderr, CliHost)</code> → <code>LicenseGate.Refresh</code> (arka plan Task), sonra <code>LicenseGate.Check</code> ve <code>Apply</code>",
-      file: "src/TestDetta.Cli/CliApp.cs:32, src/TestDetta.Cli/LicenseGate.cs",
+      file: "src/TestDetta.Cli/CliApp.cs:41, src/TestDetta.Cli/LicenseGate.cs",
       input: "<code>td test --base origin/main --max-map-age 50 --drift-fallback all --summary-file $GITHUB_STEP_SUMMARY -- -c Debug</code>, ortamda <code>TESTDETTA_LICENSE</code>",
       output: "<code>LicenseStatus</code> (Valid, Warning, PublicRepository, Missing, Invalid, Expired, OverSeats…)",
       purpose: "Geçerli lisans yoksa seçim yapılmaz, bütün testler koşar; iş hiçbir zaman lisans yüzünden başarısız olmaz.",
@@ -125,6 +125,7 @@ foreach (var project in SelectTestProjects(graph, root, projects))
         "Koltuk hesabı: son 30 günün bot olmayan commit yazarları; izin = koltuk + max(1, ⌈koltuk × 0,2⌉).",
         "<b>Bugün:</b> <code>LicenseKeys.Enforced = false</code>, yani kontrol raporlanır ama seçimi kapatmaz.",
         "<b>Shadow mode</b> (<code>td test --shadow</code>) bu adıma hiç gelmez: <code>CliApp.Run</code> onu yenileme başlamadan <code>CliApp.Shadow</code>'a gönderir; lisans okunmaz, yenilenmez, TestDetta'nın kendisi ağ çağrısı yapmaz (ağı kullanan TestDetta değildir: Action aracı nuget.org'dan indirir ve Actions önbelleğini kullanır, base commit'teki yeniden koşu o commit'in paketlerini her derleme gibi geri yükler).",
+        "<code>td --version</code> komut ayrıştırılmadan önce <code>CliApp.Version</code>'ı yazar (paket sürümü + derlendiği commit, <code>AssemblyInformationalVersion</code>); shadow ve audit raporları da sürümü buradan alır.",
         "<b>td audit</b> de gelmez: <code>CliApp.Run</code> onu da yenilemeden önce <code>CliApp.Audit</code>'e gönderir (SIGINT/SIGTERM iptal belirtecine bağlanır); lisans okunmaz, ağ çağrısı yoktur (docs/design/audit.md).",
       ]),
     },

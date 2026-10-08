@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Logging;
 using TestDetta.Core;
 using TestDetta.Coverage;
@@ -1441,7 +1440,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     private ShadowReproduction Reproduce(CliOptions options, string? root, ProjectGraph? graph)
     {
         var assembly = typeof(ShadowRun).Assembly;
-        var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        var version = CliApp.Version;
         var binary = Try(() => Sha256(assembly.Location));
         var mergeBase = root is null ? null : Try(() => _git.MergeBase(root, options.Analysis.BaseRef));
         var head = root is null ? null : Try(() => _git.Head(root));

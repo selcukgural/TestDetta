@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 4033f5ddbf38 -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: cb9624dda3da -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -7,7 +7,8 @@ td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
 td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
-td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection
+td --version                       Print the version (include it in a bug report)</code></pre>
 
 <h2 id="shared">すべての分析に共通のオプション</h2>
 <p>これらは <code>affected</code>、<code>test</code>、<code>record</code>、<code>audit</code> で使用できます。<code>audit</code> は常に <code>HEAD</code> と比較するため、<code>--base</code> は使えません。</p>

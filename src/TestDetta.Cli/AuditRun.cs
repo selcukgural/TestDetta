@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Logging;
 using TestDetta.Core;
 using TestDetta.Mutants;
@@ -497,7 +496,7 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
     {
         var (root, graph) = (state.Root, state.Graph);
         var assembly = typeof(AuditRun).Assembly;
-        var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        var version = CliApp.Version;
         string? binary = null;
         var head = state.Head;
         var maps = new List<(string, string, string)>();

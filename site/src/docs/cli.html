@@ -7,7 +7,8 @@ td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
 td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
-td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection
+td --version                       Print the version (include it in a bug report)</code></pre>
 
 <h2 id="shared">Options for every analysis</h2>
 <p>These work with <code>affected</code>, <code>test</code>, <code>record</code> and <code>audit</code>; <code>audit</code> always compares with <code>HEAD</code>, so <code>--base</code> does not apply to it.</p>

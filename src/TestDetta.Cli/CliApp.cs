@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using TestDetta.Core;
 
@@ -18,6 +19,14 @@ internal static partial class CliApp
     /// <summary>Exit code of <c>td test</c> when at least one <c>dotnet test</c> failed.</summary>
     private const int TestsFailed = 3;
 
+    /// <summary>
+    /// The tool's version as built: the package version and, after a <c>+</c>, the commit it was built from
+    /// (the SDK adds it to the informational version). <c>td --version</c> prints it, and the shadow and audit
+    /// reports record it, so a bug report names the exact build.
+    /// </summary>
+    internal static string Version { get; } =
+        typeof(CliApp).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+
     /// <summary>Runs the command and returns the process exit code.</summary>
     /// <param name="args">Raw command line arguments.</param>
     /// <param name="stdout">Receives the result.</param>
@@ -31,6 +40,12 @@ internal static partial class CliApp
     /// <param name="host">The environment variables and home directory the license is read from.</param>
     internal static int Run(string[] args, TextWriter stdout, TextWriter stderr, CliHost host)
     {
+        if (args is ["--version", ..])
+        {
+            stdout.WriteLine($"td {Version}");
+            return Success;
+        }
+
         if (args is ["-h" or "--help", ..])
         {
             stderr.WriteLine(CliOptions.Usage);

@@ -260,6 +260,7 @@ internal sealed record CliOptions(
           td record [options]                Run all tests with coverage and store the map in .testdetta/coverage
           td license status [options]        Check the TestDetta license and show what it covers
           td license install <license|file>  Store a license in ~/.testdetta/license (when no CI secret can hold it)
+          td --version                       Print the version of td
           td audit [options] [-- <args>]     Break members of your code one at a time (in a copy of the
                                              working tree) and check the selection ran every test that failed
 

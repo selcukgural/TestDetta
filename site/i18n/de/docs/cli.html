@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 4033f5ddbf38 -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: cb9624dda3da -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -7,7 +7,8 @@ td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
 td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
-td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection
+td --version                       Print the version (include it in a bug report)</code></pre>
 
 <h2 id="shared">Optionen für jede Analyse</h2>
 <p>Diese funktionieren mit <code>affected</code>, <code>test</code>, <code>record</code> und <code>audit</code>; <code>audit</code> vergleicht immer mit <code>HEAD</code>, daher gilt <code>--base</code> dort nicht.</p>

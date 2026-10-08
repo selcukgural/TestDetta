@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 4033f5ddbf38 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: cb9624dda3da -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -7,7 +7,8 @@ td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
 td record [options]                Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
 td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
-td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection</code></pre>
+td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection
+td --version                       Print the version (include it in a bug report)</code></pre>
 
 <h2 id="shared">Tüm analizler için seçenekler</h2>
 <p>Bunlar <code>affected</code>, <code>test</code>, <code>record</code> ve <code>audit</code> ile çalışır; <code>audit</code> her zaman <code>HEAD</code> ile karşılaştırır, bu yüzden <code>--base</code> onda geçerli değildir.</p>

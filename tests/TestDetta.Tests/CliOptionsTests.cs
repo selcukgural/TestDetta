@@ -6,6 +6,18 @@ namespace TestDetta.Tests;
 public sealed class CliOptionsTests
 {
     [Fact]
+    public void Version_prints_the_informational_version_to_stdout()
+    {
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        Assert.Equal(0, CliApp.Run(["--version"], stdout, stderr));
+        Assert.Equal($"td {CliApp.Version}", stdout.ToString().Trim());
+        Assert.NotEqual("unknown", CliApp.Version);
+        Assert.Empty(stderr.ToString());
+    }
+
+    [Fact]
     public void Test_command_passes_everything_after_double_dash_through()
     {
         var ok = CliOptions.TryParse(["test", "--base", "main", "--dry-run", "--", "-c", "Release", "--no-build"], "/repo", out var options, out _);
