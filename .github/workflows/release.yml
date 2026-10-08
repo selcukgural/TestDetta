@@ -24,10 +24,12 @@ jobs:
         with:
           global-json-file: global.json
 
+      # The tool's own tests: the license service is not in the package, and its tests need the Postgres
+      # service container that ci.yml gives them (they ran there on the same commit).
       - name: Test
         env:
           CI: 'true'
-        run: dotnet test --filter "Category!=Slow&Category!=Legacy" -c Release --nologo
+        run: dotnet test tests/TestDetta.Tests --filter "Category!=Slow&Category!=Legacy" -c Release --nologo
 
       - name: Pack
         env:
