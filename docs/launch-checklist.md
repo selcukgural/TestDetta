@@ -36,7 +36,8 @@ organization), `TestDetta/action` 0.1.0 at `35e57ee` with tags `v0.1.0` and `v0`
 license tested in CI with `.github/workflows/license-check.yml` (run 37835407956: valid with refresh, missing without).
 The Trusted Publishing policy needed the scope "Push new packages and package versions" for the first package.
 0.1.1 (2026-10-08, the first covering license counts, refresh never replaces another license, authors): `TestDetta/action`
-at `cb38ce9` with tag `v0.1.1`, the site and README pinned to it.
+at `7c3cda6` with tags `v0.1.1` and `v0`, the site and README pinned to it. The tags moved there from `cb38ce9` on
+2026-10-09: the Marketplace refused the description (125 characters or more), so `7c3cda6` changes only that line.
 
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
