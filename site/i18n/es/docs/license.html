@@ -1,7 +1,6 @@
-<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: 5e0d26276ed1 -->
+<!-- title: Licencia; layout: docs; description: Pasa la licencia de {{name}} al CI, comprueba qué cubre y cómo se renueva.; source: e6a5b71b9c36 -->
 <h1>Licencia</h1>
 <p class="lead">Los repositorios públicos usan {{name}} gratis. Los repositorios privados pasan una cadena de licencia al CI. Un problema de licencia nunca hace fallar una compilación: sin una licencia válida se ejecutan todas las pruebas, como antes de {{name}}.</p>
-<div class="callout"><p><strong>Hasta el lanzamiento</strong>, las licencias todavía no se venden ni se aplican: {{name}} comprueba la licencia e informa de lo que encontró, como se describe aquí (<code>td license status</code> añade "Not enforced yet"), pero selecciona pruebas diga lo que diga la comprobación, y ninguna licencia se verifica ni se puede instalar hasta que el servicio de licencias tenga su primera clave.</p></div>
 
 <h2>Repositorios públicos</h2>
 <p>Un repositorio público no necesita licencia, pero {{name}} solo sabe que un repositorio es público donde el CI lo indica:</p>
@@ -20,7 +19,7 @@
   <li><code>.testdetta/license</code> en el repositorio.</li>
 </ol>
 <p>Lo recomendado es una variable secreta. En GitHub Actions, pásala a través de la entrada <code>license</code> de la acción:</p>
-<pre><code>- uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+<pre><code>- uses: {{actionRef}}
   with:
     mode: test
     license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>

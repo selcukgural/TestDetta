@@ -1,6 +1,7 @@
 # Licensing
 
-Status: phase 1 implemented 2026-10-03 (see "As built"); enforcement off until launch. Decisions
+Status: phase 1 implemented 2026-10-03 (see "As built"); enforced since launch (`LicenseKeys.Enforced`,
+with the production key `td-2026-10` trusted). Decisions
 marked **(decided)** were made with the user.
 
 ## Goals
@@ -216,10 +217,10 @@ A small web service, the only holder of the signing key.
   and uses the Actions cache, and the rerun on the base commit restores packages like any build); in return it shows decisions only for the tests the
   job ran (docs/design/shadow-mode.md, "Free, but no free selection").
 - `td license status`, `td license install`, and the action's `license` input.
-- **Not enforced yet:** `LicenseKeys.Trusted` is empty until the license service makes the first
-  production key, and `LicenseKeys.Enforced` is false. Until then the status is checked and appears
-  only in the JSON output, the debug log and `td license status`, so nobody's runs change or get
-  noisy before launch.
+- **Enforced since launch:** `LicenseKeys.Trusted` holds the production key `td-2026-10` and
+  `LicenseKeys.Enforced` is true. Before launch both were off: the status was checked and appeared only in
+  the JSON output, the debug log and `td license status`. A test keeps them together: enforcement without
+  the production key would run every test for every customer.
 - Refresh is phase 2: it needs the service.
 - Tests: `LicensingTests` and `LicenseGateTests`, sabotage-checked:
   - a tampered license, an unknown key;
@@ -281,8 +282,8 @@ honours `TESTDETTA_LICENSE_REFRESH=off` and `HTTPS_PROXY`. The license goes in t
 response is stored in `~/.testdetta/license` only when it is a genuine, newer version (`issued`) of the
 same license; every failure is ignored. Licenses carry `issued`. Of the genuine versions found (the
 CI secret, the refreshed copy), the newest of the first license counts (`LicenseCheck.Best`). A
-seat reduction is a newer license with fewer seats. Before launch no key is trusted, so no request
-is ever sent.
+seat reduction is a newer license with fewer seats. Before launch no key was trusted, so no request
+was ever sent.
 
 Still to do in phase 2:
 - the production key and embedding its public key;
@@ -434,9 +435,8 @@ revoking `CONNECT` would not have been enough. The production instance now holds
 the sandbox's earlier test records were not moved. The Polar webhook secret and the Resend key are mounted once their
 secrets exist (`<prefix>-polar-webhook-secret`, `<prefix>-resend-api-key`, with `MAIL_FROM` set).
 
-The key's public half is not in `LicenseKeys.Trusted` yet: adding it makes such licenses verify and starts
-refresh requests, while the site says no license verifies before launch. It goes in with launch, together
-with that text.
+The key's public half went into `LicenseKeys.Trusted` at launch, together with the site's texts that had said
+no license verifies before launch.
 
 ## Trials (as built, 2026-10-07)
 

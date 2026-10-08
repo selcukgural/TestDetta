@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 658501dbeb84 -->
+<!-- title: {{name}}; description: {{name}} は git の差分を読み取り、変更が影響しうる .NET のテストクラスだけを実行します。確信が持てないときは、少なくではなく多めに実行します。; source: 6069e638934d -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -180,7 +180,7 @@
     </div>
     <dl class="promise-list" data-reveal>
       <div><dt>0</dt><dd><strong>行のコードも CI の外に出ません</strong>分析、カバレッジマップ、テスト結果はお使いのマシンにとどまります。</dd></div>
-      <div><dt>0</dt><dd><strong>件：ライセンスの問題によるビルドの失敗</strong>正式リリースでライセンスの適用が始まるまでは、ライセンスは不要です。適用後は、有効なライセンスがない場合、これまでどおりすべてのテストを実行します。</dd></div>
+      <div><dt>0</dt><dd><strong>件：ライセンスの問題によるビルドの失敗</strong>有効なライセンスがない場合、{{name}} を導入する前と同じようにすべてのテストを実行します。</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>テストフレームワークとテストランナー</strong>xUnit v2 と v3、NUnit、MSTest、TUnit に、VSTest と Microsoft.Testing.Platform の両方で対応しています。</dd></div>
       <div><dt>1</dt><dd><strong>種類のネットワーク通信（任意）</strong>ライセンスの更新で、送信するのはライセンスだけです。マシンごとに 1 日に最大 1 回（新しい状態で始まるランナーではジョブごとに 1 回）です。</dd></div>
     </dl>
@@ -239,12 +239,12 @@ jobs:
           fetch-depth: 0
 
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           license: ${{ secrets.TESTDETTA_LICENSE }}</pre>

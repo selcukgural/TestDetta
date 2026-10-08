@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: ea42ce35898c -->
+<!-- title: GitHub Actions; layout: docs; description: Registra mapas de cobertura en la rama predeterminada y ejecuta solo las pruebas afectadas en las pull requests con la acción de {{name}}.; source: c38e93cb413f -->
 <h1>GitHub Actions</h1>
 <p class="lead">Registra un mapa por cada commit de la rama predeterminada y deja que las pull requests ejecuten solo las pruebas que sus cambios afectan. La acción obtiene de nuget.org el paquete de {{name}} que fija en <code>tool.lock</code>, comprueba su SHA-512 antes de ejecutarlo y guarda los mapas en la caché de Actions.</p>
 
@@ -28,14 +28,14 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           dotnet-test-args: --logger trx
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Modo audit: no empieza ningún cambio pasado este tiempo (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> para sin límite); un cambio que aún se ejecuta termina entonces, así que el audit puede terminar después del presupuesto, y el informe dice por cuánto. Deja ese margen por debajo del <code>timeout-minutes</code> del job.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Modo audit: cambios probados a la vez, cada uno en su propia copia; la memoria crece con ello.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Modos test, shadow y audit: lista las cachés de Actions para encontrar el mapa más reciente (necesita <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Hasta que el licenciamiento se active en el lanzamiento, ningún repositorio la necesita; después, sin una licencia válida se ejecutan todas las pruebas. El job nunca falla por ello. Los modos sombra y audit nunca la leen.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Modo test: la cadena de licencia, desde un secreto del repositorio o de la organización como <code>TESTDETTA_LICENSE</code>. Los repositorios públicos no la necesitan. Sin una licencia válida se ejecutan todas las pruebas; el job nunca falla por ello. Los modos sombra y audit nunca la leen.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Cualquier directorio dentro del repositorio que se vaya a analizar.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Instala el SDK de .NET 10 sobre el que se ejecuta {{name}}. Ponlo en <code>false</code> si el job ya lo tiene.</td></tr>
   </tbody>
@@ -92,7 +92,7 @@ jobs:
 <p>Para probar {{name}} sin omitir nada, use <code>mode: shadow</code> en las pull requests. Todas las pruebas que ejecuta su comando se ejecutan, y el resultado del job es el de esa ejecución; el job summary y el artefacto del informe muestran lo que habría ejecutado la selección, los minutos medidos y cada clase fallida que habría dejado fuera. El artefacto se llama <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code>, uno por job y por parte de la matriz (<code>shadow-artifact-suffix</code> añade su propia parte), y se conserva hasta 90 días (el ajuste de retención de artefactos de su repositorio puede acortarlo). Nombre su solución en <code>dotnet-test-args</code> para ejecutarla como un solo comando, como hace su propio job; vea <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
 <p>No necesita licencia, así que no se le pasa el secreto de la licencia, y el propio {{name}} no hace ninguna llamada de red en modo sombra. La acción descarga el paquete de {{name}} desde nuget.org (comprobado con su SHA-512) y lista y restaura los mapas de su caché de Actions, como en el modo test. Ningún paso anterior a las pruebas hace fallar el job: si uno no puede hacer su parte (un checkout superficial, la descarga, una rama base que falta, una entrada no válida), o {{name}} termina sin un resultado de las pruebas, el paso ejecuta en su lugar su <code>dotnet test</code> normal con los mismos argumentos, y el job summary dice por qué. Un paquete que no coincide con su suma de comprobación nunca se ejecuta. Una subida fallida del informe tampoco hace fallar nunca el job.</p>
 <pre><code>      - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           dotnet-test-args: Shop.slnx</code></pre>
@@ -101,7 +101,7 @@ jobs:
         run: dotnet build Shop.slnx -c Debug
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           configuration: Debug
@@ -134,7 +134,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      - uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+      - uses: {{actionRef}}
         with:
           mode: audit
           audit-budget: 4h</code></pre>

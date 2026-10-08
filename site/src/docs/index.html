@@ -15,20 +15,19 @@
 <h3>GitHub Actions</h3>
 <p>The GitHub Action fetches the {{name}} package it pins from nuget.org and checks its SHA-512 before running it; there is nothing to install. Add two steps to your workflow: one records a coverage map on pushes to your default branch, the other runs only the affected tests on pull requests.</p>
 <pre><code>- if: github.event_name == 'push'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: record
 
 - if: github.event_name == 'pull_request'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: test</code></pre>
 <p>The full workflow, the permissions it needs and every input are in <a href="/docs/github-actions/">GitHub Actions</a>.</p>
 
 <h3>Other CI systems</h3>
 <p>GitLab CI, Jenkins, Azure DevOps, Bitbucket and on-premises setups run the same two commands, with a folder of per-commit coverage maps (<code>--maps-dir</code>) kept on a shared disk or in object storage. Install {{name}} as a .NET tool:</p>
-<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
-<div class="callout"><p>The package name is set at launch. Until then, build the tool from source with <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> and call <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> wherever <code>td</code> appears.</p></div>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
 <p>Pipelines for each system are in <a href="/docs/other-ci/">Other CI systems</a>.</p>
 
 <h2>First commands</h2>

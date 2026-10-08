@@ -138,7 +138,7 @@ public sealed class LicenseGateTests : IDisposable
         }
 
         Assert.Contains("License: Missing", stdout.ToString(), StringComparison.Ordinal);
-        Assert.Contains("Not enforced yet", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Every test runs until this is fixed.", stdout.ToString(), StringComparison.Ordinal);
 
         Assert.Equal(1, CliApp.Run(["license", "install", "testdetta1.not.genuine"], stdout, stderr));
         Assert.Contains("not valid", stderr.ToString(), StringComparison.Ordinal);

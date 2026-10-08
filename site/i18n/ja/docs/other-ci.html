@@ -1,4 +1,4 @@
-<!-- title: その他の CI システム; layout: docs; description: カバレッジマップのフォルダーを使って、GitLab CI、Jenkins、Azure DevOps、Bitbucket、オンプレミスの CI で {{name}} を実行します。; source: eb01d770f653 -->
+<!-- title: その他の CI システム; layout: docs; description: カバレッジマップのフォルダーを使って、GitLab CI、Jenkins、Azure DevOps、Bitbucket、オンプレミスの CI で {{name}} を実行します。; source: 6022371af2df -->
 <h1>その他の CI システム</h1>
 <p class="lead">{{name}} は、.NET と git を実行できるあらゆる CI で動作します。GitHub Actions 以外では、2 つのコマンドと 1 つのフォルダーで対応できます。</p>
 
@@ -17,14 +17,13 @@
 <ul>
   <li><strong>完全な git 履歴：</strong>{{name}} はマージベースと比較し、履歴をたどってマップを探します。シャロークローンではどちらも行えません。</li>
   <li><strong>ターゲットブランチのフェッチ：</strong><code>origin/&lt;target&gt;</code> が存在している必要があります。明示的な refspec <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code> でフェッチしてください。CI のクローンでは、リモートの refspec がパイプライン自身のブランチに限定されていることがよくあります（GitLab や Bitbucket がそうです）。その場合、<code>git fetch origin &lt;target&gt;</code> だけでは <code>FETCH_HEAD</code> しか更新されず、<code>origin/&lt;target&gt;</code> は存在しないままになります。</li>
-  <li><strong>ライセンス：</strong><code>TESTDETTA_LICENSE</code>（マスクされた変数またはシークレット変数）か、<code>TESTDETTA_LICENSE_FILE</code> で指定したファイルに置きます。GitLab CI と GitHub Actions では、パブリックリポジトリにライセンスは不要です。Jenkins、Azure DevOps、Bitbucket はリポジトリがパブリックかどうかを示さないため、これらではすべてのリポジトリにライセンスが必要です。正式リリースでライセンスの適用が始まるまでは不要です。適用後は、有効なライセンスがない場合はすべてのテストを実行し、それが原因でビルドが失敗することはありません。<a href="/docs/license/">ライセンス</a>を参照してください。</li>
+  <li><strong>ライセンス：</strong><code>TESTDETTA_LICENSE</code>（マスクされた変数またはシークレット変数）か、<code>TESTDETTA_LICENSE_FILE</code> で指定したファイルに置きます。GitLab CI と GitHub Actions では、パブリックリポジトリにライセンスは不要です。Jenkins、Azure DevOps、Bitbucket はリポジトリがパブリックかどうかを示さないため、これらではすべてのリポジトリにライセンスが必要です。有効なライセンスがない場合はすべてのテストを実行し、それが原因でビルドが失敗することはありません。<a href="/docs/license/">ライセンス</a>を参照してください。</li>
   <li><strong>終了コード：</strong><code>0</code> は成功、<code>1</code> は分析の失敗、<code>2</code> は無効なコマンドライン、<code>3</code> はテストの失敗です。</li>
   <li><strong>クリーンアップ：</strong>古いコミットのマップが必要なのは 50 コミット分だけです。それより古いフォルダーは、スケジュールされたジョブかストレージのライフサイクルルールで削除してください。</li>
 </ul>
 
 <h2>インストール</h2>
-<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
-<div class="callout"><p>パッケージ名はリリース時に決定します。それまでは <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> でソースから {{name}} をビルドし、以下で <code>td</code> と書かれている箇所では代わりに <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> を呼び出してください。</p></div>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
 
 <h2>GitLab CI</h2>
 <pre><code>variables:

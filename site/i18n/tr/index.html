@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 658501dbeb84 -->
+<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 6069e638934d -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -180,7 +180,7 @@
     </div>
     <dl class="promise-list" data-reveal>
       <div><dt>0</dt><dd><strong>satır kodunuz CI'ınızın dışına çıkar</strong>Analiz, kapsam haritaları ve test sonuçları makinelerinizde kalır.</dd></div>
-      <div><dt>0</dt><dd><strong>derleme bir lisans sorunu yüzünden başarısız olur</strong>Lisanslama lansmanda açılana kadar lisans gerekmez; sonrasında geçerli bir lisans olmadan, eskisi gibi tüm testler çalışır.</dd></div>
+      <div><dt>0</dt><dd><strong>derleme bir lisans sorunu yüzünden başarısız olur</strong>Geçerli bir lisans olmadan, {{name}}'dan önceki gibi tüm testler çalışır.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>test framework'ü ve runner</strong>VSTest ve Microsoft.Testing.Platform üzerinde xUnit v2 ve v3, NUnit, MSTest ve TUnit.</dd></div>
       <div><dt>1</dt><dd><strong>tür ağ çağrısı, isteğe bağlı</strong>Lisansın kendisinden başka hiçbir şey göndermeyen, makine başına günde en fazla bir kez (temiz başlayan runner'larda job başına bir kez) yapılan bir lisans yenilemesi.</dd></div>
     </dl>
@@ -239,12 +239,12 @@ jobs:
           fetch-depth: 0
 
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           license: ${{ secrets.TESTDETTA_LICENSE }}</pre>

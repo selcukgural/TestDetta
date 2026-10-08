@@ -1,4 +1,4 @@
-<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: 94fd455577ce -->
+<!-- title: Seguridad y datos; layout: docs; description: Qué guarda {{name}}, dónde lo guarda y la única llamada de red que hace.; source: 511855824b2a -->
 <h1>Seguridad y datos</h1>
 <p class="lead">{{name}} se ejecuta en tu CI y en tus máquinas. Tu código fuente, tus mapas de cobertura y los resultados de tus pruebas nunca salen de ellos. Esta página enumera todo lo que guarda y cada llamada de red que hace.</p>
 
@@ -39,7 +39,7 @@
 <p>Una ejecución sin licencia no hace ninguna llamada, y los repositorios públicos no necesitan ninguna. Tampoco el modo sombra (<code>td test --shadow</code>) ni el audit (<code>td audit</code>), que no leen ninguna licencia. Lo que usa la red en un job así no es de {{name}}: la GitHub Action descarga el paquete de {{name}} desde nuget.org, comprobado con el SHA-512 que fija, y lista y restaura los mapas de cobertura de tu caché de Actions; tus compilaciones restauran paquetes como siempre, la nueva ejecución del modo sombra sobre el commit base restaura los paquetes de ese commit como cualquier compilación, y las compilaciones y ejecuciones de pruebas del audit en su copia restauran paquetes de la misma forma.</p>
 
 <h2 id="license-check">Cómo se comprueba la licencia</h2>
-<p>Una licencia es una cadena firmada que se verifica en tu máquina con una clave pública incluida en {{name}} (antes del lanzamiento no hay ninguna incluida, así que hasta entonces ninguna licencia se verifica). Indica los repositorios que cubre, que se comparan con el remoto <code>origin</code> después de eliminar cualquier credencial. Un problema de licencia nunca hace fallar una compilación: una vez que el licenciamiento se activa en el lanzamiento, en su lugar se ejecutan todas las pruebas, como antes de {{name}}; hasta entonces, la comprobación solo se informa y se seleccionan pruebas diga lo que diga. <a href="/docs/license/">Más sobre las licencias</a>.</p>
+<p>Una licencia es una cadena firmada que se verifica en tu máquina con una clave pública incluida en {{name}}. Indica los repositorios que cubre, que se comparan con el remoto <code>origin</code> después de eliminar cualquier credencial. Un problema de licencia nunca hace fallar una compilación: en su lugar se ejecutan todas las pruebas, como antes de {{name}}. <a href="/docs/license/">Más sobre las licencias</a>.</p>
 
 <h2 id="us">Qué guardamos nosotros</h2>
 <p>Para una suscripción: el nombre del titular de la licencia, los repositorios que cubre, el número de puestos y su periodo. El pago y la dirección de correo a la que se envía la licencia los gestiona {{seller}}, nuestro merchant of record. Consulta la <a href="/legal/privacy/">política de privacidad</a>.</p>

@@ -20,6 +20,15 @@ public sealed class LicensingTests : IDisposable
         Now.AddDays(-10), Now.AddDays(daysLeft), new Uri("https://license.example/v1/licenses/L-1"));
 
     [Fact]
+    public void Enforcement_ships_only_with_the_production_key_trusted()
+    {
+        // Enforced without td-2026-10 would make every paying customer's run run every test.
+        var ready = !LicenseKeys.Enforced || LicenseKeys.Trusted.ContainsKey("td-2026-10");
+
+        Assert.True(ready, "LicenseKeys.Enforced is true but the production key td-2026-10 is not in LicenseKeys.Trusted");
+    }
+
+    [Fact]
     public void Signed_license_verifies_and_keeps_its_claims()
     {
         var text = License.Sign(Claims(), _key);

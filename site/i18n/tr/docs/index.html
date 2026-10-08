@@ -1,4 +1,4 @@
-<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: 92ddac6ece11 -->
+<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: c968767e0689 -->
 <h1>Başlarken</h1>
 <p class="lead">{{name}} branch'inizi base'iyle karşılaştırır, hangi test projelerinin ve hangi test sınıflarının değişikliği gözlemleyebileceğini belirler ve yalnızca onları çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil; göremedikleri <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -15,20 +15,19 @@
 <h3>GitHub Actions</h3>
 <p>GitHub Action, sabitlediği {{name}} paketini nuget.org'dan indirir ve çalıştırmadan önce SHA-512'sini kontrol eder; kurmanız gereken bir şey yok. Workflow'unuza iki adım ekleyin: biri varsayılan branch'inize yapılan push'larda bir kapsam haritası kaydeder, diğeri pull request'lerde yalnızca etkilenen testleri çalıştırır.</p>
 <pre><code>- if: github.event_name == 'push'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: record
 
 - if: github.event_name == 'pull_request'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: test</code></pre>
 <p>Workflow'un tamamı, gerektirdiği izinler ve tüm girdiler <a href="/docs/github-actions/">GitHub Actions</a> sayfasında.</p>
 
 <h3>Diğer CI sistemleri</h3>
 <p>GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi kurulumlar aynı iki komutu çalıştırır; commit başına kapsam haritalarını içeren bir klasör (<code>--maps-dir</code>) paylaşılan bir diskte ya da nesne depolamada tutulur. {{name}}'yı bir .NET aracı olarak kurun:</p>
-<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
-<div class="callout"><p>Paket adı lansmanda belirlenecek. O zamana kadar aracı kaynaktan <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> ile derleyin ve <code>td</code> geçen her yerde <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> çağırın.</p></div>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
 <p>Her sistem için pipeline'lar <a href="/docs/other-ci/">Diğer CI sistemleri</a> sayfasında.</p>
 
 <h2>İlk komutlar</h2>

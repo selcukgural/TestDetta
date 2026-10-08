@@ -4,14 +4,15 @@ namespace TestDetta.Core.Licensing;
 public static class LicenseKeys
 {
     /// <summary>
-    /// Public keys (SubjectPublicKeyInfo) by key id. Empty until the license service exists and its
-    /// first production key is made (docs/design/licensing.md, phase 2): no license verifies until then.
+    /// Public keys (SubjectPublicKeyInfo) by key id: <c>td-2026-10</c>, the license service's production key
+    /// (<c>deploy/license-service/admin.sh production public-key</c>). The sandbox's key is never trusted.
     /// </summary>
     public static IReadOnlyDictionary<string, byte[]> Trusted { get; } = new Dictionary<string, byte[]>(StringComparer.Ordinal);
 
     /// <summary>
-    /// False until launch: the license is checked and reported, but tests are selected whatever the
-    /// outcome. Without a production key every run would otherwise run every test.
+    /// True since launch: without a license that covers the run, every test runs. It was false before, when
+    /// no production key was trusted and every run would otherwise have run every test; a test keeps the
+    /// two together (enforced only with the production key trusted).
     /// </summary>
-    public const bool Enforced = false;
+    public const bool Enforced = true;
 }

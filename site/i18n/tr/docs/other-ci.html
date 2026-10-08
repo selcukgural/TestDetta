@@ -1,4 +1,4 @@
-<!-- title: Diğer CI sistemleri; layout: docs; description: {{name}}'yı GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi CI'da bir kapsam haritaları klasörüyle çalıştırın.; source: eb01d770f653 -->
+<!-- title: Diğer CI sistemleri; layout: docs; description: {{name}}'yı GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi CI'da bir kapsam haritaları klasörüyle çalıştırın.; source: 6022371af2df -->
 <h1>Diğer CI sistemleri</h1>
 <p class="lead">{{name}}, .NET ve git çalıştıran her CI'da çalışır. GitHub Actions dışında iki komut ve bir klasör işi görür.</p>
 
@@ -17,14 +17,13 @@
 <ul>
   <li><strong>Tam git geçmişi.</strong> {{name}}, merge base ile karşılaştırma yapar ve haritaları bulmak için geçmişi dolaşır. Shallow clone'lar ikisini de yapamaz.</li>
   <li><strong>Hedef branch'in fetch edilmiş olması</strong>; böylece <code>origin/&lt;target&gt;</code> mevcut olur. Onu açık bir refspec ile fetch edin: <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code>. CI clone'ları remote'un refspec'lerini çoğu zaman pipeline'ın kendi branch'iyle sınırlar (GitLab ve Bitbucket öyle yapar); bu durumda tek başına <code>git fetch origin &lt;target&gt;</code> yalnızca <code>FETCH_HEAD</code>'i günceller ve <code>origin/&lt;target&gt;</code> eksik kalır.</li>
-  <li><strong>Lisans</strong>: <code>TESTDETTA_LICENSE</code> içinde (maskelenmiş ya da secret bir değişken) ya da <code>TESTDETTA_LICENSE_FILE</code> ile belirtilen bir dosyada. GitLab CI ve GitHub Actions'ta açık depolar lisansa ihtiyaç duymaz; Jenkins, Azure DevOps ve Bitbucket bir deponun açık olup olmadığını bildirmez, bu yüzden oralarda her depo lisans gerektirir. Lisanslama lansmanda açılana kadar lisans gerekmez; sonrasında geçerli bir lisans olmadan tüm testler çalışır ve derleme bu yüzden asla başarısız olmaz. Bkz. <a href="/docs/license/">Lisans</a>.</li>
+  <li><strong>Lisans</strong>: <code>TESTDETTA_LICENSE</code> içinde (maskelenmiş ya da secret bir değişken) ya da <code>TESTDETTA_LICENSE_FILE</code> ile belirtilen bir dosyada. GitLab CI ve GitHub Actions'ta açık depolar lisansa ihtiyaç duymaz; Jenkins, Azure DevOps ve Bitbucket bir deponun açık olup olmadığını bildirmez, bu yüzden oralarda her depo lisans gerektirir. Geçerli bir lisans olmadan tüm testler çalışır ve derleme bu yüzden asla başarısız olmaz. Bkz. <a href="/docs/license/">Lisans</a>.</li>
   <li><strong>Çıkış kodları:</strong> <code>0</code> başarılı, <code>1</code> analiz başarısız oldu, <code>2</code> geçersiz komut satırı, <code>3</code> testler başarısız oldu.</li>
   <li><strong>Temizlik:</strong> eski commit'lerin haritalarına yalnızca 50 commit boyunca ihtiyaç duyulur. Daha eski klasörleri zamanlanmış bir job ya da bir depolama yaşam döngüsü kuralıyla silin.</li>
 </ul>
 
 <h2>Kurulum</h2>
-<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
-<div class="callout"><p>Paket adı lansmanda belirlenecek. O zamana kadar {{name}}'yı kaynaktan <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> ile derleyin ve aşağıda <code>td</code> geçen her yerde <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> çağırın.</p></div>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
 
 <h2>GitLab CI</h2>
 <pre><code>variables:

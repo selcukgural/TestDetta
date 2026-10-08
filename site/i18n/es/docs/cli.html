@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: cb9624dda3da -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 5c2e0f4c2b64 -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -158,7 +158,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
 <pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
 
 <h2 id="license-commands"><code>td license</code></h2>
-<p><code>td license status</code> comprueba la licencia igual que lo haría <code>td test</code> y muestra lo que cubre: licenciatario, puestos, committers activos en los últimos 30 días, la lista de bots, los ámbitos y la fecha de fin. Cuenta los committers en tu máquina y no envía nombres ni direcciones de correo electrónico; como <code>td test</code>, puede hacer la renovación diaria de la licencia, que envía la propia licencia. <code>td license install &lt;license|file&gt;</code> guarda una licencia en <code>~/.testdetta/license</code>, para máquinas donde ningún secreto de CI puede contenerla. Hasta el lanzamiento ninguna licencia se verifica, así que <code>install</code> rechaza todas las licencias, y <code>status</code> dice "Not enforced yet": las pruebas se siguen seleccionando. Consulta <a href="/docs/license/">Licencia</a>.</p>
+<p><code>td license status</code> comprueba la licencia igual que lo haría <code>td test</code> y muestra lo que cubre: licenciatario, puestos, committers activos en los últimos 30 días, la lista de bots, los ámbitos y la fecha de fin. Cuenta los committers en tu máquina y no envía nombres ni direcciones de correo electrónico; como <code>td test</code>, puede hacer la renovación diaria de la licencia, que envía la propia licencia. <code>td license install &lt;license|file&gt;</code> guarda una licencia en <code>~/.testdetta/license</code>, para máquinas donde ningún secreto de CI puede contenerla. Consulta <a href="/docs/license/">Licencia</a>.</p>
 
 <h2 id="environment">Variables de entorno</h2>
 <table>

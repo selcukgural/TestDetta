@@ -65,7 +65,7 @@ internal static partial class LicenseGate
     /// </summary>
     /// <param name="analysis">Finished analysis.</param>
     /// <param name="status">Result of <see cref="Check"/>.</param>
-    /// <param name="enforced">False until launch (<see cref="LicenseKeys.Enforced"/>): the status is only reported.</param>
+    /// <param name="enforced">Whether the license decides the run (<see cref="LicenseKeys.Enforced"/>); when false the status is only reported.</param>
     /// <param name="logger">Receives the status.</param>
     public static AnalysisResult Apply(AnalysisResult analysis, LicenseStatus status, bool enforced, ILogger logger)
     {

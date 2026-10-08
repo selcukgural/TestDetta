@@ -1,4 +1,4 @@
-<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 94fd455577ce -->
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: 511855824b2a -->
 <h1>Güvenlik ve veri</h1>
 <p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz, kapsam haritalarınız ve test sonuçlarınız oradan hiç çıkmaz. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
 
@@ -39,7 +39,7 @@
 <p>Lisanssız bir çalıştırma hiçbir çağrı yapmaz ve açık depolar lisansa ihtiyaç duymaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) ve audit (<code>td audit</code>) da çağrı yapmaz. Böyle bir job'da ağı kullanan şey {{name}}'nın kendisi değildir: GitHub Action, {{name}} paketini nuget.org'dan indirir ve sabitlediği SHA-512'ye karşı doğrular, kapsam haritalarını da Actions önbelleğinizde listeler ve geri yükler; derlemeleriniz paketleri her zaman olduğu gibi restore eder shadow mode'un base commit üzerindeki yeniden çalıştırması o commit'in paketlerini her derleme gibi restore eder ve audit'in kopyasındaki derlemeleri ve test çalıştırmaları da paketleri aynı şekilde restore eder.</p>
 
 <h2 id="license-check">Lisans nasıl kontrol edilir</h2>
-<p>Lisans imzalı bir dizedir ve {{name}}'ya gömülü bir açık anahtarla sizin makinenizde doğrulanır (lansmandan önce gömülü bir anahtar yoktur, bu yüzden o zamana kadar hiçbir lisans doğrulanmaz). Kapsadığı depoları adlandırır; bunlar, içindeki kimlik bilgileri önce çıkarılarak <code>origin</code> remote'uyla eşleştirilir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: lisanslama lansmanda açıldıktan sonra bunun yerine, tıpkı {{name}}'dan önceki gibi tüm testler çalışır; o zamana kadar kontrol yalnızca bildirilir ve ne bulursa bulsun testler seçilir. <a href="/docs/license/">Lisanslar hakkında daha fazlası</a>.</p>
+<p>Lisans imzalı bir dizedir ve {{name}}'ya gömülü bir açık anahtarla sizin makinenizde doğrulanır. Kapsadığı depoları adlandırır; bunlar, içindeki kimlik bilgileri önce çıkarılarak <code>origin</code> remote'uyla eşleştirilir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: bunun yerine, tıpkı {{name}}'dan önceki gibi tüm testler çalışır. <a href="/docs/license/">Lisanslar hakkında daha fazlası</a>.</p>
 
 <h2 id="us">Bizim tuttuklarımız</h2>
 <p>Bir abonelik için: lisans sahibinin adı, kapsadığı depolar, koltuk sayısı ve süresi. Ödeme ve lisansın gönderildiği e-posta adresi, satış aracımız (merchant of record) {{seller}} tarafından yönetilir. Bkz. <a href="/legal/privacy/">gizlilik politikası</a>.</p>

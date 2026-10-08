@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: cb9624dda3da -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 5c2e0f4c2b64 -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -158,7 +158,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
 <pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
 
 <h2 id="license-commands"><code>td license</code></h2>
-<p><code>td license status</code> は、<code>td test</code> と同じ方法でライセンスを確認し、ライセンシー、シート数、過去 30 日間のアクティブなコミッター、ボットの一覧、スコープ、終了日といった対象範囲を出力します。コミッターはあなたのマシン上で数え、名前やメールアドレスは送信しません。<code>td test</code> と同じく、1 日 1 回のライセンス更新を行うことがあり、その際にはライセンスそのものを送信します。<code>td license install &lt;license|file&gt;</code> はライセンスを <code>~/.testdetta/license</code> に保存します。CI のシークレットにライセンスを保持できないマシン向けです。正式リリースまではどのライセンスも検証に通らないため、<code>install</code> はすべてのライセンスを拒否し、<code>status</code> は "Not enforced yet" と表示します。テストは引き続き選択されます。<a href="/docs/license/">ライセンス</a>を参照してください。</p>
+<p><code>td license status</code> は、<code>td test</code> と同じ方法でライセンスを確認し、ライセンシー、シート数、過去 30 日間のアクティブなコミッター、ボットの一覧、スコープ、終了日といった対象範囲を出力します。コミッターはあなたのマシン上で数え、名前やメールアドレスは送信しません。<code>td test</code> と同じく、1 日 1 回のライセンス更新を行うことがあり、その際にはライセンスそのものを送信します。<code>td license install &lt;license|file&gt;</code> はライセンスを <code>~/.testdetta/license</code> に保存します。CI のシークレットにライセンスを保持できないマシン向けです。<a href="/docs/license/">ライセンス</a>を参照してください。</p>
 
 <h2 id="environment">環境変数</h2>
 <table>

@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: ea42ce35898c -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} のアクションで、既定のブランチではカバレッジマップを記録し、プルリクエストでは影響を受けるテストだけを実行します。; source: c38e93cb413f -->
 <h1>GitHub Actions</h1>
 <p class="lead">既定のブランチのコミットごとにマップを記録し、プルリクエストでは変更が影響するテストだけを実行します。アクションは <code>tool.lock</code> で固定した {{name}} のパッケージを nuget.org から取得し、実行前にその SHA-512 を確認して、マップを Actions のキャッシュに保持します。</p>
 
@@ -28,14 +28,14 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           dotnet-test-args: --logger trx
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>audit モード：この時間の経過後は新しい変更を始めません（<code>90s</code>、<code>15m</code>、<code>1h30m</code>。制限なしは <code>none</code>）。その時点で実行中の変更は最後まで実行されるため、監査は予算を過ぎて終わることがあり、どれだけ超過したかがレポートに記載されます。ジョブの <code>timeout-minutes</code> の下にその余裕を残してください。</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>audit モード：同時にテストする変更の数。それぞれが専用のコピーで実行され、メモリ使用量はこの数とともに増えます。</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>test、shadow、audit モード：最新のマップを探すために Actions のキャッシュを一覧表示します（<code>actions: read</code> が必要）。</td></tr>
-    <tr><td><code>license</code></td><td></td><td>test モード：ライセンス文字列。<code>TESTDETTA_LICENSE</code> のようなリポジトリまたは組織のシークレットから渡します。パブリックリポジトリでは不要です。正式リリースでライセンスの適用が始まるまでは、どのリポジトリでも不要です。適用後は、有効なライセンスがない場合はすべてのテストを実行します。それが原因でジョブが失敗することはありません。shadow モードと audit モードはこれを読み取りません。</td></tr>
+    <tr><td><code>license</code></td><td></td><td>test モード：ライセンス文字列。<code>TESTDETTA_LICENSE</code> のようなリポジトリまたは組織のシークレットから渡します。パブリックリポジトリでは不要です。有効なライセンスがない場合はすべてのテストを実行します。それが原因でジョブが失敗することはありません。shadow モードと audit モードはこれを読み取りません。</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>分析するリポジトリ内の任意のディレクトリ。</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>{{name}} の実行に必要な .NET 10 SDK をインストールします。ジョブにすでにインストールされている場合は <code>false</code> に設定してください。</td></tr>
   </tbody>
@@ -92,7 +92,7 @@ jobs:
 <p>何もスキップせずに {{name}} を試すには、プルリクエストで <code>mode: shadow</code> を使います。コマンドで実行されるすべてのテストが実行され、ジョブの結果はその実行のものになります。ジョブサマリーとレポートのアーティファクトには、選択が実行したはずのテスト、実測の時間、除外したはずの失敗クラスが示されます。アーティファクトの名前は <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code> で、ジョブとマトリックスのレッグごとに 1 つ作られ（<code>shadow-artifact-suffix</code> で独自の部分を追加できます）、最大 90 日間保持されます（リポジトリのアーティファクト保持期間の設定によって短くなることがあります）。普段のジョブと同じように 1 つのコマンドとして実行するには、<code>dotnet-test-args</code> にソリューションを指定してください。<a href="/docs/cli/#shadow"><code>td test --shadow</code></a> を参照してください。</p>
 <p>ライセンスは不要なので、ライセンスのシークレットは渡されません。また、shadow モードでは {{name}} 自身はネットワーク呼び出しを一切行いません。アクションは test モードと同じように、nuget.org から {{name}} のパッケージをダウンロードし（SHA-512 で検証）、Actions のキャッシュにあるマップを一覧表示して復元します。テストより前のステップでジョブが失敗することはありません。いずれかのステップが自分の役割を果たせない場合（シャローチェックアウト、ダウンロード、ベースブランチの欠落、無効な入力）、または {{name}} がテストの結果なしで終了した場合、そのステップは代わりに同じ引数で通常の <code>dotnet test</code> を実行し、ジョブサマリーにその理由が記載されます。チェックサムが一致しないパッケージが実行されることはありません。レポートのアップロードに失敗しても、ジョブが失敗することはありません。</p>
 <pre><code>      - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           dotnet-test-args: Shop.slnx</code></pre>
@@ -101,7 +101,7 @@ jobs:
         run: dotnet build Shop.slnx -c Debug
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           configuration: Debug
@@ -134,7 +134,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      - uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+      - uses: {{actionRef}}
         with:
           mode: audit
           audit-budget: 4h</code></pre>

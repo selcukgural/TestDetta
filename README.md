@@ -92,14 +92,14 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: <owner>/testdetta@<sha>
+        uses: TestDetta/action@<sha> # v0.1.0
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: <owner>/testdetta@<sha>
+        uses: TestDetta/action@<sha> # v0.1.0
         with:
           mode: test
           dotnet-test-args: --logger trx
@@ -138,10 +138,8 @@ Public repositories need no license on GitHub Actions and GitLab CI, which say w
 is public; on other CI systems and on developer machines every repository counts as private. Private
 ones pass the license string in `TESTDETTA_LICENSE` (or a file named by `TESTDETTA_LICENSE_FILE`); in GitHub
 Actions, through the `license` input from a secret. Only `affected`, `test` (not `test --shadow`) and
-`license status` read the license; `record`, `test --shadow` and `audit` run every test anyway. Until
-launch the license is checked and reported but not enforced: tests are selected whatever it says,
-and no license verifies or can be installed yet. `td license status` shows what a license covers.
-Once licensing is switched on at launch, without a valid license every test runs; the build never
+`license status` read the license; `record`, `test --shadow` and `audit` run every test anyway.
+`td license status` shows what a license covers. Without a valid license every test runs; the build never
 fails because of it. A subscription's license runs at most 40 days ahead and renews itself through the
 daily refresh; machines that cannot reach the license service use an annual license file and set
 `TESTDETTA_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).

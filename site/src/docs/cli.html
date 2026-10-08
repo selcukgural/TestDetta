@@ -158,7 +158,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
 <pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
 
 <h2 id="license-commands"><code>td license</code></h2>
-<p><code>td license status</code> checks the license the way <code>td test</code> would and prints what it covers: licensee, seats, active committers over the last 30 days, the bot list, scopes, the end date. It counts committers on your machine and sends no names or email addresses; like <code>td test</code>, it may make the daily license refresh, which sends the license itself. <code>td license install &lt;license|file&gt;</code> stores a license in <code>~/.testdetta/license</code>, for machines where no CI secret can hold it. Until launch no license verifies, so <code>install</code> refuses every license, and <code>status</code> says "Not enforced yet": tests are still selected. See <a href="/docs/license/">License</a>.</p>
+<p><code>td license status</code> checks the license the way <code>td test</code> would and prints what it covers: licensee, seats, active committers over the last 30 days, the bot list, scopes, the end date. It counts committers on your machine and sends no names or email addresses; like <code>td test</code>, it may make the daily license refresh, which sends the license itself. <code>td license install &lt;license|file&gt;</code> stores a license in <code>~/.testdetta/license</code>, for machines where no CI secret can hold it. See <a href="/docs/license/">License</a>.</p>
 
 <h2 id="environment">Environment variables</h2>
 <table>

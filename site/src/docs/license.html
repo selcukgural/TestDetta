@@ -1,7 +1,6 @@
 <!-- title: License; layout: docs; description: Pass the {{name}} license to CI, check what it covers, and how it renews. -->
 <h1>License</h1>
 <p class="lead">Public repositories use {{name}} for free. Private repositories pass a license string to CI. A license problem never fails a build: without a valid license, every test runs, as it did before {{name}}.</p>
-<div class="callout"><p><strong>Until launch</strong>, licenses are not sold or enforced yet: {{name}} checks the license and reports what it found, as described here (<code>td license status</code> adds "Not enforced yet"), but selects tests whatever the check says, and no license verifies or can be installed until the license service has its first key.</p></div>
 
 <h2>Public repositories</h2>
 <p>A public repository needs no license, but {{name}} only knows a repository is public where the CI says so:</p>
@@ -20,7 +19,7 @@
   <li><code>.testdetta/license</code> in the repository.</li>
 </ol>
 <p>A secret variable is the recommended way. In GitHub Actions, pass it through the action's <code>license</code> input:</p>
-<pre><code>- uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+<pre><code>- uses: {{actionRef}}
   with:
     mode: test
     license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>

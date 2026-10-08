@@ -1,4 +1,4 @@
-<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: ea42ce35898c -->
+<!-- title: GitHub Actions; layout: docs; description: {{name}} action'ı ile varsayılan branch'te kapsam haritaları kaydedin ve pull request'lerde yalnızca etkilenen testleri çalıştırın.; source: c38e93cb413f -->
 <h1>GitHub Actions</h1>
 <p class="lead">Varsayılan branch'teki her commit için bir harita kaydedin ve pull request'lerin yalnızca değişikliklerinin etkilediği testleri çalıştırmasını sağlayın. Action, <code>tool.lock</code> içinde sabitlediği {{name}} paketini nuget.org'dan indirir, çalıştırmadan önce SHA-512'sini kontrol eder ve haritaları Actions önbelleğinde tutar.</p>
 
@@ -28,14 +28,14 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           dotnet-test-args: --logger trx
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit modu: bu süreden sonra yeni bir değişikliğe başlamaz (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; sınırsız için <code>none</code>); o sırada hâlâ çalışan bir değişiklik tamamlanır, bu yüzden denetim bütçeden sonra bitebilir ve rapor ne kadar aştığını söyler. Job'un <code>timeout-minutes</code> değerinin altında bu payı bırakın.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit modu: aynı anda test edilen değişiklikler, her biri kendi kopyasında; bellek kullanımı bununla artar.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test, shadow ve audit modları: en yeni haritayı bulmak için Actions önbelleklerini listeler (<code>actions: read</code> gerektirir).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test modu: <code>TESTDETTA_LICENSE</code> gibi bir depo ya da organizasyon secret'ından gelen lisans dizesi. Açık depolar lisansa ihtiyaç duymaz. Lisanslama lansmanda açılana kadar hiçbir depo duymaz; sonrasında geçerli bir lisans olmadan tüm testler çalışır. Job bu yüzden asla başarısız olmaz. Shadow ve audit modları onu hiç okumaz.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test modu: <code>TESTDETTA_LICENSE</code> gibi bir depo ya da organizasyon secret'ından gelen lisans dizesi. Açık depolar lisansa ihtiyaç duymaz. Geçerli bir lisans olmadan tüm testler çalışır; job bu yüzden asla başarısız olmaz. Shadow ve audit modları onu hiç okumaz.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Analiz edilecek, depo içindeki herhangi bir dizin.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>{{name}}'nın üzerinde çalıştığı .NET 10 SDK'yı kurar. Job'da zaten varsa <code>false</code> yapın.</td></tr>
   </tbody>
@@ -92,7 +92,7 @@ jobs:
 <p>{{name}}'yı hiçbir testi atlamadan denemek için pull request'lerde <code>mode: shadow</code> kullanın. Komutunuzun çalıştırdığı her test çalışır ve job'un sonucu bu çalıştırmanınkidir; job özeti ve rapor artifact'i seçimin neyi çalıştıracağını, ölçülen dakikaları ve dışarıda bırakacağı her başarısız sınıfı gösterir. Artifact'in adı <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code> biçimindedir, her job ve matris işi için bir tane (<code>shadow-artifact-suffix</code> kendi parçanızı ekler), ve en fazla 90 gün saklanır (deponuzun artifact saklama ayarı bunu kısaltabilir). Kendi job'unuzun yaptığı gibi tek bir komut olarak çalışması için solution'ınızı <code>dotnet-test-args</code> içinde belirtin; bkz. <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
 <p>Lisans gerektirmez, bu yüzden lisans secret'ı ona iletilmez ve {{name}}'nın kendisi shadow mode'da hiçbir ağ çağrısı yapmaz. Action, {{name}} paketini nuget.org'dan indirir (SHA-512'sine karşı doğrulanarak) ve test modunda olduğu gibi Actions önbelleğinizdeki haritaları listeler ve geri yükler. Testlerden önceki hiçbir adım job'u düşürmez: biri kendi işini yapamazsa (shallow bir checkout, indirme, eksik bir base branch, geçersiz bir girdi) ya da {{name}} testlerin bir sonucu olmadan biterse, adım bunun yerine aynı argümanlarla düz <code>dotnet test</code> komutunuzu çalıştırır ve job özeti nedenini söyler. Checksum'ı eşleşmeyen bir paket asla çalıştırılmaz. Raporun yüklenmesinin başarısız olması da job'u asla düşürmez.</p>
 <pre><code>      - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           dotnet-test-args: Shop.slnx</code></pre>
@@ -101,7 +101,7 @@ jobs:
         run: dotnet build Shop.slnx -c Debug
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           configuration: Debug
@@ -134,7 +134,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      - uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+      - uses: {{actionRef}}
         with:
           mode: audit
           audit-budget: 4h</code></pre>

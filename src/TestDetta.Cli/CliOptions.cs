@@ -335,8 +335,7 @@ internal sealed record CliOptions(
           --no-build           Use the existing build output (built with the same -c) instead of building
 
         License: set TESTDETTA_LICENSE (or TESTDETTA_LICENSE_FILE) in CI. Public repositories need none.
-        Until licensing is switched on at launch, tests are selected with or without one; after that,
-        without a valid license every test runs. The build never fails because of it.
+        Without a valid license every test runs. The build never fails because of it.
 
         Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed (td audit: a miss).
         """;

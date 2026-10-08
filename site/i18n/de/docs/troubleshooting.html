@@ -1,4 +1,4 @@
-<!-- title: Fehlerbehebung; layout: docs; description: Was zu tun ist, wenn {{name}} mehr auswählt als erwartet, keine Coverage-Map findet oder den Basis-Commit nicht findet.; source: 61a70f19f50c -->
+<!-- title: Fehlerbehebung; layout: docs; description: Was zu tun ist, wenn {{name}} mehr auswählt als erwartet, keine Coverage-Map findet oder den Basis-Commit nicht findet.; source: 469ec3d17ce3 -->
 <h1>Fehlerbehebung</h1>
 <p class="lead">Jeder Eintrag geht von dem aus, was Sie sehen. Bei allen schreibt <code>-v</code> jede Entscheidung samt Grund nach stderr; dieses Log beantwortet die meisten Fragen, und genau das sollten Sie uns schicken.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
@@ -34,7 +34,7 @@
 <p>Maps werden für Commits auf dem Standard-Branch aufgezeichnet, und ein Pull Request findet die neueste an oder vor seiner Merge-Base. Ein Squash-Merge oder Rebase erzeugt neue Commits auf dem Standard-Branch; der nächste Push zeichnet eine Map für sie auf, und bis dahin verwenden Pull Requests die vorherige Map über die Drift-Bridge. Ein Force-Push auf einen Pull-Request-Branch ändert nichts: Die Merge-Base wird neu berechnet.</p>
 
 <h2 id="forks">Pull Requests aus Forks</h2>
-<p>CI-Systeme geben Secrets nicht an Pull Requests aus Forks weiter. Öffentliche Repositorys benötigen keine Lizenz, für sie ändert sich also nichts. Bei einem privaten Repository führt ein Lauf ohne Lizenz, sobald die Lizenzierung zum Start eingeschaltet ist, alle Tests aus, wie ohne {{name}}; bis dahin wählt er Tests wie gewohnt aus.</p>
+<p>CI-Systeme geben Secrets nicht an Pull Requests aus Forks weiter. Öffentliche Repositorys benötigen keine Lizenz, für sie ändert sich also nichts. Bei einem privaten Repository führt ein Lauf ohne Lizenz alle Tests aus, wie ohne {{name}}.</p>
 
 <h2 id="faq">Fragen</h2>
 <h3>Ist die Code-Coverage eines ausgewählten Laufs vollständig?</h3>

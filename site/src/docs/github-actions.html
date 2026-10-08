@@ -28,14 +28,14 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           dotnet-test-args: --logger trx
@@ -82,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit mode: start no change after this long (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> for no limit); a change still running then finishes, so the audit can end after the budget, and the report says by how much. Leave that headroom below the job's <code>timeout-minutes</code>.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit mode: changes tested at once, each in its own copy; memory use grows with it.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test, shadow and audit modes: lists the Actions caches to find the newest map (needs <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>TESTDETTA_LICENSE</code>. Public repositories need none. Until licensing is switched on at launch, no repository does; after that, without a valid license every test runs. The job never fails because of it. Shadow and audit modes never read it.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>TESTDETTA_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it. Shadow and audit modes never read it.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Any directory inside the repository to analyze.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Install the .NET 10 SDK {{name}} runs on. Set to <code>false</code> if the job already has it.</td></tr>
   </tbody>
@@ -92,7 +92,7 @@ jobs:
 <p>To try {{name}} without skipping anything, use <code>mode: shadow</code> on pull requests. Every test your command runs, runs, and the job's result is that run's; the job summary and the report artifact show what the selection would have run, the measured minutes, and any failing class it would have left out. The artifact is named <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code>, one per job and matrix leg (<code>shadow-artifact-suffix</code> adds your own part), and is kept for up to 90 days (your repository's artifact retention setting can shorten it). Name your solution in <code>dotnet-test-args</code> to run it as one command, as your own job does; see <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
 <p>It needs no license, so the license secret is not passed to it, and {{name}} itself makes no network call in shadow mode. The Action downloads the {{name}} package from nuget.org (checked against its SHA-512) and lists and restores the maps in your Actions cache, as in test mode. No step before the tests fails the job: if one cannot do its part (a shallow checkout, the download, a missing base branch, an invalid input), or {{name}} ends without a result of the tests, the step runs your plain <code>dotnet test</code> with the same arguments instead, and the job summary says why. A package that does not match its checksum is never run. A failed upload of the report never fails the job either.</p>
 <pre><code>      - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           dotnet-test-args: Shop.slnx</code></pre>
@@ -101,7 +101,7 @@ jobs:
         run: dotnet build Shop.slnx -c Debug
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: shadow
           configuration: Debug
@@ -134,7 +134,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      - uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+      - uses: {{actionRef}}
         with:
           mode: audit
           audit-budget: 4h</code></pre>

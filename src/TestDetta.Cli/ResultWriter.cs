@@ -276,8 +276,8 @@ internal static class ResultWriter
 
     /// <summary>
     /// A line about the license when it matters to the reader: only when the license is enforced and
-    /// it is not simply valid (a warning, or every test running). Null otherwise, so runs before launch
-    /// and runs with a valid license stay quiet.
+    /// it is not simply valid (a warning, or every test running). Null otherwise, so runs with a valid
+    /// license, and runs before licensing was enforced, stay quiet.
     /// </summary>
     /// <param name="license">The license check, or null.</param>
     /// <param name="enforced">True when the license decides the run.</param>

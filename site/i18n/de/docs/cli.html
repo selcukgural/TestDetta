@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: cb9624dda3da -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 5c2e0f4c2b64 -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -158,7 +158,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
 <pre><code>td audit --target-broken 150 --budget 6h --work-dir "$RUNNER_TEMP"</code></pre>
 
 <h2 id="license-commands"><code>td license</code></h2>
-<p><code>td license status</code> prüft die Lizenz so, wie <code>td test</code> es tun würde, und gibt aus, was sie abdeckt: Lizenznehmer, Seats, aktive Committer der letzten 30 Tage, die Bot-Liste, Scopes und das Enddatum. Es zählt die Committer auf Ihrem Rechner und sendet keine Namen oder E-Mail-Adressen; wie <code>td test</code> kann es die tägliche Lizenzaktualisierung vornehmen, die die Lizenz selbst sendet. <code>td license install &lt;license|file&gt;</code> speichert eine Lizenz in <code>~/.testdetta/license</code>, für Rechner, auf denen kein CI-Secret sie aufnehmen kann. Bis zum Start lässt sich keine Lizenz verifizieren, daher weist <code>install</code> jede Lizenz ab, und <code>status</code> meldet "Not enforced yet": Tests werden weiterhin ausgewählt. Siehe <a href="/docs/license/">Lizenz</a>.</p>
+<p><code>td license status</code> prüft die Lizenz so, wie <code>td test</code> es tun würde, und gibt aus, was sie abdeckt: Lizenznehmer, Seats, aktive Committer der letzten 30 Tage, die Bot-Liste, Scopes und das Enddatum. Es zählt die Committer auf Ihrem Rechner und sendet keine Namen oder E-Mail-Adressen; wie <code>td test</code> kann es die tägliche Lizenzaktualisierung vornehmen, die die Lizenz selbst sendet. <code>td license install &lt;license|file&gt;</code> speichert eine Lizenz in <code>~/.testdetta/license</code>, für Rechner, auf denen kein CI-Secret sie aufnehmen kann. Siehe <a href="/docs/license/">Lizenz</a>.</p>
 
 <h2 id="environment">Umgebungsvariablen</h2>
 <table>

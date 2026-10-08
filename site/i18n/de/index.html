@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} liest Ihren Git-Diff und führt nur die .NET-Testklassen aus, die eine Änderung betreffen kann. Ist es sich nicht sicher, führt es mehr aus, nie weniger.; source: 658501dbeb84 -->
+<!-- title: {{name}}; description: {{name}} liest Ihren Git-Diff und führt nur die .NET-Testklassen aus, die eine Änderung betreffen kann. Ist es sich nicht sicher, führt es mehr aus, nie weniger.; source: 6069e638934d -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -180,7 +180,7 @@
     </div>
     <dl class="promise-list" data-reveal>
       <div><dt>0</dt><dd><strong>Zeilen Ihres Codes verlassen Ihre CI</strong>Analyse, Coverage-Maps und Testergebnisse bleiben auf Ihren Rechnern.</dd></div>
-      <div><dt>0</dt><dd><strong>Builds scheitern an einem Lizenzproblem</strong>Bis die Lizenzierung zum Start eingeschaltet wird, ist keine Lizenz nötig; danach laufen ohne gültige Lizenz alle Tests, wie bisher.</dd></div>
+      <div><dt>0</dt><dd><strong>Builds scheitern an einem Lizenzproblem</strong>Ohne gültige Lizenz laufen alle Tests, wie vor {{name}}.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>Test-Frameworks und Test Runner</strong>xUnit v2 und v3, NUnit, MSTest und TUnit, unter VSTest und Microsoft.Testing.Platform.</dd></div>
       <div><dt>1</dt><dd><strong>Art von Netzwerkaufruf, optional</strong>Eine Lizenzerneuerung, die die Lizenz sendet und sonst nichts, höchstens einmal am Tag pro Rechner (einmal pro Job auf Runnern, die frisch starten).</dd></div>
     </dl>
@@ -239,12 +239,12 @@ jobs:
           fetch-depth: 0
 
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           license: ${{ secrets.TESTDETTA_LICENSE }}</pre>

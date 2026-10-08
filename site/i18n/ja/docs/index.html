@@ -1,4 +1,4 @@
-<!-- title: はじめに; layout: docs; description: {{name}} を CI に導入し、変更が影響しうる .NET のテストだけを実行します。; source: 92ddac6ece11 -->
+<!-- title: はじめに; layout: docs; description: {{name}} を CI に導入し、変更が影響しうる .NET のテストだけを実行します。; source: c968767e0689 -->
 <h1>はじめに</h1>
 <p class="lead">{{name}} はブランチをそのベースと比較し、変更を検出できるテストプロジェクトとテストクラスを割り出して、それらだけを実行します。確信が持てないときは、少なくではなく多めに実行します。見えないものは<a href="/docs/limitations/">制限事項</a>に一覧があります。</p>
 
@@ -15,20 +15,19 @@
 <h3>GitHub Actions</h3>
 <p>GitHub Action は固定した {{name}} のパッケージを nuget.org から取得し、実行前にその SHA-512 を確認するため、インストールするものはありません。ワークフローに 2 つのステップを追加します。1 つは既定のブランチへのプッシュ時にカバレッジマップを記録し、もう 1 つはプルリクエストで影響を受けるテストだけを実行します。</p>
 <pre><code>- if: github.event_name == 'push'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: record
 
 - if: github.event_name == 'pull_request'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: test</code></pre>
 <p>ワークフロー全体、必要なアクセス許可、すべての入力については <a href="/docs/github-actions/">GitHub Actions</a> を参照してください。</p>
 
 <h3>その他の CI システム</h3>
 <p>GitLab CI、Jenkins、Azure DevOps、Bitbucket、オンプレミス環境でも同じ 2 つのコマンドを実行します。コミットごとのカバレッジマップを格納するフォルダー（<code>--maps-dir</code>）は、共有ディスクまたはオブジェクトストレージに保持します。{{name}} は .NET ツールとしてインストールします。</p>
-<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
-<div class="callout"><p>パッケージ名はリリース時に決定します。それまでは <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> でソースからツールをビルドし、<code>td</code> と書かれている箇所では代わりに <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> を呼び出してください。</p></div>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
 <p>各システム向けのパイプラインは<a href="/docs/other-ci/">その他の CI システム</a>にあります。</p>
 
 <h2>最初に試すコマンド</h2>

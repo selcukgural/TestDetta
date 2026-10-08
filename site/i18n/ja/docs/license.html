@@ -1,7 +1,6 @@
-<!-- title: ライセンス; layout: docs; description: {{name}} のライセンスを CI に渡す方法、その対象範囲の確認方法、更新のしくみを説明します。; source: 5e0d26276ed1 -->
+<!-- title: ライセンス; layout: docs; description: {{name}} のライセンスを CI に渡す方法、その対象範囲の確認方法、更新のしくみを説明します。; source: e6a5b71b9c36 -->
 <h1>ライセンス</h1>
 <p class="lead">パブリックリポジトリでは {{name}} を無料で使用できます。プライベートリポジトリでは、ライセンス文字列を CI に渡します。ライセンスの問題でビルドが失敗することはありません。有効なライセンスがない場合は、{{name}} を導入する前と同じようにすべてのテストを実行します。</p>
-<div class="callout"><p><strong>正式リリースまでは</strong>、ライセンスの販売も適用もまだ行っていません。{{name}} はここで説明するとおりにライセンスを確認し、その結果を報告します（<code>td license status</code> には "Not enforced yet" が追加されます）が、確認の結果にかかわらずテストを選択します。また、ライセンスサービスが最初の鍵を持つまでは、どのライセンスも検証に通らず、インストールもできません。</p></div>
 
 <h2>パブリックリポジトリ</h2>
 <p>パブリックリポジトリにライセンスは不要ですが、{{name}} がリポジトリをパブリックと判断できるのは、CI がそれを示している場合だけです。</p>
@@ -20,7 +19,7 @@
   <li>リポジトリ内の <code>.testdetta/license</code></li>
 </ol>
 <p>推奨される方法はシークレット変数です。GitHub Actions では、アクションの <code>license</code> 入力で渡します。</p>
-<pre><code>- uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+<pre><code>- uses: {{actionRef}}
   with:
     mode: test
     license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>

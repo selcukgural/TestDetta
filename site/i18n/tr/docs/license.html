@@ -1,7 +1,6 @@
-<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: 5e0d26276ed1 -->
+<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: e6a5b71b9c36 -->
 <h1>Lisans</h1>
 <p class="lead">Açık depolar {{name}}'yı ücretsiz kullanır. Özel depolar CI'a bir lisans dizesi iletir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: geçerli bir lisans olmadan, tıpkı {{name}}'dan önceki gibi tüm testler çalışır.</p>
-<div class="callout"><p><strong>Lansmana kadar</strong> lisanslar henüz satılmıyor ve uygulanmıyor: {{name}} lisansı burada anlatıldığı gibi kontrol eder ve ne bulduğunu bildirir (<code>td license status</code> "Not enforced yet" ekler), ancak kontrol ne derse desin testleri seçer; lisans servisi ilk anahtarına sahip olana kadar hiçbir lisans doğrulanamaz ya da kurulamaz.</p></div>
 
 <h2>Açık depolar</h2>
 <p>Açık bir depo lisansa ihtiyaç duymaz, ancak {{name}} bir deponun açık olduğunu yalnızca CI bunu bildirdiğinde bilir:</p>
@@ -20,7 +19,7 @@
   <li>depodaki <code>.testdetta/license</code>.</li>
 </ol>
 <p>Önerilen yol bir secret değişkendir. GitHub Actions'ta onu action'ın <code>license</code> girdisi üzerinden iletin:</p>
-<pre><code>- uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+<pre><code>- uses: {{actionRef}}
   with:
     mode: test
     license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>

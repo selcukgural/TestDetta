@@ -180,7 +180,7 @@
     </div>
     <dl class="promise-list" data-reveal>
       <div><dt>0</dt><dd><strong>lines of your code leave your CI</strong>Analysis, coverage maps and test results stay on your machines.</dd></div>
-      <div><dt>0</dt><dd><strong>builds failed by a license problem</strong>No license is needed until licensing is switched on at launch; after that, without a valid license every test runs, as before.</dd></div>
+      <div><dt>0</dt><dd><strong>builds failed by a license problem</strong>Without a valid license every test runs, as before {{name}}.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>test frameworks and runners</strong>xUnit v2 and v3, NUnit, MSTest and TUnit, on VSTest and Microsoft.Testing.Platform.</dd></div>
       <div><dt>1</dt><dd><strong>kind of network call, optional</strong>A license renewal that sends the license and nothing else, at most once a day per machine (once per job on runners that start fresh).</dd></div>
     </dl>
@@ -239,12 +239,12 @@ jobs:
           fetch-depth: 0
 
       - if: github.event_name == 'push'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: record
 
       - if: github.event_name == 'pull_request'
-        uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+        uses: {{actionRef}}
         with:
           mode: test
           license: ${{ secrets.TESTDETTA_LICENSE }}</pre>

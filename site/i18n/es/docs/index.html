@@ -1,4 +1,4 @@
-<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: 92ddac6ece11 -->
+<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: c968767e0689 -->
 <h1>Primeros pasos</h1>
 <p class="lead">{{name}} compara tu rama con su base, determina qué proyectos de pruebas y qué clases de prueba pueden observar el cambio, y ejecuta solo esos. Cuando no puede estar seguro, ejecuta más, nunca menos; lo que no puede ver se enumera en <a href="/docs/limitations/">Limitaciones</a>.</p>
 
@@ -15,20 +15,19 @@
 <h3>GitHub Actions</h3>
 <p>La GitHub Action obtiene de nuget.org el paquete de {{name}} que fija y comprueba su SHA-512 antes de ejecutarlo; no hay nada que instalar. Añade dos pasos a tu workflow: uno registra un mapa de cobertura en los push a tu rama predeterminada y el otro ejecuta solo las pruebas afectadas en las pull requests.</p>
 <pre><code>- if: github.event_name == 'push'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: record
 
 - if: github.event_name == 'pull_request'
-  uses: &lt;owner&gt;/testdetta@&lt;sha&gt;
+  uses: {{actionRef}}
   with:
     mode: test</code></pre>
 <p>El workflow completo, los permisos que necesita y todas las entradas están en <a href="/docs/github-actions/">GitHub Actions</a>.</p>
 
 <h3>Otros sistemas de CI</h3>
 <p>GitLab CI, Jenkins, Azure DevOps, Bitbucket y las instalaciones on-premises ejecutan los mismos dos comandos, con una carpeta de mapas de cobertura por commit (<code>--maps-dir</code>) guardada en un disco compartido o en almacenamiento de objetos. Instala {{name}} como herramienta de .NET:</p>
-<pre><code>dotnet tool install --global &lt;package&gt;</code></pre>
-<div class="callout"><p>El nombre del paquete se fijará en el lanzamiento. Hasta entonces, compila la herramienta desde el código fuente con <code>dotnet build src/TestDetta.Cli -c Release -o testdetta-bin</code> y llama a <code>dotnet testdetta-bin/TestDetta.Cli.dll</code> allí donde aparezca <code>td</code>.</p></div>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
 <p>Los pipelines para cada sistema están en <a href="/docs/other-ci/">Otros sistemas de CI</a>.</p>
 
 <h2>Primeros comandos</h2>

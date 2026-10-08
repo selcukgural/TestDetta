@@ -1,4 +1,4 @@
-<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: 61a70f19f50c -->
+<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: 469ec3d17ce3 -->
 <h1>Sorun giderme</h1>
 <p class="lead">Her başlık gördüğünüz durumdan yola çıkar. Hepsi için <code>-v</code>, her kararı gerekçesiyle birlikte stderr'e yazar; bu log çoğu soruyu yanıtlar ve bize göndermeniz gereken de odur.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
@@ -34,7 +34,7 @@
 <p>Haritalar varsayılan branch'teki commit'ler için kaydedilir ve bir pull request, merge base'indeki ya da ondan önceki en yeni haritayı bulur. Bir squash merge ya da rebase, varsayılan branch'te yeni commit'ler oluşturur; bir sonraki push onlar için bir harita kaydeder, o zamana kadar pull request'ler önceki haritayı drift bridge üzerinden kullanır. Bir pull request branch'ine yapılan force push hiçbir şeyi değiştirmez: merge base yeniden hesaplanır.</p>
 
 <h2 id="forks">Fork'lardan gelen pull request'ler</h2>
-<p>CI sistemleri fork'lardan gelen pull request'lere secret iletmez. Açık depolar lisansa ihtiyaç duymadığından onlar için hiçbir şey değişmez. Özel bir depoda, lisanslama lansmanda açıldıktan sonra lisanssız bir koşu, tıpkı {{name}} olmadan olacağı gibi tüm testleri çalıştırır; o zamana kadar testleri her zamanki gibi seçer.</p>
+<p>CI sistemleri fork'lardan gelen pull request'lere secret iletmez. Açık depolar lisansa ihtiyaç duymadığından onlar için hiçbir şey değişmez. Özel bir depoda lisanssız bir koşu, tıpkı {{name}} olmadan olacağı gibi tüm testleri çalıştırır.</p>
 
 <h2 id="faq">Sorular</h2>
 <h3>Seçimli bir koşunun code coverage'ı eksiksiz mi?</h3>

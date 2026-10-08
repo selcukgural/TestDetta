@@ -27,8 +27,7 @@ TestDetta itself never uses the network for maps.
   `TESTDETTA_LICENSE_FILE`.
   - Public repositories need none on GitLab CI (`CI_PROJECT_VISIBILITY`) and GitHub Actions. Jenkins,
     Azure DevOps and Bitbucket do not tell TestDetta, so there every repository needs one.
-  - Until licensing is switched on at launch, none is needed: tests are selected with or without one.
-    After that, without a valid license every test runs, and the build never fails because of it.
+  - Without a valid license every test runs, and the build never fails because of it.
   - A subscription's license runs at most 40 days ahead and renews only through the daily refresh. On a
     network that cannot reach the license service, use an annual license (its file runs for the whole term)
     and set `TESTDETTA_LICENSE_REFRESH=off` (docs/design/licensing.md).
@@ -40,9 +39,7 @@ TestDetta itself never uses the network for maps.
 - **Clean-up:** maps of old commits are only needed for 50 commits. Delete older folders with a
   scheduled job or a storage lifecycle rule.
 
-Install TestDetta as a .NET tool (`dotnet tool install --global <package>`; the package name is set at
-launch). Until then, build it from source with `dotnet build src/TestDetta.Cli -c Release -o testdetta-bin`
-and call `dotnet testdetta-bin/TestDetta.Cli.dll` wherever `td` appears below.
+Install TestDetta as a .NET tool: `dotnet tool install --global TestDetta`.
 
 ## GitLab CI
 
