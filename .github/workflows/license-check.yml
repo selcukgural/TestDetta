@@ -39,5 +39,9 @@ jobs:
           TESTDETTA_LICENSE: ${{ secrets.TESTDETTA_LICENSE }}
         run: td license status -v
 
+      # An empty home: the step above stored the refreshed license in ~/.testdetta, as a persistent agent keeps it.
       - name: Without a license (every test runs, the job does not fail)
-        run: td license status
+        run: |
+          export HOME="$RUNNER_TEMP/no-license-home" DOTNET_CLI_HOME="$HOME"
+          mkdir -p "$HOME"
+          td license status
