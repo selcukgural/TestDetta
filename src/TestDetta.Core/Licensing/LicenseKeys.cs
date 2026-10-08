@@ -7,7 +7,10 @@ public static class LicenseKeys
     /// Public keys (SubjectPublicKeyInfo) by key id: <c>td-2026-10</c>, the license service's production key
     /// (<c>deploy/license-service/admin.sh production public-key</c>). The sandbox's key is never trusted.
     /// </summary>
-    public static IReadOnlyDictionary<string, byte[]> Trusted { get; } = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+    public static IReadOnlyDictionary<string, byte[]> Trusted { get; } = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+    {
+        ["td-2026-10"] = Convert.FromBase64String("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYK2kCQrbj8gyYSxBhD12bx/9jVPVE7ogMrqaUpxRDQeif0dlMH3msH/fwMsizXjmfNvDV7loj8rHJ8OvkepWeg=="),
+    };
 
     /// <summary>
     /// True since launch: without a license that covers the run, every test runs. It was false before, when
