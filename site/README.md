@@ -83,3 +83,19 @@ under the company account, e.g. a separate `gcloud config configurations create 
    (Porkbun), after deleting Porkbun's parking records; add `www.testdetta.com` as a redirect to it.
 
 The custom 404 page is the English one: Hosting serves only the root `404.html`.
+
+## Evaluation numbers
+
+The corpus numbers (`corpus*` in `site.json`), the home page's chart and the examples page's table come from an
+evaluation round, written by one script in every language:
+
+```sh
+python3 eval/site/corpus_site.py --round ~/sift-corpus/runs-final-1007 \
+  --override ~/sift-corpus/runs-final-1007-rejudge --override ~/sift-corpus/runs-final-1007-nlog-clean
+```
+
+It reads the round's `summary.md` (and each repository's `synthetic.md` for the classes run per failure); an
+`--override` folder replaces the round's results for the repositories it holds. The chart and table sit between
+`<!-- corpus:chart -->` and `<!-- corpus:table -->` markers; the hard-case tiles carry the tag they count
+(`data-tag`). Prose that describes a round (its dates, what the misses were, which repositories gain most) is
+edited by hand in five languages, and the translations' source hashes updated as for any change.

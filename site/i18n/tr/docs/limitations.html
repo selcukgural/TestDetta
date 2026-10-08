@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: e26f7079da42 -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: fad52b9f54c6 -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -16,7 +16,7 @@
 <div class="callout"><p><code>TryGetValue</code> ile kontrol edilen bir <code>Dictionary</code> gibi elle yazılmış bir önbellek, kullanıcılarını yine de gizleyebilir. Varsayılan branch'te tüm test paketini çalıştırmaya devam edin; kayıt bunu zaten yapar.</p></div>
 
 <h2>Bir test sınıfının sonrakine bıraktığı durum</h2>
-<p>Bir test sınıfı, aynı süreçte kendisinden önce koşan bir sınıfın bıraktığına göre farklı davranabilir; örneğin ayarlanıp geri alınmayan genel bir yapılandırma. Harita sınıfın kayıttaki sırada izlediği yolu tutar; bu yüzden sınıfın tek başına ya da başka bir sırada çalıştıracağı kodda yapılan bir değişiklik onu seçmeyebilir. Aynı sırayla yapılan tam koşu da o sınıfı düşürmez. Corpus'ta bu durum 2.562 değişiklikten birini gizledi (NLog'un <code>LogManagerTests</code> sınıfı). Paylaşılan durumu kurulumda sıfırlayan testlerde bu sorun olmaz.</p>
+<p>Bir test sınıfı, aynı süreçte kendisinden önce koşan bir sınıfın bıraktığına göre farklı davranabilir; örneğin ayarlanıp geri alınmayan genel bir yapılandırma. Harita sınıfın kayıttaki sırada izlediği yolu tutar; bu yüzden sınıfın tek başına ya da başka bir sırada çalıştıracağı kodda yapılan bir değişiklik onu seçmeyebilir. Aynı sırayla yapılan tam koşu da o sınıfı düşürmez. Corpus'ta bu durum {{corpusFailingChanges}} değişiklikten birini gizledi (NLog'un <code>LogManagerTests</code> sınıfı). Paylaşılan durumu kurulumda sıfırlayan testlerde bu sorun olmaz.</p>
 
 <h2>Proje dosyaları</h2>
 <p>Proje dosyaları; referanslar, derlenen ve gömülü öğeler, assembly adları ve hedef framework'ler için varsayılan yapılandırmada ve restore yapılmadan MSBuild ile değerlendirilir (tek bir <code>dotnet msbuild</code> çağrısı, <code>.testdetta/cache</code> içinde önbelleğe alınır).</p>

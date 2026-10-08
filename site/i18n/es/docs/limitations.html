@@ -1,4 +1,4 @@
-<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: e26f7079da42 -->
+<!-- title: Limitaciones; layout: docs; description: Qué admite {{name}} y dónde recurre a ejecutar más pruebas.; source: fad52b9f54c6 -->
 <h1>Limitaciones</h1>
 <p class="lead">Donde {{name}} no puede ver algo, selecciona más. Esta página enumera esos casos, para que sepas cuándo una selección es más amplia de lo necesario, y los pocos casos en los que un patrón escrito a mano puede ocultar una prueba.</p>
 
@@ -16,7 +16,7 @@
 <div class="callout"><p>Una caché escrita a mano, como un <code>Dictionary</code> consultado con <code>TryGetValue</code>, todavía puede ocultar a quienes la usan. Sigue ejecutando el conjunto completo en la rama predeterminada; el registro ya lo hace.</p></div>
 
 <h2>Estado que una clase de prueba deja a la siguiente</h2>
-<p>Una clase de prueba puede comportarse de otra forma según lo que una clase anterior del mismo proceso dejó atrás, como una configuración global que fijó y nunca restableció. El mapa registra el camino que siguió la clase en el orden grabado, así que un cambio en el código que ejecutaría sola o en otro orden puede no seleccionarla. La ejecución completa en el mismo orden tampoco la hace fallar. En el corpus esto ocultó un cambio de 2.562 (<code>LogManagerTests</code> de NLog). Las pruebas que restablecen el estado compartido en su preparación lo evitan.</p>
+<p>Una clase de prueba puede comportarse de otra forma según lo que una clase anterior del mismo proceso dejó atrás, como una configuración global que fijó y nunca restableció. El mapa registra el camino que siguió la clase en el orden grabado, así que un cambio en el código que ejecutaría sola o en otro orden puede no seleccionarla. La ejecución completa en el mismo orden tampoco la hace fallar. En el corpus esto ocultó un cambio de {{corpusFailingChanges}} (<code>LogManagerTests</code> de NLog). Las pruebas que restablecen el estado compartido en su preparación lo evitan.</p>
 
 <h2>Archivos de proyecto</h2>
 <p>Los archivos de proyecto los evalúa MSBuild (una llamada a <code>dotnet msbuild</code>, almacenada en caché en <code>.testdetta/cache</code>) para obtener referencias, elementos compilados e incrustados, nombres de ensamblado y frameworks de destino, en la configuración predeterminada y sin restore.</p>

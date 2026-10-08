@@ -44,6 +44,7 @@
   "themeSystem": "sistema",
   "themeLight": "claro",
   "themeDark": "oscuro",
-  "corpusFailingChanges": "2422",
-  "corpusMedianShare": "30 %"
+  "corpusFailingChanges": "2561",
+  "corpusMedianShare": "31 %",
+  "corpusUpperBound": "0,19 %"
 }

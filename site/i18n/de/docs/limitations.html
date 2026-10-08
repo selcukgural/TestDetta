@@ -1,4 +1,4 @@
-<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: e26f7079da42 -->
+<!-- title: Einschränkungen; layout: docs; description: Was {{name}} unterstützt und wo es darauf zurückfällt, mehr Tests auszuführen.; source: fad52b9f54c6 -->
 <h1>Einschränkungen</h1>
 <p class="lead">Wo {{name}} etwas nicht sehen kann, wählt es mehr aus. Diese Seite listet diese Stellen auf, damit Sie wissen, wann eine Auswahl breiter ist als nötig, sowie die wenigen Fälle, in denen ein handgeschriebenes Muster einen Test verbergen kann.</p>
 
@@ -16,7 +16,7 @@
 <div class="callout"><p>Ein von Hand geschriebener Cache, etwa ein mit <code>TryGetValue</code> abgefragtes <code>Dictionary</code>, kann seine Nutzer weiterhin verbergen. Führen Sie die vollständige Testsuite weiterhin auf dem Standard-Branch aus; die Aufzeichnung tut genau das.</p></div>
 
 <h2>Zustand, den eine Testklasse der nächsten hinterlässt</h2>
-<p>Eine Testklasse kann sich anders verhalten, je nachdem, was eine frühere Klasse im selben Prozess hinterlassen hat, etwa eine globale Konfiguration, die gesetzt und nie zurückgesetzt wurde. Die Karte hält den Weg fest, den die Klasse in der aufgezeichneten Reihenfolge genommen hat; eine Änderung an Code, den sie allein oder in anderer Reihenfolge ausführen würde, wählt sie daher womöglich nicht aus. Der vollständige Lauf in derselben Reihenfolge lässt sie ebenfalls nicht fehlschlagen. Im Korpus verbarg das eine von 2.562 Änderungen (NLogs <code>LogManagerTests</code>). Tests, die gemeinsamen Zustand in ihrer Vorbereitung zurücksetzen, vermeiden es.</p>
+<p>Eine Testklasse kann sich anders verhalten, je nachdem, was eine frühere Klasse im selben Prozess hinterlassen hat, etwa eine globale Konfiguration, die gesetzt und nie zurückgesetzt wurde. Die Karte hält den Weg fest, den die Klasse in der aufgezeichneten Reihenfolge genommen hat; eine Änderung an Code, den sie allein oder in anderer Reihenfolge ausführen würde, wählt sie daher womöglich nicht aus. Der vollständige Lauf in derselben Reihenfolge lässt sie ebenfalls nicht fehlschlagen. Im Korpus verbarg das eine von {{corpusFailingChanges}} Änderungen (NLogs <code>LogManagerTests</code>). Tests, die gemeinsamen Zustand in ihrer Vorbereitung zurücksetzen, vermeiden es.</p>
 
 <h2>Projektdateien</h2>
 <p>Projektdateien werden von MSBuild ausgewertet (ein <code>dotnet msbuild</code>-Aufruf, zwischengespeichert in <code>.testdetta/cache</code>), und zwar für Referenzen, kompilierte und eingebettete Elemente, Assemblynamen und Ziel-Frameworks, in der Standardkonfiguration und ohne Restore.</p>

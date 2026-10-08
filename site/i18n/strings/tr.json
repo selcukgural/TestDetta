@@ -44,6 +44,7 @@
   "themeSystem": "sistem",
   "themeLight": "açık",
   "themeDark": "koyu",
-  "corpusFailingChanges": "2.422",
-  "corpusMedianShare": "%30"
+  "corpusFailingChanges": "2.561",
+  "corpusMedianShare": "%31",
+  "corpusUpperBound": "%0,19"
 }

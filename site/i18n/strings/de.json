@@ -44,6 +44,7 @@
   "themeSystem": "System",
   "themeLight": "hell",
   "themeDark": "dunkel",
-  "corpusFailingChanges": "2.422",
-  "corpusMedianShare": "30 %"
+  "corpusFailingChanges": "2.561",
+  "corpusMedianShare": "31 %",
+  "corpusUpperBound": "0,19 %"
 }
