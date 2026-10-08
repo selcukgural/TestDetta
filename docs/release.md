@@ -11,7 +11,7 @@ GitHub Action `testdetta/action`, which downloads that package. This repository 
    `release.yml`, environment `nuget`.
 2. **This repository:** the environment `nuget`, limited to tags `v*`, and the variable `NUGET_USER`
    (the nuget.org user name in the policy). Until `NUGET_USER` is set, a release only builds the package.
-3. **GitHub:** the organization `testdetta` and the public repository `testdetta/action`. For the
+3. **GitHub:** the organization `testdetta` and the public repository `TestDetta/action` (created 2026-10-08). For the
    Marketplace listing, the action name must be unique: `TestDetta` in `action.yml`.
 
 ## A release
@@ -21,7 +21,7 @@ GitHub Action `testdetta/action`, which downloads that package. This repository 
    the setup done, pushes it to nuget.org through trusted publishing (a short-lived key, no secret).
 3. The `action-bundle` job waits until nuget.org serves the package, pins its SHA-512 in `tool.lock`
    and uploads the bundle: `action.yml`, `tool.lock`, `README.md`, `LICENSE.txt`.
-4. Copy the bundle into `testdetta/action`, commit, tag `v0.1.0`, and move the `v1` tag to it.
+4. Copy the bundle into `testdetta/action`, commit, tag `v0.1.0`, and move the major tag to it (`v0` while the version is 0.x, `v1` from 1.0.0).
 
 `action.yml` is the same file in both places. Here it builds TestDetta from source (this repository's
 own workflows use the action from the checkout); in the public repository, where there is no source, it
