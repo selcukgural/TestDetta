@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-time (re-runnable): e-mails what needs a person from the license service's logs, through Cloud
-# Monitoring log-based alerts (docs/design/licensing.md, "Alerts"). Usage: alerts.sh [production|sandbox] <address>.
+# Monitoring log-based alerts (docs/design/licensing.md, "Logs and alerts"). Usage: alerts.sh [production|sandbox] <address>.
 # Reads no secret. The service logs one JSON line per entry with a Cloud Logging severity (CloudLogFormatter),
 # so this needs a deploy from a commit that has it.
 #  - Warnings and errors of the service and its jobs: trials paused at the daily ceiling, a license that needs
@@ -21,38 +21,45 @@ ADDRESS="${2:?usage: alerts.sh [production|sandbox] <address>}"
 
 gcloud services enable monitoring.googleapis.com --project $P
 
-CHANNEL=$(gcloud beta monitoring channels list --project $P --filter "type=email AND labels.email_address=\"$ADDRESS\"" --format 'value(name)' | head -n 1)
-if [ -z "$CHANNEL" ]; then
-  CHANNEL=$(gcloud beta monitoring channels create --project $P --type email --display-name "License alerts: $ADDRESS" \
-    --channel-labels "email_address=$ADDRESS" --format 'value(name)')
-fi
-
 SOURCE="(resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$SERVICE\" OR resource.type=\"cloud_run_job\" AND (resource.labels.job_name=\"$SERVICE-trials\" OR resource.labels.job_name=\"$SERVICE-admin\")) AND (log_id(\"run.googleapis.com/stdout\") OR log_id(\"run.googleapis.com/stderr\"))"
 
-# Creates the policy named $1 matching log filter $2, or replaces the one with that name.
-policy() {
-  local name="$1" filter="$2" file
-  file=$(mktemp)
-  NAME="$name" FILTER="$filter" CHANNEL="$CHANNEL" python3 -c '
-import json, os
-print(json.dumps({
-  "displayName": os.environ["NAME"],
-  "combiner": "OR",
-  "conditions": [{"displayName": os.environ["NAME"], "conditionMatchedLog": {"filter": os.environ["FILTER"]}}],
-  "alertStrategy": {"notificationRateLimit": {"period": "3600s"}, "autoClose": "1800s"},
-  "notificationChannels": [os.environ["CHANNEL"]],
-  "documentation": {"mimeType": "text/markdown", "content": "Read the matching lines in Logs Explorer (the link above). docs/design/licensing.md, \"Alerts\"."},
-}))' > "$file"
-  local existing
-  existing=$(gcloud alpha monitoring policies list --project $P --filter "displayName=\"$name\"" --format 'value(name)' | head -n 1)
-  if [ -n "$existing" ]; then
-    gcloud alpha monitoring policies update "$existing" --project $P --policy-from-file "$file" > /dev/null
-  else
-    gcloud alpha monitoring policies create --project $P --policy-from-file "$file" > /dev/null
-  fi
-  rm -f "$file"
-  echo "alert: $name -> $ADDRESS"
-}
+# The Monitoring REST API directly: gcloud's channel and policy commands are beta and alpha components, which a
+# fresh gcloud install lacks and installs only interactively.
+TOKEN=$(gcloud auth print-access-token) PROJECT=$P SERVICE=$SERVICE ADDRESS="$ADDRESS" SOURCE="$SOURCE" python3 - <<'EOF'
+import json, os, urllib.parse, urllib.request
 
-policy "$SERVICE: warnings and errors" "$SOURCE AND severity>=WARNING"
-policy "$SERVICE: trial refused (address or owner had one)" "$SOURCE AND jsonPayload.message:\"Trial request: HadOne\""
+api = "https://monitoring.googleapis.com/v3/projects/" + os.environ["PROJECT"]
+headers = {"Authorization": "Bearer " + os.environ["TOKEN"], "Content-Type": "application/json"}
+service, address, source = os.environ["SERVICE"], os.environ["ADDRESS"], os.environ["SOURCE"]
+
+def call(method, url, body=None):
+    request = urllib.request.Request(url, method=method, headers=headers, data=None if body is None else json.dumps(body).encode())
+    with urllib.request.urlopen(request) as response:
+        return json.load(response)
+
+def listed(kind, filter):
+    return call("GET", f"{api}/{kind}?" + urllib.parse.urlencode({"filter": filter})).get(kind, [])
+
+channels = listed("notificationChannels", f'type="email" AND labels.email_address="{address}"')
+channel = channels[0]["name"] if channels else call("POST", f"{api}/notificationChannels", {
+    "type": "email", "displayName": f"License alerts: {address}", "labels": {"email_address": address}})["name"]
+
+def policy(name, filter):
+    body = {
+        "displayName": name,
+        "combiner": "OR",
+        "conditions": [{"displayName": name, "conditionMatchedLog": {"filter": filter}}],
+        "alertStrategy": {"notificationRateLimit": {"period": "3600s"}, "autoClose": "1800s"},
+        "notificationChannels": [channel],
+        "documentation": {"mimeType": "text/markdown", "content": "Read the matching lines in Logs Explorer (the link above). docs/design/licensing.md, \"Logs and alerts\"."},
+    }
+    existing = listed("alertPolicies", f'display_name="{name}"')
+    if existing:
+        call("PATCH", "https://monitoring.googleapis.com/v3/" + existing[0]["name"], body)
+    else:
+        call("POST", f"{api}/alertPolicies", body)
+    print(f"alert: {name} -> {address}")
+
+policy(f"{service}: warnings and errors", f"{source} AND severity>=WARNING")
+policy(f"{service}: trial refused (address or owner had one)", f'{source} AND jsonPayload.message:"Trial request: HadOne"')
+EOF
