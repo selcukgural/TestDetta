@@ -212,6 +212,14 @@ const CH_MAP = {
       purpose: "Senaryo 2'nin devamı: yeni kodu harita bilmez ama onu çağıran mevcut kodu bilir. Yansımayla bulunabilir türün üyesi burada cevaplanabilir, çünkü bildirimi değişmedi, yalnız çalışınca yaptığı değişti.",
     },
     {
+      title: "Senaryo 10b · İsim izlemenin ulaştığı arayüz üyesi (2026-10-09)", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok", "i_run"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "t5", "t6", "t7"],
+      who: "<code>TestSelector.Trace</code> içindeki <code>ResolveThroughImplementations</code> → <code>SourceIndex.Implementations</code> → her uygulama için <code>TryResolve(…, reached: true)</code>",
+      file: "src/TestDetta.Core/TestSelector.cs, SourceIndex.cs, SourceIndexBuilder.cs (HasNoCode)",
+      input: "Değişen <code>ApplicationDetailResponse</code>'u döndüren <code>IApplicationService.CreateAsync</code>: gövdesi yok (<code>IndexedMember.IsAbstract</code>), harita onu hiç enstrümante etmedi",
+      output: "Uygulaması <code>ApplicationService.CreateAsync</code>'i çalıştıran sınıflar; yayılım durur, <code>CreateAsync</code> adı izlenmez",
+      purpose: "Arayüz üzerinden yapılan çağrı her zaman bir uygulamayı çalıştırır. Depodaki bütün uygulamaları haritalar biliyorsa cevap onlardır; çıplak ad izlenseydi depodaki her alakasız <code>CreateAsync</code> çağrısına ulaşılırdı. Uygulama yoksa ya da biri cevaplanamazsa eski yol (isim izleme) sürer. Depo dışı uygulama (mock) değişen kodu çalıştırmaz.",
+    },
+    {
       title: "Senaryo 11 · Harita, sahibi enstrümante etmedi (2026-10-07)", nodes: ["start", "q1", "q2", "q3", "q4", "no"], edges: ["t0", "t1", "t2", "t3", "n4"],
       who: "<code>Answers</code> içinde <code>Instrumented(project, map, owner.Path)</code>; <code>TryResolveType</code> aynı kontrolü yapar",
       file: "src/TestDetta.Core/CoverageSelection.cs",

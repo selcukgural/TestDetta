@@ -49,6 +49,14 @@ internal sealed record IndexedMember(
     /// compare that way, and the index finds it for a name in any case.
     /// </summary>
     public bool IgnoreCase { get; init; }
+
+    /// <summary>
+    /// True for a member with no code of its own: an interface member without a default body or an
+    /// <c>abstract</c> member. A call through it runs an implementation, so a coverage map, which never
+    /// instruments it, can still answer for it through the implementations
+    /// (<see cref="SourceIndex.Implementations"/>). Set for C# only; false elsewhere keeps the name trace.
+    /// </summary>
+    public bool IsAbstract { get; init; }
 }
 
 /// <summary>A type declared in an indexed project.</summary>
@@ -342,6 +350,53 @@ internal sealed class SourceIndex
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The members with code that implement or override <paramref name="member"/>, an abstract one: the
+    /// members of the same simple name in every type whose base list names its type, directly or
+    /// through other such types (an abstract class between an interface and the class that implements
+    /// it). Matching by simple name may add an unrelated overload, which only asks coverage about more
+    /// code. Empty when the repository declares no implementation.
+    /// </summary>
+    /// <param name="member">An abstract member (<see cref="IndexedMember.IsAbstract"/>).</param>
+    public List<IndexedMember> Implementations(IndexedMember member)
+    {
+        var names = member.DeclaredNames;
+        var implementations = new List<IndexedMember>();
+        if (names.Count == 0)
+        {
+            return implementations;
+        }
+
+        var pending = new Queue<string>([DeclarationWalker.SimpleTypeName(member.TypeName)]);
+        var seen = new HashSet<string>(StringComparer.Ordinal) { member.TypeName };
+        while (pending.TryDequeue(out var baseName))
+        {
+            foreach (var type in _types.Values)
+            {
+                if (!type.BaseTypeNames.Contains(baseName) || !seen.Add(type.TypeName))
+                {
+                    continue;
+                }
+
+                pending.Enqueue(DeclarationWalker.SimpleTypeName(type.TypeName));
+                if (!_membersByType.TryGetValue(type.TypeName, out var candidates))
+                {
+                    continue;
+                }
+
+                foreach (var candidate in candidates)
+                {
+                    if (!candidate.IsAbstract && candidate.MemberName is not null && candidate.DeclaredNames.Any(names.Contains))
+                    {
+                        implementations.Add(candidate);
+                    }
+                }
+            }
+        }
+
+        return implementations;
     }
 
     /// <summary>Returns the list stored under <paramref name="key"/>, creating it when missing.</summary>

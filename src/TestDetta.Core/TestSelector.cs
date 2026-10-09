@@ -181,12 +181,40 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             logger,
             coverage is null
                 ? null
-                : member => coverage.TryResolve(
-                    new SymbolChange(member.TypeName, member.MemberName, SymbolChangeKind.Modified),
-                    request.Graph[member.ProjectPath],
-                    reached: true),
+                : member => Resolve(member) || (member.IsAbstract && ResolveThroughImplementations(member)),
             request.Graph);
         var root = Paths.Normalize(request.RepoRoot);
+
+        // Coverage answers for a member the spread reached.
+        bool Resolve(IndexedMember member) => coverage!.TryResolve(
+            new SymbolChange(member.TypeName, member.MemberName, SymbolChangeKind.Modified),
+            request.Graph[member.ProjectPath],
+            reached: true);
+
+        // An abstract member has no code a map could record: a call through it runs an implementation.
+        // When the repository declares implementations and coverage answers for every one of them, the
+        // classes that ran them are the answer; tracing the member's simple name instead reaches every
+        // call of an unrelated member of that name (AfterApply's IApplicationService.CreateAsync). An
+        // implementation outside the repository (a mock) runs none of the changed code.
+        bool ResolveThroughImplementations(IndexedMember member)
+        {
+            var implementations = index.Implementations(member);
+            if (implementations.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var implementation in implementations)
+            {
+                if (!Resolve(implementation))
+                {
+                    return false;
+                }
+            }
+
+            LogAnsweredThroughImplementations(member.TypeName, member.MemberName!, implementations.Count);
+            return true;
+        }
 
         foreach (var change in request.Impact.CodeChanges)
         {
@@ -686,6 +714,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "{TypeName} is named by nothing and has no base list or attributes; treated as unused")]
     private partial void LogDeadType(string typeName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: no code of its own; answered through the coverage of its {Count} implementation(s)")]
+    private partial void LogAnsweredThroughImplementations(string typeName, string memberName, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: test classes taken from coverage")]
     private partial void LogResolvedByCoverage(string typeName, string memberName);

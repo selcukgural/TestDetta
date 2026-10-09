@@ -294,6 +294,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                 CollectReferences(declaration.Node, declaration.Descend, usingStatic, aliases))
             {
                 MetadataReferences = CollectMetadataReferences(declaration.Node, declaration.Descend, aliases),
+                IsAbstract = declaration.MemberName is not null && HasNoCode(node),
             });
         }
 
@@ -459,6 +460,35 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// True for a member with no code of its own (<see cref="IndexedMember.IsAbstract"/>): marked
+    /// <c>abstract</c>, or an instance member of an interface without a body, an expression body or an
+    /// accessor with one. A static interface member and an auto-property of a class have code or a field.
+    /// </summary>
+    /// <param name="member">Member declaration.</param>
+    private static bool HasNoCode(MemberDeclarationSyntax member)
+    {
+        if (member.Modifiers.Any(SyntaxKind.AbstractKeyword))
+        {
+            return true;
+        }
+
+        if (member.Parent is not InterfaceDeclarationSyntax || member.Modifiers.Any(SyntaxKind.StaticKeyword))
+        {
+            return false;
+        }
+
+        return member switch
+        {
+            BaseMethodDeclarationSyntax method => method.Body is null && method.ExpressionBody is null,
+            BasePropertyDeclarationSyntax property => property is not PropertyDeclarationSyntax { ExpressionBody: not null }
+                                                     and not IndexerDeclarationSyntax { ExpressionBody: not null }
+                                                     && property.AccessorList?.Accessors.All(static a => a.Body is null && a.ExpressionBody is null) != false,
+            EventFieldDeclarationSyntax => true,
+            _ => false,
+        };
     }
 
     /// <summary>
