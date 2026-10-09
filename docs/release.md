@@ -20,7 +20,8 @@ GitHub Action `testdetta/action`, which downloads that package. This repository 
 2. `.github/workflows/release.yml` runs the quick tests, packs the tool with the tag's version and, with
    the setup done, pushes it to nuget.org through trusted publishing (a short-lived key, no secret).
 3. The `action-bundle` job waits until nuget.org serves the package, pins its SHA-512 in `tool.lock`
-   and uploads the bundle: `action.yml`, `tool.lock`, `README.md`, `LICENSE.txt`.
+   and uploads the bundle: `action.yml`, `tool.lock`, `README.md` (its `{{version}}` replaced with the tag's
+   version, so the example names the release), `LICENSE.txt`.
 4. Copy the bundle into `testdetta/action`, commit, tag `v0.1.0`, and move the major tag to it (`v0` while the version is 0.x, `v1` from 1.0.0).
 
 `action.yml` is the same file in both places. Here it builds TestDetta from source (this repository's

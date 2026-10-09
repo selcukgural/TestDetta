@@ -94,7 +94,8 @@ jobs:
           mkdir -p bundle
           echo "$version $(sha512sum package.nupkg | cut -d' ' -f1)" > bundle/tool.lock
           cp action.yml bundle/action.yml
-          cp dist/action/README.md bundle/README.md
+          # The README's example names the release it ships with.
+          sed "s/{{version}}/$version/g" dist/action/README.md > bundle/README.md
           cp dist/LICENSE.txt bundle/LICENSE.txt
           cat bundle/tool.lock
 

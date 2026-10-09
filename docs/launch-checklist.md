@@ -45,8 +45,9 @@ check of 43 repositories, 100 failing mutants, 0 missed): `TestDetta/action` at 
 GitHub release created, the site and README pinned to it.
 0.1.3 (2026-10-09, a name used only inside endpoint handlers is answered by the handlers' coverage; maps record
 `nestedMethods`; AfterApply PR #205 integration selection 97 -> 4 of 100 classes; corpus check of 43 repositories, 101
-failing mutants, 0 missed): `TestDetta/action` at `a46fb19` with tags `v0.1.3` and `v0`, GitHub release created, the
-site and README pinned to it.
+failing mutants, 0 missed): `TestDetta/action` at `6ceba36` with tags `v0.1.3` and `v0`, GitHub release created, the
+site and README pinned to it. The tags moved there from `a46fb19` the same day: the action README's example still named
+v0.1.0, so `6ceba36` changes only that, and the release workflow now writes the tag's version into it.
 
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
