@@ -1019,6 +1019,86 @@
         "data-heavy"
       ],
       "notes": "Public holiday calculations for ~100 countries, MSTest data-driven tests plus ArchUnitNET architecture rules. 677 tests, ~3 s (2026-10-09)."
+    },
+    {
+      "name": "devarchitecture",
+      "url": "https://github.com/DevArchitecture/DevArchitecture.git",
+      "commit": "b2f839bcc9b9178cdc22597383bf26449cb9907a",
+      "branch": "master",
+      "tags": [
+        "app",
+        "aspnet",
+        "nunit",
+        "web-app-factory",
+        "efcore",
+        "mediatr",
+        "layered"
+      ],
+      "environment": {
+        "RunAnalyzers": "false"
+      },
+      "notes": "Layered ASP.NET Core template (CQRS handlers, EF Core InMemory, WebApplicationFactory), NUnit with Moq and FluentAssertions. Its analyzers fail the build under SDK 10.0.401 (CA1813 and friends as errors), so they are off, as for meziantou-analyzer. 132 tests, ~8 s (2026-10-10)."
+    },
+    {
+      "name": "aicentral",
+      "url": "https://github.com/microsoft/AICentral.git",
+      "commit": "d5580c36999364bef1089bd9e6f68e2cbb68fee0",
+      "framework": "net8.0",
+      "tags": [
+        "app",
+        "aspnet",
+        "proxy",
+        "verify",
+        "web-app-factory",
+        "pipelines"
+      ],
+      "environment": {
+        "RunAnalyzers": "false"
+      },
+      "projects": [
+        "src/AICentralTests/AICentralTests.csproj",
+        "src/AICentralTestsNewOpenAIClient/AICentralTestsNewOpenAIClient.csproj"
+      ],
+      "notes": "ASP.NET Core proxy for AI endpoints built from configurable pipelines (auth, rate limits, routing), tested through WebApplicationFactory against faked upstreams with Verify snapshots. net8.0 only; analyzers off as above. 79 tests, ~22 s (2026-10-10)."
+    },
+    {
+      "name": "heron-mudcalendar",
+      "url": "https://github.com/danheron/Heron.MudCalendar.git",
+      "commit": "437f22900d9239958c63ffd3e60c7586d6982735",
+      "branch": "dev",
+      "tags": [
+        "app",
+        "blazor",
+        "components",
+        "bunit",
+        "nunit"
+      ],
+      "environment": {
+        "RunAnalyzers": "false"
+      },
+      "notes": "MudBlazor calendar component, rendered and clicked through with bUnit under NUnit (bunit's own suite is xUnit/MTP). Analyzers off as above. 37 tests, ~14 s (2026-10-10)."
+    },
+    {
+      "name": "fscheck",
+      "url": "https://github.com/fscheck/FsCheck.git",
+      "commit": "9cb659449ce7c9316c2d9c438a4881411f89cb20",
+      "branch": "master",
+      "framework": "net8.0",
+      "tags": [
+        "app",
+        "fsharp",
+        "property-based",
+        "mtp",
+        "xunit-v3"
+      ],
+      "environment": {
+        "RunAnalyzers": "false"
+      },
+      "projects": [
+        "tests/FsCheck.Test/FsCheck.Test.fsproj",
+        "tests/FsCheck.Test.v3/FsCheck.Test.v3.fsproj"
+      ],
+      "notes": "Property-based testing library written in F#, its own suite generating random inputs (seeded per property). The MSTest examples project is left out (it fails on its own). net8.0. 327 tests, ~13 s (2026-10-10)."
     }
   ]
 }
