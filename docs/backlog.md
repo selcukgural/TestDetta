@@ -4,6 +4,22 @@ Work agreed on but not started, in the order we plan to take it. Reliability and
 come first: the evaluation corpus and every finding there before anything below, and features
 that report numbers (value reporting) only once the numbers are proven right.
 
+## Next, to discuss with the owner: a record's shape change reaches startup code (AfterApply, 2026-10-09)
+
+Dogfooding on AfterApply PR #202, after the initialization-use, lifecycle-callback and interface-member
+fixes: the integration project still selects 96 of 99 classes. Adding optional parameters to the
+response record `ApplicationDetailResponse` is changed metadata, which spreads the record's name; the
+endpoint registrations name it (`MapApplicationEndpoints`, `Produces<ApplicationDetailResponse>()`,
+handler lambdas), coverage knows who ran them, and every class's host runs them at startup.
+
+Proposal (not started; it narrows selection, so the owner decides): for changed metadata of a record or
+class whose members only carry data (constructor parameters, properties), answer through coverage of its
+constructor and property accessors: the code that builds or reads the values, and the serializer that
+reads them through the accessors, runs only in the classes the map names. Keep the name trace for
+attributes and default values read through reflection without running the members (validation
+attributes, `[JsonPropertyName]`), and for code that only names the type in metadata. Validate with a
+corpus run on every repository, `--mutant-kinds all`, before shipping.
+
 ## Later: Windows (owner, 2026-10-06: noted, to do later)
 
 - A Windows CI job (manual or weekly; Windows minutes cost about 1.7x Linux) that runs the `Legacy`
