@@ -76,6 +76,20 @@ public static class CoverageMapStore
             WriteIds(json, "nestedMethods", nested);
         }
 
+        if (map.Unobserved is { } unobserved)
+        {
+            WriteIds(json, "unobserved", unobserved);
+        }
+
+        if (map.Lineage is { } lineage)
+        {
+            json.WriteStartObject("lineage"u8);
+            json.WriteString("fullCommit"u8, lineage.FullCommit);
+            json.WriteString("fullRecordedAt"u8, lineage.FullRecordedAt);
+            json.WriteNumber("steps"u8, lineage.Steps);
+            json.WriteEndObject();
+        }
+
         // Generated files can be large (a polyfill package writes hundreds of members); compressed,
         // they cost a fraction of the map.
         json.WriteStartArray("generated"u8);
@@ -296,6 +310,13 @@ public static class CoverageMapStore
                 LinkedInitialization = root.TryGetProperty("linkedInitialization", out var linked) ? ReadIds(linked) : null,
                 ExternalCallbacks = root.TryGetProperty("externalCallbacks", out var callbacks) ? ReadIds(callbacks) : null,
                 NestedMethods = root.TryGetProperty("nestedMethods", out var nested) ? ReadIds(nested) : null,
+                Unobserved = root.TryGetProperty("unobserved", out var unobserved) ? ReadIds(unobserved) : null,
+                Lineage = root.TryGetProperty("lineage", out var lineage)
+                    ? new MapLineage(
+                        lineage.GetProperty("fullCommit").GetString()!,
+                        lineage.GetProperty("fullRecordedAt").GetDateTimeOffset(),
+                        lineage.GetProperty("steps").GetInt32())
+                    : null,
                 BuiltValues = root.TryGetProperty("builtValues", out var built)
                     ? new CoverageHits(ReadBuckets(built.GetProperty("classes")), ReadBuckets(built.GetProperty("fixtures")), ReadIds(built.GetProperty("ambient")))
                     : null,

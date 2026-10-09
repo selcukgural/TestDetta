@@ -40,7 +40,24 @@ public sealed record RecordOptions(string Configuration = "Debug", string? Frame
     /// same configuration just before. The output must have its PDBs for generated code to be read.
     /// </summary>
     public bool NoBuild { get; init; }
+
+    /// <summary>
+    /// Test classes (runtime names) to record, for an incremental step (docs/design/incremental-recording.md); null
+    /// records every class. Tests outside every class the source index knows are recorded as well, since the selection
+    /// cannot have judged them.
+    /// </summary>
+    public IReadOnlyCollection<string>? Classes { get; init; }
 }
+
+/// <summary>A recording of some classes of a test project, for an incremental step.</summary>
+/// <param name="Map">What the recorded classes ran, at the current commit.</param>
+/// <param name="TestsPassed">True when every recorded test passed.</param>
+/// <param name="AssemblyClasses">Every class the test assembly's PDB names; empty when it could not be read.</param>
+/// <param name="Complete">
+/// True when every test ran after all: the filtered run crashed and the project was recorded the way it normally runs.
+/// The map is then a full recording.
+/// </param>
+public sealed record PartialRecording(CoverageMap Map, bool TestsPassed, IReadOnlySet<string> AssemblyClasses, bool Complete);
 
 /// <summary>
 /// Builds a test project, instruments the repository's assemblies in its output, runs the tests
@@ -65,6 +82,26 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <exception cref="InvalidOperationException">The build failed.</exception>
     /// <exception cref="NoTestsRecordedException">No test ran, so nothing was recorded.</exception>
     public (CoverageMap Map, bool TestsPassed) Record(RecordRequest request, TextWriter output)
+    {
+        var recording = RecordShards(request with { Options = request.Options with { Classes = null } }, output);
+        return (recording.Map, recording.TestsPassed);
+    }
+
+    /// <summary>Records only <see cref="RecordOptions.Classes"/> of one test project, for an incremental step.</summary>
+    /// <param name="request">What to record; its options name the classes.</param>
+    /// <param name="output">Receives build and test output.</param>
+    /// <exception cref="InvalidOperationException">The build failed.</exception>
+    /// <exception cref="NoTestsRecordedException">No test ran, so nothing was recorded.</exception>
+    public PartialRecording RecordClasses(RecordRequest request, TextWriter output)
+    {
+        ArgumentNullException.ThrowIfNull(request.Options.Classes);
+        return RecordShards(request, output);
+    }
+
+    /// <summary>Builds, instruments and runs the test project, all of it or the classes its options name.</summary>
+    /// <param name="request">What to record.</param>
+    /// <param name="output">Receives build and test output.</param>
+    private PartialRecording RecordShards(RecordRequest request, TextWriter output)
     {
         var dotnet = new DotnetProcess(_logger);
         var project = request.TestProject.Path;
@@ -162,12 +199,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             var runs = RunShards(shards, new ShardContext(request, mode, runDirectory, outputDirectory, instrumentation, work), testArguments, synchronizedOutput);
             ThrowIfTimedOut(runs, project, request);
             ThrowIfTrackerSilent(runs, project);
+            var complete = request.Options.Classes is null;
 
             // A shard that crashed before its process wrote results (NLog: a subset of its classes takes
             // the host down when they run without the others) would cost the project its whole map.
             // The suite passes in one process, so the project is recorded again the way dotnet test runs it.
             if (shards.Count > 1 && runs.Any(static r => r.Result.ResultsFiles.Count == 0))
             {
+                // Recorded unfiltered, also in an incremental step: the result is then a full recording.
+                complete = true;
                 LogShardCrashed(project);
                 var single = Path.Combine(work, "single");
                 Directory.CreateDirectory(single);
@@ -189,6 +229,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 runs = RunShards([[]], new ShardContext(request, mode, runDirectory, outputDirectory, instrumentation, parallel, SuiteParallelism: true), parallelArguments, synchronizedOutput);
                 ThrowIfTimedOut(runs, project, request);
                 suiteParallelism = true;
+                complete = true;
             }
 
             var resultsFiles = new List<string>(runs.Length);
@@ -243,7 +284,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             };
             LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
             LogSkippedClasses(project, map.SkippedClasses?.Count ?? -1, map.ClassLocations?.Count ?? 0);
-            return (map, runs.All(static r => r.Result.ExitCode == 0));
+            return new PartialRecording(map, runs.All(static r => r.Result.ExitCode == 0), locations.Keys.ToHashSet(StringComparer.Ordinal), complete);
         }
         finally
         {
@@ -439,6 +480,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="syntax">Filter syntax of the project's runner.</param>
     private List<IReadOnlyList<string>> Shards(RecordRequest request, TestFilterSyntax syntax)
     {
+        if (request.Options.Classes is { } selected)
+        {
+            return ClassShards(request, selected, syntax);
+        }
+
         if (request.Parallelism <= 1)
         {
             return [[]];
@@ -471,6 +517,47 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         filters.Add(TestFilter.Arguments(classes, exclude: true, syntax));
         LogShards(request.TestProject.Path, groupCount, classes.Count);
+        return filters;
+    }
+
+    /// <summary>
+    /// Filters for an incremental step: the selected classes dealt round-robin into at most
+    /// <see cref="RecordRequest.Parallelism"/> groups, plus one shard for every test outside the classes the source index
+    /// knows. Those the selection could not judge, so they are recorded again each step.
+    /// </summary>
+    /// <param name="request">What to record.</param>
+    /// <param name="selected">Classes to record.</param>
+    /// <param name="syntax">Filter syntax of the project's runner.</param>
+    private List<IReadOnlyList<string>> ClassShards(RecordRequest request, IReadOnlyCollection<string> selected, TestFilterSyntax syntax)
+    {
+        var known = new TestClassFinder(loggerFactory.CreateLogger<TestClassFinder>())
+            .Find(request.Graph, request.RepoRoot, request.TestProject)
+            .Union(selected, StringComparer.Ordinal)
+            .ToList();
+        var ordered = selected.Order(StringComparer.Ordinal).ToList();
+        var groupCount = Math.Max(1, Math.Min(request.Parallelism, ordered.Count));
+        var groups = new List<string>[groupCount];
+        for (var i = 0; i < groupCount; i++)
+        {
+            groups[i] = [];
+        }
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            groups[i % groupCount].Add(ordered[i]);
+        }
+
+        var filters = new List<IReadOnlyList<string>>(groupCount + 1);
+        foreach (var group in groups)
+        {
+            if (group.Count > 0)
+            {
+                filters.Add(TestFilter.Arguments(group, exclude: false, syntax));
+            }
+        }
+
+        filters.Add(TestFilter.Arguments(known, exclude: true, syntax));
+        LogClassShards(request.TestProject.Path, ordered.Count, known.Count);
         return filters;
     }
 
@@ -1427,6 +1514,10 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Recording {Project} in {ShardCount} process(es) for {ClassCount} known test class(es), plus a catch-all process")]
     private partial void LogShards(string project, int shardCount, int classCount);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Recording {Project} incrementally: {ClassCount} selected test class(es), plus a catch-all process for tests outside the {KnownCount} known class(es)")]
+    private partial void LogClassShards(string project, int classCount, int knownCount);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "The tests of {Project} crashed when run one at a time; recording them with their own parallelism, so code outside every test counts as ambient")]

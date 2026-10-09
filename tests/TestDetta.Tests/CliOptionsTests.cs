@@ -66,6 +66,35 @@ public sealed class CliOptionsTests
     }
 
     [Fact]
+    public void Record_command_reads_incremental_and_its_thresholds()
+    {
+        var ok = CliOptions.TryParse(
+            ["record", "--incremental", "--max-map-age", "10", "--full-record-every", "5", "--full-record-days", "3", "--full-record-share", "40"],
+            "/repo", out var options, out var error);
+
+        Assert.True(ok, error);
+        Assert.True(options.Record.Incremental);
+        Assert.Equal(10, options.Analysis.MaxMapAge);
+        Assert.Equal(new IncrementalThresholds { FullEvery = 5, FullDays = 3, FullShare = 40 }, options.Record.Thresholds);
+    }
+
+    [Theory]
+    [InlineData("--full-record-share", "101")]
+    [InlineData("--full-record-every", "-1")]
+    [InlineData("--full-record-days", "soon")]
+    public void Record_command_rejects_a_threshold_out_of_range(string option, string value)
+    {
+        Assert.False(CliOptions.TryParse(["record", "--incremental", option, value], "/repo", out _, out var error));
+        Assert.Contains(option, error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Incremental_belongs_to_record_only()
+    {
+        Assert.False(CliOptions.TryParse(["test", "--incremental"], "/repo", out _, out _));
+    }
+
+    [Fact]
     public void Record_command_reads_no_build()
     {
         var ok = CliOptions.TryParse(["record", "--no-build", "-c", "Release"], "/repo", out var options, out _);

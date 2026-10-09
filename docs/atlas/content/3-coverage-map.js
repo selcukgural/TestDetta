@@ -92,7 +92,7 @@ const CH_MAP = {
       file: "src/TestDetta.Core/CoverageIndex.cs",
       input: "<code>map.Ambient</code>: ilk testten önce çalışan id'ler (keşif, <code>[MemberData]</code>/<code>TestCaseSource</code> verisi)",
       output: "<code>null</code>: \"harita cevaplayamaz\"; tür düzeyinde <code>TypeRanOutsideTests</code>",
-      purpose: "Keşifte üretilen bir veri her testi etkileyebilir ama hangi sınıfın kullandığı görünmez. Boş küme (\"kimse\") yanlış olurdu; <code>null</code> (\"bilmiyorum\") doğru cevaptır.",
+      purpose: "Keşifte üretilen bir veri her testi etkileyebilir ama hangi sınıfın kullandığı görünmez. Boş küme (\"kimse\") yanlış olurdu; <code>null</code> (\"bilmiyorum\") doğru cevaptır. Artımlı haritanın <code>Unobserved</code> üyeleri de buraya eklenir (<code>IsUnobserved</code>, <code>TypeUnobserved</code>); Senaryo 12.",
     },
     {
       title: "Değeri kuran kod, değeri okuyan sınıfa yazılır", nodes: ["m_built", "i_run"], edges: ["x_built"],
@@ -234,6 +234,14 @@ const CH_MAP = {
       input: "İki dll'e derlenen bağlı (linked) dosya: <code>Helper.Run</code> hem A'da hem B'de; harita yalnız A'yı enstrümante etmiş (<code>InstrumentedProjects = [A, Tests]</code>)",
       output: "Sahip B için <code>false</code>, sebep <code>a map does not know it (… was recorded without instrumenting B.csproj)</code>; isim izleme B'nin kopyasından devam eder",
       purpose: "Harita aynı adları A'dan bilir; B'nin kopyası için cevap veremez (meziantou #17). Yalnız haritada liste varsa ve test projesi sahibe karşı derleniyorsa (opak referans değil) uygulanır; listesiz eski haritalar eskisi gibi cevaplar.",
+    },
+    {
+      title: "Senaryo 12 · Artımlı haritanın görmediği üye (2026-10-09)", nodes: ["start", "q1", "q2", "q3", "q4", "no", "i_null"], edges: ["t0", "t1", "t2", "t3", "n4"],
+      who: "<code>CoverageIndex</code>: <code>map.Unobserved</code> id'leri <code>_ambient</code>'e eklenir; <code>Answers</code> sebebi <code>Unobserved(map, change)</code> ile seçer",
+      file: "src/TestDetta.Core/CoverageIndex.cs, src/TestDetta.Core/CoverageSelection.cs",
+      input: "Artımlı adımlarla kurulmuş harita: <code>Helper.Run</code> sonradan eklendi, <code>GoTests</code>'in girdisi ondan önce kaydedilip taşındı; <code>Unobserved = [Helper.Run]</code>",
+      output: "<code>ClassesRunning</code> → <code>null</code>, sebep <code>the incremental map has not seen its users since it changed</code>; isim izleme <code>Wrapper.Go</code>'ya, oradan kapsamla <code>GoTests</code>'e ulaşır",
+      purpose: "Taşınmış bir girdi, üye bugünkü haline gelmeden önce kaydedildi; \"bu üyeyi kimse koşmuyor\" diyemez. Üye bir sonraki tam kayda kadar ambient kod gibi isimle izlenir; bu, drift köprüsünün ve haritasız yolun güvenlik çıtasıdır (<code>UnobservedMemberTests</code>: işaret olmadan seçim boş kalır).",
     },
   ],
 };

@@ -175,6 +175,31 @@ internal sealed record RecordSettings(string Configuration, IReadOnlyList<string
 {
     /// <summary>True to record from the existing build output instead of building.</summary>
     public bool NoBuild { get; init; }
+
+    /// <summary>
+    /// True to re-record only the classes the commits since the previous map can affect and carry the rest over
+    /// (docs/design/incremental-recording.md).
+    /// </summary>
+    public bool Incremental { get; init; }
+
+    /// <summary>When an incremental recording records a project in full instead.</summary>
+    public IncrementalThresholds Thresholds { get; init; } = new();
+}
+
+/// <summary>
+/// When <c>td record --incremental</c> records a test project in full: a full map resets the lineage, which bounds how
+/// long a wrong carried-over entry could survive, and saves little time when most classes run anyway.
+/// </summary>
+internal sealed record IncrementalThresholds
+{
+    /// <summary>Record in full after this many incremental steps.</summary>
+    public int FullEvery { get; init; } = 20;
+
+    /// <summary>Record in full when the last full recording is this many days old.</summary>
+    public int FullDays { get; init; } = 7;
+
+    /// <summary>Record in full when the selection covers more than this percentage of the project's classes.</summary>
+    public int FullShare { get; init; } = 60;
 }
 
 /// <summary>
@@ -333,6 +358,11 @@ internal sealed record CliOptions(
           --parallel <n>       Spread each project's test classes over n processes (default: 1).
                                The suite must tolerate several test processes at once.
           --no-build           Use the existing build output (built with the same -c) instead of building
+          --incremental        Re-record only the test classes the commits since the previous map (in
+                               .testdetta/coverage or --maps-dir, within --max-map-age) can affect
+          --full-record-every <n>  With --incremental: record in full after n incremental steps (default: 20)
+          --full-record-days <n>   With --incremental: record in full when the last full map is n days old (default: 7)
+          --full-record-share <percent>  With --incremental: record in full when more of a project is selected (default: 60)
 
         License: set TESTDETTA_LICENSE (or TESTDETTA_LICENSE_FILE) in CI. Public repositories need none.
         Without a valid license every test runs. The build never fails because of it.
@@ -482,6 +512,10 @@ internal sealed record CliOptions(
                 options = options with { Record = options.Record with { NoBuild = true } };
                 return true;
 
+            case "--incremental" when options.Command == CliCommand.Record:
+                options = options with { Record = options.Record with { Incremental = true } };
+                return true;
+
             case "--base" when options.Command == CliCommand.Audit:
                 error = "td audit compares every change with HEAD; --base does not apply";
                 return false;
@@ -490,6 +524,7 @@ internal sealed record CliOptions(
             case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record or CliCommand.Audit:
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
+            case "--full-record-every" or "--full-record-days" or "--full-record-share" when options.Command == CliCommand.Record:
             case "--summary-file" or "--shadow-report" when options.Command == CliCommand.Test:
             case "--summary-file" or "--target-broken" or "--max-mutants" or "--budget" or "--parallel" or "--seed" or "--kinds" or "--member" or "--report" or "--work-dir"
                 when options.Command == CliCommand.Audit:
@@ -571,6 +606,23 @@ internal sealed record CliOptions(
                 }
 
                 options = options with { Record = options.Record with { Parallelism = parallelism } };
+                return true;
+
+            case "--full-record-every" or "--full-record-days" or "--full-record-share":
+                var most = arg == "--full-record-share" ? 100 : 100_000;
+                if (!int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var threshold) || threshold < 0 || threshold > most)
+                {
+                    error = $"{arg} needs a number from 0 to {most}, not {value}";
+                    return false;
+                }
+
+                var thresholds = arg switch
+                {
+                    "--full-record-every" => options.Record.Thresholds with { FullEvery = threshold },
+                    "--full-record-days" => options.Record.Thresholds with { FullDays = threshold },
+                    _ => options.Record.Thresholds with { FullShare = threshold },
+                };
+                options = options with { Record = options.Record with { Thresholds = thresholds } };
                 return true;
 
             case "--summary-file":

@@ -234,6 +234,18 @@ public sealed record CoverageMap(
     public IReadOnlyDictionary<string, IReadOnlyList<string>>? LeakedReads { get; init; }
 
     /// <summary>
+    /// Methods (indexes into <see cref="Methods"/>) whose users no recording at <see cref="Commit"/> could name: members that
+    /// were added, belong to a type whose declaration changed, or whose metadata changed since the last full recording, in a
+    /// map built by incremental steps (docs/design/incremental-recording.md). Carried-over classes were recorded before such
+    /// a member looked as it does now, so they may reach it by reflection or dispatch without the map showing it; selection
+    /// treats these like code that ran outside every test. Null for a full recording.
+    /// </summary>
+    public IReadOnlyList<int>? Unobserved { get; init; }
+
+    /// <summary>How the map was made: null for a full recording, the incremental steps since one otherwise.</summary>
+    public MapLineage? Lineage { get; init; }
+
+    /// <summary>
     /// True when the map knows every class the runner reported, run or not, so a class outside them
     /// was not seen while recording rather than seen running nothing.
     /// </summary>
@@ -247,6 +259,16 @@ public sealed record CoverageMap(
     public bool Reported(string testClass) =>
         Classes.ContainsKey(testClass) || FailedClasses?.Contains(testClass) == true || SkippedClasses?.Contains(testClass) == true;
 }
+
+/// <summary>
+/// The incremental steps a map was built by since its last full recording (docs/design/incremental-recording.md). Each
+/// step re-records the classes a range of commits can affect and carries the others over, so the count and the age bound
+/// how long a wrong carried-over entry could survive; past the thresholds the next recording is a full one.
+/// </summary>
+/// <param name="FullCommit">Commit of the last full recording.</param>
+/// <param name="FullRecordedAt">When the last full recording was made.</param>
+/// <param name="Steps">Incremental steps since then, at least one.</param>
+public sealed record MapLineage(string FullCommit, DateTimeOffset FullRecordedAt, int Steps);
 
 /// <summary>Where a test class is written in one source file, as the test assembly's PDB says.</summary>
 /// <param name="File">Path relative to the repository root, with '/' separators.</param>

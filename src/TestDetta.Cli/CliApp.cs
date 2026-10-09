@@ -64,7 +64,7 @@ internal static partial class CliApp
 
         if (options.Command == CliCommand.Record)
         {
-            return RecordCoverage(options, loggerFactory, logger, stdout, stderr);
+            return RecordCoverage(options, loggerFactory, stdout, stderr, host);
         }
 
         if (options.Command is CliCommand.LicenseStatus or CliCommand.LicenseInstall)
@@ -388,28 +388,53 @@ internal static partial class CliApp
     /// does not build or run here (a mobile app that needs a workload the machine lacks, a recording
     /// that hangs) gets no map and the others are still recorded: selection decides a project without
     /// a map by name, which is wider but safe. The run fails only when no map was written at all.
+    /// With <c>--incremental</c>, each project records only the classes the commits since its previous
+    /// map can affect, or keeps that map, or records in full (docs/design/incremental-recording.md).
     /// </summary>
     /// <param name="options">Parsed command line.</param>
     /// <param name="loggerFactory">Creates the recorder's loggers.</param>
-    /// <param name="logger">Logger of the CLI.</param>
     /// <param name="stdout">Receives build and test output and the summary.</param>
     /// <param name="stderr">Receives errors.</param>
+    /// <param name="host">Environment and home directory, for the license an incremental recording's selection needs.</param>
     private static int RecordCoverage(
         CliOptions options,
-        ILoggerFactory loggerFactory,
-        ILogger logger,
+        StderrLoggerFactory loggerFactory,
         TextWriter stdout,
-        TextWriter stderr)
+        TextWriter stderr,
+        CliHost host)
     {
+        var logger = loggerFactory.CreateLogger(typeof(CliApp).FullName!);
         try
         {
-            var root = new GitClient(loggerFactory.CreateLogger<GitClient>()).TopLevel(options.Analysis.RepoPath);
-            var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), new TestDetta.Coverage.MsBuildProjectEvaluator(loggerFactory)).Load(root);
+            var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
+            var root = git.TopLevel(options.Analysis.RepoPath);
+            var evaluator = new TestDetta.Coverage.MsBuildProjectEvaluator(loggerFactory);
+            var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), evaluator).Load(root);
             var testProjects = SelectTestProjects(graph, root, options.Record.Projects);
             if (testProjects.Count == 0)
             {
                 stderr.WriteLine("td: no test project to record.");
                 return Failure;
+            }
+
+            var head = git.Head(root);
+            var now = DateTimeOffset.UtcNow;
+            List<ProjectStep> steps;
+            if (options.Record.Incremental)
+            {
+                if (options.Analysis.MapsDir is { } restoreFrom)
+                {
+                    MapDirectory.Restore(Path.GetFullPath(restoreFrom), root, "HEAD", options.Analysis.MaxMapAge, git, logger);
+                }
+
+                var license = LicenseGate.Check(root, loggerFactory, host.Environment, host.Home);
+                var licensed = license.AllowsSelection || !TestDetta.Core.Licensing.LicenseKeys.Enforced;
+                steps = new IncrementalRecording(loggerFactory, evaluator)
+                    .Plan(new IncrementalContext(root, graph, options.Record, options.Analysis.MaxMapAge, licensed), testProjects, now);
+            }
+            else
+            {
+                steps = [.. testProjects.Select(static p => new ProjectStep(p, StepKind.Full, string.Empty, null, []))];
             }
 
             var recorder = new TestDetta.Coverage.CoverageRecorder(loggerFactory);
@@ -418,13 +443,62 @@ internal static partial class CliApp
             var summary = new List<string>();
             var written = new List<string>();
 
-            foreach (var project in testProjects)
+            foreach (var step in steps)
             {
-                (CoverageMap Map, bool Passed) recorded;
+                var project = step.Project;
+                var path = CoverageMapStore.PathFor(root, project.Path);
+                if (options.Record.Incremental)
+                {
+                    summary.Add($"  {step.Kind.ToString().ToLowerInvariant(),-9} {Path.GetRelativePath(root, project.Path)}: {step.Reason}");
+                }
+
+                if (step.Kind == StepKind.Current)
+                {
+                    written.Add(path);
+                    continue;
+                }
+
+                if (step.Kind == StepKind.Carry)
+                {
+                    var previous = step.Previous!;
+                    var carried = previous with
+                    {
+                        Header = previous.Header with { Commit = head, RecordedAt = now },
+                        Unobserved = [.. new SortedSet<int>([.. previous.Unobserved ?? [], .. Ids(previous.Methods, CoverageMapMerge.UnobservedBy(step.Changes, previous.Methods))])],
+                        Lineage = previous.Lineage is { } lineage
+                            ? lineage with { Steps = lineage.Steps + 1 }
+                            : new MapLineage(previous.Commit, previous.Header.RecordedAt, 1),
+                    };
+                    CoverageMapStore.Write(path, carried);
+                    written.Add(path);
+                    continue;
+                }
+
+                var recordOptions = new TestDetta.Coverage.RecordOptions(options.Record.Configuration, options.Record.Framework, options.Record.Parallelism)
+                {
+                    NoBuild = options.Record.NoBuild,
+                    Classes = step.Kind == StepKind.Partial ? step.Classes : null,
+                };
+                CoverageMap map;
+                bool passed;
                 try
                 {
-                    recorded = recorder.Record(
-                        new TestDetta.Coverage.RecordRequest(root, graph, project, new TestDetta.Coverage.RecordOptions(options.Record.Configuration, options.Record.Framework, options.Record.Parallelism) { NoBuild = options.Record.NoBuild }), stdout);
+                    var request = new TestDetta.Coverage.RecordRequest(root, graph, project, recordOptions);
+                    if (step.Kind == StepKind.Partial)
+                    {
+                        var partial = recorder.RecordClasses(request, stdout);
+                        passed = partial.TestsPassed;
+                        map = partial.Complete
+                            ? partial.Map
+                            : CoverageMapMerge.Merge(step.Previous!, partial.Map, new MapMergeScope(
+                                step.Classes.ToHashSet(StringComparer.Ordinal),
+                                partial.AssemblyClasses,
+                                CoverageMapMerge.UnobservedBy(step.Changes, partial.Map.Methods)));
+                    }
+                    else
+                    {
+                        (map, passed) = recorder.Record(request, stdout);
+                    }
                 }
                 catch (TestDetta.Coverage.NoTestsRecordedException ex)
                 {
@@ -441,8 +515,6 @@ internal static partial class CliApp
                     continue;
                 }
 
-                var (map, passed) = recorded;
-                var path = CoverageMapStore.PathFor(root, project.Path);
                 CoverageMapStore.Write(path, map);
                 written.Add(path);
 
@@ -464,11 +536,15 @@ internal static partial class CliApp
                 {
                     summary.Add($"    {skipped.Count} test class(es) had every test skipped on {map.Platform}; on other platforms they run whenever the project is affected");
                 }
+
+                if (map.Lineage is null && step.Previous is { Lineage: not null } incremental)
+                {
+                    summary.AddRange(Divergences(incremental, map));
+                }
             }
 
             if (options.Analysis.MapsDir is { } mapsDir && written.Count > 0)
             {
-                var head = new GitClient(loggerFactory.CreateLogger<GitClient>()).Head(root);
                 MapDirectory.Save(Path.GetFullPath(mapsDir), head, written, logger);
                 summary.Add($"  saved     {written.Count} map(s) to {Path.Combine(mapsDir, head)}");
             }
@@ -494,6 +570,44 @@ internal static partial class CliApp
             LogFailed(logger, ex);
             stderr.WriteLine($"td: {ex.Message}");
             return Failure;
+        }
+    }
+
+    /// <summary>The ids of <paramref name="members"/> in <paramref name="methods"/>.</summary>
+    /// <param name="methods">A map's method list.</param>
+    /// <param name="members">Members to look up; those the list lacks are left out.</param>
+    private static IEnumerable<int> Ids(IReadOnlyList<CoveredMethod> methods, IReadOnlySet<CoveredMethod> members)
+    {
+        for (var i = 0; i < methods.Count; i++)
+        {
+            if (members.Contains(methods[i]))
+            {
+                yield return i;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Summary lines for a full recording that replaced an incremental map: the classes that ran members the incremental
+    /// map did not credit them with (docs/design/incremental-recording.md), the first ones in detail.
+    /// </summary>
+    /// <param name="incremental">The map built by incremental steps.</param>
+    /// <param name="full">The full recording that replaces it.</param>
+    private static IEnumerable<string> Divergences(CoverageMap incremental, CoverageMap full)
+    {
+        var divergences = MapDivergence.Find(incremental, full);
+        if (divergences.Count == 0)
+        {
+            yield return $"    checked the incremental map ({incremental.Lineage!.Steps} step(s)) against this full recording: no class ran code it lacked";
+            yield break;
+        }
+
+        yield return $"    {divergences.Count} class(es) ran code the incremental map ({incremental.Lineage!.Steps} step(s)) did not credit them with " +
+                     "(nondeterministic tests, or a selection gap worth reporting):";
+        foreach (var divergence in divergences.Take(10))
+        {
+            var members = string.Join(", ", divergence.Missing.Take(5)) + (divergence.Missing.Count > 5 ? $" and {divergence.Missing.Count - 5} more" : string.Empty);
+            yield return $"      {divergence.TestClass}: {members}";
         }
     }
 

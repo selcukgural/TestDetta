@@ -30,6 +30,12 @@ internal sealed class CoverageIndex
     /// <summary>Types (and the types they are nested in) with a member in <see cref="_externalCallbacks"/>.</summary>
     private readonly HashSet<string> _externalCallbackTypes = new(StringComparer.Ordinal);
 
+    /// <summary>Members an incremental map holds as unobserved (<see cref="CoverageMap.Unobserved"/>).</summary>
+    private readonly HashSet<CoveredMethod> _unobserved = [];
+
+    /// <summary>Types (and the types they are nested in) with a member in <see cref="_unobserved"/>.</summary>
+    private readonly HashSet<string> _unobservedTypes = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Ids of the methods compiled from lambdas and local functions (<see cref="CoverageMap.NestedMethods"/>);
     /// null for a map recorded before they were kept.
@@ -157,6 +163,16 @@ internal sealed class CoverageIndex
             {
                 _initializationTypes.Add(type);
             }
+        }
+
+        // A member no recording at the map's commit could name the users of (an incremental map's unobserved members)
+        // is answered like code that ran outside every test: by name (docs/design/incremental-recording.md).
+        foreach (var id in map.Unobserved ?? [])
+        {
+            _ambient.Add(map.Methods[id]);
+            _unobserved.Add(map.Methods[id]);
+            _unobservedTypes.UnionWith(EnclosingTypes(map.Methods[id].TypeName));
+            MarkNestedUnanswerable(id, map.Methods[id]);
         }
 
         foreach (var method in _ambient)
@@ -293,6 +309,15 @@ internal sealed class CoverageIndex
     /// </summary>
     /// <param name="typeName">Qualified type name.</param>
     public bool TypeRanOutsideTests(string typeName) => _ambientTypes.Contains(typeName);
+
+    /// <summary>True when an overload of the member is held as unobserved by an incremental map (<see cref="CoverageMap.Unobserved"/>).</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name.</param>
+    public bool IsUnobserved(string typeName, string member) => _unobserved.Contains(new CoveredMethod(typeName, member));
+
+    /// <summary>True when a member of <paramref name="typeName"/> or a type nested in it is held as unobserved by an incremental map.</summary>
+    /// <param name="typeName">Qualified type name.</param>
+    public bool TypeUnobserved(string typeName) => _unobservedTypes.Contains(typeName);
 
     /// <summary><paramref name="typeName"/> and every type it is nested in: <c>A.B.C</c> gives <c>A.B.C</c>, <c>A.B</c>, <c>A</c>.</summary>
     /// <param name="typeName">Qualified type name.</param>

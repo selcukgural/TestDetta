@@ -54,17 +54,33 @@ A map lists every instrumented method; a listed method that no class ran is know
 That claim is only as fresh as the run that made it. A carried-over entry describes `A`, where a
 member added in `A..H` did not exist, so it cannot say whether `T` reaches the new member at `H`.
 
-The case that matters is dispatch the name trace cannot see: `T` runs unchanged code that finds plugins
-by assembly scanning, and the merge adds a plugin class. Selection leaves `T` out (the scan is
-reflection, a known blind spot). With a full recording at `H`, `T`'s entry would include the plugin.
-With a carried-over entry it does not, and the map would answer "nobody runs this plugin" to every
-later pull request that changes it.
+The obvious case is already covered by selection: `T` runs unchanged code that finds plugins by
+assembly scanning, and the merge adds a plugin class. A type that nothing names but that has a base
+list or attributes may be created by a framework, so selection runs its test projects completely
+(docs/design/reflection-types-with-coverage.md), and the step records them in full. What remains are
+paths the step's selection did not follow for some other reason: a gap nobody knows yet. With a full
+recording at `H`, `T`'s entry would show such a path. With a carried-over entry it does not, and the
+map would answer "nobody runs this member" to every later pull request that changes it.
 
-Rule: a member added in `A..H` that no re-recorded class ran is stored as **unobserved**. Selection
-treats an unobserved member like a member the map does not know: it traces it by name, which is what
-happens today for code without a map. The set grows with each incremental step and is emptied by a
-full recording. A member only modified in `A..H` does not need this: who calls it did not change, and
-every class that ran it at `A` was selected and re-recorded.
+Rule: these members are stored as **unobserved**:
+
+- every member added in `A..H`;
+- every member of a type whose declaration was added or changed in `A..H` (attributes, base types,
+  interfaces: what scanning and dispatch look at);
+- every member whose metadata changed (attributes, parameter defaults), which reflection reads
+  without running it.
+
+Selection treats an unobserved member like code that ran outside every test: the map cannot name its
+users, so it is traced by name, which is what happens today for code the map cannot answer for. A
+member stays unobserved until the next full recording, even when a re-recorded class ran it: that
+class is then known to use it, but a carried-over class may reach it as well, and only a run of that
+class at `H` could say. A member whose body alone changed does not need this: who calls it did not
+change, and every class that ran it at `A` was selected and re-recorded.
+
+What this buys is the same bar the drift bridge sets: a later change to an unobserved member is
+decided by name, never by an entry that could not have seen it. It does not make a path visible that
+the name trace cannot follow either (reflection by a string); that is the no-map path's blind spot,
+shared by the bridge, and the regular full recording with its divergence check is what bounds it.
 
 ### Merging a map
 
@@ -78,13 +94,14 @@ Per test project, from the previous map `M(A)` and the partial recording `P(H)` 
 | `Ambient`, `Initialization`, `LinkedInitialization`, `ExternalCallbacks`, `NestedMethods`, ambient and initialization reads | union of both, after re-mapping; a larger set only selects more |
 | `FailedClasses`, `SkippedClasses` | selected classes take their new status, the rest keep theirs |
 | `Generated`, `BuildInputs`, `ClassLocations`, `InstrumentedProjects`, `Platform`, `Framework` | from `P(H)`: they describe the build at `H`, which the partial recording builds in full |
-| Unobserved members | `M(A)`'s set, re-mapped, plus the members added in `A..H` that `P(H)` did not run, minus everything `P(H)` ran |
+| Unobserved members | `M(A)`'s set, re-mapped, plus the members `A..H` makes unobserved (see above) |
 | Startup seconds | from `P(H)` |
 
-A carried-over class that no longer exists at `H` (its test class is gone from the test assembly) is
-dropped. A carried-over entry that names a method missing at `H` cannot occur for a class that was
-left out, since removing a method it ran is a change that selects it. If it does occur, the class is
-recorded again rather than trusted.
+A carried-over class that no longer exists at `H` (its test class is gone from the test assembly's
+PDB) is dropped. A carried-over entry that names a method missing at `H` cannot occur for a class that
+was left out, since removing a method it ran is a change that selects it. If it does occur, the class
+is kept as failed while recording (`FailedClasses`), which makes it run whenever its project is
+affected, until the next recording of it.
 
 The header records the lineage: the commit of the last full recording and the number of incremental
 steps since then.

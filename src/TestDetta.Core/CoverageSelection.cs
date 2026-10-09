@@ -541,7 +541,9 @@ internal sealed partial class CoverageSelection
                 // Two different gaps, worth telling apart when a selection is questioned: code the map
                 // never instrumented (fields, constants, abstract members, other assemblies) and code
                 // that also ran before or between tests.
-                unresolved ??= RanOutsideTests(map, change) ? "it ran outside any test" : "a map does not know it";
+                unresolved ??= Unobserved(map, change) ? "the incremental map has not seen its users since it changed"
+                    : RanOutsideTests(map, change) ? "it ran outside any test"
+                    : "a map does not know it";
                 known = false;
                 continue;
             }
@@ -765,6 +767,14 @@ internal sealed partial class CoverageSelection
 
         return (classes, classes is not null);
     }
+
+    /// <summary>True when the change is to a member, or a type with a member, that an incremental map holds as unobserved.</summary>
+    /// <param name="map">Coverage of one test project.</param>
+    /// <param name="change">The change coverage could not answer for.</param>
+    private static bool Unobserved(CoverageIndex map, SymbolChange change) =>
+        change.MemberName is null
+            ? map.TypeUnobserved(change.TypeName)
+            : DeclarationWalker.CompiledNames(change.MemberName).Any(name => map.IsUnobserved(change.TypeName, name));
 
     /// <summary>True when an overload of the member, or for a type any member of it, ran outside any test.</summary>
     /// <param name="map">Coverage of one test project.</param>

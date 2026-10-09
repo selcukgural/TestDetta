@@ -10,6 +10,8 @@ const CALLS = {
     ["RunShards → RunShard", 2, 6], ["TestDettaTracker.Hit / Enter…", 3, 7], ["TestDettaTracker.WriteResults", 3, 8],
     ["BuildMap", 2, 9], ["FileReadPaths.ResolveAll", 3, 9], ["Untrusted · Skipped · Reported", 2, 10],
     ["finally: Restore", 2, 11], ["CoverageMapStore.Write", 1, 10],
+    ["IncrementalRecording.Plan", 1, 12], ["AnalysisPipeline.Run (base A)", 2, 12], ["CoverageRecorder.RecordClasses · ClassShards", 1, 12],
+    ["CoverageMapMerge.Merge · UnobservedBy", 1, 12], ["MapDivergence.Find", 1, 12],
   ],
   test: [
     ["CliApp.Run", 0, 0], ["AnalysisPipeline.Run", 1, 1], ["GitClient.ChangedFiles · MergeBase", 2, 1],
@@ -26,6 +28,7 @@ const CALLS = {
     ["TryResolve · S1 gövde", 0, 7], ["TryResolve · S2 eklendi", 0, 8], ["TryResolve · S3 .cctor", 0, 9], ["TryResolve · S4 .ctor", 0, 10],
     ["TryResolve · S5 ambient", 0, 11], ["TryResolve · S6 önbellek", 0, 12], ["TryResolve · S7 singleton", 0, 13],
     ["TryResolve · S8 metaveri", 0, 14], ["TryResolve · S9 harita yok", 0, 15], ["TryResolve(reached) · S10", 0, 16],
+    ["TryResolve · S12 görülmemiş (Unobserved)", 0, 20],
   ],
   eval: [
     ["BatchRunner.Run", 0, 0], ["EvalApp.RunOne", 1, 1], ["SyntheticEvaluator.Evaluate", 2, 1], ["EvalSteps.RecordAt", 3, 1],

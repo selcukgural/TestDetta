@@ -217,23 +217,24 @@ const CH_RECORD = {
     {
       title: "Komut, projeleri ve seçenekleri toplar", nodes: ["cli", "graph"], edges: ["load"],
       who: "<code>CliApp.RecordCoverage</code>",
-      file: "src/TestDetta.Cli/CliApp.cs:382",
-      input: "<code>RecordSettings(Configuration, Projects, Parallelism, Framework) { NoBuild }</code>",
+      file: "src/TestDetta.Cli/CliApp.cs:399",
+      input: "<code>RecordSettings(Configuration, Projects, Parallelism, Framework) { NoBuild, Incremental, Thresholds }</code>",
       output: "<code>ProjectGraph</code> ve kaydedilecek test projelerinin listesi",
       purpose: "Hangi projelerin test projesi olduğunu (MSBuild değerlendirmesi ya da <code>*.Tests</code> adı) bulmak.",
       body: ul([
         "<code>GitClient.TopLevel(repo)</code> depo kökünü verir.",
         "<code>ProjectGraphLoader.Load(root)</code> her <code>.csproj</code>'u MSBuild ile değerlendirir (önbellek: <code>.testdetta/cache/graph</code>).",
         "<code>--project</code> verilmemişse bütün test projeleri kaydedilir.",
+        "<code>--incremental</code> ile her proje için önce bir adım planlanır (son adım: \"Artımlı kayıt\"); yoksa hepsi tam kaydedilir.",
       ]),
     },
     {
       title: "Kayıt isteği kurulur", nodes: ["graph", "rec"], edges: ["call"],
       who: "<code>CoverageRecorder.Record(RecordRequest request, TextWriter output)</code>",
-      file: "src/TestDetta.Coverage/CoverageRecorder.cs:67",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs:84 (RecordClasses:95)",
       input: "<code>RecordRequest(RepoRoot, Graph, TestProject, RecordOptions(Configuration = \"Debug\", Framework = null, Parallelism = 1, Timeout = null) { NoBuild })</code>",
       output: "<code>(CoverageMap Map, bool TestsPassed)</code>",
-      purpose: "Tek bir test projesinin baştan sona kaydı. Aşağıdaki adımların hepsi bu metodun içindedir.",
+      purpose: "Tek bir test projesinin baştan sona kaydı. Aşağıdaki adımların hepsi ortak <code>RecordShards</code> metodunun içindedir; <code>RecordClasses</code> aynı yolu <code>RecordOptions.Classes</code> ile yalnız seçilen sınıflar için yürür ve <code>PartialRecording(Map, TestsPassed, AssemblyClasses, Complete)</code> döner.",
       body: "<p><code>DotnetTestLocation.For(root, project)</code> çalışma klasörünü (en yakın <code>global.json</code>) ve modu (VSTest ya da Microsoft.Testing.Platform) belirler.</p>",
     },
     {
@@ -293,6 +294,7 @@ call    TestDettaTracker.Hit(int32)`) + ul([
       purpose: "Paralellik kapatılır (xUnit <code>MaxParallelThreads=1</code>, NUnit <code>NumberOfTestWorkers=0</code>, MSTest <code>Workers=1</code>) ki bir anda tek test sınıfı çalışsın ve vuruşlar doğru sınıfa yazılsın. Test AppDomain'leri de kapatılır (<code>DisableAppDomain</code>, xUnit <code>AppDomain=denied</code>): .NET Framework'te izleyicinin verisi aksi halde ayrı domain'de kalır.",
       body: ul([
         "<code>--parallel n</code>: sınıflar <code>n</code> parçaya dağıtılır, her parça ayrı süreç; sonda bilinen sınıfları dışlayan bir \"artakalan\" parça.",
+        "Artımlı adımda (<code>ClassShards</code>, <code>CoverageRecorder.cs:531</code>) yalnız seçilen sınıflar parçalara dağıtılır (paralellik 1 olsa da filtreli); artakalan parça kaynak indeksinin bilmediği testleri yine koşturur. Bir parça çökerse proje filtresiz kaydedilir ve sonuç tam kayıt sayılır (<code>Complete = true</code>).",
         "Bir parça sonuç yazmazsa tek süreçte filtresiz tekrar; o da olmazsa testin kendi paralelliğiyle (<code>TESTDETTA_PARALLEL_FLOWS=1</code>).",
         "Zaman aşımı <code>RecordingTimedOutException</code>; hiç test koşmadıysa <code>NoTestsRecordedException</code>.",
         "Testler geçti ama parça sonuç yazmadıysa bu çökme değildir: tekrar denenmez, <code>ThrowIfTrackerSilent</code> projeyi \"not recorded\" yapar. Tekrarlardan sonra da sonuç yoksa ama TRX test koştuğunu söylüyorsa mesaj \"no test ran\" değil, \"host sonuç yazmadan çöktü ya da izleyiciyi yüklemedi\" olur.",
@@ -370,6 +372,21 @@ public static void Hit(int id)
       input: "<code>InstrumentationResult.Backups</code> (asıl dosya → yedek)",
       output: "Kayıttan önceki dll ve pdb'ler",
       purpose: "Kayıt sonrası aynı çıktıyla normal testler koşabilsin; yarıda kalan kayıt depoyu bozmasın.",
+    },
+    {
+      title: "Artımlı kayıt: yalnız değişikliğin ulaşabildiği sınıflar (2026-10-09)", nodes: ["cli", "rec", "map"], edges: ["load", "call", "out"],
+      who: "<code>IncrementalRecording.Plan</code> → <code>CoverageRecorder.RecordClasses</code> → <code>CoverageMapMerge.Merge</code>",
+      file: "src/TestDetta.Cli/IncrementalRecording.cs:58 (Select:164), src/TestDetta.Core/CoverageMapMerge.cs:31 (UnobservedBy:113), src/TestDetta.Core/MapDivergence.cs:20",
+      input: "<code>td record --incremental [--max-map-age n] [--full-record-every 20] [--full-record-days 7] [--full-record-share 60]</code>; <code>.testdetta/coverage</code> (ya da <code>--maps-dir</code>) içindeki önceki harita, commit'i A",
+      output: "Proje başına <code>ProjectStep</code>: <code>Full</code>, <code>Partial</code>, <code>Carry</code> ya da <code>Current</code>; HEAD'de (H) birleşik harita, <code>Lineage(FullCommit, FullRecordedAt, Steps)</code> ve <code>Unobserved</code> ile",
+      purpose: "Her merge'de bütün testleri enstrümante koşturmak yerine A..H değişikliğinin etkileyebileceği sınıfları yeniden kaydetmek, gerisini taşımak (docs/design/incremental-recording.md). Seçim, <code>td test --base A</code>'nın yapacağı seçimin aynısıdır: A'daki harita kendi commit'inde tam haritadır.",
+      body: ul([
+        "Tam kayıt sebepleri: önceki harita yok ya da okunamıyor, lisans seçimi kapsamıyor, harita sınıfları tam bilmiyor (<code>KnowsClasses</code>), başka platform ya da framework, A <code>--max-map-age</code> içinde ata değil, eşikler (adım sayısı, gün), seçim projenin tamamı (<code>TestRunMode.All</code>, ör. reflection ile bulunabilen yeni tür) ya da sınıfların %60'ından fazlası.",
+        "<code>Carry</code>: projede hiçbir şey değişikliği göremez; harita H commit'ine taşınır, soy bir adım uzar.",
+        "<code>Merge</code>: seçilen sınıflar yeni girdilerini alır, diğerleri A'dan (yöntem id'leri tip+üye adıyla yeniden eşlenir); ambient, başlatma ve okumalar iki tarafın birleşimi; H'de silinmiş bir metodu anan taşınmış sınıf <code>FailedClasses</code>'a girer; test dll'inin PDB'sinde artık olmayan sınıf düşer.",
+        "<code>UnobservedBy</code>: A..H'de eklenen üyeler, bildirimi eklenen/değişen türlerin bütün üyeleri ve metadata'sı değişen üyeler <code>Unobserved</code> olur ve bir sonraki tam kayda kadar öyle kalır (Bölüm 4, Senaryo 12).",
+        "Tam kayıt, yerini aldığı artımlı haritayla karşılaştırılır (<code>MapDivergence.Find</code>): bir sınıf artımlı girdisinde olmayan (bilinen, görülmemiş ya da başlatma kodu olmayan) bir üyeyi koştuysa özet bunu \"selection gap worth reporting\" diye listeler.",
+      ]),
     },
   ],
 };
