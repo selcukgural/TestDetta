@@ -27,6 +27,14 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
     /// </summary>
     private const string NotRecordedFile = "not-recorded.tsv";
 
+    /// <summary>Suffix of the file next to a recorded map that holds the recording's wall time in seconds.</summary>
+    private const string SecondsSuffix = ".record-seconds";
+
+    /// <summary>Directory under the map cache that holds the maps an incremental step built at a commit from older maps.</summary>
+    /// <param name="sha">Commit the step recorded at.</param>
+    /// <param name="mapCommit">Commit of the older maps.</param>
+    public static string IncrementalKey(string sha, string mapCommit) => $"{sha}-incremental-{mapCommit[..Math.Min(12, mapCommit.Length)]}";
+
     /// <summary>Test projects whose recording hung; they are left out of the rest of the evaluation.</summary>
     private readonly HashSet<string> _hung = new(StringComparer.Ordinal);
 
@@ -69,9 +77,14 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
                 using var log = File.CreateText(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".record.log"));
                 try
                 {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
                     var (map, _) = recorder.Record(
                         new RecordRequest(workspace.RepoRoot, graph, project, new RecordOptions("Debug", settings.Framework, settings.Parallelism, RecordTimeout)), log);
                     CoverageMapStore.Write(Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + ".json"), map);
+                    // Kept for the incremental recording's cost comparison (docs/design/incremental-recording.md).
+                    File.WriteAllText(
+                        Path.Combine(temporary, Path.GetFileNameWithoutExtension(project.Path) + SecondsSuffix),
+                        watch.Elapsed.TotalSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -409,6 +422,117 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         }
     }
 
+    /// <summary>
+    /// Runs one incremental recording step at <paramref name="sha"/> from the full maps at <paramref name="mapCommit"/>, as
+    /// <c>td record --incremental</c> does, unless the cache has it, and compares each result with the full map at
+    /// <paramref name="sha"/> (docs/design/incremental-recording.md). Both commits must be recorded already.
+    /// </summary>
+    /// <param name="mapCommit">Commit of the older maps, an ancestor of <paramref name="sha"/>.</param>
+    /// <param name="sha">Commit the step records at.</param>
+    /// <param name="full">The full maps at <paramref name="sha"/>, by normalized test project path.</param>
+    /// <returns>What the step did per test project.</returns>
+    public List<IncrementalStepResult> RecordIncremental(string mapCommit, string sha, Dictionary<string, CoverageMap> full)
+    {
+        var key = IncrementalKey(sha, mapCommit);
+        var directory = Path.Combine(workspace.MapCache, key);
+        var stepsFile = Path.Combine(directory, "steps.json");
+        if (!File.Exists(stepsFile))
+        {
+            var temporary = directory + ".partial";
+            if (Directory.Exists(temporary))
+            {
+                Directory.Delete(temporary, recursive: true);
+            }
+
+            Directory.CreateDirectory(temporary);
+            workspace.Git.Checkout(sha);
+            workspace.Executor.Setup();
+            var untracked = workspace.Git.Untracked();
+            PlaceMaps(mapCommit);
+            var graph = new ProjectGraphLoader(workspace.LoggerFactory.CreateLogger<ProjectGraphLoader>(), workspace.Evaluator).Load(workspace.RepoRoot);
+            var projects = TestProjects(graph).Where(p => full.ContainsKey(p.Path)).ToList();
+            var record = new TestDetta.Cli.RecordSettings("Debug", [], settings.Parallelism, settings.Framework);
+            var plan = new TestDetta.Cli.IncrementalRecording(workspace.LoggerFactory, workspace.Evaluator)
+                .Plan(new TestDetta.Cli.IncrementalContext(workspace.RepoRoot, graph, record, int.MaxValue, SelectionLicensed: true), projects, DateTimeOffset.UtcNow);
+            ClearMaps();
+
+            var recorder = new CoverageRecorder(workspace.LoggerFactory);
+            var results = new List<IncrementalStepResult>();
+            foreach (var step in plan)
+            {
+                var name = Path.GetFileNameWithoutExtension(step.Project.Path);
+                var fullMap = full[step.Project.Path];
+                var total = step.Previous is { } before ? before.Classes.Count + (before.FailedClasses?.Count ?? 0) + (before.SkippedClasses?.Count ?? 0) : 0;
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                CoverageMap map;
+                var recorded = 0;
+                switch (step.Kind)
+                {
+                    case TestDetta.Cli.StepKind.Partial:
+                        using (var log = File.CreateText(Path.Combine(temporary, name + ".record.log")))
+                        {
+                            var partial = recorder.RecordClasses(
+                                new RecordRequest(workspace.RepoRoot, graph, step.Project, new RecordOptions("Debug", settings.Framework, settings.Parallelism, RecordTimeout) { Classes = step.Classes }), log);
+                            map = partial.Complete
+                                ? partial.Map
+                                : CoverageMapMerge.Merge(step.Previous!, partial.Map, new MapMergeScope(
+                                    step.Classes.ToHashSet(StringComparer.Ordinal), partial.AssemblyClasses, CoverageMapMerge.UnobservedBy(step.Changes, partial.Map.Methods)));
+                            recorded = step.Classes.Count;
+                        }
+
+                        workspace.Executor.Cleanup();
+                        break;
+                    case TestDetta.Cli.StepKind.Carry:
+                        var previous = step.Previous!;
+                        map = previous with
+                        {
+                            Header = previous.Header with { Commit = sha },
+                            Lineage = new MapLineage(previous.Commit, previous.Header.RecordedAt, 1),
+                        };
+                        break;
+                    default:
+                        // A full recording at this commit is the one already made.
+                        map = fullMap;
+                        recorded = fullMap.Classes.Count;
+                        break;
+                }
+
+                var seconds = step.Kind == TestDetta.Cli.StepKind.Partial ? watch.Elapsed.TotalSeconds : step.Kind == TestDetta.Cli.StepKind.Carry ? 0 : FullSeconds(sha, name) ?? 0;
+                CoverageMapStore.Write(Path.Combine(temporary, name + ".json"), map);
+                var divergent = map.Lineage is null ? [] : MapDivergence.Find(map, fullMap).Select(static d => $"{d.TestClass}: {string.Join(", ", d.Missing)}").ToList();
+                results.Add(new IncrementalStepResult(name, step.Kind.ToString().ToLowerInvariant(), step.Reason, recorded, total, Math.Round(seconds, 1), FullSeconds(sha, name), divergent));
+                LogIncrementalStep(name, step.Kind, recorded, total);
+            }
+
+            RemoveLeftBehind(untracked);
+            using (var stream = File.Create(Path.Combine(temporary, "steps.json")))
+            {
+                System.Text.Json.JsonSerializer.Serialize(stream, results);
+            }
+
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+
+            Directory.Move(temporary, directory);
+        }
+
+        using var read = File.OpenRead(stepsFile);
+        return System.Text.Json.JsonSerializer.Deserialize<List<IncrementalStepResult>>(read) ?? [];
+    }
+
+    /// <summary>Wall time of the full recording of a test project at a commit; null when the cache did not keep it.</summary>
+    /// <param name="sha">Commit.</param>
+    /// <param name="project">Test project name.</param>
+    private double? FullSeconds(string sha, string project)
+    {
+        var file = Path.Combine(workspace.MapCache, sha, project + SecondsSuffix);
+        return File.Exists(file) && double.TryParse(File.ReadAllText(file), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var seconds)
+            ? seconds
+            : null;
+    }
+
     /// <summary>Removes the maps from the clone so they never mix with a later commit.</summary>
     public void ClearMaps()
     {
@@ -496,6 +620,9 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Removed {Count} file(s) test runs left in the clone: {Files}")]
     private partial void LogLeftBehind(int count, string files);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Incremental step for {Project}: {Kind}, {Recorded} of {Total} class(es) recorded")]
+    private partial void LogIncrementalStep(string project, TestDetta.Cli.StepKind kind, int recorded, int total);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Recording of {Sha} reused from {Cache}")]
     private partial void LogRecordingReused(string sha, string cache);

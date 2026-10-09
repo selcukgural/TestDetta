@@ -82,7 +82,24 @@ internal enum OtherSelector
 
     /// <summary>dotnet-affected itself (whole affected test projects), to confirm <see cref="ProjectLevel"/> with the tool teams use.</summary>
     DotnetAffected,
+
+    /// <summary>
+    /// Maps built by one incremental recording step from the older maps to the evaluated commit
+    /// (docs/design/incremental-recording.md); judged against the exact maps of a full recording there.
+    /// </summary>
+    Incremental,
 }
+
+/// <summary>What the incremental recording step did for one test project, next to the full recording at the same commit.</summary>
+/// <param name="Project">The test project's name.</param>
+/// <param name="Kind">full, partial, carry or current.</param>
+/// <param name="Reason">Why, as <c>td record --incremental</c> says it.</param>
+/// <param name="Recorded">Classes the step recorded (all of them for a full recording, none for a carried map).</param>
+/// <param name="Total">Classes the older map knew.</param>
+/// <param name="Seconds">Wall time of the step's recording, build included; 0 when nothing was recorded.</param>
+/// <param name="FullSeconds">Wall time of the full recording at the commit; null when it came from a cache that did not keep it.</param>
+/// <param name="Divergent">Classes whose full entry ran code the incremental map did not credit them with (<see cref="Core.MapDivergence"/>).</param>
+internal sealed record IncrementalStepResult(string Project, string Kind, string Reason, int Recorded, int Total, double Seconds, double? FullSeconds, IReadOnlyList<string> Divergent);
 
 /// <summary>One other selector's result for a mutant.</summary>
 /// <param name="Missed">Confirmed failing classes the mode did not select (<c>Project: Class</c>).</param>
@@ -130,6 +147,9 @@ internal sealed record SyntheticRun(string Sha, int TestClasses, double Baseline
 
     /// <summary>Recorded test classes per map, by test project name, for the incidents and the comparison with an earlier round.</summary>
     public IReadOnlyList<MapCount> Maps { get; init; } = [];
+
+    /// <summary>With drift modes: the incremental recording step from the older maps, per test project; empty otherwise.</summary>
+    public IReadOnlyList<IncrementalStepResult> IncrementalSteps { get; init; } = [];
 
     /// <summary>What went wrong while recording or evaluating that a reader of the numbers must know (docs/evaluation.md, "Incidents").</summary>
     public IReadOnlyList<string> Incidents { get; init; } = [];

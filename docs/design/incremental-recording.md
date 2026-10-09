@@ -1,7 +1,8 @@
 # Incremental recording: re-record only what a merge can change
 
-Status: design 2026-10-09 (owner asked for it after the first AfterApply record run on main). Nothing
-built yet. Measurement before implementation, as for the drift bridge.
+Status: design 2026-10-09 (owner asked for it after the first AfterApply record run on main); CLI and
+evaluator built the same day (see "As built"). Open: the corpus measurement, the thresholds and the
+action's default.
 
 ## Problem
 
@@ -216,3 +217,38 @@ but maps would then come from pull request runs, which forks and untrusted branc
 4. Action input and steps, README and docs/ci.md, atlas.
 5. AfterApply: switch its record job to incremental and compare per-merge time and PR selection for a
    week.
+
+## As built (2026-10-09)
+
+- Map: `CoverageMap.Unobserved` (method ids) and `CoverageMap.Lineage` (`MapLineage(FullCommit,
+  FullRecordedAt, Steps)`), both optional in the file (`unobserved`, `lineage`); the format version is
+  unchanged, since a map without them is a full recording. `CoverageIndex` adds unobserved members to
+  the ambient set, so `ClassesRunning` returns null and selection traces them by name; the reason reads
+  "the incremental map has not seen its users since it changed".
+- `CoverageMapMerge.Merge(previous, partial, MapMergeScope(RecordedClasses, AssemblyClasses,
+  NewlyUnobserved))` as in "Merging a map"; `CoverageMapMerge.UnobservedBy(changes, methods)` for the
+  rule above. `MapDivergence.Find(incremental, full)` for the check.
+- Recorder: `RecordOptions.Classes` and `CoverageRecorder.RecordClasses`, returning
+  `PartialRecording(Map, TestsPassed, AssemblyClasses, Complete)`. The selected classes are dealt into at
+  most `--parallel` filtered shards, plus the catch-all shard for tests outside every class the source
+  index knows. A crashed shard falls back to an unfiltered run, as before, and the result is then a
+  full recording (`Complete`).
+- CLI: `td record --incremental` with `--max-map-age`, `--full-record-every`, `--full-record-days`,
+  `--full-record-share` (and `--maps-dir`, restored before planning). `IncrementalRecording.Plan` decides
+  `Full`, `Partial`, `Carry` or `Current` per project with the reasons above; selection runs once per
+  distinct map commit through `AnalysisPipeline.Run(root, A)` with exact maps only. The license check
+  is the one `td test` uses; without a covering license every project is recorded in full. The summary
+  names each project's step and reason; a full recording after incremental steps lists divergences.
+- Tests: `CoverageMapMergeTests` (merge rules, unobserved members, lineage, divergence),
+  `UnobservedMemberTests` (selection traces an unobserved member by name; without the mark the carried
+  entries would select nothing), `IncrementalRecordingTests` (end to end through the CLI: partial step,
+  carried map, reflection-found plugin recorded in full with the divergence check, step threshold),
+  `CliOptionsTests`. Sabotage-checked: no re-indexing, and a recorder that ignores the class filter.
+- Evaluator: with `--map-age k`, after recording both commits, `EvalSteps.RecordIncremental` runs the
+  step from the maps at `N−k` to `N` as the CLI would (cached under `<N>-incremental-<A>`) and every
+  mutant is also selected with those maps (`OtherSelector.Incremental`, JSON `others.incremental`). The
+  report's drift table gets a row for it, and an "Incremental recording step" table lists per project
+  the step, classes recorded, seconds against the full recording (now kept as `<project>.record-seconds`
+  next to each recorded map) and divergent classes (JSON `incrementalSteps`). `EvalMapAgeTests` covers
+  it: the drift adds a call, the naive maps miss the class, the incremental maps do not.
+  Still to do: the chain `A→A+1→…→N`.

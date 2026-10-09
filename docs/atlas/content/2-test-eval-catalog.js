@@ -309,6 +309,7 @@ const CH_EVAL = {
       input: "Depo URL'si, commit, kayıt önbelleği (<code>cache/maps/&lt;repo&gt;</code>)",
       output: "Commit'teki kapsam haritaları (ürünle aynı <code>CoverageRecorder</code>)",
       purpose: "TestDetta'nın göreceği haritanın aynısını üretmek. Kayıt önbelleğin anahtarı kaydedici kodunun özetini içerir: kaydedici değişince haritalar yeniden çıkarılır.",
+      body: "<p><code>--map-age k</code> ile önce <code>N−k</code> commit'i, sonra N kaydedilir; ardından <code>EvalSteps.RecordIncremental(mapCommit, sha, maps)</code> eski haritalardan N'ye bir artımlı kayıt adımı yürütür (<code>td record --incremental</code> ile aynı planlayıcı, <code>RecordClasses</code> ve <code>Merge</code>; önbellek <code>&lt;N&gt;-incremental-&lt;A&gt;</code>) ve her projeyi N'deki tam haritayla karşılaştırır (<code>MapDivergence</code>). Tam kaydın süresi haritanın yanında <code>&lt;proje&gt;.record-seconds</code> olarak saklanır; rapordaki \"Incremental recording step\" tablosu adım, kaydedilen sınıf, süre ve sapmayı gösterir.</p>",
     },
     {
       title: "Bozulacak üyeler örneklenir", nodes: ["rec", "sample"], edges: ["e4"],
@@ -334,7 +335,7 @@ const CH_EVAL = {
       input: "Klonda düzenlenmiş kaynak; jeneratör değişikliğinde <code>GeneratorWorkspace.For(target, originals)</code>",
       output: "<code>Selection(Tests, Detected, Share, Others) { StoppedOnBuild }</code>",
       purpose: "Ürünün gerçekten yapacağı seçimi kaydetmek. Jeneratör değişikliğinde mutant jeneratör dll'ine yazılıp tüketici yeniden derlenir; TestDetta gerçek çıktı farkını görür.",
-      body: "<p>Proje düzeyi seçim (<code>dotnet-affected</code> gibi) aynı anda <code>OtherSelector.ProjectLevel</code> olarak ölçülür; site rakamlarındaki karşılaştırma buradan gelir.</p>",
+      body: "<p>Proje düzeyi seçim (<code>dotnet-affected</code> gibi) aynı anda <code>OtherSelector.ProjectLevel</code> olarak ölçülür; site rakamlarındaki karşılaştırma buradan gelir.</p><p><code>--map-age</code> ile her mutant eski haritalarla da seçilir: <code>Bridge</code>, <code>NoMap</code>, <code>Naive</code> ve artımlı adımın haritalarıyla <code>Incremental</code>; hepsi aynı doğrulanmış düşen sınıflara göre değerlendirilir.</p>",
     },
     {
       title: "Bütün mutantlar bir kez, anahtarla yazılır", nodes: ["base", "schema", "workers"], edges: ["e9", "e10"],

@@ -72,6 +72,16 @@ public sealed class EvalMapAgeTests : IDisposable
         Assert.Empty(Strings(drift.GetProperty("noMap").GetProperty("missed")));
         Assert.Equal(["Shop.Tests: Shop.Tests.DiscountTests"], Strings(drift.GetProperty("naive").GetProperty("missed")));
 
+        // The incremental step re-recorded the class whose code the drift changed, so its map misses nothing either.
+        Assert.Empty(Strings(drift.GetProperty("incremental").GetProperty("missed")));
+        var step = run.GetProperty("incrementalSteps").EnumerateArray().Single();
+        Assert.Equal("partial", step.GetProperty("kind").GetString());
+        Assert.Equal(1, step.GetProperty("recorded").GetInt32());
+        Assert.Equal(2, step.GetProperty("total").GetInt32());
+        Assert.Empty(Strings(step.GetProperty("divergent")));
+        Assert.True(step.GetProperty("fullSeconds").GetDouble() > 0);
+        Assert.Contains("### Incremental recording step", File.ReadAllText(Path.Combine(_output, "synthetic.md")), StringComparison.Ordinal);
+
         // Project level runs the one affected test project whole: everything, and misses nothing.
         Assert.Equal(1.0, drift.GetProperty("projectLevel").GetProperty("selectedShare").GetDouble());
         Assert.Empty(Strings(drift.GetProperty("projectLevel").GetProperty("missed")));

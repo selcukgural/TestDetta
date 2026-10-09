@@ -183,6 +183,45 @@ internal static class SyntheticReport
             AppendDriftRow(text, DriftName(mode), [.. judged.Select(m => (m.Others[mode].Missed, m.Others[mode].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
         }
 
+        if (judged.Count > 0 && judged.All(static m => m.Others.ContainsKey(OtherSelector.Incremental)))
+        {
+            AppendDriftRow(text, DriftName(OtherSelector.Incremental), [.. judged.Select(static m => (m.Others[OtherSelector.Incremental].Missed, m.Others[OtherSelector.Incremental].SelectedShare, m.KilledClasses.Count))], run.TestClasses);
+        }
+
+        text.AppendLine();
+        AppendIncrementalSteps(text, run);
+    }
+
+    /// <summary>
+    /// The incremental recording step from the older maps per test project: what it recorded, what it cost against the
+    /// full recording, and the classes whose full entry ran code the incremental map lacked (docs/design/incremental-recording.md).
+    /// </summary>
+    /// <param name="text">Report so far.</param>
+    /// <param name="run">The evaluation.</param>
+    private static void AppendIncrementalSteps(StringBuilder text, SyntheticRun run)
+    {
+        if (run.IncrementalSteps.Count == 0)
+        {
+            return;
+        }
+
+        text.AppendLine("### Incremental recording step");
+        text.AppendLine();
+        text.AppendLine("| Test project | Step | Classes recorded | Seconds (step / full) | Divergent classes | Reason |");
+        text.AppendLine("|---|---|---|---|---|---|");
+        foreach (var step in run.IncrementalSteps)
+        {
+            var full = step.FullSeconds is { } seconds ? seconds.ToString("0", CultureInfo.InvariantCulture) : "-";
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"| {step.Project} | {step.Kind} | {step.Recorded} of {step.Total} | {step.Seconds:0} / {full} | {step.Divergent.Count} | {step.Reason.Replace("|", "/", StringComparison.Ordinal)} |");
+        }
+
+        text.AppendLine();
+        foreach (var line in run.IncrementalSteps.SelectMany(static s => s.Divergent.Select(d => $"- {s.Project}: {d}")).Take(20))
+        {
+            text.AppendLine(line);
+        }
+
         text.AppendLine();
     }
 
@@ -259,6 +298,7 @@ internal static class SyntheticReport
     {
         OtherSelector.Bridge => "older, bridged",
         OtherSelector.NoMap => "none (by name)",
+        OtherSelector.Incremental => "incremental step from the older maps",
         _ => "older, as if current",
     };
 
@@ -283,6 +323,29 @@ internal static class SyntheticReport
             json.WriteNumber("seconds", Math.Round(run.Seconds, 1));
             json.WriteNumber("mapAge", run.MapAge);
             json.WriteString("mapCommit", run.MapCommit);
+            if (run.IncrementalSteps.Count > 0)
+            {
+                json.WriteStartArray("incrementalSteps");
+                foreach (var step in run.IncrementalSteps)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("project", step.Project);
+                    json.WriteString("kind", step.Kind);
+                    json.WriteString("reason", step.Reason);
+                    json.WriteNumber("recorded", step.Recorded);
+                    json.WriteNumber("total", step.Total);
+                    json.WriteNumber("seconds", step.Seconds);
+                    if (step.FullSeconds is { } fullSeconds)
+                    {
+                        json.WriteNumber("fullSeconds", fullSeconds);
+                    }
+
+                    WriteStrings(json, "divergent", step.Divergent);
+                    json.WriteEndObject();
+                }
+
+                json.WriteEndArray();
+            }
             json.WriteString("judging", run.Judging);
             WriteStrings(json, "incidents", run.Incidents);
             json.WriteStartArray("maps");

@@ -33,6 +33,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     /// </summary>
     private Dictionary<SyntheticTarget, List<ProjectNode>> _generatorTests = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>
+    /// Map cache key of the maps an incremental recording step built at the evaluated commit from the older maps; null
+    /// without drift modes or when the step failed.
+    /// </summary>
+    private string? _incrementalKey;
+
     /// <summary>The generator projects and their consumers in the commit's graph; set per evaluation.</summary>
     private GeneratorMutants? _generatorMutants;
 
@@ -88,6 +94,21 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
             var maps = _steps.RecordAt(sha);
             incidents = _steps.Incidents(sha, maps);
+            List<IncrementalStepResult> incrementalSteps = [];
+            if (mapCommit is not null)
+            {
+                try
+                {
+                    incrementalSteps = _steps.RecordIncremental(mapCommit, sha, maps);
+                    _incrementalKey = EvalSteps.IncrementalKey(sha, mapCommit);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or IOException or InvalidDataException)
+                {
+                    // The drift modes still count; the incremental mode is left out, with the reason where readers look.
+                    incidents = [.. incidents, $"incremental recording step failed: {ex.Message.ReplaceLineEndings(" ")}"];
+                }
+            }
+
             mapCounts = [.. maps.Values
                 .OrderBy(static m => m.TestProject, StringComparer.Ordinal)
                 .Select(static m => new MapCount(Path.GetFileNameWithoutExtension(m.TestProject), m.Classes.Count, m.FailedClasses?.Count))];
@@ -194,6 +215,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 MapCommit = mapCommit,
                 Incidents = incidents,
                 Maps = mapCounts,
+                IncrementalSteps = incrementalSteps,
             };
 
             void Report()
@@ -1316,6 +1338,12 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 others[OtherSelector.Bridge] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { MaxMapAge = int.MaxValue, Cancellation = stop }).Tests, 0);
                 others[OtherSelector.Naive] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.AsIfCurrent, Cancellation = stop }).Tests, 0);
                 others[OtherSelector.NoMap] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Maps = MapUse.None, Cancellation = stop }).Tests, 0);
+                if (_incrementalKey is { } incremental)
+                {
+                    stop.ThrowIfCancellationRequested();
+                    _steps.PlaceMaps(incremental);
+                    others[OtherSelector.Incremental] = new(pipeline.Run(workspace.RepoRoot, sha, new AnalysisOptions { Cancellation = stop }).Tests, 0);
+                }
             }
 
             stop.ThrowIfCancellationRequested();
