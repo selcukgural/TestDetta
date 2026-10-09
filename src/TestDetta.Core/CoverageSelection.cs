@@ -551,7 +551,9 @@ internal sealed partial class CoverageSelection
             // The classes the map names ran it all the same; the rest are traced by name.
             if (!complete)
             {
-                unresolved ??= "a member of its type ran outside any test";
+                unresolved ??= change.MemberName is null ? "a member of its type ran outside any test"
+                    : Unobserved(map, change) ? "the incremental map has not seen its users since it changed"
+                    : "it ran outside any test";
                 known = false;
             }
 
@@ -734,8 +736,8 @@ internal sealed partial class CoverageSelection
     /// Test classes that ran the changed member (all overloads share a name in the map), or any
     /// member of a changed type, and whether they are all of them. Null classes when the map does not
     /// know the member: fields and constants (constants are inlined at compile time), abstract
-    /// members, members of other assemblies, or a member that also ran outside any test. A type
-    /// whose members ran outside any test has known users, but not all of them (incomplete).
+    /// members, members of other assemblies. A member, or a type with a member, that also ran outside
+    /// any test has known users, but not all of them (incomplete).
     /// </summary>
     /// <param name="map">Coverage of one test project.</param>
     /// <param name="change">A changed type or member.</param>
@@ -749,6 +751,7 @@ internal sealed partial class CoverageSelection
         // Operators are recorded under their metadata names (op_Addition); the checked form of one may
         // not exist, which is fine, but a name the map knows and cannot answer for makes the whole unknown.
         HashSet<string>? classes = null;
+        var complete = true;
         foreach (var name in DeclarationWalker.CompiledNames(change.MemberName))
         {
             if (!map.Knows(change.TypeName, name))
@@ -756,16 +759,20 @@ internal sealed partial class CoverageSelection
                 continue;
             }
 
+            // A member that also ran outside any test has users the map cannot name, so the change is traced by name
+            // as well; the classes the map saw running it are users all the same. A framework that finds the member by
+            // reflection (FsCheck's default arbitraries) leaves the name trace nothing to follow, and only they remain.
             if (map.ClassesRunning(change.TypeName, name) is not { } ran)
             {
-                return (null, false);
+                complete = false;
+                ran = map.ClassesSeenRunning(change.TypeName, name);
             }
 
             classes ??= new HashSet<string>(StringComparer.Ordinal);
             classes.UnionWith(ran);
         }
 
-        return (classes, classes is not null);
+        return (classes, classes is not null && complete);
     }
 
     /// <summary>True when the change is to a member, or a type with a member, that an incremental map holds as unobserved.</summary>
