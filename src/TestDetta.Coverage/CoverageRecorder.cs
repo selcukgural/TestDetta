@@ -868,11 +868,12 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         {
             using var document = ReadResults(file);
             var root = document.RootElement;
-            reads.Add(root);
-            uses.Add(root);
             // Ids past the methods are tracked fields a bucket read; what built their values in this
-            // process counts for the bucket through the value.
+            // process counts for the bucket through the value, and so do the files and outputs used
+            // while building them.
             var fieldReads = new FieldReads(root.TryGetProperty("methodCount", out var count) ? count.GetInt32() : methods.Count, Builders(root));
+            reads.Add(root, fieldReads);
+            uses.Add(root, fieldReads);
             MergeBuckets(root.GetProperty("classes"), merged, builtClasses, fieldReads);
             MergeBuckets(root.GetProperty("fixtures"), mergedFixtures, builtFixtures, fieldReads);
             if (root.TryGetProperty("initialization", out var initializing))
@@ -967,12 +968,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         /// <summary>Adds one process's uses.</summary>
         /// <param name="root">The process's results.</param>
-        public void Add(JsonElement root)
+        /// <param name="fieldReads">The process's tracked fields: a bucket that read one used what built its value.</param>
+        public void Add(JsonElement root, FieldReads fieldReads)
         {
             if (!root.TryGetProperty("outputUses", out var uses))
             {
                 return;
             }
+
+            AddFieldUses(root, uses, fieldReads, _classes, _fixtures, _ambient);
 
             Seen = true;
             foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, HashSet<string>>)>)[("classes", _classes), ("fixtures", _fixtures)])
@@ -1068,12 +1072,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         /// <summary>Adds one process's reads.</summary>
         /// <param name="root">The process's results.</param>
-        public void Add(JsonElement root)
+        /// <param name="fieldReads">The process's tracked fields: a bucket that read one used what built its value.</param>
+        public void Add(JsonElement root, FieldReads fieldReads)
         {
             if (!root.TryGetProperty("fileReads", out var reads))
             {
                 return;
             }
+
+            AddFieldUses(root, reads, fieldReads, _classes, _fixtures, _ambient);
 
             Seen = true;
             foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, HashSet<string>>)>)[("classes", _classes), ("fixtures", _fixtures)])
@@ -1155,11 +1162,36 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 return false;
             }
 
-            // A value built while reading another field's value depends on what built that one too:
-            // the time zone cache built from the parsed TZDB data (NodaTime). Fields are followed
-            // transitively, each once.
-            var pending = new Stack<int>([id - MethodCount]);
-            var seen = new HashSet<int>();
+            Walk(id - MethodCount, built, fields: null);
+            return true;
+        }
+
+        /// <summary>
+        /// Adds to <paramref name="fields"/> the field <paramref name="id"/> stands for and every field
+        /// whose value went into building it; nothing when <paramref name="id"/> is a method.
+        /// </summary>
+        /// <param name="id">Bit id from the results.</param>
+        /// <param name="fields">Field indexes; updated in place.</param>
+        public void AddFields(int id, HashSet<int> fields)
+        {
+            if (id >= MethodCount)
+            {
+                Walk(id - MethodCount, built: null, fields);
+            }
+        }
+
+        /// <summary>
+        /// Follows the builders of <paramref name="start"/>. A value built while reading another field's
+        /// value depends on what built that one too: the time zone cache built from the parsed TZDB data
+        /// (NodaTime). Fields are followed transitively, each once.
+        /// </summary>
+        /// <param name="start">Field index.</param>
+        /// <param name="built">Builder methods reached, or null.</param>
+        /// <param name="fields">Fields reached, <paramref name="start"/> included, or null.</param>
+        private void Walk(int start, SortedSet<int>? built, HashSet<int>? fields)
+        {
+            var pending = new Stack<int>([start]);
+            var seen = fields ?? [];
             while (pending.TryPop(out var field))
             {
                 if (!seen.Add(field) || !Builders.TryGetValue(field, out var builders))
@@ -1171,7 +1203,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 {
                     if (builder < MethodCount)
                     {
-                        built.Add(builder);
+                        built?.Add(builder);
                     }
                     else
                     {
@@ -1179,8 +1211,77 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                     }
                 }
             }
+        }
+    }
 
-            return true;
+    /// <summary>
+    /// Credits the files or outputs used while building a tracked field's value (the <c>fields</c> of
+    /// <paramref name="uses"/>) to every bucket of <paramref name="root"/> that read the field, or a field
+    /// whose value was built from it (docs/design/runtime-file-reads.md, initialization).
+    /// </summary>
+    /// <param name="root">One process's results.</param>
+    /// <param name="uses">Its <c>fileReads</c> or <c>outputUses</c>.</param>
+    /// <param name="fieldReads">Its tracked fields.</param>
+    /// <param name="classes">Uses per test class; updated in place.</param>
+    /// <param name="fixtures">Uses per fixture; updated in place.</param>
+    /// <param name="ambient">Uses outside every test; updated in place.</param>
+    private static void AddFieldUses(JsonElement root, JsonElement uses, FieldReads fieldReads, Dictionary<string, HashSet<string>> classes, Dictionary<string, HashSet<string>> fixtures, HashSet<string> ambient)
+    {
+        if (!uses.TryGetProperty("fields", out var element))
+        {
+            return;
+        }
+
+        var byField = new Dictionary<int, string[]>();
+        foreach (var field in element.EnumerateObject())
+        {
+            byField[int.Parse(field.Name, System.Globalization.CultureInfo.InvariantCulture)] = [.. field.Value.EnumerateArray().Select(static p => p.GetString()!)];
+        }
+
+        if (byField.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, HashSet<string>>)>)[("classes", classes), ("fixtures", fixtures)])
+        {
+            foreach (var bucket in root.GetProperty(name).EnumerateObject())
+            {
+                if (Used(bucket.Value) is not { } used)
+                {
+                    continue;
+                }
+
+                if (!buckets.TryGetValue(bucket.Name, out var set))
+                {
+                    buckets[bucket.Name] = set = new HashSet<string>(StringComparer.Ordinal);
+                }
+
+                set.UnionWith(used);
+            }
+        }
+
+        ambient.UnionWith(Used(root.GetProperty("ambient")) ?? []);
+
+        // What the fields a bucket read, directly or through the values built from them, were built with; null for none.
+        HashSet<string>? Used(JsonElement ids)
+        {
+            var fields = new HashSet<int>();
+            foreach (var id in ids.EnumerateArray())
+            {
+                fieldReads.AddFields(id.GetInt32(), fields);
+            }
+
+            HashSet<string>? used = null;
+            foreach (var field in fields)
+            {
+                if (byField.TryGetValue(field, out var values))
+                {
+                    (used ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(values);
+                }
+            }
+
+            return used;
         }
     }
 

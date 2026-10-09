@@ -102,6 +102,15 @@ public static class TestDettaTracker
 
         /// <summary>For a static constructor, the tracked fields it stored; null until it stores one.</summary>
         public List<int>? Stores;
+
+        /// <summary>
+        /// Files read and directories listed in the scope (see <see cref="NoteFile"/>); null until one is.
+        /// They go with the scope's result: to the fields it is stored into, or to initialization.
+        /// </summary>
+        public HashSet<string>? Files;
+
+        /// <summary>Names of the processes started and assemblies loaded in the scope (see <see cref="OutputUsed"/>); null until one is.</summary>
+        public HashSet<string>? Outputs;
     }
 
     /// <summary>Initialization scopes open on this thread, innermost last.</summary>
@@ -187,6 +196,16 @@ public static class TestDettaTracker
 
     /// <summary>Names of processes started and assemblies loaded inside an initialization scope; see <see cref="OutputUsed"/>.</summary>
     private static readonly HashSet<string> InitializationOutputs = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Per tracked field, the files read inside the initialization scopes whose result was stored into
+    /// it: every reader of the field uses them, as it depends on the field's <see cref="Builders"/>.
+    /// Guarded by <see cref="Gate"/>.
+    /// </summary>
+    private static readonly Dictionary<int, HashSet<string>> FieldFiles = [];
+
+    /// <summary>Per tracked field, the outputs used inside the scopes whose result was stored into it; see <see cref="FieldFiles"/>.</summary>
+    private static readonly Dictionary<int, HashSet<string>> FieldOutputs = [];
 
     /// <summary>Extensions dropped from a used name, so a file, an assembly and a project compare by name.</summary>
     private static readonly string[] OutputExtensions = [".dll", ".exe", ".csproj", ".fsproj", ".vbproj"];
@@ -338,7 +357,18 @@ public static class TestDettaTracker
 
         lock (Gate)
         {
-            (_typeInitializerDepth != 0 || _cacheDepth != 0 ? InitializationOutputs : BucketForHit().Outputs).UnionWith(names);
+            if (_typeInitializerDepth == 0 && _cacheDepth == 0)
+            {
+                BucketForHit().Outputs.UnionWith(names);
+            }
+            else if (_scopeCount > 0)
+            {
+                (_scopes![_scopeCount - 1].Outputs ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(names);
+            }
+            else
+            {
+                InitializationOutputs.UnionWith(names);
+            }
         }
     }
 
@@ -497,7 +527,18 @@ public static class TestDettaTracker
 
         lock (Gate)
         {
-            (_typeInitializerDepth != 0 || _cacheDepth != 0 ? InitializationFiles : BucketForHit().Files).Add(full);
+            if (_typeInitializerDepth == 0 && _cacheDepth == 0)
+            {
+                BucketForHit().Files.Add(full);
+            }
+            else if (_scopeCount > 0)
+            {
+                (_scopes![_scopeCount - 1].Files ??= new HashSet<string>(StringComparer.Ordinal)).Add(full);
+            }
+            else
+            {
+                InitializationFiles.Add(full);
+            }
         }
     }
 
@@ -903,6 +944,7 @@ public static class TestDettaTracker
             var builders = Builders.GetOrAdd(field, static _ => new());
             AddScopeContents(in _scopes![_scopeCount - 1], builders);
             builders.TryAdd(method, 0);
+            GiveUses(in _scopes[_scopeCount - 1], field);
         }
 
         PopScope(link: true);
@@ -955,6 +997,7 @@ public static class TestDettaTracker
             AddScopeContents(in scope, contents);
             foreach (var field in stores)
             {
+                GiveUses(in scope, field);
                 var builders = Builders.GetOrAdd(field, static _ => new());
                 foreach (var id in contents.Keys)
                 {
@@ -993,9 +1036,84 @@ public static class TestDettaTracker
         }
 
         ref var scope = ref _scopes![--_scopeCount];
-        MarkScope(in scope, scope.Linked || link);
+        var linked = scope.Linked || link;
+        MarkScope(in scope, linked);
+        PassUses(ref scope, linked);
         scope.Spilled = null;
         scope.Stores = null;
+    }
+
+    /// <summary>
+    /// Adds the files and outputs used in <paramref name="scope"/> so far to those of
+    /// <paramref name="field"/>, which its result was stored into: every reader of the field uses them.
+    /// </summary>
+    /// <param name="scope">An open scope.</param>
+    /// <param name="field">Field index its result was stored into.</param>
+    private static void GiveUses(in Scope scope, int field)
+    {
+        if (scope.Files is null && scope.Outputs is null)
+        {
+            return;
+        }
+
+        lock (Gate)
+        {
+            foreach (var (uses, byField) in (ReadOnlySpan<(HashSet<string>?, Dictionary<int, HashSet<string>>)>)[(scope.Files, FieldFiles), (scope.Outputs, FieldOutputs)])
+            {
+                if (uses is null)
+                {
+                    continue;
+                }
+
+                if (!byField.TryGetValue(field, out var given))
+                {
+                    byField[field] = given = new HashSet<string>(StringComparer.Ordinal);
+                }
+
+                given.UnionWith(uses);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Hands on the files and outputs used in a closing scope. Those of an unlinked scope may serve
+    /// anyone, as the code run there does: they become initialization, which runs the whole project.
+    /// Those of a linked scope already went to its fields (<see cref="GiveUses"/>); an enclosing scope
+    /// built its value from this one's, so they go to it as well.
+    /// </summary>
+    /// <param name="scope">The scope being closed, already removed from the open ones.</param>
+    /// <param name="linked">True when its result was stored into a tracked field.</param>
+    private static void PassUses(ref Scope scope, bool linked)
+    {
+        if (scope.Files is null && scope.Outputs is null)
+        {
+            return;
+        }
+
+        lock (Gate)
+        {
+            if (!linked)
+            {
+                InitializationFiles.UnionWith(scope.Files ?? []);
+                InitializationOutputs.UnionWith(scope.Outputs ?? []);
+            }
+            else if (_scopeCount > 0)
+            {
+                ref var outer = ref _scopes![_scopeCount - 1];
+                if (scope.Files is { } files)
+                {
+                    (outer.Files ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(files);
+                }
+
+                if (scope.Outputs is { } outputs)
+                {
+                    (outer.Outputs ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(outputs);
+                }
+            }
+        }
+
+        scope.Files = null;
+        scope.Outputs = null;
     }
 
     /// <summary>Marks what ran in <paramref name="scope"/> as linked or unlinked.</summary>
@@ -1061,6 +1179,7 @@ public static class TestDettaTracker
         {
             ref var scope = ref _scopes![--_scopeCount];
             MarkScope(in scope, linked: false);
+            PassUses(ref scope, linked: false);
             scope.Spilled = null;
             scope.Stores = null;
         }
@@ -1591,6 +1710,7 @@ public static class TestDettaTracker
 
         WritePaths(json, "ambient", Startup.Files);
         WritePaths(json, "initialization", InitializationFiles);
+        WriteFieldUses(json, FieldFiles);
         json.WriteEndObject();
 
         static void WritePaths(ResultsJsonWriter json, string name, HashSet<string> paths)
@@ -1626,6 +1746,7 @@ public static class TestDettaTracker
 
         WriteNames(json, "ambient", Startup.Outputs);
         WriteNames(json, "initialization", InitializationOutputs);
+        WriteFieldUses(json, FieldOutputs);
         json.WriteEndObject();
 
         static void WriteNames(ResultsJsonWriter json, string name, HashSet<string> names)
@@ -1638,6 +1759,30 @@ public static class TestDettaTracker
 
             json.WriteEndArray();
         }
+    }
+
+    /// <summary>
+    /// Writes <c>fields</c>: per tracked field (by index), the files or outputs used while initializing
+    /// a value stored into it (<see cref="FieldFiles"/>, <see cref="FieldOutputs"/>), which the recorder
+    /// credits to the field's readers.
+    /// </summary>
+    /// <param name="json">Writer positioned inside <c>fileReads</c> or <c>outputUses</c>.</param>
+    /// <param name="byField">Paths or names by field index.</param>
+    private static void WriteFieldUses(ResultsJsonWriter json, Dictionary<int, HashSet<string>> byField)
+    {
+        json.WriteStartObject("fields");
+        foreach (var entry in byField.OrderBy(static e => e.Key))
+        {
+            json.WriteStartArray(entry.Key.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            foreach (var value in entry.Value.OrderBy(static v => v, StringComparer.Ordinal))
+            {
+                json.WriteStringValue(value);
+            }
+
+            json.WriteEndArray();
+        }
+
+        json.WriteEndObject();
     }
 
     /// <summary>

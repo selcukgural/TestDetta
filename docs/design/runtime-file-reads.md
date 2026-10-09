@@ -250,3 +250,30 @@ Two changes, both approved by the owner:
   (`Shared`, `Module` members, `As New`); F# `let` values are not covered yet.
 
 Tests: `LoadedOutputTests` (14 cases).
+
+## Uses while initializing a field belong to its readers (owner, 2026-10-09)
+
+Found dogfooding on AfterApply (PR #202): its architecture tests keep the layers in their own static
+fields (`private static readonly Assembly ApplicationAssembly = Assembly.Load("AfterApply.Application")`).
+The load ran in the test class's static constructor, so the tracker put it into `initialization`, and every
+change to a layer ran all 182 classes of the unit test project. Moving the same calls into the test bodies
+recorded them per class and selected 2. Code run in a static constructor or cache fill had been answered
+through the fields it builds since 2026-10-02 (run-once-cascades.md, C); files read and outputs used
+there had not.
+
+- **Tracker**: a read or use inside an initialization scope goes to the innermost scope. When the scope's
+  result is stored into tracked fields (the static constructor's own fields, `ExitCacheInto`'s cache, the
+  field standing for a type's initialization), the uses go to those fields (`FieldFiles`,
+  `FieldOutputs`). On closing, a linked scope passes them to the scope around it, which built its value
+  from this one; an unlinked scope, or one abandoned by a throw or a new test, puts them into
+  `initialization` as before. Results gain `fields` in `fileReads` and `outputUses` (field index to paths
+  or names).
+- **Recorder** (`AddFieldUses`): a bucket that read a field, or a field whose value was built from it
+  (followed transitively, as builders are), gets the field's uses as its own reads or uses. The map's
+  format does not change, and selection reads it as before.
+- **Unchanged on purpose**: a scope linked in one place and unlinked in another still puts its uses into
+  `initialization` from the unlinked run, so one path no probe sees keeps the whole project, as for code.
+  A static constructor that keeps only mutable value-type statics (untracked) stays unlinked.
+- **Tests**: `InitializationUseTests` (a test class's own field, a shared holder read by another class,
+  an unlinked static constructor, and the selection for a change to the loaded project and to the read
+  file).
