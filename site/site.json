@@ -17,7 +17,7 @@
   "refundDays": "14",
   "checkoutUrl": "https://buy.polar.sh/polar_cl_7qgdSlOlLdrZJ1PE6WY3OnEADd2Z8cCkdw5yT0ED0uR",
   "checkoutOpen": "true",
-  "actionRef": "TestDetta/action@afc6fb36704e2754db456c4c55fe7d78cab438ca # v0.1.2",
+  "actionRef": "TestDetta/action@a46fb19ff53443e7f0b4b0d51c1558fdb1c69457 # v0.1.3",
   "packageId": "TestDetta",
   "corpusRepositories": "43",
   "corpusFailingChanges": "2,561",

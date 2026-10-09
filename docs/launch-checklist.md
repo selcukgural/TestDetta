@@ -43,6 +43,10 @@ Listed on the Marketplace the same day: https://github.com/marketplace/actions/t
 framework's lifecycle is not an external callback, interface members answered through their implementations; corpus
 check of 43 repositories, 100 failing mutants, 0 missed): `TestDetta/action` at `afc6fb3` with tags `v0.1.2` and `v0`,
 GitHub release created, the site and README pinned to it.
+0.1.3 (2026-10-09, a name used only inside endpoint handlers is answered by the handlers' coverage; maps record
+`nestedMethods`; AfterApply PR #205 integration selection 97 -> 4 of 100 classes; corpus check of 43 repositories, 101
+failing mutants, 0 missed): `TestDetta/action` at `a46fb19` with tags `v0.1.3` and `v0`, GitHub release created, the
+site and README pinned to it.
 
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
