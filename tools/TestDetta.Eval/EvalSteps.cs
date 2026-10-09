@@ -462,7 +462,9 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             {
                 var name = Path.GetFileNameWithoutExtension(step.Project.Path);
                 var fullMap = full[step.Project.Path];
-                var total = step.Previous is { } before ? before.Classes.Count + (before.FailedClasses?.Count ?? 0) + (before.SkippedClasses?.Count ?? 0) : 0;
+                // A full recording is measured against what it recorded; a step against the classes the older map knew.
+                var counted = step.Kind == TestDetta.Cli.StepKind.Full ? fullMap : step.Previous;
+                var total = counted is { } known ? known.Classes.Count + (known.FailedClasses?.Count ?? 0) + (known.SkippedClasses?.Count ?? 0) : 0;
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 CoverageMap map;
                 var recorded = 0;

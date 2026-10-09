@@ -252,3 +252,44 @@ but maps would then come from pull request runs, which forks and untrusted branc
   next to each recorded map) and divergent classes (JSON `incrementalSteps`). `EvalMapAgeTests` covers
   it: the drift adds a call, the naive maps miss the class, the incremental maps do not.
   Still to do: the chain `A→A+1→…→N`.
+
+## Measurement 1 (2026-10-09)
+
+`--map-age 1` and `10`, 40 mutants each, on the high-commit-rate corpus repositories (`~/sift-corpus/incr-k<k>`).
+"Failing" counts the failing mutants every mode was judged on; steps are per test project.
+
+| Repository | k | Failing | Missed (incremental) | Full | Partial | Carry |
+|---|---|---|---|---|---|---|
+| fastendpoints | 1 | 27 | 0 | 10 | 0 | 1 |
+| fastendpoints | 10 | 27 | 0 | 11 | 0 | 0 |
+| polly | 1 | 30 | 0 | 5 | 0 | 0 |
+| polly | 10 | 30 | 0 | 5 | 0 | 0 |
+| awesomeassertions | 1 | 32 | 0 | 2 | 0 | 14 |
+| awesomeassertions | 10 | 32 | 0 | 16 | 0 | 0 |
+| mapperly | 1 | 0 | 0 | 0 | 0 | 3 |
+| mapperly | 10 | 0 | 0 | 2 | 0 | 1 |
+| nodatime | 1 | 30 | 0 | 3 | 0 | 0 |
+| nodatime | 10 | 30 | 0 | 3 | 0 | 0 |
+| meziantou-analyzer | 1 | 37 | 0 | 5 | 0 | 0 |
+| meziantou-analyzer | 10 | 37 | 0 | 5 | 0 | 0 |
+
+- **Safety:** the incremental maps missed nothing and selected exactly what the full maps at the same
+  commit selected (same share and precision in every repository). No divergence was reported. (Mapperly's
+  failing mutants are generator mutants whose consumers stop on a failing build, judged before any map
+  is used, so it has none to compare.)
+- **Savings: none yet.** No step was partial. A test project was either carried over (nothing could
+  observe the commits) or recorded in full, because the commits reached it at project level:
+  - documentation inside a project folder: `Src/Library/changelog.md` (fastendpoints, almost every
+    commit), `docs/Rules/*.md` and `docs/README.md` (meziantou-analyzer);
+  - a package bump: Dependabot's SonarAnalyzer update in `Directory.Packages.props` (polly);
+  - project files, `Directory.Build.props`, global usings (awesomeassertions at k=10, nodatime at k=10);
+  - real data: `Tzdb.nzd`, the time zone database the tests read (nodatime at k=1).
+
+  These are the same rules that make a pull request run a whole project. The first two kinds are
+  avoidable with signals the map already has: a non-code file that no test read (`FileReads`) and that
+  the build does not feed into the output (`BuildInputs`, no `EmbeddedResource`/`Content`/copy item) cannot
+  change a test result, and an analyzer-only package (no runtime asset, no source generator) cannot change
+  what the tests run. Both narrow selection, so they are a design decision for the owner, not part of
+  this change. Until then, incremental recording saves time on merges that change code only, which the
+  library corpus rarely has between two commits; the app repositories and AfterApply are the next place
+  to measure it.

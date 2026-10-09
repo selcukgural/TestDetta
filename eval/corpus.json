@@ -902,6 +902,123 @@
       ],
       "setup": "perl -pi -e 's#<BootstrapSdkVersion>[^<]*#<BootstrapSdkVersion>11.0.100-rc.1.26425.128#' eng/Versions.props && { grep -q '<RunArguments>' src/Directory.Build.targets || perl -pi -e 's#(<TestRunnerAdditionalArguments>\\$\\(XunitOptions\\)</TestRunnerAdditionalArguments>)#$1<RunArguments>\\$(RunArguments) --filter-not-trait Category=nonosxtests --filter-not-trait Category=netcore-osx-failing --filter-not-trait Category=nonnetcoreapptests --filter-not-trait Category=failing --filter-not-method Microsoft.Build.UnitTests.XMakeAppTests.SetConsoleUICultureInInvariantCulture --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildMultithreaded_Tests.ReusedTaskHostDiscardsOutputFromCachedWriter --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.CanShutdownServerProcess --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.ServerStartsWhenMtInResponseFileEvenWithoutEnvVar --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.BuildsWhileBuildIsRunningOnServer --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.DeferredLoggerMessagesDoNotAccumulateAcrossServerBuilds --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.NonMultiThreadedServerProcessDoesNotUseServerGC --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.ServerShouldStartWhenBuildIsInteractive --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.PropertyMSBuildStartupDirectoryOnServer --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.MSBuildServerTest --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.TerminalLoggerAutoIsNotSelectedWhenServerOutputIsRedirected --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.VerifyMixedLegacyBehavior --filter-not-method Microsoft.Build.Engine.UnitTests.MSBuildServer_Tests.ServerStartsWhenMtPresentEvenWithoutEnvVar --filter-not-method Microsoft.Build.UnitTests.BackEnd.TaskHostConsoleTelemetry_Tests.ForwardsConsoleOutputFromBuildObjectDisposal --filter-not-method Microsoft.Build.UnitTests.FileLogger_Tests.EmptyErrorLogUsingWarningsErrorsOnly --filter-not-method Microsoft.Build.Engine.UnitTests.BackEnd.TaskHostFactory_Tests.TransientAndSidecarNodeCanCoexist --filter-not-method Microsoft.Build.Engine.UnitTests.BackEnd.AppHostSupport_Tests.ClearBootstrapDotnetRootEnvironment_*</RunArguments>#' src/Directory.Build.targets; } && git update-index --assume-unchanged eng/Versions.props src/Directory.Build.targets && mkdir -p artifacts/bin/bootstrap artifacts/log/Debug && { [ -d artifacts/bin/bootstrap/core/sdk/11.0.100-rc.1.26425.128 ] || { rm -rf artifacts/bin/bootstrap/core && cp -Rc \"$DOTNET_ROOT\" artifacts/bin/bootstrap/core; }; } && { [ -e .dotnet ] || ln -s \"$DOTNET_ROOT\" .dotnet; } && { grep -qx .dotnet .git/info/exclude || echo .dotnet >> .git/info/exclude; } && dotnet build MSBuild.slnx -c Debug -v:q",
       "notes": "Setup seeds the bootstrap layout (artifacts/bin/bootstrap/core) with an APFS clone of the pinned toolchain and points BootstrapSdkVersion at it (global.json's 26420.103 is not public), adds CI's macOS trait filters plus 17 macOS/harness-only failures as --filter-not-* in RunArguments, and runs a full MSBuild.slnx build for the packages and net472 samples the tests read. VSTest wrapper projects left out. ~11,700 tests, 20 min on an M-series Mac (2026-10-06)."
+    },
+    {
+      "name": "bunit",
+      "url": "https://github.com/bUnit-dev/bUnit.git",
+      "commit": "0b9d00c9941a130135cc5d27fd4e37d9fec65847",
+      "framework": "net11.0",
+      "toolchain": {
+        "sdk": "11.0.100-rc.1.26425.128",
+        "runtimes": []
+      },
+      "tags": [
+        "app",
+        "blazor",
+        "components",
+        "mtp",
+        "xunit-v3",
+        "source-generator"
+      ],
+      "projects": [
+        "tests/bunit.tests/bunit.tests.csproj",
+        "tests/bunit.generators.tests/bunit.generators.tests.csproj",
+        "tests/bunit.web.query.tests/bunit.web.query.tests.csproj"
+      ],
+      "notes": "Blazor component testing library: tests render Razor components in a test renderer and query their markup. Test projects target net8.0 to net11.0, so the net11.0 SDK builds them and net11.0 is recorded. The docs/samples test projects are left out (they do not build on their own). Nerdbank.GitVersioning needs the full history. ~2,400 tests, 10 s (2026-10-09)."
+    },
+    {
+      "name": "grpc-aspnetcore-validator",
+      "url": "https://github.com/AnthonyGiretti/grpc-aspnetcore-validator.git",
+      "commit": "644195019f9a6285d6ff89a162984fde78a06ff7",
+      "branch": "master",
+      "tags": [
+        "app",
+        "aspnet",
+        "grpc",
+        "web-app-factory",
+        "interceptors"
+      ],
+      "notes": "gRPC request validation as a server interceptor, tested end to end through WebApplicationFactory and a gRPC client. 12 tests, under 2 s (2026-10-09)."
+    },
+    {
+      "name": "orleans-syncwork",
+      "url": "https://github.com/OrleansContrib/Orleans.SyncWork.git",
+      "commit": "3066c6e5d19e4c1490984a3a4e77033866c021a9",
+      "tags": [
+        "app",
+        "orleans",
+        "actors",
+        "async",
+        "test-cluster"
+      ],
+      "notes": "Long-running work on Orleans grains, tested in an in-process TestCluster (silo and client in the test process). 33 tests, ~40 s (2026-10-09)."
+    },
+    {
+      "name": "alba",
+      "url": "https://github.com/JasperFx/alba.git",
+      "commit": "df21d4d7d50937eeae8171cd2cfb48b822f84a45",
+      "branch": "master",
+      "framework": "net11.0",
+      "toolchain": {
+        "sdk": "11.0.100-rc.1.26425.128",
+        "runtimes": []
+      },
+      "tags": [
+        "app",
+        "aspnet",
+        "http-scenarios",
+        "in-memory-host",
+        "xunit-v3"
+      ],
+      "notes": "HTTP scenario testing on an in-memory ASP.NET Core host (minimal APIs, MVC, authentication stubs). global.json pins the net11.0 SDK. 690 tests, ~8 s (2026-10-09)."
+    },
+    {
+      "name": "efcore-projectables",
+      "url": "https://github.com/EFNext/EntityFrameworkCore.Projectables.git",
+      "commit": "ae324ab2cdff384831fc5fe31badb93446e5c048",
+      "branch": "master",
+      "tags": [
+        "app",
+        "efcore",
+        "sqlite",
+        "source-generator",
+        "analyzers",
+        "verify"
+      ],
+      "projects": [
+        "tests/EntityFrameworkCore.Projectables.CodeFixes.Tests/EntityFrameworkCore.Projectables.CodeFixes.Tests.csproj",
+        "tests/EntityFrameworkCore.Projectables.FunctionalTests/EntityFrameworkCore.Projectables.FunctionalTests.csproj",
+        "tests/EntityFrameworkCore.Projectables.Generator.Tests/EntityFrameworkCore.Projectables.Generator.Tests.csproj",
+        "tests/EntityFrameworkCore.Projectables.Tests/EntityFrameworkCore.Projectables.Tests.csproj"
+      ],
+      "notes": "Source generator that turns [Projectable] members into EF Core expression trees: generator snapshot tests (Verify), code fix tests and functional tests that translate queries to SQL. VendorTests (net8.0 only) left out. ~500 tests, ~13 s (2026-10-09)."
+    },
+    {
+      "name": "managedcode-communication",
+      "url": "https://github.com/managedcode/Communication.git",
+      "commit": "243aa586c4b3d1cc82c7dec5a00b1b51d245ec68",
+      "tags": [
+        "app",
+        "orleans",
+        "signalr",
+        "aspnet",
+        "tunit",
+        "result-types"
+      ],
+      "notes": "Result types across ASP.NET Core, SignalR and Orleans serialization, tested with TUnit. 1,369 tests, ~9 s (2026-10-09)."
+    },
+    {
+      "name": "nager-date",
+      "url": "https://github.com/nager/Nager.Date.git",
+      "commit": "6fb36ef23bf44b3a4bccbdafbda760ad866d2c40",
+      "tags": [
+        "app",
+        "mstest",
+        "archunitnet",
+        "data-heavy"
+      ],
+      "notes": "Public holiday calculations for ~100 countries, MSTest data-driven tests plus ArchUnitNET architecture rules. 677 tests, ~3 s (2026-10-09)."
     }
   ]
 }
