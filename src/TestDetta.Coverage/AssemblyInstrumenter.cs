@@ -251,12 +251,6 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
                 var id = methods.Count;
                 methods.Add(MethodNames.Map(method));
-                var isCallback = ExternalContracts.IsCallback(method, ownAssemblies);
-                if (isCallback)
-                {
-                    callbacks.Add(id);
-                }
-
                 var dataUser = dataSources.GetValueOrDefault(method);
                 // A data source serves the classes that name it, whatever class declares it.
                 var scope = scopes.GetValueOrDefault(method);
@@ -265,6 +259,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                     : isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
                     : isFixture && IsFixtureSetup(method) ? Marker.Fixture
                     : Marker.None;
+
+                // The test framework calls a test class's entry points and a fixture's setup (xUnit's
+                // IAsyncLifetime.InitializeAsync) per instance and keeps nothing they build; their own
+                // bucket already holds what they run. As callbacks they made all of it run-once code,
+                // which AfterApply's per-class host setup spread to every class of the suite.
+                var isCallback = marker is not (Marker.TestClass or Marker.Fixture) && ExternalContracts.IsCallback(method, ownAssemblies);
+                if (isCallback)
+                {
+                    callbacks.Add(id);
+                }
                 InsertProbes(method, probes, new ProbeSite(id, marker, scope ?? dataUser) { ExternalCallback = isCallback });
                 InsertFieldProbes(method, probes, id, tracked);
             }

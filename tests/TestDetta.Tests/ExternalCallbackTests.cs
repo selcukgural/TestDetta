@@ -96,6 +96,21 @@ public sealed class ExternalCallbackTests : IDisposable
             public class PlainTests { [Fact] public void Three() => Assert.Equal(3, App.Math2.Three()); }
             // A recording opens no diff tool for a failing snapshot.
             public class UnattendedTests { [Fact] public void No_diff_tool() => Assert.Equal("true", System.Environment.GetEnvironmentVariable("DiffEngine_Disabled")); }
+
+            // The test framework's own lifecycle: xUnit calls these per instance and keeps nothing they
+            // build, and the class's or fixture's bucket already holds what they run.
+            static class Prep { public static Task Run(int value) => Task.FromResult(value); }
+            public sealed class SetupFixture : IAsyncLifetime
+            {
+                public Task InitializeAsync() => Prep.Run(1);
+                public Task DisposeAsync() => Task.CompletedTask;
+            }
+            public class LifecycleTests(SetupFixture fixture) : IClassFixture<SetupFixture>, IAsyncLifetime
+            {
+                public Task InitializeAsync() => Prep.Run(2);
+                public Task DisposeAsync() => Task.CompletedTask;
+                [Fact] public void Has_a_fixture() => Assert.NotNull(fixture);
+            }
             """);
         _repo.Commit("base");
 
@@ -119,6 +134,9 @@ public sealed class ExternalCallbackTests : IDisposable
         Assert.DoesNotContain(new CoveredMethod("App.Names", "Of"), callbacks);
         Assert.DoesNotContain(new CoveredMethod("App.ByLength", "Compare"), callbacks);
         Assert.DoesNotContain(new CoveredMethod("App.Square", "Corners"), callbacks);
+        Assert.DoesNotContain(new CoveredMethod("App.Tests.LifecycleTests", "InitializeAsync"), callbacks);
+        Assert.DoesNotContain(new CoveredMethod("App.Tests.SetupFixture", "InitializeAsync"), callbacks);
+        Assert.DoesNotContain(map.Methods.ToList().IndexOf(new CoveredMethod("App.Tests.Prep", "Run")), map.Initialization);
 
         _repo.Replace("src/App/Names.cs", "\"[\" + name + \"]\"", "\"<\" + name + \">\"");
         var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();

@@ -1191,6 +1191,7 @@ const CH_MAP = {
       input: "<code>externalCallbacks</code>: bir dış kütüphanenin arayüzünü uygulayan ve onun çağırdığı metotlar",
       output: "\"Bir kez çalışan kod\" kanıtı",
       purpose: "Kütüphane ürettiğini saklayıp sonraki sınıflara verebilir (NSubstitute'taki Castle proxy kancası). Kayıtta bu metotlar ayrıca önbellek kapsamı gibi işaretlenir.",
+      body: "<p><b>İstisna:</b> test sınıfının giriş noktaları ve fixture kurulumu (xUnit'in <code>IAsyncLifetime.InitializeAsync</code>'i) geri çağırma sayılmaz: çatı onları her örnek için çağırır, ürettiklerini saklamaz, çalıştırdıkları zaten kendi kovalarındadır. AfterApply'da sınıf başına host kurulumunun tamamı bu yüzden bir kez çalışan kod sayılıyor ve bütün sınıflara yayılıyordu.</p>",
     },
     {
       title: "Senaryo 1 · Tax'ın gövdesi değişti", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok", "i_run"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "t5", "t6", "t7"],

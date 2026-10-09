@@ -63,3 +63,18 @@ whole-project runs. That is a separate precision item.
 Tests: `ExternalCallbackTests` (a vendor library built outside the repository that caches per type;
 the explicit, override, framework and own-interface cases; sabotage-checked), and
 `TestSelectorTests.Member_a_third_party_library_calls_back_is_traced_by_name_too`.
+
+## The test framework's own lifecycle is not a callback (owner, 2026-10-09)
+
+Found dogfooding on AfterApply (PR #202): xUnit is a third-party assembly, so a test class's or class
+fixture's `IAsyncLifetime.InitializeAsync` and `DisposeAsync` counted as external callbacks. Their whole
+synchronous part, and with it the per-class host setup (`ApiHost.InitializeAsync`, the profile, the
+shared container startup), became unlinked initialization: 592 test-project methods run-once, traced by
+name, and from there every one of the 99 integration classes. xUnit calls these per instance and keeps
+nothing they build, and the tracker already puts what they run into the class's or fixture's bucket.
+
+- **Instrumenter**: a method marked as a test class entry point (`Marker.TestClass`) or a fixture setup
+  (`Marker.Fixture`) is never an external callback: no cache scope, not in `externalCallbacks`. Other
+  overrides of a test framework's types (a custom `DataAttribute`) keep the rule.
+- **Tests**: `ExternalCallbackTests` (a test class and a class fixture implementing `IAsyncLifetime`; the
+  helper their setup calls is not initialization).
