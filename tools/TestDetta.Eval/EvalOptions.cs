@@ -25,7 +25,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
     /// <summary>Help text.</summary>
     public const string Usage = """
         Usage: testdetta-eval --repo <path-or-url> [options]
-               testdetta-eval --corpus <file> [--only <name,...>] [--out <dir>] [--synthetic <n>]
+               testdetta-eval --corpus <file> [--only <name,...>] [--tag <tag,...>] [--out <dir>] [--synthetic <n>]
                          [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
                          [--compare-tia <dll>] [--compare-affected <exe>] [--toolchains <dir>] [--compare <dir>]
                          [--history <dir>] [--cache <dir>] [--explain] [--keep-clones] [-v]

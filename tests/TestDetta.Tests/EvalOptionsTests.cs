@@ -98,6 +98,58 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void Corpus_run_reads_tags()
+    {
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--tag", "app,web", "--tag", "fsharp"], out var options, out var error), error);
+
+        Assert.Equal(["app", "fsharp", "web"], options.Tags.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_tag_runs_the_repositories_that_carry_it_and_an_unknown_tag_is_an_error()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "testdetta-tags-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var corpus = Path.Combine(directory, "corpus.json");
+            File.WriteAllText(corpus, """
+                { "repositories": [
+                  { "name": "shop", "url": "https://example.invalid/shop.git", "tags": ["app", "web"] },
+                  { "name": "parser", "url": "https://example.invalid/parser.git", "tags": ["library"] } ] }
+                """);
+            var stdout = Console.Out;
+            var stderr = Console.Error;
+            var error = new StringWriter();
+            int tagged;
+            int unknown;
+            try
+            {
+                Console.SetOut(TextWriter.Null);
+                Console.SetError(error);
+                tagged = EvalApp.Run(["--summarize", directory, "--corpus", corpus, "--tag", "APP"]);
+                unknown = EvalApp.Run(["--summarize", directory, "--corpus", corpus, "--tag", "mobile"]);
+            }
+            finally
+            {
+                Console.SetOut(stdout);
+                Console.SetError(stderr);
+            }
+
+            var summary = File.ReadAllText(Path.Combine(directory, "summary.md"));
+            Assert.NotEqual(2, tagged);
+            Assert.Contains("| shop |", summary, StringComparison.Ordinal);
+            Assert.DoesNotContain("| parser |", summary, StringComparison.Ordinal);
+            Assert.Equal(2, unknown);
+            Assert.Contains("No corpus repository has the tag mobile", error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Corpus_run_can_replace_mutants_and_parallelism_for_every_repository()
     {
         Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--only", "scriban,fluid", "--synthetic", "20", "--mutant-parallelism", "2", "--parallel", "2"], out var options, out var error), error);

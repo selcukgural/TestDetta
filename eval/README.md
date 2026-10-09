@@ -6,8 +6,14 @@ build and test. Run all of them (hours) or some:
 ```sh
 dotnet run --project tools/TestDetta.Eval -c Release -- --corpus eval/corpus.json --out ~/sift-corpus
 dotnet run --project tools/TestDetta.Eval -c Release -- --corpus eval/corpus.json --only polly,nodatime --out ~/sift-corpus
+dotnet run --project tools/TestDetta.Eval -c Release -- --corpus eval/corpus.json --tag app --out ~/sift-corpus
 dotnet run --project tools/TestDetta.Eval -c Release -- --summarize ~/sift-corpus --corpus eval/corpus.json
 ```
+
+`--tag` picks the repositories that carry any of the given tags (comma-separated or repeated, case does not
+matter), next to `--only`. Two tiers use it: `app`, small applications whose suites run in minutes, each a
+different way of writing tests, for the everyday check of a change; and the whole corpus, the confidence run
+after a large change or before a release.
 
 Each repository gets `<out>/<name>/` with its clone, cached coverage maps, logs and reports
 (`synthetic.md`, `results.md` for history commits); `<out>/summary.md` adds them up, per tag and in

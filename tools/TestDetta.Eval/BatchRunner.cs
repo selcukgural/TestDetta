@@ -21,6 +21,12 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
     public string? Toolchains { get; init; }
 
     /// <summary>
+    /// Tags whose repositories to evaluate (<c>--tag</c>), next to <see cref="Only"/>; empty for none. The quick tier
+    /// (<c>app</c>) is a tag, so a small change can run it and a large one the whole corpus.
+    /// </summary>
+    public IReadOnlySet<string> Tags { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Folder for test outcomes and coverage maps shared by every round (<c>--cache</c>); null keeps
     /// them in the output folder. Useful with pinned commits (docs/design/eval-result-cache.md).
     /// </summary>
@@ -57,6 +63,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         string? output = null;
         var summarize = false;
         var only = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var logLevel = LogLevel.Information;
         var overrides = new BatchOverrides();
         string? toolchains = null;
@@ -127,6 +134,10 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 
                 case "--only":
                     only.UnionWith(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                    break;
+
+                case "--tag":
+                    tags.UnionWith(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                     break;
 
                 case "--focus":
@@ -214,7 +225,7 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
         }
 
         output ??= Path.Combine(Path.GetTempPath(), "sift-corpus-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains, Compare = compare, History = history, Cache = cache };
+        options = new BatchOptions(corpus, only, output, summarize, logLevel) { Overrides = overrides, Toolchains = toolchains, Compare = compare, History = history, Cache = cache, Tags = tags };
         return true;
     }
 }
@@ -257,6 +268,18 @@ internal static partial class BatchRunner
         {
             Console.Error.WriteLine(ex.Message);
             return 2;
+        }
+
+        if (options.Tags.Count > 0)
+        {
+            var tagged = corpus.Repositories.Where(r => r.Tags?.Any(options.Tags.Contains) == true).Select(static r => r.Name).ToList();
+            if (tagged.Count == 0)
+            {
+                Console.Error.WriteLine($"No corpus repository has the tag {string.Join(" or ", options.Tags)}");
+                return 2;
+            }
+
+            options = options with { Only = new HashSet<string>([.. options.Only, .. tagged], StringComparer.OrdinalIgnoreCase) };
         }
 
         var unknown = options.Only.Where(n => !corpus.Repositories.Any(r => string.Equals(r.Name, n, StringComparison.OrdinalIgnoreCase))).ToList();

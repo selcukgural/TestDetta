@@ -259,7 +259,7 @@ const CH_EVAL = {
   nodes: [
     { id: "quick", kind: "cmd", x: 30, y: 56, w: 200, h: 58, label: "quick-check.sh", sub: "--focus · --max-mutants" },
     { id: "corpus", kind: "data", x: 270, y: 52, w: 190, h: 66, label: "eval/corpus.json", sub: "42 depo, sabit commit" },
-    { id: "batch", kind: "cmd", x: 500, y: 56, w: 200, h: 58, label: "BatchRunner.Run", sub: "--cache · --only" },
+    { id: "batch", kind: "cmd", x: 500, y: 56, w: 200, h: 58, label: "BatchRunner.Run", sub: "--cache · --only · --tag" },
     { id: "one", kind: "core", x: 740, y: 56, w: 220, h: 58, label: "EvalApp.RunOne", sub: "klon · rapor · temizlik" },
     { id: "rec", kind: "core", x: 760, y: 216, w: 200, h: 58, label: "EvalSteps.RecordAt", sub: "td record (önbellekli)" },
     { id: "sample", kind: "core", x: 510, y: 216, w: 210, h: 58, label: "TargetSampler", sub: "+ DataFileSampler" },
@@ -298,9 +298,9 @@ const CH_EVAL = {
       title: "Corpus ve tur seçenekleri", nodes: ["corpus", "batch", "quick"], edges: ["e1", "e0"],
       who: "<code>BatchOptions.TryParse</code> → <code>BatchRunner.Run</code>; hızlı kontrol için <code>~/sift-corpus/quick-check.sh</code>",
       file: "tools/TestDetta.Eval/BatchRunner.cs, Corpus.cs, EvalOptions.cs",
-      input: "<code>--corpus eval/corpus.json --only fluid --out runs-x --cache ~/sift-corpus/cache --toolchains … [--focus generator|data-files] [--max-mutants n] [--data-files n] [--keep-clones]</code>",
+      input: "<code>--corpus eval/corpus.json --only fluid [--tag app] --out runs-x --cache ~/sift-corpus/cache --toolchains … [--focus generator|data-files] [--max-mutants n] [--data-files n] [--keep-clones]</code>",
       output: "Depo başına <code>EvalOptions(Target, RunSettings, Output, LogLevel)</code>; <code>BatchRunner.SettingsFor(entry, options)</code>",
-      purpose: "Her depo sabit bir commit'te, kendi SDK'sı (hermetik toolchain) ve ortamıyla değerlendirilir; sonuçlar turlar arasında karşılaştırılabilir kalır.",
+      purpose: "Her depo sabit bir commit'te, kendi SDK'sı (hermetik toolchain) ve ortamıyla değerlendirilir; sonuçlar turlar arasında karşılaştırılabilir kalır. <code>--tag</code> etiketi taşıyan depoları seçer (<code>--only</code> ile birleşir): <code>app</code> dakikalar içinde koşan hızlı katman, tüm corpus büyük değişiklik sonrası güven koşusu.",
     },
     {
       title: "Depo klonlanır, haritalar kaydedilir", nodes: ["batch", "one", "rec"], edges: ["e2", "e3"],
