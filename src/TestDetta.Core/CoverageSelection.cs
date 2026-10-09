@@ -369,6 +369,77 @@ internal sealed partial class CoverageSelection
         return reason is null || Unanswered(change, reason);
     }
 
+    /// <summary>
+    /// Selects the test classes that ran a lambda or local function written in the reached member
+    /// <paramref name="change"/>, in every affected test project with a map downstream of
+    /// <paramref name="owner"/>: the name that reached it appears only in its endpoint handlers, which run
+    /// for the requests that reach them, while its own body (the route mapping) runs whenever a host
+    /// starts (docs/design/endpoint-handlers.md). Returns false, selecting nothing, when a map cannot
+    /// say: recorded before nested methods were kept, without nested methods for the member, or with one
+    /// that may be run-once code; the caller then asks about the whole member.
+    /// </summary>
+    /// <param name="change">A member the name spread reached.</param>
+    /// <param name="owner">Project that compiles it.</param>
+    public bool TryResolveNested(SymbolChange change, ProjectNode owner)
+    {
+        if (_maps.Count == 0 || change.MemberName is null)
+        {
+            return false;
+        }
+
+        var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
+        var runsCompletely = false;
+        foreach (var project in _graph.WithDependents([owner.Path]))
+        {
+            if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var map))
+            {
+                continue;
+            }
+
+            if (_runsCompletely.Contains(project))
+            {
+                runsCompletely = true;
+                continue;
+            }
+
+            if (!Instrumented(project, map, owner.Path))
+            {
+                return false;
+            }
+
+            HashSet<string>? classes = null;
+            foreach (var name in DeclarationWalker.CompiledNames(change.MemberName))
+            {
+                if (!map.Knows(change.TypeName, name))
+                {
+                    continue;
+                }
+
+                if (map.ClassesRunningNested(change.TypeName, name) is not { } ran)
+                {
+                    return false;
+                }
+
+                (classes ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(ran);
+            }
+
+            if (classes is null)
+            {
+                return false;
+            }
+
+            answers.Add((project, classes));
+        }
+
+        if (answers.Count == 0)
+        {
+            return runsCompletely;
+        }
+
+        SelectAll(answers, $"ran an endpoint handler of {change.TypeName}.{change.MemberName}, which names the changed code");
+        return true;
+    }
+
     /// <summary>Logs why coverage cannot answer for <paramref name="change"/>; always false, for the caller to return.</summary>
     /// <param name="change">The change or reached member.</param>
     /// <param name="reason">Why.</param>

@@ -239,6 +239,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 LeakedReads = LeakedReads(resultsFiles, instrumentation.Fields),
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
+                NestedMethods = instrumentation.NestedMethods,
             };
             LogFailedClasses(project, map.FailedClasses?.Count ?? -1);
             LogSkippedClasses(project, map.SkippedClasses?.Count ?? -1, map.ClassLocations?.Count ?? 0);

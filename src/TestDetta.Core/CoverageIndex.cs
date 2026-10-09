@@ -30,6 +30,18 @@ internal sealed class CoverageIndex
     /// <summary>Types (and the types they are nested in) with a member in <see cref="_externalCallbacks"/>.</summary>
     private readonly HashSet<string> _externalCallbackTypes = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Ids of the methods compiled from lambdas and local functions (<see cref="CoverageMap.NestedMethods"/>);
+    /// null for a map recorded before they were kept.
+    /// </summary>
+    private readonly HashSet<int>? _nestedIds;
+
+    /// <summary>Test classes per member, counting only the member's nested methods; a member with none is absent.</summary>
+    private readonly Dictionary<CoveredMethod, HashSet<string>> _nestedClassesByMember = [];
+
+    /// <summary>Members with a nested method that ran outside any test, inside a static constructor or cache fill, or is a third-party callback.</summary>
+    private readonly HashSet<CoveredMethod> _nestedUnanswerable = [];
+
     /// <summary>Builds the lookups; members that no test ran are still known, with no classes.</summary>
     /// <param name="map">Recorded map.</param>
     /// <param name="classesUsingFixture">
@@ -39,6 +51,7 @@ internal sealed class CoverageIndex
     public CoverageIndex(CoverageMap map, Func<string, IReadOnlyCollection<string>> classesUsingFixture)
     {
         Map = map;
+        _nestedIds = map.NestedMethods is { } nestedIds ? [.. nestedIds] : null;
         foreach (var method in map.Methods)
         {
             _classesByMember.TryAdd(method, []);
@@ -48,11 +61,17 @@ internal sealed class CoverageIndex
             }
         }
 
+        foreach (var id in _nestedIds ?? [])
+        {
+            _nestedClassesByMember.TryAdd(map.Methods[id], []);
+        }
+
         foreach (var (testClass, ids) in map.Classes)
         {
             foreach (var id in ids)
             {
                 var method = map.Methods[id];
+                AddNested(id, method, [testClass]);
                 _classesByMember[method].Add(testClass);
                 foreach (var type in EnclosingTypes(method.TypeName))
                 {
@@ -70,9 +89,11 @@ internal sealed class CoverageIndex
                 if (users.Count == 0)
                 {
                     _ambient.Add(method);
+                    MarkNestedUnanswerable(id, method);
                     continue;
                 }
 
+                AddNested(id, method, users);
                 _classesByMember[method].UnionWith(users);
                 foreach (var type in EnclosingTypes(method.TypeName))
                 {
@@ -84,6 +105,7 @@ internal sealed class CoverageIndex
         foreach (var id in map.Ambient)
         {
             _ambient.Add(map.Methods[id]);
+            MarkNestedUnanswerable(id, map.Methods[id]);
         }
 
         // Code that built a value a bucket read counts for that bucket, without counting as a bucket
@@ -101,6 +123,11 @@ internal sealed class CoverageIndex
                 if (users.Count == 0)
                 {
                     _ambient.UnionWith(ids.Select(id => map.Methods[id]));
+                    foreach (var id in ids)
+                    {
+                        MarkNestedUnanswerable(id, map.Methods[id]);
+                    }
+
                     continue;
                 }
 
@@ -108,6 +135,10 @@ internal sealed class CoverageIndex
             }
 
             _ambient.UnionWith(built.Ambient.Select(id => map.Methods[id]));
+            foreach (var id in built.Ambient)
+            {
+                MarkNestedUnanswerable(id, map.Methods[id]);
+            }
         }
 
         // Initialization whose result was stored into a tracked field is answered through the values it
@@ -121,6 +152,7 @@ internal sealed class CoverageIndex
             }
 
             _initialization.Add(map.Methods[id]);
+            MarkNestedUnanswerable(id, map.Methods[id]);
             foreach (var type in EnclosingTypes(map.Methods[id].TypeName))
             {
                 _initializationTypes.Add(type);
@@ -134,6 +166,7 @@ internal sealed class CoverageIndex
 
         foreach (var id in map.ExternalCallbacks ?? [])
         {
+            MarkNestedUnanswerable(id, map.Methods[id]);
             _externalCallbacks.Add(map.Methods[id]);
             _externalCallbackTypes.UnionWith(EnclosingTypes(map.Methods[id].TypeName));
         }
@@ -160,12 +193,55 @@ internal sealed class CoverageIndex
         foreach (var id in ids)
         {
             var method = map.Methods[id];
+            AddNested(id, method, classes);
             _classesByMember[method].UnionWith(classes);
             foreach (var type in EnclosingTypes(method.TypeName))
             {
                 _classesByType[type].UnionWith(classes);
             }
         }
+    }
+
+    /// <summary>Credits a nested method's classes to its member's nested view; other methods are left out.</summary>
+    /// <param name="id">Method id.</param>
+    /// <param name="method">Its member.</param>
+    /// <param name="classes">Test classes that ran it.</param>
+    private void AddNested(int id, CoveredMethod method, IReadOnlyCollection<string> classes)
+    {
+        if (_nestedIds?.Contains(id) == true)
+        {
+            _nestedClassesByMember[method].UnionWith(classes);
+        }
+    }
+
+    /// <summary>Marks the member of a nested method that ran where its users are unknown, or may be run-once code.</summary>
+    /// <param name="id">Method id.</param>
+    /// <param name="method">Its member.</param>
+    private void MarkNestedUnanswerable(int id, CoveredMethod method)
+    {
+        if (_nestedIds?.Contains(id) == true)
+        {
+            _nestedUnanswerable.Add(method);
+        }
+    }
+
+    /// <summary>
+    /// Test classes that ran a lambda or local function written in <paramref name="member"/> of
+    /// <paramref name="typeName"/>, whatever ran its own body; null when the map cannot say: it was
+    /// recorded before nested methods were kept, the member has none, or one of them ran outside any
+    /// test, inside a static constructor or cache fill, or is called back by a third-party library.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name as in <see cref="CoveredMethod.MemberName"/>.</param>
+    public IReadOnlySet<string>? ClassesRunningNested(string typeName, string member)
+    {
+        var key = new CoveredMethod(typeName, member);
+        if (_nestedIds is null || _nestedUnanswerable.Contains(key))
+        {
+            return null;
+        }
+
+        return _nestedClassesByMember.GetValueOrDefault(key);
     }
 
     /// <summary>True when some member of <paramref name="typeName"/> or a type nested in it ran inside a static constructor or a cache fill.</summary>

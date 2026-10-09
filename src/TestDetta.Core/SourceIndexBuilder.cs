@@ -295,6 +295,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
             {
                 MetadataReferences = CollectMetadataReferences(declaration.Node, declaration.Descend, aliases),
                 IsAbstract = declaration.MemberName is not null && HasNoCode(node),
+                HandlerOnlyReferences = declaration.MemberName is null ? [] : HandlerOnlyReferences(declaration.Node, declaration.Descend, aliases),
             });
         }
 
@@ -581,6 +582,76 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                     break;
             }
         }
+    }
+
+    /// <summary>Route mappings whose handler delegate the framework calls per request (ASP.NET Core minimal APIs).</summary>
+    private static readonly FrozenSet<string> EndpointMappings = FrozenSet.Create(
+        StringComparer.Ordinal, "Map", "MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch", "MapMethods", "MapFallback");
+
+    /// <summary>
+    /// The names <paramref name="node"/> mentions only inside endpoint handler bodies; see
+    /// <see cref="IndexedMember.HandlerOnlyReferences"/>. A handler is a lambda or anonymous method with a
+    /// block body passed as an argument of a call named like a route mapping. Its parameters and attributes
+    /// are outside its body, and its <c>return</c> statements count as outside as well: what a handler
+    /// returns sets its delegate's type, which the framework reads at start-up for endpoint metadata. A
+    /// handler with an expression body is all return value.
+    /// </summary>
+    /// <param name="node">Member declaration.</param>
+    /// <param name="descend">Which child nodes belong to the declaration.</param>
+    /// <param name="aliases">The file's using aliases and the names their targets hold.</param>
+    private static FrozenSet<string> HandlerOnlyReferences(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> descend, Dictionary<string, List<string>> aliases)
+    {
+        List<BlockSyntax>? bodies = null;
+        foreach (var invocation in node.DescendantNodes(n => descend(n, node)).OfType<InvocationExpressionSyntax>())
+        {
+            var called = invocation.Expression switch
+            {
+                MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+                SimpleNameSyntax simple => simple.Identifier.ValueText,
+                _ => null,
+            };
+            if (called is null || !EndpointMappings.Contains(called))
+            {
+                continue;
+            }
+
+            foreach (var argument in invocation.ArgumentList.Arguments)
+            {
+                if (argument.Expression is AnonymousFunctionExpressionSyntax { Block: { } body })
+                {
+                    (bodies ??= []).Add(body);
+                }
+            }
+        }
+
+        if (bodies is null)
+        {
+            return [];
+        }
+
+        var inside = new HashSet<string>(StringComparer.Ordinal);
+        var outside = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var child in node.DescendantNodes(n => descend(n, node)))
+        {
+            var name = child switch
+            {
+                SimpleNameSyntax simple => simple.Identifier.ValueText,
+                AttributeSyntax attribute when RightmostName(attribute.Name) is { } attributeName => attributeName.Identifier.ValueText + "Attribute",
+                _ => null,
+            };
+            if (name is null)
+            {
+                continue;
+            }
+
+            var inBody = bodies.Exists(b => b.Span.Contains(child.Span)) && !child.Ancestors().Any(static a => a is ReturnStatementSyntax);
+            (inBody ? inside : outside).Add(name);
+        }
+
+        AddAliasTargets(inside, aliases);
+        AddAliasTargets(outside, aliases);
+        inside.ExceptWith(outside);
+        return inside.ToFrozenSet(StringComparer.Ordinal);
     }
 
     /// <summary>The last identifier of a possibly qualified name: <c>Xunit.Fact</c> gives <c>Fact</c>.</summary>

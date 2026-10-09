@@ -21,6 +21,9 @@ internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Method
 
     /// <summary>Ids of the methods that implement or override a member of a third-party library; see <see cref="CoverageMap.ExternalCallbacks"/>.</summary>
     public IReadOnlyList<int> ExternalCallbacks { get; init; } = [];
+
+    /// <summary>Ids of the methods compiled from lambdas and local functions; see <see cref="CoverageMap.NestedMethods"/>.</summary>
+    public IReadOnlyList<int> NestedMethods { get; init; } = [];
 }
 
 /// <summary>
@@ -66,7 +69,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var ownAssemblies = assemblies.Select(static a => Path.GetFileNameWithoutExtension(a)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var coreLibrary = TestHostCoreLibrary(testAssemblies);
 
-        var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks };
+        var nested = new List<int>();
+        var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks, NestedMethods = nested };
         try
         {
             foreach (var assembly in assemblies)
@@ -75,7 +79,10 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 BackUp(Path.ChangeExtension(assembly, ".pdb"), backupDirectory, backups);
 
                 var before = methods.Count;
-                InstrumentOne(assembly, testAssemblies.Contains(assembly), new MethodTables(methods, fields, callbacks, ownAssemblies) { CoreLibrary = coreLibrary });
+                InstrumentOne(assembly, testAssemblies.Contains(assembly), new MethodTables(methods, fields, callbacks, ownAssemblies)
+                {
+                    CoreLibrary = coreLibrary, Nested = nested,
+                });
                 LogInstrumented(assembly, methods.Count - before);
             }
         }
@@ -154,6 +161,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     {
         /// <summary>Version of the test host's System.Private.CoreLib (<see cref="TestHostCoreLibrary"/>); null when unknown.</summary>
         public Version? CoreLibrary { get; init; }
+
+        /// <summary>Ids of methods compiled from lambdas and local functions; see <see cref="InstrumentationResult.NestedMethods"/>.</summary>
+        public List<int> Nested { get; init; } = [];
     }
 
     /// <summary>Rewrites one assembly, appending its methods to the shared tables.</summary>
@@ -251,6 +261,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
                 var id = methods.Count;
                 methods.Add(MethodNames.Map(method));
+                if (MethodNames.IsNested(method))
+                {
+                    tables.Nested.Add(id);
+                }
+
                 var dataUser = dataSources.GetValueOrDefault(method);
                 // A data source serves the classes that name it, whatever class declares it.
                 var scope = scopes.GetValueOrDefault(method);

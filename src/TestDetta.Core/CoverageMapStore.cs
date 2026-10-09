@@ -71,6 +71,11 @@ public static class CoverageMapStore
             WriteIds(json, "externalCallbacks", callbacks);
         }
 
+        if (map.NestedMethods is { } nested)
+        {
+            WriteIds(json, "nestedMethods", nested);
+        }
+
         // Generated files can be large (a polyfill package writes hundreds of members); compressed,
         // they cost a fraction of the map.
         json.WriteStartArray("generated"u8);
@@ -290,6 +295,7 @@ public static class CoverageMapStore
                 Initialization = root.TryGetProperty("initialization", out var initialization) ? ReadIds(initialization) : [],
                 LinkedInitialization = root.TryGetProperty("linkedInitialization", out var linked) ? ReadIds(linked) : null,
                 ExternalCallbacks = root.TryGetProperty("externalCallbacks", out var callbacks) ? ReadIds(callbacks) : null,
+                NestedMethods = root.TryGetProperty("nestedMethods", out var nested) ? ReadIds(nested) : null,
                 BuiltValues = root.TryGetProperty("builtValues", out var built)
                     ? new CoverageHits(ReadBuckets(built.GetProperty("classes")), ReadBuckets(built.GetProperty("fixtures")), ReadIds(built.GetProperty("ambient")))
                     : null,

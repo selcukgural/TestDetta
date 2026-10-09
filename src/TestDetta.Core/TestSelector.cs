@@ -182,7 +182,12 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             coverage is null
                 ? null
                 : member => Resolve(member) || (member.IsAbstract && ResolveThroughImplementations(member)),
-            request.Graph);
+            request.Graph,
+            coverage is null
+                ? null
+                : member => coverage.TryResolveNested(
+                    new SymbolChange(member.TypeName, member.MemberName, SymbolChangeKind.Modified),
+                    request.Graph[member.ProjectPath]));
         var root = Paths.Normalize(request.RepoRoot);
 
         // Coverage answers for a member the spread reached.

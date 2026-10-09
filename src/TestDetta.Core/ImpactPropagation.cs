@@ -18,8 +18,29 @@ namespace TestDetta.Core;
 /// projects that depend on it, the only code that can name it (docs/design/run-once-cascades.md).
 /// Null looks names up everywhere.
 /// </param>
-internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logger, Func<IndexedMember, bool>? resolveByCoverage = null, ProjectGraph? graph = null)
+/// <param name="resolveByHandlers">
+/// Asked before <paramref name="resolveByCoverage"/> for a member reached by a name it mentions only
+/// inside its endpoint handlers (<see cref="IndexedMember.HandlerOnlyReferences"/>), when that name
+/// carries no change of a declaration's shape: true when coverage of the member's lambdas answers
+/// (docs/design/endpoint-handlers.md). Null disables it.
+/// </param>
+internal sealed partial class ImpactPropagation(
+    SourceIndex index,
+    ILogger logger,
+    Func<IndexedMember, bool>? resolveByCoverage = null,
+    ProjectGraph? graph = null,
+    Func<IndexedMember, bool>? resolveByHandlers = null)
 {
+    /// <summary>
+    /// Names whose declaration changed shape: types declared anew or with changed metadata, and members
+    /// added, removed or with changed metadata. A framework reads shapes at start-up, through the
+    /// handler signatures the route mapping registers, so these never use the handler rule.
+    /// </summary>
+    private readonly HashSet<string> _shapeNames = new(StringComparer.Ordinal);
+
+    /// <summary>Members answered by their endpoint handlers' coverage alone, with the name that reached them.</summary>
+    private readonly Dictionary<IndexedMember, string> _stoppedByHandlers = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>Per declaring project, the projects whose code can name its members: itself and its dependents.</summary>
     private readonly Dictionary<string, HashSet<string>> _visibleFrom = new(Paths.Comparer);
 
@@ -122,6 +143,14 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     {
         AddAffectedType(change.TypeName, null);
         _seededChanges.TryAdd(change.TypeName, change);
+        if (change.MemberName is null || change.MetadataChanged || change.Kind != SymbolChangeKind.Modified)
+        {
+            _shapeNames.Add(DeclarationWalker.SimpleTypeName(change.TypeName));
+            if (change.MemberName is not null)
+            {
+                _shapeNames.UnionWith(DeclarationWalker.ReferenceNames(change.MemberName));
+            }
+        }
 
         // A removed member may have been reached through its type (an override, an interface
         // implementation), and nothing is left in the index to say which.
@@ -148,19 +177,58 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
         }
     }
 
-    /// <summary>Follows the queued names until no new member is reached.</summary>
+    /// <summary>
+    /// Follows the queued names until no new member is reached. A member answered by its endpoint
+    /// handlers through a name that turned out to carry a shape change (seen later in the spread) is
+    /// answered as a whole after all, and the spread goes on from there.
+    /// </summary>
     public void Run()
     {
-        while (_pending.TryDequeue(out var lookup))
+        do
         {
-            foreach (var member in index.ReferencesTo(lookup.Name))
+            while (_pending.TryDequeue(out var lookup))
             {
-                if (Matches(lookup, member))
+                foreach (var member in index.ReferencesTo(lookup.Name))
                 {
-                    MarkAffected(member, lookup.Name, _lookupOrigin.GetValueOrDefault(lookup), member.MetadataReferences.Contains(lookup.Name) ? Reach.Metadata : Reach.Code);
+                    if (Matches(lookup, member))
+                    {
+                        MarkAffected(member, lookup.Name, _lookupOrigin.GetValueOrDefault(lookup), member.MetadataReferences.Contains(lookup.Name) ? Reach.Metadata : Reach.Code);
+                    }
                 }
             }
+
+            foreach (var (member, name) in _stoppedByHandlers.Where(s => _shapeNames.Contains(s.Value)).ToList())
+            {
+                ResolveWhole(member, name, Reach.Code);
+            }
         }
+        while (_pending.Count > 0);
+    }
+
+    /// <summary>True when the handler rule may answer for <paramref name="member"/> reached by <paramref name="name"/>.</summary>
+    /// <param name="member">A member reached through its code.</param>
+    /// <param name="name">The name that reached it.</param>
+    private bool ThroughHandlersOnly(IndexedMember member, string name) =>
+        resolveByHandlers is not null && member.HandlerOnlyReferences.Contains(name) && !_shapeNames.Contains(name);
+
+    /// <summary>
+    /// Takes back the handler-only answer for <paramref name="member"/>: asks coverage about the whole
+    /// member and spreads its names when that cannot answer either.
+    /// </summary>
+    /// <param name="member">A member answered by its handlers' coverage.</param>
+    /// <param name="because">The name that reaches it now.</param>
+    /// <param name="reach">How it is reached now.</param>
+    private void ResolveWhole(IndexedMember member, string because, Reach reach)
+    {
+        _stoppedByHandlers.Remove(member);
+        LogHandlersNotEnough(member.TypeName, member.MemberName ?? "(type)", because);
+        if (reach == Reach.Code && resolveByCoverage?.Invoke(member) == true)
+        {
+            _stoppedByCoverage.Add(member);
+            return;
+        }
+
+        Spread(member, reach);
     }
 
     /// <summary>Records <paramref name="member"/> as affected and queues the names it can be reached by.</summary>
@@ -179,12 +247,25 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
                 Spread(member, reach);
             }
 
+            // Its handlers answered; now a name outside them (or metadata) reaches it too.
+            if (_stoppedByHandlers.ContainsKey(member) && (reach != Reach.Code || !ThroughHandlersOnly(member, because)))
+            {
+                ResolveWhole(member, because, reach);
+            }
+
             return;
         }
 
         LogAffected(member.TypeName, member.MemberName ?? "(type)", because);
         _reachedFrom[member] = (from, because);
         AddAffectedType(member.TypeName, member);
+
+        if (reach == Reach.Code && ThroughHandlersOnly(member, because) && resolveByHandlers!(member))
+        {
+            LogStoppedByHandlers(member.TypeName, member.MemberName ?? "(type)", because);
+            _stoppedByHandlers[member] = because;
+            return;
+        }
 
         if (reach == Reach.Code && resolveByCoverage?.Invoke(member) == true)
         {
@@ -201,6 +282,13 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     /// <param name="reach">How it was reached; changed metadata is read through the type.</param>
     private void Spread(IndexedMember member, Reach reach)
     {
+        // Reached through metadata, the member's own declaration reads differently: its names carry that.
+        if (reach == Reach.Metadata)
+        {
+            _shapeNames.UnionWith(member.DeclaredNames);
+            _shapeNames.Add(DeclarationWalker.SimpleTypeName(member.TypeName));
+        }
+
         var referencedByName = false;
         var scope = member switch
         {
@@ -390,6 +478,12 @@ internal sealed partial class ImpactPropagation(SourceIndex index, ILogger logge
     private static bool IsInScope(string typeName, string scope) =>
         typeName.StartsWith(scope, StringComparison.Ordinal)
         && (typeName.Length == scope.Length || typeName[scope.Length] == '.');
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: {Because} appears only in its endpoint handlers; test classes taken from their coverage")]
+    private partial void LogStoppedByHandlers(string typeName, string memberName, string because);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: reached through {Because} as well, outside its endpoint handlers or with a changed shape; answered as a whole")]
+    private partial void LogHandlersNotEnough(string typeName, string memberName, string because);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: its metadata names {Because}, which coverage cannot see; spreading after all")]
     private partial void LogReachedThroughMetadata(string typeName, string memberName, string because);

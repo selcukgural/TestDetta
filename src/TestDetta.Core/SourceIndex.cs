@@ -57,6 +57,16 @@ internal sealed record IndexedMember(
     /// (<see cref="SourceIndex.Implementations"/>). Set for C# only; false elsewhere keeps the name trace.
     /// </summary>
     public bool IsAbstract { get; init; }
+
+    /// <summary>
+    /// Names the member mentions only inside the bodies of endpoint handlers: lambdas passed straight to
+    /// <c>MapGet</c>, <c>MapPost</c> and the other route mappings, outside their <c>return</c> statements. The
+    /// mapping call runs when every host starts; the handler runs only for the requests that reach it,
+    /// and a name inside its body (unlike its parameters and what it returns, which the framework reads
+    /// at start-up to build endpoint metadata) changes nothing until it does. Set for C# only; empty
+    /// elsewhere (docs/design/endpoint-handlers.md).
+    /// </summary>
+    public FrozenSet<string> HandlerOnlyReferences { get; init; } = [];
 }
 
 /// <summary>A type declared in an indexed project.</summary>

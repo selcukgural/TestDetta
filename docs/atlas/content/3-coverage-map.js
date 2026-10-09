@@ -220,6 +220,14 @@ const CH_MAP = {
       purpose: "Arayüz üzerinden yapılan çağrı her zaman bir uygulamayı çalıştırır. Depodaki bütün uygulamaları haritalar biliyorsa cevap onlardır; çıplak ad izlenseydi depodaki her alakasız <code>CreateAsync</code> çağrısına ulaşılırdı. Uygulama yoksa ya da biri cevaplanamazsa eski yol (isim izleme) sürer. Depo dışı uygulama (mock) değişen kodu çalıştırmaz.",
     },
     {
+      title: "Senaryo 10c · Adı yalnızca uç nokta handler'ında geçen üye (2026-10-09)", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok", "i_run"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "t5", "t6", "t7"],
+      who: "<code>ImpactPropagation.MarkAffected</code> → <code>ThroughHandlersOnly</code> → <code>CoverageSelection.TryResolveNested</code> → <code>CoverageIndex.ClassesRunningNested</code>",
+      file: "src/TestDetta.Core/ImpactPropagation.cs, CoverageSelection.cs, CoverageIndex.cs, SourceIndexBuilder.cs (HandlerOnlyReferences)",
+      input: "<code>MapSiteTrafficEndpoints</code>, <code>SiteTrafficNormalizer</code> adına yalnızca <code>MapPost</code>'a verilen lambda'nın gövdesinde değiniyor; haritada <code>nestedMethods</code> var",
+      output: "Lambdalarını çalıştıran 4 sınıf; kayıt kodunu her host açılışında çalıştıran 97 sınıf değil",
+      purpose: "Kayıt her host açılışında, handler yalnız isteğe ulaşınca çalışır. Kural dar tutulur: yalnız <code>Map*</code> handler'ları (DI fabrikası ve options lambda'sı bir kez çalışıp saklanır), <code>return</code> ve parametreler hariç (çatı imzayı açılışta okur), şekli değişen ad hariç. Aynı üyeye sonra başka bir adla ya da metaveriyle ulaşılırsa bütün üyenin kapsamına dönülür.",
+    },
+    {
       title: "Senaryo 11 · Harita, sahibi enstrümante etmedi (2026-10-07)", nodes: ["start", "q1", "q2", "q3", "q4", "no"], edges: ["t0", "t1", "t2", "t3", "n4"],
       who: "<code>Answers</code> içinde <code>Instrumented(project, map, owner.Path)</code>; <code>TryResolveType</code> aynı kontrolü yapar",
       file: "src/TestDetta.Core/CoverageSelection.cs",

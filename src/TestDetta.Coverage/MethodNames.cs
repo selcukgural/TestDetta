@@ -113,6 +113,37 @@ internal static class MethodNames
         return null;
     }
 
+    /// <summary>
+    /// True for a method compiled from a lambda, an anonymous method or a local function, or from the
+    /// state machine of one (<c>&lt;Run&gt;b__0_0</c>, <c>&lt;&gt;c__DisplayClass0_0.&lt;Run&gt;b__1</c>,
+    /// <c>&lt;Run&gt;g__Local|0_0</c>, <c>&lt;&lt;Run&gt;b__0_0&gt;d.MoveNext</c>). <see cref="Map"/> credits it to
+    /// the member it is written in; this tells it apart from the member's own body, which runs when the
+    /// member is called, while a lambda may run later or never (an endpoint handler runs per request).
+    /// </summary>
+    /// <param name="method">A method with a body.</param>
+    public static bool IsNested(MethodDefinition method)
+    {
+        if (IsNestedName(method.Name))
+        {
+            return true;
+        }
+
+        for (var type = method.DeclaringType; type is not null && IsCompilerGenerated(type); type = type.DeclaringType)
+        {
+            if (IsNestedName(type.Name))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True for a generated name of a lambda or local function, or of a type generated for one.</summary>
+    /// <param name="name">Method or type name.</param>
+    private static bool IsNestedName(string name) =>
+        name.StartsWith('<') && (name.Contains(">b__", StringComparison.Ordinal) || name.Contains(">g__", StringComparison.Ordinal));
+
     /// <summary>True for types the compiler generates: closures, lambda caches and state machines.</summary>
     /// <param name="type">Type definition.</param>
     private static bool IsCompilerGenerated(TypeDefinition type) => type.Name.StartsWith('<');

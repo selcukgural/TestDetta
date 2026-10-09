@@ -137,6 +137,16 @@ public sealed record CoverageMap(
     public IReadOnlyList<int>? ExternalCallbacks { get; init; }
 
     /// <summary>
+    /// Methods (indexes into <see cref="Methods"/>) compiled from lambdas, anonymous methods and local
+    /// functions, or their state machines. They carry the name of the member they are written in, whose
+    /// own body may run elsewhere: an endpoint registration runs at every host's start, its handler lambda
+    /// only for the requests that reach it. A member reached by a name written only inside its endpoint
+    /// handlers is answered by these alone (docs/design/endpoint-handlers.md). Null for maps recorded
+    /// before this was kept.
+    /// </summary>
+    public IReadOnlyList<int>? NestedMethods { get; init; }
+
+    /// <summary>
     /// Files source generators wrote into the recorded assemblies, read from their PDBs. They are not
     /// in the source tree, so the source index adds them from here, as sources of their projects.
     /// </summary>

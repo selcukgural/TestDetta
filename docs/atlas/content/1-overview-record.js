@@ -348,6 +348,7 @@ public static void Hit(int id)
       body: ul([
         "Kovalar sınıf adına göre birleşir (<code>MergeBuckets</code>). <code>methodCount</code> üstündeki id'ler alan okumasıdır: o alanın değerini kuran metotlar (<code>fieldBuilders</code>, zincirleme) <code>BuiltValues</code>'a gider.",
         "<code>LinkedInitialization</code>: bir süreçte bağlanmış, hiçbir süreçte bağlanmamış (unlinked) olmayan başlatma kodu.",
+        "<code>NestedMethods</code>: lambda, anonim metot ve yerel fonksiyonlardan (ve onların state machine'lerinden) derlenen metotların id'leri (<code>MethodNames.IsNested</code>). Aynı üyenin adını taşırlar ama başka zaman çalışırlar: uç nokta kaydı her host açılışında, handler yalnız istekte.",
         "<code>fileReads.fields</code> ve <code>outputUses.fields</code> (alan → yollar/adlar): bir kova o alanı ya da değeri ondan kurulan bir alanı okuduysa (zincirleme, <code>FieldReads.AddFields</code>), alanın kullanımları o kovanın kendi okuması/kullanımı sayılır (<code>AddFieldUses</code>). Harita biçimi değişmez.",
         "Dosya okumaları <code>FileReadPaths</code> ile depo yollarına çevrilir: depo dışı atılır, <code>bin/obj</code> kopyası aynı adlı ve içerikli izlenen dosyaya eşlenir.",
         "<code>OutputUses</code>: tracker'ın <code>outputUses</code>'ı, kancanın <code>process-starts-*.tsv</code> satırları ve <code>bin/obj</code> altında okunup hiçbir izlenen dosyaya karşılık gelmeyen dosyaların adları (<code>RawOutputUses</code>).",
