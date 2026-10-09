@@ -20,6 +20,14 @@ attributes and default values read through reflection without running the member
 attributes, `[JsonPropertyName]`), and for code that only names the type in metadata. Validate with a
 corpus run on every repository, `--mutant-kinds all`, before shipping.
 
+**Withdrawn as written (2026-10-09, before any code):** it would miss tests that read the type's shape
+through reflection in third-party code. AfterApply's `SiteRootTests.Neither_Address_Is_In_The_OpenApi_Document`
+downloads `/openapi/v1.json`, which ASP.NET builds from `.Produces<ApplicationDetailResponse>()` by
+reflection: no constructor or accessor of the record runs, so coverage of them never names the test,
+and only the name trace through the registration selects it. OpenAPI and Swagger snapshot tests are
+common. A safe version needs a signal for "this class read the type's shape" (reflection inside
+ASP.NET, Swashbuckle, serializers), which nothing records today.
+
 ## Later: Windows (owner, 2026-10-06: noted, to do later)
 
 - A Windows CI job (manual or weekly; Windows minutes cost about 1.7x Linux) that runs the `Legacy`
