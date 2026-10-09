@@ -39,6 +39,10 @@ The Trusted Publishing policy needed the scope "Push new packages and package ve
 at `7c3cda6` with tags `v0.1.1` and `v0`, the site and README pinned to it. The tags moved there from `cb38ce9` on
 2026-10-09: the Marketplace refused the description (125 characters or more), so `7c3cda6` changes only that line.
 Listed on the Marketplace the same day: https://github.com/marketplace/actions/testdetta (Testing, Continuous integration).
+0.1.2 (2026-10-09, dogfooding fixes from AfterApply: uses while initializing a field belong to its readers, the test
+framework's lifecycle is not an external callback, interface members answered through their implementations; corpus
+check of 43 repositories, 100 failing mutants, 0 missed): `TestDetta/action` at `afc6fb3` with tags `v0.1.2` and `v0`,
+GitHub release created, the site and README pinned to it.
 
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
