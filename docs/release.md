@@ -23,6 +23,11 @@ GitHub Action `testdetta/action`, which downloads that package. This repository 
    and uploads the bundle: `action.yml`, `tool.lock`, `README.md` (its `{{version}}` replaced with the tag's
    version, so the example names the release), `LICENSE.txt`.
 4. Copy the bundle into `testdetta/action`, commit, tag `v0.1.0`, and move the major tag to it (`v0` while the version is 0.x, `v1` from 1.0.0).
+5. Check every README before announcing: the bundled action README (its example names the new version), the NuGet
+   README (`dist/nuget/README.md`: frameworks, CI systems, trial length and pricing as the site states them; a fix
+   there needs the next package version), this README and `site/site.json` (`actionRef` pinned to the new action
+   commit), and the release notes on `TestDetta/action`. A README fix after tagging is a README-only commit in
+   `TestDetta/action` with the version and major tags moved to it.
 
 `action.yml` is the same file in both places. Here it builds TestDetta from source (this repository's
 own workflows use the action from the checkout); in the public repository, where there is no source, it
