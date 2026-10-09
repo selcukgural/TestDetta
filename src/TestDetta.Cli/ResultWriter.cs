@@ -37,6 +37,9 @@ internal sealed record ResultReport(
 
     /// <summary>See <see cref="AnalysisResult.UnmappedFilesRead"/>.</summary>
     public IReadOnlyList<string>? UnmappedFilesRead { get; init; }
+
+    /// <summary>Colour and characters of the text format; the other formats are never styled.</summary>
+    public ConsoleStyle Style { get; init; } = ConsoleStyle.Plain;
 }
 
 /// <summary>Prints an analysis result on stdout in the format chosen on the command line.</summary>
@@ -111,130 +114,10 @@ internal static class ResultWriter
         $"Coverage maps from {drift.FromCommit[..Math.Min(12, drift.FromCommit.Length)]} are {drift.Commits} commit(s) behind the base; "
         + $"{drift.ChangedFiles.Count} file(s) changed since then were bridged.";
 
-    /// <summary>Human readable summary: affected projects with reasons, then what to run per test project.</summary>
+    /// <summary>Human readable report (docs/design/console-output.md); see <see cref="TextReport.WriteAnalysis"/>.</summary>
     /// <param name="report">What to print.</param>
     /// <param name="stdout">Destination.</param>
-    private static void WriteText(ResultReport report, TextWriter stdout)
-    {
-        var testsOnly = report.Options.Affected.TestsOnly;
-        var selected = testsOnly ? [.. report.Result.Tests] : report.Result.Affected;
-
-        if (LicenseLine(report.License, report.LicenseEnforced) is { } license)
-        {
-            stdout.WriteLine(license);
-        }
-
-        stdout.WriteLine($"{report.Stats.ChangedFileCount} changed file(s) vs {report.Options.Analysis.BaseRef}, {report.Stats.ProjectCount} project(s) in repo.");
-        stdout.WriteLine($"{selected.Count} affected{(testsOnly ? " test" : "")} project(s):");
-
-        foreach (var affected in selected)
-        {
-            var marker = affected.Project.IsTestProject ? "[test] " : "       ";
-            stdout.WriteLine($"  {marker}{Relative(report.RepoRoot, affected.Project.Path)}  ({affected.Reason})");
-        }
-
-        if (report.Result.CosmeticFiles.Count > 0)
-        {
-            stdout.WriteLine($"{report.Result.CosmeticFiles.Count} C# file(s) with only whitespace or comment changes (ignored).");
-        }
-
-        if (report.Result.UnmappedFiles.Count > 0)
-        {
-            // With maps that recorded file reads, a file outside every project runs the tests that read it.
-            var read = report.UnmappedFilesRead?.Count ?? 0;
-            stdout.WriteLine(report.UnmappedFilesRead is null
-                ? $"{report.Result.UnmappedFiles.Count} changed file(s) outside any project (ignored)."
-                : $"{report.Result.UnmappedFiles.Count} changed file(s) outside any project: {read} read by recorded tests, {report.Result.UnmappedFiles.Count - read} read by none (ignored).");
-        }
-
-        foreach (var drift in report.Drifts)
-        {
-            stdout.WriteLine(DriftLine(drift));
-        }
-
-        if (report.Tests.Count == 0)
-        {
-            return;
-        }
-
-        stdout.WriteLine();
-        WriteTestDecisions(report.RepoRoot, report.Tests, stdout);
-        if (Durations.Summarize(report.Plan) is { } total)
-        {
-            stdout.WriteLine(total);
-        }
-    }
-
-    /// <summary>
-    /// The plan <c>td test</c> prints before running: one line per affected test project with
-    /// its decision and reason, followed by the selected classes.
-    /// </summary>
-    /// <param name="analysis">Finished analysis.</param>
-    /// <param name="stdout">Destination.</param>
-    public static void WritePlan(AnalysisResult analysis, TextWriter stdout)
-    {
-        if (LicenseLine(analysis.License, analysis.LicenseEnforced) is { } license)
-        {
-            stdout.WriteLine($"td: {license}");
-        }
-
-        stdout.WriteLine($"td: {analysis.ChangedFiles.Count} changed file(s), {analysis.Tests.Count} affected test project(s).");
-        if (analysis.Tests.Count == 0)
-        {
-            return;
-        }
-
-        WriteTestDecisions(analysis.RepoRoot, analysis.Tests, stdout);
-        if (Durations.Summarize(analysis.Plan) is { } total)
-        {
-            stdout.WriteLine(total);
-        }
-
-        stdout.WriteLine();
-    }
-
-    /// <summary>
-    /// Summary after <c>td test</c>: outcome and duration per project, then the totals, so the
-    /// result is readable below long test output.
-    /// </summary>
-    /// <param name="repoRoot">Repository root; printed paths are relative to it.</param>
-    /// <param name="selections">All decisions, including skipped projects.</param>
-    /// <param name="results">Results of the invocations that ran.</param>
-    /// <param name="stdout">Destination.</param>
-    /// <param name="plan">Test plan, for the time estimate; null leaves it out.</param>
-    public static void WriteRunSummary(
-        string repoRoot,
-        IReadOnlyList<TestProjectSelection> selections,
-        IReadOnlyList<TestRunResult> results,
-        TextWriter stdout,
-        TestPlan? plan = null)
-    {
-        stdout.WriteLine();
-        stdout.WriteLine("td summary:");
-
-        var failed = 0;
-        foreach (var result in results)
-        {
-            var passed = result.ExitCode == 0;
-            failed += passed ? 0 : 1;
-            var scope = result switch
-            {
-                { NotATestProject: true } => "not a test project",
-                { RanUnfiltered: true } => "all tests, filter matched nothing",
-                { Invocation.Selection.Mode: TestRunMode.Filtered } => $"{result.Invocation.Selection.TestClasses.Count} class(es)",
-                _ => "all tests",
-            };
-            stdout.WriteLine(
-                $"  {(passed ? "passed" : "FAILED")}  {Relative(repoRoot, result.Invocation.Selection.Project.Path)}  ({scope}, {result.Elapsed.TotalSeconds:0.0} s)");
-        }
-
-        var skipped = selections.Count(static s => s.Mode == TestRunMode.Skipped);
-        stdout.WriteLine($"{results.Count} project(s) run, {failed} failed, {skipped} skipped.");
-        if (plan is not null && Durations.Summarize(plan) is { } total)
-        {
-            stdout.WriteLine(total);
-        }
-    }
+    private static void WriteText(ResultReport report, TextWriter stdout) => TextReport.WriteAnalysis(report, stdout, report.Style);
 
     /// <summary>
     /// The invocation as a POSIX shell command line, run from the repository root. A project that
@@ -247,31 +130,6 @@ internal static class ResultWriter
         var command = "dotnet " + string.Join(' ', invocation.Arguments.Select(static a => IsShellSafe(a) ? a : ShellQuote(a)));
         var directory = invocation.Location.Directory;
         return directory.Length == 0 ? command : $"(cd {(IsShellSafe(directory) ? directory : ShellQuote(directory))} && {command})";
-    }
-
-    /// <summary>One line per test project with its decision and reason, followed by the selected classes.</summary>
-    /// <param name="repoRoot">Repository root; printed paths are relative to it.</param>
-    /// <param name="tests">Decisions to print.</param>
-    /// <param name="stdout">Destination.</param>
-    private static void WriteTestDecisions(string repoRoot, IReadOnlyList<TestProjectSelection> tests, TextWriter stdout)
-    {
-        stdout.WriteLine("Tests to run:");
-        foreach (var test in tests)
-        {
-            var label = test.Mode switch
-            {
-                TestRunMode.All => "all     ",
-                TestRunMode.Filtered => "filtered",
-                _ => "skip    ",
-            };
-
-            var estimate = test.Estimate is { } e ? $", {Durations.Describe(e)}" : string.Empty;
-            stdout.WriteLine($"  {label} {Relative(repoRoot, test.Project.Path)}  ({test.Reason}{estimate})");
-            foreach (var testClass in test.TestClasses)
-            {
-                stdout.WriteLine($"             {testClass}");
-            }
-        }
     }
 
     /// <summary>

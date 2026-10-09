@@ -1,4 +1,4 @@
-<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 5c2e0f4c2b64 -->
+<!-- title: CLI-Referenz; layout: docs; description: Alle Befehle, Optionen und Umgebungsvariablen von {{name}}, mit Beispielen.; source: 8bc9a28a0c27 -->
 <h1>CLI-Referenz</h1>
 <p class="lead">Alle Befehle, Optionen und Umgebungsvariablen, jeweils mit ihrer Funktion, ihrem Standardwert und einem Beispiel. Mit <code>td --help</code> erhalten Sie die Kurzfassung.</p>
 
@@ -26,6 +26,11 @@ td affected --base HEAD~3      # the last three commits and anything uncommitted
 <p>Logs gehen nach stderr, sodass stdout maschinenlesbar bleibt. <code>-v</code> aktiviert Debug-Logs, die jede Entscheidung erklären: warum ein Projekt betroffen ist, welchen Member eine Testklasse ausgeführt hat, welchem Namen eine Verfolgung gefolgt ist. <code>--log-level</code> wählt eine der Stufen <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (Standard), <code>error</code> oder <code>none</code>; <code>trace</code> ergänzt die unverarbeitete Git-Ausgabe.</p>
 <pre><code>td affected -v 2&gt; testdetta-debug.log
 td test --log-level information</code></pre>
+
+<h3 id="color"><code>--color &lt;when&gt;</code> und <code>--theme &lt;name&gt;</code></h3>
+<p>Die Textausgabe ist als Tabellen aufgebaut und wird dort farbig, wo jemand sie liest: im Terminal und im Log von GitHub Actions. <code>auto</code> (Standard) lässt Dateien und Pipes ohne Farbe und beachtet <code>NO_COLOR</code> und <code>FORCE_COLOR</code>; <code>always</code> und <code>never</code> legen es fest. <code>--format json</code> ist nie farbig. <code>--theme</code> wählt <code>default</code>, <code>colorblind</code> (Blau und Gelb statt Grün und Rot) oder <code>mono</code> (nur fett und blass); <code>TESTDETTA_THEME</code> setzt es für jeden Lauf.</p>
+<pre><code>td test --theme colorblind
+td affected --color never &gt; affected.txt</code></pre>
 
 <h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
 <p>Verwendet eine Coverage-Map, die bis zu <em>n</em> First-Parent-Commits vor der Merge-Base aufgezeichnet wurde, wenn es an der Merge-Base selbst keine gibt. Die Änderungen dazwischen werden überbrückt: Klassen, die einen seit der Map geänderten Member ausgeführt haben, der Ihre Änderung erreichen kann, werden ebenfalls ausgewählt. <code>0</code> verwendet nur eine an der Merge-Base aufgezeichnete Map. Standard: <code>50</code>. Siehe <a href="/docs/how-it-works/">Wie es entscheidet</a>.</p>

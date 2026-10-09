@@ -27,6 +27,11 @@ td affected --base HEAD~3      # the last three commits and anything uncommitted
 <pre><code>td affected -v 2&gt; testdetta-debug.log
 td test --log-level information</code></pre>
 
+<h3 id="color"><code>--color &lt;when&gt;</code> and <code>--theme &lt;name&gt;</code></h3>
+<p>The text output is laid out as tables and coloured where someone reads it: in a terminal and in a GitHub Actions log. <code>auto</code> (default) leaves files and pipes plain and follows <code>NO_COLOR</code> and <code>FORCE_COLOR</code>; <code>always</code> and <code>never</code> decide outright. <code>--format json</code> is never coloured. <code>--theme</code> picks <code>default</code>, <code>colorblind</code> (blue and yellow instead of green and red) or <code>mono</code> (bold and faint only); <code>TESTDETTA_THEME</code> sets it for every run.</p>
+<pre><code>td test --theme colorblind
+td affected --color never &gt; affected.txt</code></pre>
+
 <h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
 <p>Use a coverage map recorded up to <em>n</em> first-parent commits before the merge base when there is none at the merge base itself. Changes made in between are bridged: classes that ran any member changed since the map and able to reach your change are selected too. <code>0</code> uses only a map recorded at the merge base. Default: <code>50</code>. See <a href="/docs/how-it-works/">How it decides</a>.</p>
 <pre><code>td test --max-map-age 20</code></pre>

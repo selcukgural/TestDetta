@@ -68,6 +68,8 @@ td record</code></pre>
     <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>When the changes since an older map include a build file, configuration or a global using: run the affected test projects completely (<code>all</code>, the default) or decide them by name (<code>name</code>).</td></tr>
     <tr><td><code>-v</code>, <code>--verbose</code></td><td>Write debug logs to stderr: every decision a user might question, with its reason.</td></tr>
     <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (default), <code>error</code> or <code>none</code>.</td></tr>
+    <tr><td><code>--color &lt;when&gt;</code></td><td><code>auto</code> (default: a terminal or a GitHub Actions log; <code>NO_COLOR</code> turns it off), <code>always</code> or <code>never</code>. JSON is never coloured.</td></tr>
+    <tr><td><code>--theme &lt;name&gt;</code></td><td><code>default</code>, <code>colorblind</code> (blue and yellow instead of green and red) or <code>mono</code>. Also <code>TESTDETTA_THEME</code>.</td></tr>
   </tbody>
 </table>
 <p>Logs go to stderr; stdout carries the command's output and stays machine readable.</p>

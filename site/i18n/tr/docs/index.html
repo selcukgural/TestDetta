@@ -1,4 +1,4 @@
-<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: c968767e0689 -->
+<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: e57f80d1f0c3 -->
 <h1>Başlarken</h1>
 <p class="lead">{{name}} branch'inizi base'iyle karşılaştırır, hangi test projelerinin ve hangi test sınıflarının değişikliği gözlemleyebileceğini belirler ve yalnızca onları çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil; göremedikleri <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -68,6 +68,8 @@ td record</code></pre>
     <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>Daha eski bir haritadan bu yana yapılan değişiklikler bir derleme dosyası, yapılandırma ya da global using içerdiğinde: etkilenen test projelerini tamamen çalıştırır (<code>all</code>, varsayılan) ya da isimlere göre karar verir (<code>name</code>).</td></tr>
     <tr><td><code>-v</code>, <code>--verbose</code></td><td>Debug loglarını stderr'e yazar: kullanıcının sorgulayabileceği her karar, gerekçesiyle birlikte.</td></tr>
     <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (varsayılan), <code>error</code> ya da <code>none</code>.</td></tr>
+    <tr><td><code>--color &lt;when&gt;</code></td><td><code>auto</code> (varsayılan: terminal ya da GitHub Actions logu; <code>NO_COLOR</code> kapatır), <code>always</code> ya da <code>never</code>. JSON hiçbir zaman renklenmez.</td></tr>
+    <tr><td><code>--theme &lt;name&gt;</code></td><td><code>default</code>, <code>colorblind</code> (yeşil ve kırmızı yerine mavi ve sarı) ya da <code>mono</code>. <code>TESTDETTA_THEME</code> ile de seçilir.</td></tr>
   </tbody>
 </table>
 <p>Loglar stderr'e gider; stdout komutun çıktısını taşır ve makine tarafından okunabilir kalır.</p>

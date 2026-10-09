@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 5c2e0f4c2b64 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 8bc9a28a0c27 -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -26,6 +26,11 @@ td affected --base HEAD~3      # the last three commits and anything uncommitted
 <p>Loglar stderr'e gider, böylece stdout makine tarafından okunabilir kalır. <code>-v</code> her kararı açıklayan debug loglarını açar: bir projenin neden etkilendiğini, bir test sınıfının hangi üyeyi çalıştırdığını, bir izlemenin hangi ismi takip ettiğini. <code>--log-level</code> şunlardan birini seçer: <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (varsayılan), <code>error</code> ya da <code>none</code>; <code>trace</code> ham git çıktısını da ekler.</p>
 <pre><code>td affected -v 2&gt; testdetta-debug.log
 td test --log-level information</code></pre>
+
+<h3 id="color"><code>--color &lt;when&gt;</code> ve <code>--theme &lt;name&gt;</code></h3>
+<p>Metin çıktısı tablolar halinde düzenlenir ve birinin okuduğu yerde renklenir: terminalde ve GitHub Actions logunda. <code>auto</code> (varsayılan) dosyaları ve pipe'ları renksiz bırakır, <code>NO_COLOR</code> ve <code>FORCE_COLOR</code>'a uyar; <code>always</code> ve <code>never</code> kesin karar verir. <code>--format json</code> hiçbir zaman renklenmez. <code>--theme</code> ile <code>default</code>, <code>colorblind</code> (yeşil ve kırmızı yerine mavi ve sarı) ya da <code>mono</code> (yalnız kalın ve soluk) seçilir; <code>TESTDETTA_THEME</code> her koşu için ayarlar.</p>
+<pre><code>td test --theme colorblind
+td affected --color never &gt; affected.txt</code></pre>
 
 <h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
 <p>Merge base'in kendisinde harita yoksa, merge base'den en fazla <em>n</em> first-parent commit önce kaydedilmiş bir kapsam haritası kullanır. Aradaki değişiklikler köprülenir: haritadan bu yana değişmiş ve sizin değişikliğinize ulaşabilen herhangi bir üyeyi çalıştırmış sınıflar da seçilir. <code>0</code> yalnızca merge base'de kaydedilmiş bir haritayı kullanır. Varsayılan: <code>50</code>. Bkz. <a href="/docs/how-it-works/">Nasıl karar verir</a>.</p>

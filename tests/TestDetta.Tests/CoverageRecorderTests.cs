@@ -120,7 +120,8 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.True(exit == 0, $"{stdout}\n{stderr}");
         Assert.True(File.Exists(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Calc.Tests/Calc.Tests.csproj"))));
         Assert.False(File.Exists(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Broken.Tests/Broken.Tests.csproj"))));
-        Assert.Contains("not recorded  tests/Broken.Tests/Broken.Tests.csproj: Building Broken.Tests.csproj failed", stdout.ToString());
+        Assert.Matches(@"│ tests/Broken\.Tests +│ not recorded", stdout.ToString());
+        Assert.Contains("  tests/Broken.Tests\n    Building Broken.Tests.csproj failed", stdout.ToString().ReplaceLineEndings("\n"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -149,7 +150,8 @@ public sealed class CoverageRecorderTests : IDisposable
 
         Assert.True(exit == 0, $"{stdout}\n{stderr}");
         Assert.False(File.Exists(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Renamed.Tests/Renamed.Tests.csproj"))));
-        Assert.Contains("not recorded  tests/Renamed.Tests/Renamed.Tests.csproj: its test assembly Elsewhere.dll is not among the repository assemblies TestDetta instruments", stdout.ToString());
+        Assert.Matches(@"│ tests/Renamed\.Tests +│ not recorded", stdout.ToString());
+        Assert.Contains("  tests/Renamed.Tests\n    its test assembly Elsewhere.dll is not among the repository assemblies TestDetta instruments", stdout.ToString().ReplaceLineEndings("\n"), StringComparison.Ordinal);
 
         // The map of the project that was recorded says what its recording instrumented.
         var map = CoverageMapStore.Read(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Calc.Tests/Calc.Tests.csproj")))!;

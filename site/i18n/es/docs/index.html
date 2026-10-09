@@ -1,4 +1,4 @@
-<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: c968767e0689 -->
+<!-- title: Primeros pasos; layout: docs; description: Instala {{name}} en tu CI y ejecuta solo las pruebas de .NET que un cambio puede afectar.; source: e57f80d1f0c3 -->
 <h1>Primeros pasos</h1>
 <p class="lead">{{name}} compara tu rama con su base, determina qué proyectos de pruebas y qué clases de prueba pueden observar el cambio, y ejecuta solo esos. Cuando no puede estar seguro, ejecuta más, nunca menos; lo que no puede ver se enumera en <a href="/docs/limitations/">Limitaciones</a>.</p>
 
@@ -68,6 +68,8 @@ td record</code></pre>
     <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>Cuando los cambios desde un mapa más antiguo incluyen un archivo de compilación, configuración o un global using: ejecuta completos los proyectos de pruebas afectados (<code>all</code>, el predeterminado) o decide por nombre (<code>name</code>).</td></tr>
     <tr><td><code>-v</code>, <code>--verbose</code></td><td>Escribe registros de depuración en stderr: cada decisión que un usuario podría cuestionar, con su motivo.</td></tr>
     <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (predeterminado), <code>error</code> o <code>none</code>.</td></tr>
+    <tr><td><code>--color &lt;when&gt;</code></td><td><code>auto</code> (predeterminado: una terminal o el log de GitHub Actions; <code>NO_COLOR</code> lo desactiva), <code>always</code> o <code>never</code>. El JSON nunca lleva color.</td></tr>
+    <tr><td><code>--theme &lt;name&gt;</code></td><td><code>default</code>, <code>colorblind</code> (azul y amarillo en lugar de verde y rojo) o <code>mono</code>. También <code>TESTDETTA_THEME</code>.</td></tr>
   </tbody>
 </table>
 <p>Los registros van a stderr; stdout lleva la salida del comando y sigue siendo legible por máquinas.</p>

@@ -66,6 +66,10 @@ review.
   `Warning` is for input we ignore, `Error` for failures.
 - **Source-generated logging only.** Declare messages with `[LoggerMessage]` on partial methods,
   never `logger.LogDebug($"...")`, so disabled levels cost nothing. **(enforced, CA1848)**
+- **Console text goes through `ConsoleStyle`.** Human-readable reports are built with `TextReport` and
+  `TextTable` and styled with `ConsoleStyle.Paint(Role, ...)`; never write ANSI codes or box characters
+  by hand. Colour follows `--color` and the environment (docs/design/console-output.md) and never
+  reaches JSON or other machine formats.
 - **Log to stderr.** stdout carries the command's output and must stay machine readable.
   `-v`/`--verbose` turns on debug logs, `--log-level` selects any level.
 - Classes take `ILogger<T>` through their primary constructor; tests pass `NullLogger<T>.Instance`.

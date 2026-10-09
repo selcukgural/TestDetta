@@ -1,4 +1,4 @@
-<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 5c2e0f4c2b64 -->
+<!-- title: Referencia de la CLI; layout: docs; description: Todos los comandos, opciones y variables de entorno de {{name}}, con ejemplos.; source: 8bc9a28a0c27 -->
 <h1>Referencia de la CLI</h1>
 <p class="lead">Todos los comandos, opciones y variables de entorno, con lo que hacen, su valor predeterminado y un ejemplo. Ejecuta <code>td --help</code> para ver la versión breve.</p>
 
@@ -26,6 +26,11 @@ td affected --base HEAD~3      # the last three commits and anything uncommitted
 <p>Los registros van a stderr, así que stdout sigue siendo legible por máquinas. <code>-v</code> activa los registros de depuración, que explican cada decisión: por qué un proyecto está afectado, qué miembro ejecutó una clase de prueba, qué nombre siguió un rastreo. <code>--log-level</code> elige cualquiera de <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (predeterminado), <code>error</code> o <code>none</code>; <code>trace</code> añade la salida sin procesar de git.</p>
 <pre><code>td affected -v 2&gt; testdetta-debug.log
 td test --log-level information</code></pre>
+
+<h3 id="color"><code>--color &lt;when&gt;</code> y <code>--theme &lt;name&gt;</code></h3>
+<p>La salida de texto se presenta en tablas y lleva color donde alguien la lee: en una terminal y en el log de GitHub Actions. <code>auto</code> (predeterminado) deja sin color los archivos y las tuberías y respeta <code>NO_COLOR</code> y <code>FORCE_COLOR</code>; <code>always</code> y <code>never</code> lo fijan. <code>--format json</code> nunca lleva color. <code>--theme</code> elige <code>default</code>, <code>colorblind</code> (azul y amarillo en lugar de verde y rojo) o <code>mono</code> (solo negrita y atenuado); <code>TESTDETTA_THEME</code> lo fija para cada ejecución.</p>
+<pre><code>td test --theme colorblind
+td affected --color never &gt; affected.txt</code></pre>
 
 <h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
 <p>Usa un mapa de cobertura registrado hasta <em>n</em> commits de primer padre antes de la merge base cuando no hay ninguno en la propia merge base. Los cambios intermedios se salvan: también se seleccionan las clases que ejecutaron cualquier miembro modificado desde el mapa y capaz de llegar a tu cambio. <code>0</code> usa solo un mapa registrado en la merge base. Predeterminado: <code>50</code>. Consulta <a href="/docs/how-it-works/">Cómo decide</a>.</p>

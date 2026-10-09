@@ -160,7 +160,7 @@ var tests   = new TestSelector(...).Select(new TestSelectionRequest(graph, root,
     },
     {
       title: "Sonuç ve gerekçeler iş özetine yazılır", nodes: ["dt", "sum"], edges: ["report"],
-      who: "<code>ResultWriter.WriteRunSummary</code> (konsol) ve <code>MarkdownSummary.Write</code> (dosya)",
+      who: "<code>TextReport.WriteRunSummary</code> (konsol, tablo) ve <code>MarkdownSummary.Write</code> (dosya)",
       file: "src/TestDetta.Cli/MarkdownSummary.cs",
       input: "<code>SummaryInput(analysis, baseRef, results)</code>, <code>--summary-file</code> yolu",
       output: "<code>### TestDetta test selection</code> başlıklı Markdown; çıkış kodu: herhangi bir dotnet test başarısızsa 3, değilse 0",

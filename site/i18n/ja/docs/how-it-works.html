@@ -1,4 +1,4 @@
-<!-- title: 選択のしくみ; layout: docs; description: {{name}} が git の差分から、実行するテストプロジェクトとテストクラスをどのように決めるかを説明します。; source: 94ed2f9b12ee -->
+<!-- title: 選択のしくみ; layout: docs; description: {{name}} が git の差分から、実行するテストプロジェクトとテストクラスをどのように決めるかを説明します。; source: bf59104184cd -->
 <h1>選択のしくみ</h1>
 <p class="lead">{{name}} は、根拠がある場合に限り、1 ステップずつ選択を絞り込みます。追跡できないとわかっているものは、多めに実行する側にフォールバックします。まったく見えない少数のパターンは<a href="/docs/limitations/">制限事項</a>に一覧があります。</p>
 
@@ -43,10 +43,18 @@
 <h2>理由を確認する</h2>
 <p><code>td affected</code> と <code>td test --dry-run</code> は、影響を受けるすべてのテストプロジェクトを、フィルター付きで実行するのか、丸ごと実行するのか、まったく実行しないのかという理由とともに出力します。<code>td affected --format json</code> では、テストクラスごとの判断も加わります。<code>-v</code> を指定すると、プロジェクトが影響を受けた理由や、クラスがどの変更によって実行されたかなど、すべての判断を stderr に書き込みます。</p>
 <pre><code>$ td test --dry-run --base origin/main
-td: 1 changed file(s), 2 affected test project(s).
-Tests to run:
-  filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
-  skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>
+TestDetta 0.1.3 · 1 changed file · 2 affected test projects
+Tests to run
+┌──────────────────┬──────────┬─────────┬───────┬──────────────────────────────────────────────────────────┐
+│ Test project     │ Run      │ Classes │ Saved │ Why                                                      │
+├──────────────────┼──────────┼─────────┼───────┼──────────────────────────────────────────────────────────┤
+│ tests/Shop.Tests │ filtered │  3 / 41 │     - │ 3 of 41 test class(es) run or reference the changed code │
+│ tests/Api.Tests  │ skipped  │  0 / 12 │     - │ no test class runs or references the changed code        │
+└──────────────────┴──────────┴─────────┴───────┴──────────────────────────────────────────────────────────┘
+  tests/Shop.Tests → 3 classes
+    Shop.Tests.CartTests
+    Shop.Tests.CheckoutTests
+    Shop.Tests.OrderTests</code></pre>
 
 <h2 id="related">関連ページ</h2>
 <ul>

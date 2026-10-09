@@ -8,14 +8,29 @@ it cannot see are listed under [Limitations](#limitations).
 
 ```
 $ td test --base origin/main
-td: 1 changed file(s), 2 affected test project(s).
-Tests to run:
-  filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
-  skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)
+TestDetta 0.1.3 · 1 changed file · 2 affected test projects
+Tests to run
+┌──────────────────┬──────────┬─────────┬───────┬──────────────────────────────────────────────────────────┐
+│ Test project     │ Run      │ Classes │ Saved │ Why                                                      │
+├──────────────────┼──────────┼─────────┼───────┼──────────────────────────────────────────────────────────┤
+│ tests/Shop.Tests │ filtered │  3 / 41 │     - │ 3 of 41 test class(es) run or reference the changed code │
+│ tests/Api.Tests  │ skipped  │  0 / 12 │     - │ no test class runs or references the changed code        │
+└──────────────────┴──────────┴─────────┴───────┴──────────────────────────────────────────────────────────┘
+  tests/Shop.Tests → 3 classes
+    Shop.Tests.CartTests
+    Shop.Tests.CheckoutTests
+    Shop.Tests.OrderTests
+
 ...
-td summary:
-  passed  tests/Shop.Tests/Shop.Tests.csproj  (3 class(es), 4.1 s)
-1 project(s) run, 0 failed, 1 skipped.
+
+td summary
+┌──────────────────┬──────────┬──────────────────┬───────┐
+│ Test project     │ Result   │ Ran              │  Time │
+├──────────────────┼──────────┼──────────────────┼───────┤
+│ tests/Shop.Tests │ ✓ passed │ 3 classes        │ 4.1 s │
+│ tests/Api.Tests  │ skipped  │ nothing affected │       │
+└──────────────────┴──────────┴──────────────────┴───────┘
+1 project run · 0 failed · 1 skipped
 ```
 
 ## How it decides
@@ -49,7 +64,8 @@ A filter that matches no test is treated as a TestDetta bug: the project is run 
 
 Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `--maps-dir <dir>` (coverage
 maps outside the repository, see [docs/ci.md](docs/ci.md)), `-v` for debug logs on stderr,
-`--log-level <level>` for any other level. Exit codes: `0` success, `1` the analysis failed (`td audit`: it
+`--log-level <level>` for any other level, `--color auto|always|never` and `--theme default|colorblind|mono`
+for the console tables (colour only in a terminal or a GitHub Actions log; `NO_COLOR` is respected). Exit codes: `0` success, `1` the analysis failed (`td audit`: it
 could not run or was cancelled), `2` invalid command line, `3` tests failed (`td audit`: a miss).
 
 Coverage maps are best recorded at the merge base of your branch. A map recorded up to 50 commits

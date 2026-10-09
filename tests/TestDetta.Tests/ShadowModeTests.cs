@@ -346,7 +346,8 @@ public sealed class ShadowModeTests : IDisposable
             host);
 
         Assert.True(exit is 0 or 3, log.Text);
-        Assert.Empty(read);
+        // Only how the console output looks (docs/design/console-output.md); nothing about a license or the repository.
+        Assert.All(read, static name => Assert.Contains(name, (string[])["NO_COLOR", "FORCE_COLOR", "TERM", "GITHUB_ACTIONS", "TESTDETTA_THEME", "COLUMNS"]));
         Assert.False(Directory.Exists(home));
         var json = File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"));
         var report = JsonDocument.Parse(json).RootElement;

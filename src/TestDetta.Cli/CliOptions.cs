@@ -277,6 +277,9 @@ internal sealed record CliOptions(
     /// <summary>Options of <c>td audit</c>; defaults for other commands.</summary>
     public AuditSettings Audit { get; init; } = new();
 
+    /// <summary>Colour and theme of the console output, for every command.</summary>
+    public DisplaySettings Display { get; init; } = new();
+
     /// <summary>Help text printed for <c>--help</c> and after a usage error.</summary>
     public const string Usage = """
         Usage:
@@ -294,6 +297,8 @@ internal sealed record CliOptions(
           --repo <path>        Any path inside the repository (default: current directory)
           -v, --verbose        Write debug logs to stderr
           --log-level <level>  trace, debug, information, warning (default), error or none
+          --color <when>       auto (default: a terminal or GitHub Actions; NO_COLOR turns it off), always or never
+          --theme <name>       default, colorblind (blue/yellow instead of green/red) or mono; also TESTDETTA_THEME
           --max-map-age <n>    Use coverage maps recorded up to n commits before the merge base,
                                bridging the changes in between (default: 50; 0 = only exact maps)
           --maps-dir <dir>     Coverage maps kept outside the repository, one folder per commit: record
@@ -520,7 +525,7 @@ internal sealed record CliOptions(
                 error = "td audit compares every change with HEAD; --base does not apply";
                 return false;
 
-            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback":
+            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--color" or "--theme":
             case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record or CliCommand.Audit:
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
@@ -544,7 +549,7 @@ internal sealed record CliOptions(
         }
 
         var value = args[++i];
-        if (options.Command == CliCommand.Audit && arg is not ("--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--maps-dir"))
+        if (options.Command == CliCommand.Audit && arg is not ("--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--maps-dir" or "--color" or "--theme"))
         {
             return TryParseAuditOption(arg, value, ref options, out error);
         }
@@ -561,6 +566,26 @@ internal sealed record CliOptions(
 
             case "--maps-dir":
                 options = options with { Analysis = options.Analysis with { MapsDir = value } };
+                return true;
+
+            case "--color":
+                if (!Enum.TryParse<ColorMode>(value, ignoreCase: true, out var color) || !Enum.IsDefined(color))
+                {
+                    error = $"--color is auto, always or never, not {value}";
+                    return false;
+                }
+
+                options = options with { Display = options.Display with { Color = color } };
+                return true;
+
+            case "--theme":
+                if (ConsoleTheme.Find(value) is not { } theme)
+                {
+                    error = $"--theme is {string.Join(", ", ConsoleTheme.All.Select(static t => t.Name))}, not {value}";
+                    return false;
+                }
+
+                options = options with { Display = options.Display with { Theme = theme } };
                 return true;
 
             case "--drift-fallback":

@@ -1,4 +1,4 @@
-<!-- title: Erste Schritte; layout: docs; description: Richten Sie {{name}} in der CI ein und führen Sie nur die .NET-Tests aus, die eine Änderung betreffen kann.; source: c968767e0689 -->
+<!-- title: Erste Schritte; layout: docs; description: Richten Sie {{name}} in der CI ein und führen Sie nur die .NET-Tests aus, die eine Änderung betreffen kann.; source: e57f80d1f0c3 -->
 <h1>Erste Schritte</h1>
 <p class="lead">{{name}} vergleicht Ihren Branch mit seiner Basis, ermittelt, welche Testprojekte und welche Testklassen die Änderung bemerken können, und führt nur diese aus. Ist es sich nicht sicher, führt es mehr aus, nie weniger; was es nicht sehen kann, ist unter <a href="/docs/limitations/">Einschränkungen</a> aufgeführt.</p>
 
@@ -68,6 +68,8 @@ td record</code></pre>
     <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>Wenn die Änderungen seit einer älteren Map eine Build-Datei, Konfiguration oder ein globales Using enthalten: die betroffenen Testprojekte vollständig ausführen (<code>all</code>, der Standard) oder anhand von Namen entscheiden (<code>name</code>).</td></tr>
     <tr><td><code>-v</code>, <code>--verbose</code></td><td>Schreibt Debug-Logs nach stderr: jede Entscheidung, die ein Benutzer hinterfragen könnte, mit ihrem Grund.</td></tr>
     <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (Standard), <code>error</code> oder <code>none</code>.</td></tr>
+    <tr><td><code>--color &lt;when&gt;</code></td><td><code>auto</code> (Standard: Terminal oder Log von GitHub Actions; <code>NO_COLOR</code> schaltet es ab), <code>always</code> oder <code>never</code>. JSON ist nie farbig.</td></tr>
+    <tr><td><code>--theme &lt;name&gt;</code></td><td><code>default</code>, <code>colorblind</code> (Blau und Gelb statt Grün und Rot) oder <code>mono</code>. Auch <code>TESTDETTA_THEME</code>.</td></tr>
   </tbody>
 </table>
 <p>Logs gehen nach stderr; stdout enthält die Ausgabe des Befehls und bleibt maschinenlesbar.</p>

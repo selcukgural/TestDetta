@@ -1,4 +1,4 @@
-<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 94ed2f9b12ee -->
+<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: bf59104184cd -->
 <h1>Nasıl karar verir</h1>
 <p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediğini bildiği her şeyde daha fazlasını çalıştırmaya geri döner; hiç göremediği birkaç kalıp <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -43,10 +43,18 @@
 <h2>Nedenini görmek</h2>
 <p><code>td affected</code> ve <code>td test --dry-run</code>, etkilenen her test projesini filtreli mi, tamamen mi yoksa hiç mi çalışacağının gerekçesiyle birlikte yazdırır; <code>td affected --format json</code> her test sınıfı için verilen kararı da ekler. <code>-v</code> her kararı stderr'e yazar; örneğin bir projenin neden etkilendiğini ya da bir sınıfın hangi değişikliği çalıştırdığını.</p>
 <pre><code>$ td test --dry-run --base origin/main
-td: 1 changed file(s), 2 affected test project(s).
-Tests to run:
-  filtered tests/Shop.Tests/Shop.Tests.csproj  (3 of 41 test class(es) run or reference the changed code)
-  skip     tests/Api.Tests/Api.Tests.csproj  (no test class runs or references the changed code)</code></pre>
+TestDetta 0.1.3 · 1 changed file · 2 affected test projects
+Tests to run
+┌──────────────────┬──────────┬─────────┬───────┬──────────────────────────────────────────────────────────┐
+│ Test project     │ Run      │ Classes │ Saved │ Why                                                      │
+├──────────────────┼──────────┼─────────┼───────┼──────────────────────────────────────────────────────────┤
+│ tests/Shop.Tests │ filtered │  3 / 41 │     - │ 3 of 41 test class(es) run or reference the changed code │
+│ tests/Api.Tests  │ skipped  │  0 / 12 │     - │ no test class runs or references the changed code        │
+└──────────────────┴──────────┴─────────┴───────┴──────────────────────────────────────────────────────────┘
+  tests/Shop.Tests → 3 classes
+    Shop.Tests.CartTests
+    Shop.Tests.CheckoutTests
+    Shop.Tests.OrderTests</code></pre>
 
 <h2 id="related">İlgili sayfalar</h2>
 <ul>

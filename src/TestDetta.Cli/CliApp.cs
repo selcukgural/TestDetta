@@ -58,7 +58,8 @@ internal static partial class CliApp
             return UsageError;
         }
 
-        using var loggerFactory = new StderrLoggerFactory(stderr, options.Analysis.LogLevel);
+        var outStyle = StyleFor(options.Display, host, stdout, error: false);
+        using var loggerFactory = new StderrLoggerFactory(stderr, options.Analysis.LogLevel) { Style = StyleFor(options.Display, host, stderr, error: true) };
         var logger = loggerFactory.CreateLogger(typeof(CliApp).FullName!);
         LogOptions(logger, options);
 
@@ -105,7 +106,7 @@ internal static partial class CliApp
 
         if (options.Command == CliCommand.Test)
         {
-            return RunTests(options, analysis, loggerFactory, stdout);
+            return RunTests(options, analysis, loggerFactory, stdout, outStyle);
         }
 
         var stats = new RunStats(analysis.ChangedFiles.Count, analysis.Graph.Projects.Count);
@@ -116,9 +117,42 @@ internal static partial class CliApp
                 License = analysis.License,
                 LicenseEnforced = analysis.LicenseEnforced,
                 UnmappedFilesRead = analysis.UnmappedFilesRead,
+                Style = outStyle,
             },
             stdout);
         return Success;
+    }
+
+    /// <summary>
+    /// The console style of one of the command's streams: colour by <c>--color</c> and the environment, where the stream
+    /// goes (a terminal, the process's stream redirected, or a writer of a caller such as a test), the theme, the
+    /// characters its encoding can show, and the terminal's width.
+    /// </summary>
+    /// <param name="display">Display options from the command line.</param>
+    /// <param name="host">Environment.</param>
+    /// <param name="writer">The stream the command writes to.</param>
+    /// <param name="error">True for stderr, false for stdout.</param>
+    private static ConsoleStyle StyleFor(DisplaySettings display, CliHost host, TextWriter writer, bool error)
+    {
+        var console = error ? Console.Error : Console.Out;
+        var kind = !ReferenceEquals(writer, console) ? StreamKind.Captured
+            : (error ? Console.IsErrorRedirected : Console.IsOutputRedirected) ? StreamKind.Redirected
+            : StreamKind.Terminal;
+        int? width = null;
+        if (kind == StreamKind.Terminal)
+        {
+            try
+            {
+                width = Console.WindowWidth;
+            }
+            catch (IOException)
+            {
+                // No console window after all: the default width.
+            }
+        }
+
+        // A caller's writer (a StringWriter says UTF-16) holds text, not bytes for a console: it can take any character.
+        return ConsoleStyle.For(display, host.Environment, kind, kind == StreamKind.Captured ? System.Text.Encoding.UTF8 : writer.Encoding, width);
     }
 
     /// <summary>Restores the maps (with <c>--maps-dir</c>) and runs the analysis.</summary>
@@ -337,10 +371,11 @@ internal static partial class CliApp
     /// <param name="analysis">Finished analysis.</param>
     /// <param name="loggerFactory">Creates the runner's logger.</param>
     /// <param name="stdout">Receives the plan and the summary.</param>
-    private static int RunTests(CliOptions options, AnalysisResult analysis, ILoggerFactory loggerFactory, TextWriter stdout)
+    /// <param name="style">Colour, characters and width of <paramref name="stdout"/>.</param>
+    private static int RunTests(CliOptions options, AnalysisResult analysis, ILoggerFactory loggerFactory, TextWriter stdout, ConsoleStyle style)
     {
         var invocations = TestInvocationBuilder.Build(analysis.Tests, analysis.RepoRoot, options.Test.DotnetTestArguments, analysis.Graph);
-        ResultWriter.WritePlan(analysis, stdout);
+        TextReport.WritePlan(analysis, stdout, style);
 
         if (invocations.Count == 0)
         {
@@ -362,7 +397,7 @@ internal static partial class CliApp
 
         stdout.Flush();
         var results = new TestRunner(loggerFactory.CreateLogger<TestRunner>()).RunAll(invocations, analysis.RepoRoot, stdout);
-        ResultWriter.WriteRunSummary(analysis.RepoRoot, analysis.Tests, results, stdout, analysis.Plan);
+        TextReport.WriteRunSummary(new RunSummary(analysis.RepoRoot, analysis.Tests, results, analysis.Plan), stdout, style);
         AppendSummary(options, analysis, results);
         return results.Any(static r => r.ExitCode != 0) ? TestsFailed : Success;
     }
@@ -440,20 +475,25 @@ internal static partial class CliApp
             var recorder = new TestDetta.Coverage.CoverageRecorder(loggerFactory);
             var allPassed = true;
             var notRecorded = 0;
-            var summary = new List<string>();
+            var rows = new List<RecordRow>();
+            var saved = (string?)null;
             var written = new List<string>();
 
             foreach (var step in steps)
             {
                 var project = step.Project;
                 var path = CoverageMapStore.PathFor(root, project.Path);
+                var row = new RecordRow(TextReport.Display(root, project.Path), options.Record.Incremental ? step.Kind.ToString().ToLowerInvariant() : null);
+                rows.Add(row);
                 if (options.Record.Incremental)
                 {
-                    summary.Add($"  {step.Kind.ToString().ToLowerInvariant(),-9} {Path.GetRelativePath(root, project.Path)}: {step.Reason}");
+                    row.Notes.Add(new Cell(step.Reason, Role.Muted));
                 }
 
                 if (step.Kind == StepKind.Current)
                 {
+                    row.Result = new Cell("kept", Role.Good);
+                    row.Classes = step.Previous?.Classes.Count;
                     written.Add(path);
                     continue;
                 }
@@ -470,6 +510,9 @@ internal static partial class CliApp
                             : new MapLineage(previous.Commit, previous.Header.RecordedAt, 1),
                     };
                     CoverageMapStore.Write(path, carried);
+                    row.Result = new Cell("carried over", Role.Good);
+                    row.Classes = carried.Classes.Count;
+                    row.Methods = carried.Methods.Count;
                     written.Add(path);
                     continue;
                 }
@@ -503,14 +546,16 @@ internal static partial class CliApp
                 catch (TestDetta.Coverage.NoTestsRecordedException ex)
                 {
                     // Not a reason to fail the run: selection decides for this project by name.
-                    summary.Add($"  skipped   {Path.GetRelativePath(root, project.Path)}: {ex.Message}");
+                    row.Result = new Cell("skipped", Role.Muted);
+                    row.Notes.Add(new Cell(ex.Message, Role.Muted));
                     continue;
                 }
                 catch (InvalidOperationException ex)
                 {
                     LogNotRecorded(logger, project.Path, ex.Message);
-                    summary.Add($"  not recorded  {Path.GetRelativePath(root, project.Path)}: {ex.Message}");
-                    summary.Add("    selection decides this project by name until it has a map");
+                    row.Result = new Cell("not recorded", Role.Bad);
+                    row.Notes.Add(new Cell(ex.Message, Role.Bad));
+                    row.Notes.Add(new Cell("selection decides this project by name until it has a map", Role.Muted));
                     notRecorded++;
                     continue;
                 }
@@ -519,42 +564,39 @@ internal static partial class CliApp
                 written.Add(path);
 
                 allPassed &= passed;
-                summary.Add($"  {(passed ? "recorded" : "recorded, tests FAILED")}  {map.TestProject}: " +
-                            $"{map.Classes.Count} test class(es), {map.Methods.Count} method(s) -> {Path.GetRelativePath(root, path)}");
+                row.Result = passed ? new Cell("recorded", Role.Good) : new Cell("recorded, tests FAILED", Role.Bad);
+                row.Classes = map.Classes.Count;
+                row.Methods = map.Methods.Count;
                 switch (map.FailedClasses)
                 {
                     case null:
-                        summary.Add("    tests failed and no TRX report says which, so this map will not be used; " +
-                                    "under Microsoft.Testing.Platform add Microsoft.Testing.Extensions.TrxReport to the test project");
+                        row.Notes.Add(new Cell(
+                            "tests failed and no TRX report says which, so this map will not be used; " +
+                            "under Microsoft.Testing.Platform add Microsoft.Testing.Extensions.TrxReport to the test project", Role.Bad));
                         break;
                     case { Count: > 0 } failed:
-                        summary.Add($"    {failed.Count} test class(es) failed while recording; they run whenever the project is affected");
+                        row.Notes.Add(new Cell($"{failed.Count} test class(es) failed while recording; they run whenever the project is affected", Role.Notice));
                         break;
                 }
 
                 if (map.SkippedClasses is { Count: > 0 } skipped)
                 {
-                    summary.Add($"    {skipped.Count} test class(es) had every test skipped on {map.Platform}; on other platforms they run whenever the project is affected");
+                    row.Notes.Add(new Cell($"{skipped.Count} test class(es) had every test skipped on {map.Platform}; on other platforms they run whenever the project is affected", Role.Muted));
                 }
 
                 if (map.Lineage is null && step.Previous is { Lineage: not null } incremental)
                 {
-                    summary.AddRange(Divergences(incremental, map));
+                    row.Notes.AddRange(Divergences(incremental, map));
                 }
             }
 
             if (options.Analysis.MapsDir is { } mapsDir && written.Count > 0)
             {
                 MapDirectory.Save(Path.GetFullPath(mapsDir), head, written, logger);
-                summary.Add($"  saved     {written.Count} map(s) to {Path.Combine(mapsDir, head)}");
+                saved = $"Saved {written.Count} map(s) to {Path.Combine(mapsDir, head)}";
             }
 
-            stdout.WriteLine();
-            stdout.WriteLine("td record summary:");
-            foreach (var line in summary)
-            {
-                stdout.WriteLine(line);
-            }
+            TextReport.WriteRecordSummary(new RecordSummary(rows, options.Record.Incremental, CoverageMapStore.Directory, saved), stdout, StyleFor(options.Display, host, stdout, error: false));
 
             if (written.Count == 0 && notRecorded > 0)
             {
@@ -593,21 +635,22 @@ internal static partial class CliApp
     /// </summary>
     /// <param name="incremental">The map built by incremental steps.</param>
     /// <param name="full">The full recording that replaces it.</param>
-    private static IEnumerable<string> Divergences(CoverageMap incremental, CoverageMap full)
+    private static IEnumerable<Cell> Divergences(CoverageMap incremental, CoverageMap full)
     {
         var divergences = MapDivergence.Find(incremental, full);
         if (divergences.Count == 0)
         {
-            yield return $"    checked the incremental map ({incremental.Lineage!.Steps} step(s)) against this full recording: no class ran code it lacked";
+            yield return new Cell($"checked the incremental map ({incremental.Lineage!.Steps} step(s)) against this full recording: no class ran code it lacked", Role.Good);
             yield break;
         }
 
-        yield return $"    {divergences.Count} class(es) ran code the incremental map ({incremental.Lineage!.Steps} step(s)) did not credit them with " +
-                     "(nondeterministic tests, or a selection gap worth reporting):";
+        yield return new Cell(
+            $"{divergences.Count} class(es) ran code the incremental map ({incremental.Lineage!.Steps} step(s)) did not credit them with " +
+            "(nondeterministic tests, or a selection gap worth reporting):", Role.Notice);
         foreach (var divergence in divergences.Take(10))
         {
             var members = string.Join(", ", divergence.Missing.Take(5)) + (divergence.Missing.Count > 5 ? $" and {divergence.Missing.Count - 5} more" : string.Empty);
-            yield return $"      {divergence.TestClass}: {members}";
+            yield return new Cell($"  {divergence.TestClass}: {members}", Role.Notice);
         }
     }
 

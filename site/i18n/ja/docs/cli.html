@@ -1,4 +1,4 @@
-<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 5c2e0f4c2b64 -->
+<!-- title: CLI リファレンス; layout: docs; description: {{name}} のすべてのコマンド、オプション、環境変数を例とともに説明します。; source: 8bc9a28a0c27 -->
 <h1>CLI リファレンス</h1>
 <p class="lead">すべてのコマンド、オプション、環境変数について、その動作、既定値、例を示します。簡易版を見るには <code>td --help</code> を実行してください。</p>
 
@@ -26,6 +26,11 @@ td affected --base HEAD~3      # the last three commits and anything uncommitted
 <p>ログは stderr に出力されるため、stdout は機械可読な状態に保たれます。<code>-v</code> はデバッグログを有効にし、プロジェクトが影響を受ける理由、テストクラスがどのメンバーを実行したか、トレースがどの名前をたどったかなど、すべての判断を説明します。<code>--log-level</code> では <code>trace</code>、<code>debug</code>、<code>information</code>、<code>warning</code>（既定値）、<code>error</code>、<code>none</code> のいずれかを選択できます。<code>trace</code> では git の生の出力も加わります。</p>
 <pre><code>td affected -v 2&gt; testdetta-debug.log
 td test --log-level information</code></pre>
+
+<h3 id="color"><code>--color &lt;when&gt;</code>、<code>--theme &lt;name&gt;</code></h3>
+<p>テキスト出力は表形式で表示され、人が読む場所、つまりターミナルと GitHub Actions のログでは色が付きます。<code>auto</code>(既定)はファイルやパイプには色を付けず、<code>NO_COLOR</code> と <code>FORCE_COLOR</code> に従います。<code>always</code> と <code>never</code> は常に付ける・付けないを指定します。<code>--format json</code> には色は付きません。<code>--theme</code> では <code>default</code>、<code>colorblind</code>(緑と赤の代わりに青と黄)、<code>mono</code>(太字と淡色のみ)を選べます。<code>TESTDETTA_THEME</code> を設定するとすべての実行に適用されます。</p>
+<pre><code>td test --theme colorblind
+td affected --color never &gt; affected.txt</code></pre>
 
 <h3 id="max-map-age"><code>--max-map-age &lt;n&gt;</code></h3>
 <p>マージベース自体にカバレッジマップがない場合に、マージベースから最大 <em>n</em> 個の first-parent コミット前までに記録されたマップを使用します。その間の変更は橋渡しされます。つまり、マップ以降に変更されたメンバーのうち、今回の変更に到達しうるものを実行したクラスも選択されます。<code>0</code> を指定すると、マージベースで記録されたマップだけを使用します。既定値：<code>50</code>。<a href="/docs/how-it-works/">選択のしくみ</a>を参照してください。</p>

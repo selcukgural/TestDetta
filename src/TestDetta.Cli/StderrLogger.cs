@@ -17,6 +17,9 @@ internal sealed class StderrLoggerFactory(TextWriter writer, LogLevel minimumLev
     /// <summary>Minimum level, read by <see cref="StderrLogger.IsEnabled"/>.</summary>
     private LogLevel MinimumLevel => minimumLevel;
 
+    /// <summary>Colour of the level labels and the muted time and category (docs/design/console-output.md); plain by default.</summary>
+    public ConsoleStyle Style { get; init; } = ConsoleStyle.Plain;
+
     /// <summary>Creates a logger whose lines are prefixed with the last segment of <paramref name="categoryName"/>.</summary>
     /// <param name="categoryName">Usually the full type name, such as <c>TestDetta.Core.GitClient</c>.</param>
     public ILogger CreateLogger(string categoryName)
@@ -54,9 +57,19 @@ internal sealed class StderrLoggerFactory(TextWriter writer, LogLevel minimumLev
             _ => "???",
         };
 
+        var role = level switch
+        {
+            LogLevel.Trace or LogLevel.Debug => Role.Muted,
+            LogLevel.Warning => Role.Notice,
+            LogLevel.Error or LogLevel.Critical => Role.Bad,
+            _ => Role.Plain,
+        };
+
         lock (_gate)
         {
-            writer.WriteLine($"[{DateTime.Now:HH:mm:ss.fff} {label}] {category}: {message}");
+            writer.WriteLine(Style.Color
+                ? $"{Style.Paint(Role.Muted, $"[{DateTime.Now:HH:mm:ss.fff} ")}{Style.Paint(role, label)}{Style.Paint(Role.Muted, $"] {category}:")} {message}"
+                : $"[{DateTime.Now:HH:mm:ss.fff} {label}] {category}: {message}");
             if (exception is not null)
             {
                 writer.WriteLine(exception);

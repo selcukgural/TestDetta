@@ -1,4 +1,4 @@
-<!-- title: はじめに; layout: docs; description: {{name}} を CI に導入し、変更が影響しうる .NET のテストだけを実行します。; source: c968767e0689 -->
+<!-- title: はじめに; layout: docs; description: {{name}} を CI に導入し、変更が影響しうる .NET のテストだけを実行します。; source: e57f80d1f0c3 -->
 <h1>はじめに</h1>
 <p class="lead">{{name}} はブランチをそのベースと比較し、変更を検出できるテストプロジェクトとテストクラスを割り出して、それらだけを実行します。確信が持てないときは、少なくではなく多めに実行します。見えないものは<a href="/docs/limitations/">制限事項</a>に一覧があります。</p>
 
@@ -68,6 +68,8 @@ td record</code></pre>
     <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>古いマップ以降の変更にビルドファイル、構成、グローバル using が含まれる場合に、影響を受けるテストプロジェクトを丸ごと実行する（<code>all</code>、既定値）か、名前で判断する（<code>name</code>）かを指定します。</td></tr>
     <tr><td><code>-v</code>、<code>--verbose</code></td><td>デバッグログを stderr に書き込みます。ユーザーが疑問に思いそうなすべての判断を、その理由とともに出力します。</td></tr>
     <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>、<code>debug</code>、<code>information</code>、<code>warning</code>（既定値）、<code>error</code>、<code>none</code> のいずれか。</td></tr>
+    <tr><td><code>--color &lt;when&gt;</code></td><td><code>auto</code>(既定: ターミナルまたは GitHub Actions のログ。<code>NO_COLOR</code> で無効)、<code>always</code>、<code>never</code>。JSON には色は付きません。</td></tr>
+    <tr><td><code>--theme &lt;name&gt;</code></td><td><code>default</code>、<code>colorblind</code>(緑と赤の代わりに青と黄)、<code>mono</code>。<code>TESTDETTA_THEME</code> でも指定できます。</td></tr>
   </tbody>
 </table>
 <p>ログは stderr に出力されます。stdout にはコマンドの出力が流れ、機械可読な状態に保たれます。</p>
