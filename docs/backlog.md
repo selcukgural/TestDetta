@@ -28,6 +28,16 @@ and only the name trace through the registration selects it. OpenAPI and Swagger
 common. A safe version needs a signal for "this class read the type's shape" (reflection inside
 ASP.NET, Swashbuckle, serializers), which nothing records today.
 
+## Next: incremental recording on main (owner, 2026-10-09)
+
+Every push to main records the whole suite instrumented (AfterApply: 5 min 38 s against 5 min 6 s for
+the plain test job), so teams that merge often pay back on main what selection saves on pull
+requests, and recording less often widens their pull request runs. Design:
+docs/design/incremental-recording.md (select `A..H` against the previous map, re-record only those
+classes, carry the rest over; members no fresh run has seen count as unknown; regular full recordings
+check the incremental map). Next: the evaluator measurement, then thresholds and the action's default
+with the owner.
+
 ## Later: Windows (owner, 2026-10-06: noted, to do later)
 
 - A Windows CI job (manual or weekly; Windows minutes cost about 1.7x Linux) that runs the `Legacy`
