@@ -48,7 +48,16 @@ single-framework project had already. Restricting the comparison to the `-f` fra
 other framework's tests run in that invocation. A team that records with `-f` and runs without it keeps the
 whole-project run.
 
-## Measurement
+## Measured (2026-10-10)
 
-`--explain` before and after on LibGit2Sharp (and the repositories whose explain lists the old reason), full
-evaluations of the changes whose selection narrowed; misses must be 0.
+LibGit2Sharp, the 100 sampled changes of the corpus commit, maps recorded for net8.0 (the evaluator's `-f`):
+
+| | Before | After |
+|---|---|---|
+| `--explain`: mean share of the selected classes | 100 % (every change) | 16.2 %; 100 of 100 changes narrower, none wider |
+| Full evaluation: mean share of the recorded classes | 100 % | 26 % |
+| Missed | | **0 of 50 failing mutants** |
+
+Most changes now run 1 to 5 of the 66 classes, and 20 run none. The only other repository with the old reason
+in the 2026-10-10 scan was CliWrap, for 1 of its 88 changes: a change to `CliWrap.Signaler`, whose output
+CliWrap embeds as a resource. The embedded resource changes with it, so that change still runs the project.
