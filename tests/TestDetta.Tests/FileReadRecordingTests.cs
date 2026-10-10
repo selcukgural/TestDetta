@@ -1,3 +1,5 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.Logging.Abstractions;
 using TestDetta.Core;
 using TestDetta.Coverage;
@@ -39,6 +41,7 @@ public sealed class FileReadRecordingTests : IDisposable
                 <PackageReference Include="xunit" Version="2.9.3" />
                 <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
                 <ProjectReference Include="../../src/Rates/Rates.csproj" />
+                <Reference Include="Vendor" HintPath="../../lib/Vendor.dll" />
                 <None Update="Data/**" Link="Data/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
               </ItemGroup>
             </Project>
@@ -68,7 +71,21 @@ public sealed class FileReadRecordingTests : IDisposable
             }
 
             public class NoFileTests { [Fact] public void Adds() => Assert.Equal(2, 1 + 1); }
+
+            // Reads a file through a library no project of the repository builds, as a snapshot library does.
+            public class VendorReadTests
+            {
+                [Fact]
+                public void Reads()
+                {
+                    var root = AppContext.BaseDirectory;
+                    while (!Directory.Exists(Path.Combine(root, "testdata"))) root = Path.GetDirectoryName(root)!;
+                    Assert.Equal("# Expected", Vendor.Snapshots.Read(Path.Combine(root, "tests", "Rates.Tests", "Expected.md")).Trim());
+                }
+            }
             """);
+        _repo.Write("tests/Rates.Tests/Expected.md", "# Expected\n");
+        WriteVendorLibrary(Path.Combine(_repo.Root, "lib", "Vendor.dll"));
         _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
         _repo.Commit("base");
     }
@@ -104,11 +121,42 @@ public sealed class FileReadRecordingTests : IDisposable
         Assert.Equal(["tests/Rates.Tests/Data/", "tests/Rates.Tests/Data/euro.txt"], reads.Classes["Rates.Tests.OutputCopyTests"]);
         Assert.False(reads.Classes.ContainsKey("Rates.Tests.NoFileTests"));
 
+        // A third-party library's read shows under the class that ran it, and the map says it saw every library's reads.
+        Assert.Contains("tests/Rates.Tests/Expected.md", reads.Classes["Rates.Tests.VendorReadTests"]);
+        Assert.Equal([], map.FileReadsUnseen);
+        Assert.True(map.KnowsAllFileReads);
+
         // Only repository paths; a probe in the build output for a file that is not there stands for nothing.
         Assert.All(reads.Classes.Values.SelectMany(static p => p), static p => Assert.False(Path.IsPathRooted(p), p));
 
         var stored = CoverageMapStore.Read(WriteAndPath(map));
         Assert.Equal(reads.Classes["Rates.Tests.OutputCopyTests"], stored!.FileReads!.Classes["Rates.Tests.OutputCopyTests"]);
+        Assert.Equal([], stored.FileReadsUnseen);
+
+        // The library is put back as it was.
+        var library = Path.Combine(_repo.Root, "tests", "Rates.Tests", "bin", "Debug", "net10.0", "Vendor.dll");
+        Assert.Equal(File.ReadAllBytes(Path.Combine(_repo.Root, "lib", "Vendor.dll")), File.ReadAllBytes(library));
+    }
+
+    /// <summary>Compiles a small library that reads a file, standing in for a package such as a snapshot library.</summary>
+    private static void WriteVendorLibrary(string path)
+    {
+        // Against the reference pack, as a package is built: the test project compiles against it in turn.
+        var dotnetRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "..", "..", ".."));
+        var referencePack = Directory.GetDirectories(Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref"))
+            .Select(static d => Path.Combine(d, "ref", "net10.0", "System.Runtime.dll"))
+            .Where(File.Exists)
+            .Order(StringComparer.Ordinal)
+            .Last();
+        var compilation = CSharpCompilation.Create(
+            "Vendor",
+            [CSharpSyntaxTree.ParseText("namespace Vendor; public static class Snapshots { public static string Read(string path) => System.IO.File.ReadAllText(path); }")],
+            [MetadataReference.CreateFromFile(referencePack)],
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var pe = File.Create(path);
+        var emitted = compilation.Emit(pe);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
     }
 
     private string WriteAndPath(CoverageMap map)

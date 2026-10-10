@@ -76,6 +76,14 @@ your change, and traces new code by name. When something in between cannot be de
 decides them by name instead, as without a map (faster, but blind to calls wired by configuration).
 Add `.testdetta/` to `.gitignore`.
 
+A changed file in a project folder that is not code (`README.md`, `CHANGELOG.md`, a JSON file) runs
+only the test classes the map saw read it, when the build neither compiles, embeds, copies nor hands it
+to a tool (`--non-code-files readers`, the default). Recording sees the reads of your code and of the
+libraries your tests use (a snapshot library reading its `.verified` files). A file the build uses, or a
+test project whose map was recorded before reads of libraries were, still runs completely, and so does
+everything under `--non-code-files project`. See [docs/design/non-code-files.md](docs/design/non-code-files.md)
+for what the rule relies on and what it cannot see.
+
 ## GitHub Actions
 
 Record a map for every commit on the default branch, and let pull requests run only the tests
@@ -137,6 +145,7 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `dotnet-test-args` | | test, shadow and audit modes: extra `dotnet test` arguments; in shadow mode name your solution here to run it as one command, and with testing-platform projects build in a step before and add `--no-build` |
 | `max-map-age` | `50` | test, shadow and audit modes: commits a map may be behind the merge base (0: only an exact map) |
 | `drift-fallback` | `all` | test, shadow and audit modes: `all` runs test projects completely when the changes since an older map include a build file or configuration; `name` decides them by name |
+| `non-code-files` | | test, shadow and audit modes: `readers` runs only the test classes that read a changed non-code file the build does not use; `project` runs its project and the projects depending on it completely; empty keeps the default (`readers`) |
 | `shadow-analysis-timeout`, `shadow-rerun-timeout`, `shadow-rerun-idle-timeout`, `shadow-base-timeout`, `shadow-base-idle-timeout`, `shadow-classify-budget` | `10m`, `15m`, `5m`, `30m`, `10m`, `45m` | shadow mode: time limits of the analysis and of the reruns that classify failures |
 | `shadow-artifact-suffix` | | shadow mode: added to the report artifact's name, to tell matrix jobs apart |
 | `audit-target-broken` | `100` | audit mode: stop once this many changes broke tests |

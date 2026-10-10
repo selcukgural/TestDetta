@@ -36,6 +36,9 @@ internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLeve
     /// <summary>What a test project does when its older map's drift cannot be bridged.</summary>
     public TestDetta.Core.DriftFallback DriftFallback { get; init; } = TestDetta.Core.DriftFallback.RunAll;
 
+    /// <summary>What a changed non-code file inside a project folder runs (docs/design/non-code-files.md).</summary>
+    public TestDetta.Core.NonCodeFileRule NonCodeFiles { get; init; } = TestDetta.Core.AnalysisOptions.DefaultNonCodeFiles;
+
     /// <summary>Folder of per-commit coverage maps outside the repository (<see cref="MapDirectory"/>); null when unused.</summary>
     public string? MapsDir { get; init; }
 }
@@ -308,6 +311,11 @@ internal sealed record CliOptions(
                                configuration or a global using, run the affected test projects
                                completely (all, the default) or decide them by name (name: faster,
                                blind to calls made through configuration or reflection)
+          --non-code-files <readers|project>  What a changed file in a project folder that is not code
+                               (README.md, CHANGELOG.md, a JSON file) runs: readers (the default) runs
+                               only the test classes the map saw read it, when the build neither compiles,
+                               embeds, copies nor hands it to a tool; project runs its project and every
+                               project depending on it completely
 
         td affected:
           --tests-only         Only list affected test projects
@@ -525,7 +533,7 @@ internal sealed record CliOptions(
                 error = "td audit compares every change with HEAD; --base does not apply";
                 return false;
 
-            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--color" or "--theme":
+            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--color" or "--theme":
             case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record or CliCommand.Audit:
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
@@ -549,7 +557,7 @@ internal sealed record CliOptions(
         }
 
         var value = args[++i];
-        if (options.Command == CliCommand.Audit && arg is not ("--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--maps-dir" or "--color" or "--theme"))
+        if (options.Command == CliCommand.Audit && arg is not ("--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--maps-dir" or "--color" or "--theme"))
         {
             return TryParseAuditOption(arg, value, ref options, out error);
         }
@@ -598,6 +606,19 @@ internal sealed record CliOptions(
                 options = options with
                 {
                     Analysis = options.Analysis with { DriftFallback = value == "all" ? TestDetta.Core.DriftFallback.RunAll : TestDetta.Core.DriftFallback.ByName },
+                };
+                return true;
+
+            case "--non-code-files":
+                if (value is not ("readers" or "project"))
+                {
+                    error = $"--non-code-files is readers or project, not {value}";
+                    return false;
+                }
+
+                options = options with
+                {
+                    Analysis = options.Analysis with { NonCodeFiles = value == "readers" ? TestDetta.Core.NonCodeFileRule.Readers : TestDetta.Core.NonCodeFileRule.Project },
                 };
                 return true;
 

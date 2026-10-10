@@ -20,7 +20,7 @@ namespace TestDetta.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 5;
+    private const int EvaluatorVersion = 6;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -61,6 +61,17 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
               <TestDettaEvaluated Include="@(_TestDettaGeneratorReference->'%(FullPath)')" Kind="GeneratorReference" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="@(PackageReference)" Kind="Package" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="@(Compile->'%(FullPath)');@(EmbeddedResource->'%(FullPath)');@(Content->'%(FullPath)');@(None->'%(FullPath)');@(AdditionalFiles->'%(FullPath)')" Kind="Item" Project="$(MSBuildProjectFullPath)" />
+              <!-- Non-code files the build does not use (docs/design/non-code-files.md): None items it does not copy, and the files of item types that build, copy or generate from them. -->
+              <_TestDettaInert Include="@(None->'%(FullPath)')" Condition="'%(None.CopyToOutputDirectory)' == '' or '%(None.CopyToOutputDirectory)' == 'Never'" />
+              <_TestDettaBuilt Include="@(None->'%(FullPath)')" Condition="'%(None.CopyToOutputDirectory)' != '' and '%(None.CopyToOutputDirectory)' != 'Never'" />
+              <_TestDettaBuilt Include="@(Compile->'%(FullPath)');@(EmbeddedResource->'%(FullPath)');@(Content->'%(FullPath)');@(AdditionalFiles->'%(FullPath)')" />
+              <_TestDettaBuilt Include="@(Resource->'%(FullPath)');@(Page->'%(FullPath)');@(ApplicationDefinition->'%(FullPath)');@(XamlAppDef->'%(FullPath)')" />
+              <_TestDettaBuilt Include="@(Protobuf->'%(FullPath)');@(TypeScriptCompile->'%(FullPath)');@(ContentWithTargetPath->'%(FullPath)');@(EditorConfigFiles->'%(FullPath)');@(GlobalAnalyzerConfigFiles->'%(FullPath)')" />
+              <_TestDettaBuilt Include="@(RazorComponent->'%(FullPath)');@(RazorGenerate->'%(FullPath)');@(AvaloniaResource->'%(FullPath)');@(AvaloniaXaml->'%(FullPath)')" />
+              <_TestDettaBuilt Include="@(MauiImage->'%(FullPath)');@(MauiFont->'%(FullPath)');@(MauiAsset->'%(FullPath)');@(MauiXaml->'%(FullPath)');@(MauiCss->'%(FullPath)');@(MauiSplashScreen->'%(FullPath)');@(MauiIcon->'%(FullPath)')" />
+              <_TestDettaBuilt Include="@(AndroidResource->'%(FullPath)');@(AndroidAsset->'%(FullPath)');@(BundleResource->'%(FullPath)');@(ImageAsset->'%(FullPath)');@(InterfaceDefinition->'%(FullPath)')" />
+              <TestDettaEvaluated Include="@(_TestDettaInert)" Kind="Inert" Project="$(MSBuildProjectFullPath)" />
+              <TestDettaEvaluated Include="@(_TestDettaBuilt)" Kind="Built" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="$(DefineConstants)" Kind="Define" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />
               <TestDettaEvaluated Include="$(MSBuildProjectFullPath)" Kind="Framework" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />
             </ItemGroup>
@@ -309,6 +320,12 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 case "Item":
                     builder.Items.Add(Paths.Normalize(fields[2]));
                     break;
+                case "Inert":
+                    builder.Inert.Add(Paths.Normalize(fields[2]));
+                    break;
+                case "Built":
+                    builder.Built.Add(Paths.Normalize(fields[2]));
+                    break;
                 case "Define" or "Framework":
                     // A framework without any symbol still compiles: its (empty) set is kept too.
                     var framework = fields.Length > 5 ? fields[5] : string.Empty;
@@ -335,6 +352,8 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 RootNamespace = b.Value.RootNamespace,
                 OpaqueReferences = b.Value.OpaqueReferences,
                 GeneratorReferences = b.Value.GeneratorReferences,
+                // A file a framework copies or builds is no inert file, whatever another framework does with it.
+                InertItems = b.Value.Inert.Where(f => !b.Value.Built.Contains(f)).ToHashSet(Paths.Comparer),
             },
             Paths.Comparer);
     }
@@ -371,6 +390,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     RootNamespace = c.Value.RootNamespace,
                     OpaqueReferences = (c.Value.OpaqueReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
                     GeneratorReferences = (c.Value.GeneratorReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
+                    InertItems = c.Value.InertItems?.Select(Full).ToHashSet(Paths.Comparer),
                 },
                 Paths.Comparer);
         }
@@ -398,6 +418,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 RootNamespace = p.Value.RootNamespace,
                 OpaqueReferences = [.. p.Value.OpaqueReferences.Select(Relative)],
                 GeneratorReferences = [.. p.Value.GeneratorReferences.Select(Relative)],
+                InertItems = p.Value.InertItems is { } inert ? [.. inert.Select(Relative).Order(StringComparer.Ordinal)] : null,
             });
         try
         {
@@ -439,6 +460,12 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
         /// <summary>See <see cref="EvaluatedProject.Packages"/>.</summary>
         public HashSet<string> Packages { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>None items without a copy to the output, under any framework; see <see cref="EvaluatedProject.InertItems"/>.</summary>
+        public HashSet<string> Inert { get; } = new(Paths.Comparer);
+
+        /// <summary>Files of item types the build compiles, copies or generates from, under any framework.</summary>
+        public HashSet<string> Built { get; } = new(Paths.Comparer);
+
         /// <summary>Preprocessor symbols by target framework; see <see cref="EvaluatedProject.SymbolSets"/>.</summary>
         public Dictionary<string, SortedSet<string>> Symbols { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
@@ -462,6 +489,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 
         /// <summary>See <see cref="EvaluatedProject.GeneratorReferences"/>; null in caches written before they were read.</summary>
         public List<string>? GeneratorReferences { get; init; }
+
+        /// <summary>See <see cref="EvaluatedProject.InertItems"/>; null in caches written before they were read.</summary>
+        public List<string>? InertItems { get; init; }
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "MSBuild evaluated {Evaluated} of {Count} project(s) in {Seconds:0.0} s")]

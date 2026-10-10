@@ -51,7 +51,7 @@ About 640 product lines and 300 test lines (instrumenter wrappers, tracker, reco
 selection, output), the design's docs page in five languages, and a corpus mode that changes data files
 (empty or delete a few unmapped files per repository, one full run as ground truth).
 
-Not seen: reads by third-party libraries (a later step could rewrite their IO calls too), child processes
+Not seen: reads by third-party libraries (seen since 2026-10-10, docs/design/non-code-files.md), child processes
 and native code, and reads by a computed path from code the map does not cover. All of this is strictly
 more than today, which selects nothing for these files.
 
@@ -97,8 +97,8 @@ the test project; a change or a deletion then runs the project.
   project after the member changes, most of them files some map recorded a read of
   (`DataFileSampler`, mutant kind `empty-file`, never part of `all`). The full run with the file emptied
   is the ground truth, as for member mutants; `EvalDataFileTests` runs it end to end.
-- **Not yet**: the drift bridge's literal search for classes changed since the map, and process starts. Reads by third-party code (snapshot libraries) stay unseen;
-  the docs say so.
+- **Not yet**: the drift bridge's literal search for classes changed since the map, and process starts. Reads by third-party code (snapshot libraries) are
+  recorded since 2026-10-10 (docs/design/non-code-files.md); maps recorded before do not have them.
 
 ## Open question for the owner: process starts and build-time tools (2026-10-05)
 

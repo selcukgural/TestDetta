@@ -73,13 +73,26 @@ internal static class FileReadCalls
         "System.AppDomain::ExecuteAssembly",
         "System.AppDomain::ExecuteAssemblyByName");
 
+    /// <summary>
+    /// True when <paramref name="module"/> references a method whose calls <see cref="Wrap"/> reports as
+    /// a file read or a directory listing. Reads only the member reference table, no method body, so a
+    /// third-party assembly that reads no file costs almost nothing to check.
+    /// </summary>
+    /// <param name="module">Module to look at.</param>
+    public static bool ReferencesReaders(ModuleDefinition module) =>
+        module.GetMemberReferences().OfType<MethodReference>().Any(static m => Directory(m) is not null);
+
     /// <summary>Wraps every file-reading, process-starting and assembly-loading call in the bodies of <paramref name="module"/>.</summary>
     /// <param name="module">Module being instrumented.</param>
     /// <param name="fileRead">Reference to <see cref="TestDettaTracker.FileRead"/> in the module.</param>
     /// <param name="directoryListed">Reference to <see cref="TestDettaTracker.DirectoryListed"/> in the module.</param>
-    /// <param name="outputUsed">Reference to <see cref="TestDettaTracker.OutputUsed"/> in the module.</param>
+    /// <param name="outputUsed">
+    /// Reference to <see cref="TestDettaTracker.OutputUsed"/> in the module; null to leave process starts and
+    /// assembly loads alone, as in third-party code, where the test platform loading the test assembly would
+    /// look like a use of the test project's output.
+    /// </param>
     /// <returns>The number of calls wrapped.</returns>
-    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed, MethodReference outputUsed)
+    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed, MethodReference? outputUsed)
     {
         TypeDefinition? holder = null;
         var wrappers = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
@@ -95,7 +108,7 @@ internal static class FileReadCalls
                     continue;
                 }
 
-                var starter = IsStarter(target);
+                var starter = outputUsed is not null && IsStarter(target);
                 if (!starter && Directory(target) is null)
                 {
                     continue;
@@ -106,7 +119,7 @@ internal static class FileReadCalls
                 {
                     holder ??= AddHolder(module);
                     wrapper = starter
-                        ? Wrapper(module, holder, target, instruction.OpCode, outputUsed, wrappers.Count, arguments: 2)
+                        ? Wrapper(module, holder, target, instruction.OpCode, outputUsed!, wrappers.Count, arguments: 2)
                         : Wrapper(module, holder, target, instruction.OpCode, Directory(target) == true ? directoryListed : fileRead, wrappers.Count, arguments: 1);
                     wrappers[key] = wrapper;
                 }

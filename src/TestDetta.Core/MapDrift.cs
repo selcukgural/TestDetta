@@ -29,6 +29,12 @@ public sealed record AnalysisOptions
     /// </summary>
     public DriftFallback DriftFallback { get; init; } = DriftFallback.RunAll;
 
+    /// <summary>The rule <see cref="NonCodeFiles"/> starts with; the developer's choice always wins.</summary>
+    public const NonCodeFileRule DefaultNonCodeFiles = NonCodeFileRule.Readers;
+
+    /// <summary>What a changed non-code file inside a project folder runs; see <see cref="NonCodeFileRule"/>.</summary>
+    public NonCodeFileRule NonCodeFiles { get; init; } = DefaultNonCodeFiles;
+
     /// <summary>
     /// Reads what source generators write now, to compare with the maps when a change reaches a
     /// generator in the repository; null keeps every project using a changed generator running completely.

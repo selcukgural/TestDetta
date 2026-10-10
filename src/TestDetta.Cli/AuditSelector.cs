@@ -61,6 +61,7 @@ internal sealed class AuditSelector(string root, string head, AnalysisSettings o
             {
                 MaxMapAge = options.MaxMapAge,
                 DriftFallback = options.DriftFallback,
+                NonCodeFiles = options.NonCodeFiles,
                 WorkingTreeOverlay = overlay,
                 Cancellation = cancel,
             });

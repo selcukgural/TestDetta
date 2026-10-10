@@ -173,7 +173,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var work = Path.Combine(Path.GetTempPath(), "testdetta-record-" + Guid.NewGuid().ToString("N"));
         var instrumenter = new AssemblyInstrumenter(_logger);
         var testAssemblies = new HashSet<string>(StringComparer.Ordinal) { targetPath };
-        var instrumentation = instrumenter.Instrument(assemblies, testAssemblies, Path.Combine(work, "backup"));
+        var thirdParty = ThirdPartyAssemblies.Find(outputDirectory, AssemblyOwners(request).Keys);
+        var instrumentation = instrumenter.Instrument(assemblies, testAssemblies, Path.Combine(work, "backup"), thirdParty);
         var mode = legacy ? DotnetTestMode.VSTest : location.Mode;
         RuntimeDeployment? deployment = null;
 
@@ -277,6 +278,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 GeneratedFrameworks = generatedFrameworks,
                 BuildInputs = buildInputs,
                 InstrumentedProjects = InstrumentedProjects(request.RepoRoot, owners, assemblies),
+                FileReadsUnseen = instrumentation.ReadsUnseen,
                 LeakedReads = LeakedReads(resultsFiles, instrumentation.Fields),
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,

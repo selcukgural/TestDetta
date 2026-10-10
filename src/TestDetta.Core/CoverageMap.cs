@@ -156,6 +156,21 @@ public sealed record CoverageMap(
     public FileReads? FileReads { get; init; }
 
     /// <summary>
+    /// File names of the third-party assemblies in the test output that read files but whose reads the
+    /// recording could not see (they could not be rewritten), sorted; empty when it saw the reads of every
+    /// third-party assembly as well as the repository's (docs/design/non-code-files.md). Null for maps
+    /// recorded before third-party reads were, which know only the reads of repository code. Only a map
+    /// with an empty list can vouch that a non-code file was read by no test.
+    /// </summary>
+    public IReadOnlyList<string>? FileReadsUnseen { get; init; }
+
+    /// <summary>
+    /// True when <see cref="FileReads"/> holds every file read the recording could observe, the reads of
+    /// third-party code included, so a file it does not name was read by no test that ran.
+    /// </summary>
+    public bool KnowsAllFileReads => FileReads is not null && FileReadsUnseen is [];
+
+    /// <summary>
     /// What the tests started as a process, loaded as an assembly, or read from a build output that git
     /// does not track, by name: the last path segment without <c>.dll</c>, <c>.exe</c> or a project
     /// extension, shaped like <see cref="FileReads"/>. A project referenced without compiling against

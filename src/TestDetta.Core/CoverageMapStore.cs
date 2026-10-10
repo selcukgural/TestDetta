@@ -193,6 +193,17 @@ public static class CoverageMapStore
             json.WriteString("platform"u8, platform);
         }
 
+        if (map.FileReadsUnseen is { } unseen)
+        {
+            json.WriteStartArray("fileReadsUnseen"u8);
+            foreach (var assembly in unseen)
+            {
+                json.WriteStringValue(assembly);
+            }
+
+            json.WriteEndArray();
+        }
+
         if (map.InstrumentedProjects is { } instrumented)
         {
             json.WriteStartArray("instrumentedProjects"u8);
@@ -325,6 +336,9 @@ public static class CoverageMapStore
                     ? skipped.EnumerateArray().Select(static n => n.GetString()!).ToHashSet(StringComparer.Ordinal)
                     : null,
                 Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
+                FileReadsUnseen = root.TryGetProperty("fileReadsUnseen", out var unseen)
+                    ? [.. unseen.EnumerateArray().Select(static a => a.GetString()!)]
+                    : null,
                 InstrumentedProjects = root.TryGetProperty("instrumentedProjects", out var instrumented)
                     ? [.. instrumented.EnumerateArray().Select(static p => p.GetString()!)]
                     : null,

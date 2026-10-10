@@ -88,6 +88,10 @@ public static class CoverageMapMerge
             BuiltValues = built,
             FileReads = Reads(previous.FileReads, partial.FileReads, carried, partial),
             OutputUses = Reads(previous.OutputUses, partial.OutputUses, carried, partial),
+            // Carried classes keep the reads the previous recording saw: what it could not see stays unseen.
+            FileReadsUnseen = partial.FileReadsUnseen is { } unseen && previous.FileReadsUnseen is { } previousUnseen
+                ? [.. unseen.Union(previousUnseen, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)]
+                : null,
             SkippedClasses = partial.SkippedClasses is { } skipped && previous.SkippedClasses is { } previousSkipped
                 ? new HashSet<string>([.. skipped, .. previousSkipped.Where(carried.Contains)], StringComparer.Ordinal)
                 : null,

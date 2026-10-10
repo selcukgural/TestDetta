@@ -40,6 +40,10 @@ inputs:
     description: "Test, shadow and audit modes. When the changes since an older map include a build file, configuration or a global using: 'all' runs the affected test projects completely (safest), 'name' decides them by name (faster, blind to calls made through configuration or reflection)."
     required: false
     default: all
+  non-code-files:
+    description: "Test, shadow and audit modes. What a changed file in a project folder that is not code (README.md, CHANGELOG.md, a JSON file) runs: 'readers' runs only the test classes the coverage map saw read it, when the build neither compiles, embeds, copies nor hands it to a tool; 'project' runs that project and every project depending on it completely. Empty keeps TestDetta's default (readers)."
+    required: false
+    default: ''
   shadow-rerun-timeout:
     description: "Shadow mode only. Longest one rerun of a project's left-out failed classes with the change may take: 90s, 15m, 1h or 1h30m; a plain number is minutes; 0 or none means no limit. Empty keeps the default (15m)."
     required: false
@@ -266,10 +270,13 @@ runs:
         EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
         MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
+        NON_CODE_FILES: ${{ inputs.non-code-files }}
         TESTDETTA_LICENSE: ${{ inputs.license }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
-        dotnet "$TESTDETTA" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+        nonCode=()
+        if [ -n "$NON_CODE_FILES" ]; then nonCode=(--non-code-files "$NON_CODE_FILES"); fi
+        dotnet "$TESTDETTA" test --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" "${nonCode[@]}" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
 
     # Shadow mode (docs/design/shadow-mode.md): every test runs as without TestDetta and the job's result is
     # that run's; the report says what the selection would have left out. dotnet test runs as given (one command
@@ -288,6 +295,7 @@ runs:
         EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
         MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
+        NON_CODE_FILES: ${{ inputs.non-code-files }}
         SHADOW_REPORT: ${{ runner.temp }}/testdetta-shadow/testdetta-shadow.json
         SHADOW_RERUN_TIMEOUT: ${{ inputs.shadow-rerun-timeout }}
         SHADOW_RERUN_IDLE_TIMEOUT: ${{ inputs.shadow-rerun-idle-timeout }}
@@ -322,8 +330,10 @@ runs:
         if [ -n "$SHADOW_BASE_IDLE_TIMEOUT" ]; then limits+=(--shadow-base-idle-timeout "$SHADOW_BASE_IDLE_TIMEOUT"); fi
         if [ -n "$SHADOW_CLASSIFY_BUDGET" ]; then limits+=(--shadow-classify-budget "$SHADOW_CLASSIFY_BUDGET"); fi
         if [ -n "$SHADOW_ANALYSIS_TIMEOUT" ]; then limits+=(--shadow-analysis-timeout "$SHADOW_ANALYSIS_TIMEOUT"); fi
+        nonCode=()
+        if [ -n "$NON_CODE_FILES" ]; then nonCode=(--non-code-files "$NON_CODE_FILES"); fi
         status=0
-        dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" "${limits[@]}" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}" || status=$?
+        dotnet "$TESTDETTA" test --shadow --shadow-report "$SHADOW_REPORT" "${limits[@]}" --base "$BASE_REF" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" "${nonCode[@]}" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}" || status=$?
         # 0 and 3 are the tests' own result (passed, failed). Anything else: td ended without a result of the tests
         # it can give (an error before they ran, or a process killed from outside, perhaps after they ran), so the
         # tests run (again) as plain dotnet test.
@@ -374,6 +384,7 @@ runs:
         EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
         MAX_MAP_AGE: ${{ steps.map.outputs.max-age }}
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
+        NON_CODE_FILES: ${{ inputs.non-code-files }}
         AUDIT_REPORT: ${{ runner.temp }}/testdetta-audit/testdetta-audit.json
         AUDIT_TARGET_BROKEN: ${{ inputs.audit-target-broken }}
         AUDIT_MAX_MUTANTS: ${{ inputs.audit-max-mutants }}
@@ -387,7 +398,9 @@ runs:
         if [ -n "$AUDIT_MAX_MUTANTS" ]; then limits+=(--max-mutants "$AUDIT_MAX_MUTANTS"); fi
         if [ -n "$AUDIT_BUDGET" ]; then limits+=(--budget "$AUDIT_BUDGET"); fi
         if [ -n "$AUDIT_PARALLEL" ]; then limits+=(--parallel "$AUDIT_PARALLEL"); fi
-        dotnet "$TESTDETTA" audit --report "$AUDIT_REPORT" --work-dir "$RUNNER_TEMP" "${limits[@]}" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
+        nonCode=()
+        if [ -n "$NON_CODE_FILES" ]; then nonCode=(--non-code-files "$NON_CODE_FILES"); fi
+        dotnet "$TESTDETTA" audit --report "$AUDIT_REPORT" --work-dir "$RUNNER_TEMP" "${limits[@]}" --max-map-age "$MAX_MAP_AGE" --drift-fallback "$DRIFT_FALLBACK" "${nonCode[@]}" --summary-file "$GITHUB_STEP_SUMMARY" -- -c "$CONFIGURATION" "${extra[@]}"
 
     # Kept whatever the result, for the graduation evidence (docs/design/shadow-mode.md).
     - name: Keep the audit report

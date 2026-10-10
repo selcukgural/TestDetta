@@ -6,8 +6,11 @@ namespace TestDetta.Eval;
 /// <summary>
 /// Picks data files for <see cref="MutantKind.EmptyFile"/> changes (docs/design/runtime-file-reads.md):
 /// tracked text files outside every project folder, which TestDetta selects only through the file reads
-/// its maps recorded. Most come from files some map recorded a read of, where a failure can prove
-/// something; the rest from files no map names, where a failing test is a read TestDetta never saw.
+/// its maps recorded; then as many non-code files inside project folders that the build does not use
+/// (<see cref="ProjectNode.InertItems"/>, READMEs included), which the readers rule selects the same way
+/// (docs/design/non-code-files.md). Most come from files some map recorded a read of, where a failure
+/// can prove something; the rest from files no map names, where a failing test is a read TestDetta
+/// never saw.
 /// </summary>
 internal static class DataFileSampler
 {
@@ -31,23 +34,46 @@ internal static class DataFileSampler
             .SelectMany(static r => r.Classes.Values.Concat(r.Fixtures.Values).Append(r.Ambient).Append(r.Initialization))
             .SelectMany(static p => p)
             .ToHashSet(StringComparer.Ordinal);
-        var candidates = new GitClient(NullLogger<GitClient>.Instance).TrackedFiles(repoRoot)
+        var tracked = new GitClient(NullLogger<GitClient>.Instance).TrackedFiles(repoRoot)
             .Where(f => !f.StartsWith(".git", StringComparison.Ordinal) && !f.StartsWith(".testdetta/", StringComparison.Ordinal)
-                        && !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
-                        && IsData(repoRoot, f)
-                        && graph.ResolveFile(Paths.Normalize(Path.Combine(repoRoot, f))).Count == 0
-                        && IsSmallText(Path.Combine(repoRoot, f)))
+                        && IsData(repoRoot, f) && IsSmallText(Path.Combine(repoRoot, f)))
             .Order(StringComparer.Ordinal)
             .ToList();
+        var unmapped = tracked.Where(f => !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                                          && graph.ResolveFile(Paths.Normalize(Path.Combine(repoRoot, f))).Count == 0).ToList();
+        var inert = tracked.Where(f => IsInert(graph, Paths.Normalize(Path.Combine(repoRoot, f)))).ToList();
 
         bool Read(string file) => reads.Contains(file) || reads.Any(r => r.EndsWith('/') && file.StartsWith(r, StringComparison.Ordinal));
+        // Inert files after the others, so the files sampled before inert files were stay the same.
+        return [.. Pick(unmapped, Read, count, seed).Concat(Pick(inert, Read, count, seed)).Select(f => Target(repoRoot, f, Read(f)))];
+    }
+
+    /// <summary>Up to <paramref name="count"/> of <paramref name="candidates"/>, 80% of them from files some map read when there are enough.</summary>
+    /// <param name="candidates">Files to pick from, sorted.</param>
+    /// <param name="read">True for a file some map recorded a read of.</param>
+    /// <param name="count">Files to pick.</param>
+    /// <param name="seed">Seed of the shuffle.</param>
+    private static List<string> Pick(List<string> candidates, Func<string, bool> read, int count, int seed)
+    {
         var random = new Random(seed);
-        var read = candidates.Where(Read).OrderBy(_ => random.Next()).ToList();
-        var unread = candidates.Where(f => !Read(f)).OrderBy(_ => random.Next()).ToList();
-        var fromRead = Math.Min(read.Count, (int)Math.Ceiling(count * 0.8));
-        var picked = read.Take(fromRead).Concat(unread.Take(count - fromRead)).ToList();
-        picked.AddRange(read.Skip(fromRead).Take(count - picked.Count));
-        return [.. picked.Select(f => Target(repoRoot, f, Read(f)))];
+        var wasRead = candidates.Where(read).OrderBy(_ => random.Next()).ToList();
+        var unread = candidates.Where(f => !read(f)).OrderBy(_ => random.Next()).ToList();
+        var fromRead = Math.Min(wasRead.Count, (int)Math.Ceiling(count * 0.8));
+        var picked = wasRead.Take(fromRead).Concat(unread.Take(count - fromRead)).ToList();
+        picked.AddRange(wasRead.Skip(fromRead).Take(count - picked.Count));
+        return picked;
+    }
+
+    /// <summary>
+    /// True for a file inside a project folder that every project owning it lists as an item its build does not use:
+    /// the files the readers rule leaves to the readers the maps recorded.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="file">Normalized full path.</param>
+    private static bool IsInert(ProjectGraph graph, string file)
+    {
+        var owners = graph.ResolveFile(file);
+        return owners.Count > 0 && owners.All(o => o.Role == FileRole.Source && o.Project.InertItems?.Contains(file) == true);
     }
 
     /// <summary>The change that empties <paramref name="file"/>: one edit that replaces its whole text.</summary>

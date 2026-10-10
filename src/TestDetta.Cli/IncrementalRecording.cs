@@ -37,7 +37,11 @@ internal sealed record ProjectStep(ProjectNode Project, StepKind Kind, string Re
 /// <param name="Settings">Options of <c>td record</c>.</param>
 /// <param name="MaxMapAge">How many first-parent commits the previous map may be behind.</param>
 /// <param name="SelectionLicensed">False when no license covers selection: every project is then recorded in full.</param>
-internal sealed record IncrementalContext(string Root, ProjectGraph Graph, RecordSettings Settings, int MaxMapAge, bool SelectionLicensed);
+internal sealed record IncrementalContext(string Root, ProjectGraph Graph, RecordSettings Settings, int MaxMapAge, bool SelectionLicensed)
+{
+    /// <summary>What a changed non-code file runs in the selection the step is planned with, as <c>td test</c> would decide it.</summary>
+    public NonCodeFileRule NonCodeFiles { get; init; } = AnalysisOptions.DefaultNonCodeFiles;
+}
 
 /// <summary>
 /// Plans <c>td record --incremental</c> (docs/design/incremental-recording.md): for each test project, the classes the
@@ -163,7 +167,7 @@ internal sealed partial class IncrementalRecording(ILoggerFactory loggerFactory,
     /// <param name="group">Projects whose previous map is at that commit.</param>
     private IEnumerable<ProjectStep> Select(IncrementalContext context, string commit, List<(ProjectNode Project, CoverageMap Map)> group)
     {
-        var analysis = new AnalysisPipeline(loggerFactory, evaluator).Run(context.Root, commit, new AnalysisOptions { MaxMapAge = 0 });
+        var analysis = new AnalysisPipeline(loggerFactory, evaluator).Run(context.Root, commit, new AnalysisOptions { MaxMapAge = 0, NonCodeFiles = context.NonCodeFiles });
         var changes = analysis.Impact.CodeChanges.SelectMany(static c => c.Symbols).ToList();
         foreach (var (project, map) in group)
         {

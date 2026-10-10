@@ -68,6 +68,54 @@ public sealed class AssemblyInstrumenterTests : IDisposable
         Assert.Equal([.. before.Append("TestDetta.Coverage.Runtime").Order(StringComparer.Ordinal)], References(library));
     }
 
+    [Fact]
+    public void Third_party_assemblies_get_read_wrappers_only_and_are_restored()
+    {
+        // Mono.Cecil opens files by path; Logging.Abstractions reads none; a native library is no assembly.
+        var reader = Copy(Path.Combine(AppContext.BaseDirectory, "Mono.Cecil.dll"));
+        var quiet = Copy(Path.Combine(AppContext.BaseDirectory, "Microsoft.Extensions.Logging.Abstractions.dll"));
+        var native = Path.Combine(_directory, "libnative.dll");
+        File.WriteAllText(native, "not an assembly");
+        var originals = new[] { reader, quiet }.ToDictionary(static f => f, File.ReadAllBytes);
+        var instrumenter = new AssemblyInstrumenter(NullLogger.Instance);
+
+        var result = instrumenter.Instrument([], new HashSet<string>(), Path.Combine(_directory, "backup"), [reader, quiet, native]);
+
+        Assert.Equal([], result.ReadsUnseen);
+        Assert.Empty(result.Methods);
+        using (var module = Mono.Cecil.ModuleDefinition.ReadModule(reader))
+        {
+            Assert.Contains(module.Types, static t => t.Name == "<TestDettaFileReads>");
+            Assert.DoesNotContain(
+                module.GetTypes().SelectMany(static t => t.Methods).Where(static m => m.HasBody).SelectMany(static m => m.Body.Instructions),
+                static i => i.Operand is Mono.Cecil.MethodReference { Name: "Hit" });
+        }
+
+        Assert.Equal(originals[quiet], File.ReadAllBytes(quiet));
+        Assert.DoesNotContain(quiet, result.Backups.Keys);
+
+        instrumenter.Restore(result);
+        Assert.Equal(originals[reader], File.ReadAllBytes(reader));
+    }
+
+    [Fact]
+    public void Third_party_assemblies_are_the_outputs_dlls_but_the_repositorys_and_the_test_platforms()
+    {
+        foreach (var name in (string[])["App.dll", "App.Tests.dll", "Tool.dll", "Verify.dll", "testhost.dll", "Microsoft.TestPlatform.CoreUtilities.dll",
+                     "xunit.runner.visualstudio.testadapter.dll", "TestDetta.Coverage.Runtime.dll", "de/Verify.resources.dll", "runtimes/win/lib/net8.0/Snap.dll"])
+        {
+            var path = Path.Combine(_directory, name);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, string.Empty);
+        }
+
+        var found = ThirdPartyAssemblies.Find(_directory, ["App.dll", "App.Tests.dll", "Tool.dll"]);
+
+        Assert.Equal(
+            [Path.Combine(_directory, "Verify.dll"), Path.Combine(_directory, "runtimes/win/lib/net8.0/Snap.dll")],
+            found.Order(StringComparer.Ordinal));
+    }
+
     /// <summary>Names and versions of the assemblies <paramref name="path"/> references, sorted.</summary>
     private static List<string> References(string path)
     {
