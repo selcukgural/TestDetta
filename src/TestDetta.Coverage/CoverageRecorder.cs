@@ -185,7 +185,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // The runtime always goes into the output, so instrumented code finds it without the VSTest
             // collector: xUnit v3 runs tests in the test executable, where no collector loads, and old
             // test hosts (Microsoft.NET.Test.Sdk 16) do not load the collector at all.
-            deployment = new RuntimeDeployment(targetPath);
+            deployment = new RuntimeDeployment(targetPath, assemblies);
             var testArguments = TestArguments(new TestRun(request, mode, targetPath, framework) { Legacy = legacy }, work);
             LogMode(project, mode);
 
