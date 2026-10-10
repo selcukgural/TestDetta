@@ -41,6 +41,13 @@ public sealed record AnalysisOptions
     /// </summary>
     public IGeneratedCodeReader? GeneratedCode { get; init; }
 
+    /// <summary>
+    /// The one target framework the selected tests run for (<c>dotnet test -f</c>), or null when they run for
+    /// every framework of their project. Only that framework's build is compared with a map
+    /// (docs/design/build-inputs-per-framework.md): the other frameworks' tests do not run.
+    /// </summary>
+    public string? Framework { get; init; }
+
     /// <summary>How maps are used; anything but <see cref="MapUse.Bridge"/> exists for evaluation only.</summary>
     internal MapUse Maps { get; init; } = MapUse.Bridge;
 

@@ -177,6 +177,29 @@ public static class CoverageMapStore
             json.WriteEndObject();
         }
 
+        if (map.FrameworkBuildInputs is { } frameworkInputs)
+        {
+            json.WriteStartObject("frameworkBuildInputs"u8);
+            foreach (var (inputsFramework, projects) in frameworkInputs.OrderBy(static f => f.Key, StringComparer.Ordinal))
+            {
+                json.WriteStartObject(inputsFramework);
+                foreach (var (project, values) in projects.OrderBy(static p => p.Key, StringComparer.Ordinal))
+                {
+                    json.WriteStartObject(project);
+                    foreach (var (key, value) in values.OrderBy(static v => v.Key, StringComparer.Ordinal))
+                    {
+                        json.WriteString(key, value);
+                    }
+
+                    json.WriteEndObject();
+                }
+
+                json.WriteEndObject();
+            }
+
+            json.WriteEndObject();
+        }
+
         if (map.GeneratedFrameworks is { } generatedFrameworks)
         {
             json.WriteStartArray("generatedFrameworks"u8);
@@ -356,11 +379,9 @@ public static class CoverageMapStore
                 FileReads = root.TryGetProperty("fileReads", out var reads)
                     ? new FileReads(ReadPaths(reads.GetProperty("classes")), ReadPaths(reads.GetProperty("fixtures")), ReadStrings(reads.GetProperty("ambient")), ReadStrings(reads.GetProperty("initialization")))
                     : null,
-                BuildInputs = root.TryGetProperty("buildInputs", out var inputs)
-                    ? inputs.EnumerateObject().ToDictionary(
-                        static p => p.Name,
-                        static p => (IReadOnlyDictionary<string, string>)p.Value.EnumerateObject().ToDictionary(static v => v.Name, static v => v.Value.GetString()!, StringComparer.Ordinal),
-                        StringComparer.Ordinal)
+                BuildInputs = root.TryGetProperty("buildInputs", out var inputs) ? ReadBuildInputs(inputs) : null,
+                FrameworkBuildInputs = root.TryGetProperty("frameworkBuildInputs", out var frameworkInputs)
+                    ? frameworkInputs.EnumerateObject().ToDictionary(static f => f.Name, static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> (f) => ReadBuildInputs(f.Value), StringComparer.Ordinal)
                     : null,
                 OutputUses = root.TryGetProperty("outputUses", out var uses)
                     ? new FileReads(ReadPaths(uses.GetProperty("classes")), ReadPaths(uses.GetProperty("fixtures")), ReadStrings(uses.GetProperty("ambient")), ReadStrings(uses.GetProperty("initialization")))
@@ -472,6 +493,14 @@ public static class CoverageMapStore
 
         json.WriteEndObject();
     }
+
+    /// <summary>Reads one framework's build inputs: by project, the inputs' names and checksums.</summary>
+    /// <param name="inputs">The JSON object.</param>
+    private static Dictionary<string, IReadOnlyDictionary<string, string>> ReadBuildInputs(JsonElement inputs) =>
+        inputs.EnumerateObject().ToDictionary(
+            static p => p.Name,
+            static p => (IReadOnlyDictionary<string, string>)p.Value.EnumerateObject().ToDictionary(static v => v.Name, static v => v.Value.GetString()!, StringComparer.Ordinal),
+            StringComparer.Ordinal);
 
     /// <summary>Reads the <c>classLocations</c> object written by <see cref="WriteLocations"/>.</summary>
     /// <param name="element">JSON object.</param>

@@ -111,6 +111,41 @@ internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTes
             return "Debug";
         }
     }
+
+    /// <summary>
+    /// The one framework <c>dotnet test</c> runs, from <c>-f</c> or <c>--framework</c> among
+    /// <see cref="DotnetTestArguments"/>; null when the tests run for every framework of their project. The
+    /// selection then compares only that framework's build with a map (docs/design/build-inputs-per-framework.md).
+    /// </summary>
+    public string? Framework
+    {
+        get
+        {
+            for (var i = 0; i < DotnetTestArguments.Count; i++)
+            {
+                var argument = DotnetTestArguments[i];
+                if (argument == "--")
+                {
+                    return null;
+                }
+
+                if (argument is "-f" or "--framework" && i + 1 < DotnetTestArguments.Count)
+                {
+                    return DotnetTestArguments[i + 1];
+                }
+
+                foreach (var prefix in (ReadOnlySpan<string>)["-f:", "--framework:", "--framework="])
+                {
+                    if (argument.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        return argument[prefix.Length..];
+                    }
+                }
+            }
+
+            return null;
+        }
+    }
 }
 
 /// <summary>

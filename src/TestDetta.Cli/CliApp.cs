@@ -176,6 +176,7 @@ internal static partial class CliApp
                 MaxMapAge = options.Analysis.MaxMapAge,
                 DriftFallback = options.Analysis.DriftFallback,
                 NonCodeFiles = options.Analysis.NonCodeFiles,
+                Framework = options.Command == CliCommand.Test ? options.Test.Framework : null,
                 Cancellation = cancel,
                 // td test builds anyway before it runs tests; td affected only when asked.
                 GeneratedCode = new TestDetta.Coverage.BuildGeneratedCodeReader(

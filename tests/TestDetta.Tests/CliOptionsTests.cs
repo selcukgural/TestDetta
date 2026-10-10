@@ -42,6 +42,20 @@ public sealed class CliOptionsTests
         Assert.Equal(configuration, options.Test.Configuration);
     }
 
+    [Theory]
+    [InlineData(new string[0], null)]
+    [InlineData(new[] { "-f", "net8.0" }, "net8.0")]
+    [InlineData(new[] { "-c", "Release", "--framework", "net10.0" }, "net10.0")]
+    [InlineData(new[] { "-f:net8.0" }, "net8.0")]
+    [InlineData(new[] { "--framework=net8.0" }, "net8.0")]
+    [InlineData(new[] { "--", "-f", "net8.0" }, null)]
+    public void Test_command_reads_the_one_framework_dotnet_test_runs(string[] dotnetTest, string? framework)
+    {
+        Assert.True(CliOptions.TryParse(["test", "--", .. dotnetTest], "/repo", out var options, out _));
+
+        Assert.Equal(framework, options.Test.Framework);
+    }
+
     [Fact]
     public void Affected_command_builds_for_changed_generators_only_when_asked()
     {
