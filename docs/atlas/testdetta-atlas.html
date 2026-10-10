@@ -812,6 +812,7 @@ git ls-files --others --exclude-standard                # yeni, izlenmeyen dosya
         "Test projesi derlenir (<code>td test</code> zaten derleyecekti), PDB'deki üretilmiş kaynaklar haritadakiyle <code>GeneratedSource.Key</code> üzerinden karşılaştırılır.",
         "Derleme başarısızsa <code>GeneratedCodeBuildException</code>: analiz durur, çünkü <code>dotnet test</code> de aynı yerde düşecekti.",
         "Harita yoksa ya da framework'ün üretilmiş kodu kayıtlı değilse proje tamamen koşar.",
+        "Karşılaştırılan framework'ler <code>GeneratorFrameworks(request, test, map)</code> ile seçilir (2026-10-10): tek framework'lü projede yalnız o; <code>td test -- -f X</code> ise yalnız X, harita X'in kodunu tutuyorsa (<code>map.Framework</code> ya da <code>GeneratedFrameworks</code>); <code>-f</code> yoksa haritanın kodunu tuttuğu her framework. Koşacak bir framework'ün kodu haritada yoksa proje tamamen koşar.",
       ]),
     },
     {
