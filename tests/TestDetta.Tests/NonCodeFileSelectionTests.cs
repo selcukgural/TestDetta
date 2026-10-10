@@ -18,6 +18,10 @@ public sealed class NonCodeFileSelectionTests : IDisposable
         _repo.Write("src/Lib/Calc.cs", "namespace Lib; public class Calc { public int Tax() => 2; }");
         _repo.Write("src/Lib/README.md", "readme");
         _repo.Write("src/Lib/seed.json", "{}");
+        // A source generator the test project runs in its compiler.
+        _repo.Write("src/Gen/Gen.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
+        _repo.Write("src/Gen/Generator.cs", "namespace Gen; public class Generator { public int Run() => 1; }");
+        _repo.Write("src/Gen/README.md", "generator readme");
         _repo.Write("tests/Lib.Tests/Lib.Tests.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <ItemGroup>
@@ -184,6 +188,29 @@ public sealed class NonCodeFileSelectionTests : IDisposable
         Assert.Equal(["Lib.Tests.DocsTests"], selection.TestClasses);
     }
 
+    [Fact]
+    public void A_generator_whose_inert_files_alone_changed_generates_what_it_did()
+    {
+        WriteMaps();
+        _repo.Write("src/Gen/README.md", "changed");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.Equal(TestRunMode.Skipped, selection.Mode);
+    }
+
+    [Fact]
+    public void A_generator_with_a_code_change_still_runs_its_consumers_when_its_output_cannot_be_compared()
+    {
+        WriteMaps();
+        _repo.Write("src/Gen/README.md", "changed");
+        _repo.Write("src/Gen/Generator.cs", "namespace Gen; public class Generator { public int Run() => 2; }");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+    }
+
     [Theory]
     [InlineData(NonCodeFileRule.Readers)]
     [InlineData(NonCodeFileRule.Project)]
@@ -252,10 +279,16 @@ public sealed class NonCodeFileSelectionTests : IDisposable
                     InertItems = inert.Select(Full).ToHashSet(Paths.Comparer),
                 };
 
+            var generator = new[] { Full("src/Gen/Gen.csproj") }.ToHashSet(Paths.Comparer);
             return new Dictionary<string, EvaluatedProject>(Paths.Comparer)
             {
                 [Full("src/Lib/Lib.csproj")] = Project(false, [], ["src/Lib/Calc.cs", "src/Lib/README.md", "src/Lib/seed.json"], ["src/Lib/README.md"]),
-                [Full("tests/Lib.Tests/Lib.Tests.csproj")] = Project(true, ["src/Lib/Lib.csproj"], ["tests/Lib.Tests/Tests.cs"], []),
+                [Full("src/Gen/Gen.csproj")] = Project(false, [], ["src/Gen/Generator.cs", "src/Gen/README.md"], ["src/Gen/README.md"]),
+                [Full("tests/Lib.Tests/Lib.Tests.csproj")] = Project(true, ["src/Lib/Lib.csproj", "src/Gen/Gen.csproj"], ["tests/Lib.Tests/Tests.cs"], []) with
+                {
+                    OpaqueReferences = generator,
+                    GeneratorReferences = generator,
+                },
                 [Full("tests/Seed.Tests/Seed.Tests.csproj")] = Project(true, [], ["tests/Seed.Tests/Tests.cs"], []),
             };
         }

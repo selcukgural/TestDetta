@@ -30,6 +30,13 @@ internal sealed record ProjectLevelUses(List<GeneratorUse> Generators, List<Outp
 {
     /// <summary>Changed non-code files the build does not use, which run their readers instead of their projects.</summary>
     public List<InertFile> InertFiles { get; } = [];
+
+    /// <summary>
+    /// Affected projects whose build output cannot have changed: every changed file that reaches them, directly or
+    /// through a reference, is an inert file. Their generator consumers, the projects that reference them without
+    /// compiling against them and the tests that load their output have nothing new to see.
+    /// </summary>
+    public HashSet<string> UnchangedOutputs { get; } = new(Paths.Comparer);
 }
 
 public sealed partial class TestSelector
@@ -262,9 +269,10 @@ public sealed partial class TestSelector
     /// <param name="request">Selection input.</param>
     /// <param name="projectLevel">Projects that run completely; left out.</param>
     /// <param name="readers">Readers per test project; updated in place.</param>
-    private void AddLoadedOutputUsers(TestSelectionRequest request, Dictionary<string, string> projectLevel, Dictionary<string, FileReaders> readers)
+    /// <param name="unchangedOutputs">Projects whose output cannot have changed; see <see cref="ProjectLevelUses.UnchangedOutputs"/>.</param>
+    private void AddLoadedOutputUsers(TestSelectionRequest request, Dictionary<string, string> projectLevel, Dictionary<string, FileReaders> readers, HashSet<string> unchangedOutputs)
     {
-        var changed = request.Impact.Affected.Where(static a => a.Reason == ImpactReason.DirectChange).Select(static a => a.Project).ToList();
+        var changed = request.Impact.Affected.Where(a => a.Reason == ImpactReason.DirectChange && !unchangedOutputs.Contains(a.Project.Path)).Select(static a => a.Project).ToList();
         if (changed.Count == 0)
         {
             return;

@@ -10,16 +10,17 @@ namespace TestDetta.Coverage;
 internal static class ThirdPartyAssemblies
 {
     /// <summary>
-    /// File name prefixes of assemblies left alone: the test platforms, runners, adapters and coverage
-    /// collectors read their own settings and the test assembly outside any test, which would only add
-    /// reads outside the tests, and TestDetta's tracker and startup hook.
+    /// File name prefixes of assemblies left alone: the test frameworks, platforms, runners, adapters, their
+    /// telemetry and the coverage collectors read their own settings and list the test output before any test
+    /// runs (bUnit: xunit.v3's testing-platform bridge listing the output, which a linked
+    /// <c>xunit.runner.json</c> turned into every file under <c>tests/</c>), which would only add reads outside
+    /// the tests; and TestDetta's tracker and startup hook. A test framework reads no file a test depends on.
     /// </summary>
     private static readonly string[] Skipped =
     [
-        "testhost", "Microsoft.TestPlatform.", "Microsoft.VisualStudio.TestPlatform.", "Microsoft.VisualStudio.CodeCoverage.",
-        "Microsoft.Testing.", "Microsoft.CodeCoverage.", "Microsoft.TestPlatform", "xunit.runner.", "xunit.v3.runner.",
-        "NUnit3.TestAdapter", "NUnit.Engine", "nunit.engine", "MSTest.TestAdapter", "Microsoft.VisualStudio.TestTools.UnitTesting.Adapter",
-        "coverlet.", "TUnit.Engine", "TestDetta.Coverage.",
+        "testhost", "Microsoft.TestPlatform", "Microsoft.VisualStudio.TestPlatform.", "Microsoft.VisualStudio.CodeCoverage.",
+        "Microsoft.Testing.", "Microsoft.CodeCoverage.", "Microsoft.ApplicationInsights", "xunit.", "nunit.", "NUnit",
+        "MSTest.", "Microsoft.VisualStudio.TestTools.UnitTesting", "Microsoft.MSTest.", "TUnit.", "coverlet.", "TestDetta.Coverage.",
     ];
 
     /// <summary>The third-party assemblies under <paramref name="outputDirectory"/>, sorted by path.</summary>

@@ -99,10 +99,10 @@ public sealed class AssemblyInstrumenterTests : IDisposable
     }
 
     [Fact]
-    public void Third_party_assemblies_are_the_outputs_dlls_but_the_repositorys_and_the_test_platforms()
+    public void Third_party_assemblies_are_the_outputs_dlls_but_the_repositorys_and_the_test_frameworks_and_platforms()
     {
         foreach (var name in (string[])["App.dll", "App.Tests.dll", "Tool.dll", "Verify.dll", "testhost.dll", "Microsoft.TestPlatform.CoreUtilities.dll",
-                     "xunit.runner.visualstudio.testadapter.dll", "TestDetta.Coverage.Runtime.dll", "de/Verify.resources.dll", "runtimes/win/lib/net8.0/Snap.dll"])
+                     "xunit.runner.visualstudio.testadapter.dll", "xunit.v3.mtp-v2.dll", "nunit.framework.dll", "Microsoft.ApplicationInsights.dll", "TestDetta.Coverage.Runtime.dll", "de/Verify.resources.dll", "runtimes/win/lib/net8.0/Snap.dll"])
         {
             var path = Path.Combine(_directory, name);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);

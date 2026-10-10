@@ -29,7 +29,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, uses);
         AddUnvouchedReaders(request, uses.InertFiles, projectLevel);
         AddOutputUsers(request, uses.Outputs, projectLevel, readers);
-        AddLoadedOutputUsers(request, projectLevel, readers);
+        AddLoadedOutputUsers(request, projectLevel, readers, uses.UnchangedOutputs);
         var generatorOutput = CompareGeneratorOutput(request, projectLevel, uses.Generators);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)
@@ -341,12 +341,23 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             }
         }
 
+        if (uses is not null)
+        {
+            AddUnchangedOutputs(graph, root, changedFiles, impact, uses);
+        }
+
         // After the file loop, so the file that caused a fallback is what its reason names.
         foreach (var affected in impact.Affected)
         {
             if (affected.Reason == ImpactReason.BuildConfiguration)
             {
                 AddFallback(fallbacks, affected.Project.Path, "build configuration changed");
+            }
+
+            // A project only inert files reach builds what it built before.
+            if (uses is not null && uses.UnchangedOutputs.Contains(affected.Project.Path))
+            {
+                continue;
             }
 
             // An analyzer or source generator runs inside the consumer's compiler, and an output the
@@ -671,6 +682,47 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         }
 
         return new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, $"ran none of the changed code and names none of it ({map}{recordedAs})");
+    }
+
+    /// <summary>
+    /// Fills <see cref="ProjectLevelUses.UnchangedOutputs"/>: the affected projects that no changed file reaches
+    /// except inert ones. Every other changed file (code, a build input, a non-code file the build uses, a
+    /// cosmetic edit) and every build-wide change counts as changing its projects and everything depending on them.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="root">Normalized repository root.</param>
+    /// <param name="changedFiles">Changed paths relative to <paramref name="root"/>.</param>
+    /// <param name="impact">Project-level impact of the same changes.</param>
+    /// <param name="uses">The inert files found, and the set to fill.</param>
+    private static void AddUnchangedOutputs(ProjectGraph graph, string root, IReadOnlyList<string> changedFiles, ImpactResult impact, ProjectLevelUses uses)
+    {
+        if (uses.InertFiles.Count == 0)
+        {
+            return;
+        }
+
+        var inert = uses.InertFiles.Select(static i => (i.File, i.Owner.Path)).ToHashSet();
+        var changing = new HashSet<string>(Paths.Comparer);
+        foreach (var file in changedFiles)
+        {
+            foreach (var owner in graph.ResolveFile(Paths.Normalize(Path.Combine(root, file))))
+            {
+                if (!inert.Contains((file, owner.Project.Path)))
+                {
+                    changing.Add(owner.Project.Path);
+                }
+            }
+        }
+
+        changing.UnionWith(impact.Affected.Where(static a => a.Reason is not (ImpactReason.DirectChange or ImpactReason.Dependency)).Select(static a => a.Project.Path));
+        var changed = graph.WithDependents(changing);
+        foreach (var affected in impact.Affected)
+        {
+            if (!changed.Contains(affected.Project.Path))
+            {
+                uses.UnchangedOutputs.Add(affected.Project.Path);
+            }
+        }
     }
 
     /// <summary>

@@ -125,7 +125,10 @@ ways TestDetta does not observe.
 - **Recorder** (`ThirdPartyAssemblies.Find`, `AssemblyInstrumenter.WrapThirdPartyReads`): every `.dll`
   under the test output, `runtimes/` included, except the repository's assemblies (every project's, so an
   executable copied in to run in another process stays as it is), satellite resource assemblies, the test
-  platforms, adapters and coverage collectors, and TestDetta's own. An assembly is opened in deferred mode
+  frameworks, platforms, runners, adapters, their telemetry and coverage collectors (`xunit.*`, `nunit.*`,
+  `MSTest.*`, `TUnit.*`, `Microsoft.Testing.*`, `Microsoft.TestPlatform*`, `Microsoft.ApplicationInsights*`,
+  `coverlet.*`; first measurement: xunit.v3's testing-platform bridge listed the bUnit test output before any
+  test, and the linked `xunit.runner.json` made that every file under `tests/`), and TestDetta's own. An assembly is opened in deferred mode
   and rewritten only when its member references name a wrapped read or directory method
   (`FileReadCalls.ReferencesReaders`); the rewrite adds the `<TestDettaFileReads>` wrappers, the tracker
   reference and the test host's core library reference (as for repository code), drops the ReadyToRun flag,
@@ -155,6 +158,12 @@ ways TestDetta does not observe.
   the changed files no project owns plus every project-owned non-code file, under both rules, so readers in
   test projects that do not depend on the owner are selected too. A build use keeps the fallback, with the
   reason ("..., and src/Lib/Directory.Build.targets names it"). The drift bridge keeps the project rule.
+- **Unchanged outputs** (`ProjectLevelUses.UnchangedOutputs`, found in the first measurement: bUnit's
+  `src/bunit.generators.internal/README.md` ran every consumer of the generator completely): an affected
+  project that only inert files reach, directly or through references, builds what it built before. Its
+  generator consumers, the projects referencing it without compiling against it, and the tests that load its
+  output are not run for it. Any other changed file or build-wide change makes its projects and their
+  dependents changed.
 - **Options**: `--non-code-files readers|project` for `affected`, `test` (and `--shadow`), `record`
   (`--incremental` plans with it) and `audit`, `AnalysisOptions.NonCodeFiles` with
   `AnalysisOptions.DefaultNonCodeFiles`, action input `non-code-files` (empty keeps the CLI default) in
