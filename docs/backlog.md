@@ -28,6 +28,20 @@ and only the name trace through the registration selects it. OpenAPI and Swagger
 common. A safe version needs a signal for "this class read the type's shape" (reflection inside
 ASP.NET, Swashbuckle, serializers), which nothing records today.
 
+## Next, to discuss with the owner: the test arguments a project already runs with (owner, 2026-10-10)
+
+EF Core adds `--filter-not-trait category=failing --ignore-exit-code 8` to every test run through
+`TestingPlatformCommandLineArguments`; TestDetta adds its own filters (`--filter-class`, `--filter-not-class`,
+`--treenode-filter`, `--filter FullyQualifiedName~…`) and `--ignore-exit-code 8` to catch-all shards. The user's own
+`--filter` after `--` is combined today (`TestFilter.WithinUserFilter`), but filters and options a project sets in
+MSBuild (`TestingPlatformCommandLineArguments`, `VSTestTestCaseFilter`, `RunSettingsFilePath` with a
+`TestCaseFilter`, Arcade's `TestRunnerAdditionalArguments`) are not read. Possible effects: a duplicated option the
+platform rejects; a selection that runs tests the team's own runs exclude (or the other way round); a recording
+of tests the team never runs. Seen: EF Core's catch-all shards end with exit code 5 ("Handshake failures") and 13 of
+15 maps are untrusted (cause not yet confirmed; not reproduced on a small xUnit v3 project). To discuss: read
+the effective test arguments of each project before recording and running, combine TestDetta's filters with
+them, and say in the docs what TestDetta does with a team's filters.
+
 ## Next: incremental recording on main (owner, 2026-10-09)
 
 Every push to main records the whole suite instrumented (AfterApply: 5 min 38 s against 5 min 6 s for
