@@ -375,7 +375,7 @@ public sealed class ProjectEvaluationTests : IDisposable
             </Project>
             """);
         _repo.Write("src/Lib/A.cs", "class A { }");
-        foreach (var file in (string[])["README.md", "CHANGELOG.md", "seed.json", "net8.txt", "Templates/Mail.md", "rules.md"])
+        foreach (var file in (string[])["README.md", "CHANGELOG.md", "seed.json", "net8.txt", "Templates/Mail.md", "rules.md", "App.config"])
         {
             _repo.Write("src/Lib/" + file, "text");
         }
@@ -383,8 +383,29 @@ public sealed class ProjectEvaluationTests : IDisposable
         var lib = Full("src/Lib/Lib.csproj");
         var evaluated = new MsBuildProjectEvaluator(NullLoggerFactory.Instance, diskCache: false).Evaluate(Paths.Normalize(_repo.Root), [lib]);
 
-        // Copied (under one framework is enough), embedded or given to the compiler: the build uses them.
+        // Copied (under one framework is enough), embedded, given to the compiler or shipped as the .config: the build uses them.
         Assert.Equal([Full("src/Lib/CHANGELOG.md"), Full("src/Lib/README.md")], evaluated![lib].InertItems!.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    [Trait("Category", "Slow")]
+    public void The_razor_sdk_builds_scoped_css_and_collocated_scripts_from_none_items()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write("src/Ui/Ui.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Razor">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        foreach (var file in (string[])["Counter.razor", "Counter.razor.css", "Counter.razor.js", "README.md"])
+        {
+            _repo.Write("src/Ui/" + file, "text");
+        }
+
+        var ui = Full("src/Ui/Ui.csproj");
+        var evaluated = new MsBuildProjectEvaluator(NullLoggerFactory.Instance, diskCache: false).Evaluate(Paths.Normalize(_repo.Root), [ui]);
+
+        Assert.Equal([Full("src/Ui/README.md")], evaluated![ui].InertItems!.Order(StringComparer.Ordinal));
     }
 
     [Fact]

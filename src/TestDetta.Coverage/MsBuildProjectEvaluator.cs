@@ -20,7 +20,7 @@ namespace TestDetta.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 6;
+    private const int EvaluatorVersion = 7;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -70,6 +70,10 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
               <_TestDettaBuilt Include="@(RazorComponent->'%(FullPath)');@(RazorGenerate->'%(FullPath)');@(AvaloniaResource->'%(FullPath)');@(AvaloniaXaml->'%(FullPath)')" />
               <_TestDettaBuilt Include="@(MauiImage->'%(FullPath)');@(MauiFont->'%(FullPath)');@(MauiAsset->'%(FullPath)');@(MauiXaml->'%(FullPath)');@(MauiCss->'%(FullPath)');@(MauiSplashScreen->'%(FullPath)');@(MauiIcon->'%(FullPath)')" />
               <_TestDettaBuilt Include="@(AndroidResource->'%(FullPath)');@(AndroidAsset->'%(FullPath)');@(BundleResource->'%(FullPath)');@(ImageAsset->'%(FullPath)');@(InterfaceDefinition->'%(FullPath)')" />
+              <!-- The Razor SDK turns None items into static web assets in its targets: scoped CSS (*.razor.css) and collocated JS modules (*.razor.js). -->
+              <_TestDettaBuilt Include="@(None->'%(FullPath)')" Condition="'$(UsingMicrosoftNETSdkRazor)' == 'true' and ('%(None.Extension)' == '.css' or '%(None.Extension)' == '.js' or '%(None.Extension)' == '.mjs' or '%(None.Extension)' == '.scss' or '%(None.Extension)' == '.less')" />
+              <!-- The common targets find app.config among the None items (FindAppConfigFile) and ship it as the assembly's .config. -->
+              <_TestDettaBuilt Include="@(None->'%(FullPath)')" Condition="'%(None.Filename)%(None.Extension)' == 'app.config' or '%(None.Filename)%(None.Extension)' == 'web.config'" />
               <TestDettaEvaluated Include="@(_TestDettaInert)" Kind="Inert" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="@(_TestDettaBuilt)" Kind="Built" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="$(DefineConstants)" Kind="Define" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />

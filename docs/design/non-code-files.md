@@ -139,7 +139,11 @@ ways TestDetta does not observe.
 - **Evaluator** (`MsBuildProjectEvaluator`, version 6): kinds `Inert` (`None` without
   `CopyToOutputDirectory` or with `Never`) and `Built` (the copied `None` items and the build item types of
   the list above); `ProjectNode.InertItems` = inert under some framework and built under none. Cached
-  evaluations of version 5 are evaluated again.
+  evaluations of version 5 are evaluated again. Version 7 (first measurement, bUnit's
+  `ScopedCssElements.razor.css`): in a Razor SDK project, `None` items ending in `.css`, `.js`, `.mjs`,
+  `.scss` or `.less` are built (scoped CSS and collocated JS modules become static web assets in the
+  SDK's targets), and so are `app.config` and `web.config` in any project (the common targets find
+  `app.config` among the `None` items and ship it as the assembly's `.config`).
 - **MSBuild scan** (`NonCodeFileUses`): every `.csproj`/`.fsproj`/`.vbproj`/`.props`/`.targets`/
   `.projitems`/`.proj` under the repository outside `bin`, `obj` and tool folders, read once per analysis
   and only when an inert candidate exists. Uses: the file's name anywhere in a file's XML after removing
