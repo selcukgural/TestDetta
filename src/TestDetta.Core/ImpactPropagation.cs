@@ -71,6 +71,13 @@ internal sealed partial class ImpactPropagation(
     /// <summary>Types in <see cref="SeededTypes"/> whose name a change or changed metadata spread, not only reached code.</summary>
     private readonly HashSet<string> _typesSeededNotByCode = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Changed members whose change is a modified body only: a method or constructor with code of its own whose
+    /// signature, attributes and parameter defaults stayed (docs/design/reflection-body-changes.md). What reflection
+    /// reads of their type is unchanged, so their change reaches the type the way code does.
+    /// </summary>
+    private readonly HashSet<IndexedMember> _bodyChanges = [];
+
     /// <summary>The changes as seeded, by type, for the end of an explanation.</summary>
     private readonly Dictionary<string, SymbolChange> _seededChanges = new(StringComparer.Ordinal);
 
@@ -166,6 +173,11 @@ internal sealed partial class ImpactPropagation(
 
         if (index.FindMember(change.TypeName, change.MemberName, projectPath) is { } member)
         {
+            if (IsBodyChange(change, member))
+            {
+                _bodyChanges.Add(member);
+            }
+
             // Changed metadata is read through the type, by whatever names it.
             MarkAffected(member, "it changed", from: null, change.MetadataChanged ? Reach.Metadata : Reach.Change);
             return;
@@ -176,6 +188,17 @@ internal sealed partial class ImpactPropagation(
             Enqueue(new NameLookup(name, null, LookupScope.Anywhere, projectPath));
         }
     }
+
+    /// <summary>
+    /// True when <paramref name="change"/> is a modified body only: a method or constructor (its signature has a
+    /// parameter list) with code of its own, whose declaration and metadata stayed. Fields, constants, properties,
+    /// static constructors and type-level, added or removed changes are not.
+    /// </summary>
+    /// <param name="change">A seeded change.</param>
+    /// <param name="member">The indexed member it names.</param>
+    private static bool IsBodyChange(SymbolChange change, IndexedMember member) =>
+        change.Kind == SymbolChangeKind.Modified && !change.MetadataChanged && !member.IsAbstract
+        && member.MemberName is { } name && name.Contains('(', StringComparison.Ordinal);
 
     /// <summary>
     /// Follows the queued names until no new member is reached. A member answered by its endpoint
@@ -393,7 +416,8 @@ internal sealed partial class ImpactPropagation(
     /// <param name="reach">How <paramref name="by"/> was reached; <see cref="Reach.Change"/> for a change.</param>
     private void SeedType(string typeName, string projectPath, IndexedMember? by, Reach reach)
     {
-        if (reach != Reach.Code)
+        // A body change leaves what reflection reads as it was: it reaches the type as code does.
+        if (reach == Reach.Metadata || (reach == Reach.Change && (by is null || !_bodyChanges.Contains(by))))
         {
             _typesSeededNotByCode.Add(typeName);
         }
