@@ -9,6 +9,7 @@ namespace TestDetta.Tests;
 /// writing each mutant in alone and still produce its results. Slow: builds, records and runs.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalSchemaFallbackTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

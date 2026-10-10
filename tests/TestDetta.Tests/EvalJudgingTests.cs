@@ -10,6 +10,7 @@ namespace TestDetta.Tests;
 /// ran crashes again, a class it ran is caught only once confirmed alone with and without the mutant, and a class whose
 /// run alone ran none of its tests is inconclusive. Every doubt goes against TestDetta.
 /// </summary>
+[Trait("Category", "Eval")]
 public sealed class EvalJudgingTests
 {
     private static readonly HashSet<string> None = new(StringComparer.Ordinal);

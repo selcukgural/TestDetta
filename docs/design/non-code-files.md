@@ -120,6 +120,23 @@ ways TestDetta does not observe.
 - Recording cost: the extra rewrite of third-party assemblies, per repository (seconds and number of
   assemblies).
 
+## Results (2026-10-10)
+
+Ground truth is the full run with the file emptied; a failing test class `readers` did not select is a miss.
+
+| Run | Changes | Broke a test | Missed |
+|---|---|---|---|
+| App tier, `--data-files 25` (11 repositories) | 251 files | 1 (a Verify `.verified.txt`, selected through the third-party reads) | 0 |
+| App tier, usual members (third-party reads wrapped while recording) | 300 mutants | | 0 |
+| Libraries with data files (scriban, mimekit, markdig, NodaTime, Newtonsoft.Json, YamlDotNet, FluentValidation, Open XML SDK, Swashbuckle, CliWrap) | about 300 files | 34 (scriban 20, mimekit 14) | 0 |
+| App tier again with the final binary (7c0b7b7) | | 1 | 0 |
+
+So the default is `readers`. The incremental set (40 mutants each, map age 1 and 10) also missed nothing
+(0 of 38 failing mutants, 9 % of the classes selected), but it still has no partial step: with map age 1,
+18 projects carried their map and 25 recorded completely (1,461 of 2,295 classes); with age 10, 1 and 42
+(2,272 of 2,295). Non-code files no longer force a project, but the code changes in between reach every
+class of the projects they touch; narrowing that is the separate incremental-recording topic.
+
 ## As built (2026-10-10)
 
 - **Recorder** (`ThirdPartyAssemblies.Find`, `AssemblyInstrumenter.WrapThirdPartyReads`): every `.dll`

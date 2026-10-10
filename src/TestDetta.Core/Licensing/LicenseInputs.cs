@@ -11,6 +11,23 @@ namespace TestDetta.Core.Licensing;
 /// <param name="home">The user's home directory, where <c>~/.testdetta/license</c> lives.</param>
 public sealed class LicenseInputs(GitClient git, Func<string, string?> environment, string home)
 {
+    /// <summary>
+    /// The environment variables that carry a license or name its file. TestDetta reads them itself and keeps them
+    /// out of every process it starts (builds, <c>dotnet test</c>, audit runs): the code there, the team's tests and
+    /// the packages' build steps, has no use for the license and should not be handed it.
+    /// </summary>
+    private static readonly string[] Secrets = ["TESTDETTA_LICENSE", "TESTDETTA_LICENSE_FILE"];
+
+    /// <summary>Removes the license variables from the environment of a process about to start.</summary>
+    /// <param name="processEnvironment">The process's environment (<c>ProcessStartInfo.Environment</c>).</param>
+    public static void KeepOutOf(IDictionary<string, string?> processEnvironment)
+    {
+        foreach (var name in Secrets)
+        {
+            processEnvironment.Remove(name);
+        }
+    }
+
     /// <summary>Gathers the inputs for the repository at <paramref name="repoRoot"/> at <paramref name="clock"/>.</summary>
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="clock">The system clock's current time.</param>

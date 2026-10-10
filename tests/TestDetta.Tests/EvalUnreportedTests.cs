@@ -8,6 +8,7 @@ namespace TestDetta.Tests;
 /// and say so, not count it as passing. Slow: builds, records and runs a small repository.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalUnreportedTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

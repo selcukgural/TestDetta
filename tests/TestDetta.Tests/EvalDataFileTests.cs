@@ -8,6 +8,7 @@ namespace TestDetta.Tests;
 /// selected (docs/design/runtime-file-reads.md). Slow: builds, records and runs a small repository.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalDataFileTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

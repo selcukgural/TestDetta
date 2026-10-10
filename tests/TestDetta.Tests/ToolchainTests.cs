@@ -12,6 +12,7 @@ namespace TestDetta.Tests;
 /// Toolchains are installed side by side, each into a directory that is never changed afterwards,
 /// from archives whose hash is in the lock; a runtime archive adds only its shared frameworks.
 /// </summary>
+[Trait("Category", "Eval")]
 public sealed class ToolchainTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "testdetta-toolchains-" + Guid.NewGuid().ToString("N"));
@@ -236,6 +237,7 @@ public sealed class ToolchainTests : IDisposable
 
 /// <summary>A toolchain scope points the process environment at the toolchain and puts it back afterwards.</summary>
 [Collection(nameof(ProcessEnvironment))]
+[Trait("Category", "Eval")]
 public sealed class ToolchainScopeTests
 {
     [Fact]

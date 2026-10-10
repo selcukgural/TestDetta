@@ -8,6 +8,7 @@ namespace TestDetta.Tests;
 /// the recording settings are unchanged, and only then. Slow: builds, records and runs twice.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalRecordingCacheTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
