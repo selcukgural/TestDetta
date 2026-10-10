@@ -1,10 +1,10 @@
-<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: 469ec3d17ce3 -->
+<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: 28e8a13e0f7b -->
 <h1>Sorun giderme</h1>
 <p class="lead">Her başlık gördüğünüz durumdan yola çıkar. Hepsi için <code>-v</code>, her kararı gerekçesiyle birlikte stderr'e yazar; bu log çoğu soruyu yanıtlar ve bize göndermeniz gereken de odur.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
 
 <h2 id="whole-project">Test projesinin tamamı çalıştı</h2>
-<p>Çıktıda projeyi bulun: gerekçe yanında yazılıdır. Olağan nedenler derlemenin geneline etki eden bir dosya, projede C#, Visual Basic ya da F# kaynağı olmayan bir dosya, bir <code>global using</code> ya da reflection ile bulunan bir tiptir. <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a> sayfası hepsini listeler. <code>-v</code> logunda <code>affects whole project: True</code> gibi bir satır dosyanın adını verir.</p>
+<p>Çıktıda projeyi bulun: gerekçe yanında yazılıdır. Olağan nedenler derlemenin geneline etki eden bir dosya, projede C#, Visual Basic ya da F# kaynağı olmayan ve derlemenin kullandığı (ya da okuyucularına haritanın kefil olamadığı) bir dosya, bir <code>global using</code> ya da reflection ile bulunan bir tiptir. <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a> sayfası hepsini listeler. <code>-v</code> logunda <code>affects whole project: True</code> gibi bir satır dosyanın adını verir.</p>
 
 <h2 id="no-map">Hiçbir kapsam haritası kullanılmadı</h2>
 <p>Harita olmadan seçim isimleri izler ve bu daha geniştir. Log, neden harita olmadığını söyler:</p>

@@ -22,7 +22,7 @@
 <h3>5. Fallbacks</h3>
 <p>A whole test project runs when a change cannot be traced:</p>
 <ul>
-  <li>files in a project that are not C#, Visual Basic or F# source (an F# signature file counts among them), such as <code>appsettings.json</code>, the <code>.csproj</code> or a <code>.resx</code>;</li>
+  <li>files in a project that are not C#, Visual Basic or F# source (an F# signature file counts among them) and that the build uses, such as a copied <code>appsettings.json</code>, the <code>.csproj</code> or a <code>.resx</code>; a file the build does not use, such as a <code>README.md</code>, runs only the test classes that read it (<a href="/docs/what-runs-everything/#non-code">details</a>);</li>
   <li>global usings and assembly attributes;</li>
   <li>types a framework discovers through reflection, such as controllers, message handlers and EF configurations.</li>
 </ul>

@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: fad52b9f54c6 -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 4e72dab11ef7 -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -23,7 +23,7 @@
 <ul>
   <li>Yalnızca bir paketin props dosyalarının eklediği ya da yalnızca bir <code>Release</code> koşulunun eklediği öğeler görülmez.</li>
   <li>MSBuild'in değerlendiremediği bir proje, import'ları gibi XML olarak okunur.</li>
-  <li>Bir proje klasörünün içinde olup projenin derlemediği değişen bir dosya, o projede yapılmış bir değişiklik sayılır. Hiçbir proje klasörünün içinde olmayan bir dosya yalnızca onu okuyan testleri seçer; bkz. <a href="/docs/what-runs-everything/#ignored">hiçbir projeye ait olmayan dosyalar</a>.</li>
+  <li>Bir proje klasörünün içinde olup projenin derlemediği değişen bir dosya, o projede yapılmış bir değişiklik sayılır: derleme dosyayı kullanıyorsa proje tamamen çalışır, kullanmıyorsa yalnızca onu okuyan testler çalışır (bkz. <a href="/docs/what-runs-everything/#non-code">derlemenin kullanmadığı dosyalar</a>). Hiçbir proje klasörünün içinde olmayan bir dosya yalnızca onu okuyan testleri seçer; bkz. <a href="/docs/what-runs-everything/#ignored">hiçbir projeye ait olmayan dosyalar</a>.</li>
   <li>Test projeleri ayrıca <code>*.Tests</code> ya da <code>*.Test</code> adından da tanınır.</li>
 </ul>
 
@@ -31,7 +31,7 @@
 <p>{{name}} kaynak kodunuzu, proje dosyalarınızı ve kayıt sırasında testlerinizin neleri çalıştırdığını görür. Şunları göremez:</p>
 <ul>
   <li><strong>Harici servisler ve veritabanları.</strong> Başka bir sistemdeki değişiklik, örneğin başka bir yerde uygulanan bir şema migration'ı ya da testlerinizin çağırdığı bir API, burada hiçbir şey seçmez.</li>
-  <li><strong>Çalışma zamanında üçüncü taraf kodun proje klasörlerinin dışından okuduğu dosyalar</strong>, örneğin depo kökündeki bir snapshot kütüphanesinin dosyaları. Kendi kodunuzun okumaları kaydedilir; bkz. <a href="/docs/what-runs-everything/#ignored">hiçbir projeye ait olmayan dosyalar</a>.</li>
+  <li><strong>Yerel (native) kodun ya da .NET olmayan programların okuduğu dosyalar</strong> ve kaydedilen listenin dışındaki bir .NET API'siyle okunan dosyalar. Kendi kodunuzun ve testlerinizin kullandığı .NET kütüphanelerinin okumaları kaydedilir; bkz. <a href="/docs/what-runs-everything/#non-code">derlemenin kullanmadığı dosyalar</a>.</li>
   <li><strong>Üçüncü taraf kodun başlattığı, .NET (Core) olmayan programlar</strong>, örneğin bir süreç kütüphanesinin başlattığı, deponuzdaki native ya da .NET Framework bir exe. .NET süreçleri kim başlatırsa başlatsın kaydedilir; kendi kodunuzun başlattıkları da öyle.</li>
   <li><strong>Ortam</strong>: çalıştırmalar arasında farklılık gösteren değişkenler, makine ayarları ve kurulu araçlar.</li>
 </ul>

@@ -24,6 +24,12 @@ internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Method
 
     /// <summary>Ids of the methods compiled from lambdas and local functions; see <see cref="CoverageMap.NestedMethods"/>.</summary>
     public IReadOnlyList<int> NestedMethods { get; init; } = [];
+
+    /// <summary>
+    /// File names of the third-party assemblies that read files but could not be rewritten to report it, sorted;
+    /// see <see cref="CoverageMap.FileReadsUnseen"/>. Null when third-party assemblies were not asked for.
+    /// </summary>
+    public IReadOnlyList<string>? ReadsUnseen { get; init; }
 }
 
 /// <summary>
@@ -52,14 +58,22 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// </summary>
     internal static readonly Lazy<List<string>> SharedFrameworkDirectories = new(FindSharedFrameworkDirectories);
 
-    /// <summary>Instruments <paramref name="assemblies"/>, numbering methods across all of them.</summary>
+    /// <summary>
+    /// Instruments <paramref name="assemblies"/>, numbering methods across all of them, and makes the
+    /// file reads of <paramref name="thirdParty"/> visible (<see cref="WrapThirdPartyReads"/>).
+    /// </summary>
     /// <param name="assemblies">Paths of the assemblies to rewrite.</param>
     /// <param name="testAssemblies">The subset of <paramref name="assemblies"/> that contain tests.</param>
     /// <param name="backupDirectory">Where the originals (and their .pdb files) are copied first.</param>
+    /// <param name="thirdParty">
+    /// Other assemblies of the test output whose file-read calls are wrapped, without probes; null to leave
+    /// every other assembly alone, and <see cref="InstrumentationResult.ReadsUnseen"/> null.
+    /// </param>
     public InstrumentationResult Instrument(
         IReadOnlyList<string> assemblies,
         IReadOnlySet<string> testAssemblies,
-        string backupDirectory)
+        string backupDirectory,
+        IReadOnlyList<string>? thirdParty = null)
     {
         var methods = new List<CoveredMethod>();
         var fields = new List<string>();
@@ -85,6 +99,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 });
                 LogInstrumented(assembly, methods.Count - before);
             }
+
+            if (thirdParty is not null)
+            {
+                result = result with { ReadsUnseen = WrapThirdPartyReads(thirdParty, backupDirectory, backups, coreLibrary) };
+            }
         }
         catch
         {
@@ -94,6 +113,101 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Rewrites the third-party assemblies that call a file-read or directory method so that each such call
+    /// reports its path first, exactly as in repository code, and nothing else: no probes, no ids, no
+    /// process-start or assembly-load wrappers (docs/design/non-code-files.md). A snapshot library reading
+    /// <c>*.verified.txt</c>, or a configuration provider reading <c>appsettings.json</c>, then shows in the
+    /// map under the class or fixture that ran it. An assembly that reads no file is only opened, not
+    /// rewritten. One that cannot be rewritten (mixed-mode code, a write error) is put back as it was and
+    /// returned: the map then cannot vouch that a file was read by nobody.
+    /// </summary>
+    /// <param name="assemblies">Third-party assemblies of the test output.</param>
+    /// <param name="backupDirectory">Where originals are copied first.</param>
+    /// <param name="backups">Original to backup mapping; updated in place.</param>
+    /// <param name="coreLibrary">Version of the test host's core library; see <see cref="AddCoreLibraryReference"/>.</param>
+    /// <returns>File names of the assemblies that read files and could not be rewritten, sorted.</returns>
+    private List<string> WrapThirdPartyReads(IReadOnlyList<string> assemblies, string backupDirectory, Dictionary<string, string> backups, Version? coreLibrary)
+    {
+        var unseen = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var wrapped = 0;
+        foreach (var assembly in assemblies)
+        {
+            var reads = ReadsFiles(assembly);
+            if (reads is null or false)
+            {
+                continue;
+            }
+
+            BackUp(assembly, backupDirectory, backups);
+            try
+            {
+                WrapReadsOf(assembly, coreLibrary);
+                wrapped++;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Mono.Cecil cannot write mixed-mode images; anything it fails on keeps its original bytes.
+                File.Copy(backups[assembly], assembly, overwrite: true);
+                unseen.Add(Path.GetFileName(assembly));
+                LogThirdPartyUnseen(assembly, ex.Message);
+            }
+        }
+
+        LogThirdPartyWrapped(wrapped, assemblies.Count, unseen.Count);
+        return [.. unseen];
+    }
+
+    /// <summary>
+    /// True when the managed assembly at <paramref name="path"/> references a file-read or directory method;
+    /// null when it is not a managed assembly (a native library under <c>runtimes/</c>), whose reads no
+    /// rewrite can see.
+    /// </summary>
+    /// <param name="path">Assembly file.</param>
+    private static bool? ReadsFiles(string path)
+    {
+        try
+        {
+            using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { ReadingMode = ReadingMode.Deferred });
+            return FileReadCalls.ReferencesReaders(module);
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or InvalidOperationException or IOException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Wraps the file-read calls of one third-party assembly in place; see <see cref="WrapThirdPartyReads"/>.</summary>
+    /// <param name="path">Assembly file.</param>
+    /// <param name="coreLibrary">Version of the test host's core library.</param>
+    private static void WrapReadsOf(string path, Version? coreLibrary)
+    {
+        using var resolver = new DefaultAssemblyResolver();
+        resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
+        foreach (var directory in SharedFrameworkDirectories.Value)
+        {
+            resolver.AddSearchDirectory(directory);
+        }
+
+        // Symbols stay as they are: a package's PDB only serves a debugger, and a stale one is ignored.
+        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, AssemblyResolver = resolver });
+        if ((module.Attributes & ModuleAttributes.ILOnly) == 0)
+        {
+            throw new NotSupportedException("it holds native code (mixed-mode), which a rewrite would lose");
+        }
+
+        // A ReadyToRun image keeps working without its precompiled code once it no longer claims to have it.
+        module.Attributes &= ~ModuleAttributes.ILLibrary;
+        var tracker = module.ImportReference(typeof(TestDettaTracker));
+        AddCoreLibraryReference(module, coreLibrary);
+        FileReadCalls.Wrap(
+            module,
+            Probe(tracker, nameof(TestDettaTracker.FileRead)),
+            Probe(tracker, nameof(TestDettaTracker.DirectoryListed)),
+            outputUsed: null);
+        module.Write(path);
     }
 
     /// <summary>Lists the shared framework directories next to the runtime TestDetta itself runs on.</summary>
@@ -1962,4 +2076,10 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Restored {Count} original file(s)")]
     private partial void LogRestored(int count);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Third-party file reads: wrapped in {Wrapped} of {Count} assembly(ies), unseen in {Unseen}")]
+    private partial void LogThirdPartyWrapped(int wrapped, int count, int unseen);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not make the file reads of {Assembly} visible ({Reason}); the map will not vouch that a non-code file is read by no test")]
+    private partial void LogThirdPartyUnseen(string assembly, string reason);
 }

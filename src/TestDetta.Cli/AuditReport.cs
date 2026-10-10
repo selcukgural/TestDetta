@@ -78,6 +78,11 @@ internal static class AuditReport
             : [$"--seed {audit.Seed.ToString(CultureInfo.InvariantCulture)}", $"--kinds {Quoted(audit.KindsText)}", .. audit.Members.Select(static m => $"--member {Quoted(m)}")];
         result.Add($"--max-map-age {options.Analysis.MaxMapAge.ToString(CultureInfo.InvariantCulture)}");
         result.Add($"--drift-fallback {drift}");
+        if (options.Analysis.NonCodeFiles != TestDetta.Core.AnalysisOptions.DefaultNonCodeFiles)
+        {
+            result.Add($"--non-code-files {(options.Analysis.NonCodeFiles == TestDetta.Core.NonCodeFileRule.Readers ? "readers" : "project")}");
+        }
+
         if (options.Analysis.MapsDir is { } mapsDir)
         {
             result.Add($"--maps-dir {Quoted(mapsDir)}");

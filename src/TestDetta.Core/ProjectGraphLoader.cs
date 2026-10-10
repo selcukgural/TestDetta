@@ -152,6 +152,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 RootNamespace = project.RootNamespace ?? node.RootNamespace,
                 AssemblyNameUnresolved = project.AssemblyName is null && node.AssemblyNameUnresolved,
                 EvaluatedItems = project.Items,
+                InertItems = project.InertItems,
                 SymbolSets = project.SymbolSets,
             };
         }

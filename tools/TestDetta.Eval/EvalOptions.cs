@@ -28,7 +28,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                testdetta-eval --corpus <file> [--only <name,...>] [--tag <tag,...>] [--out <dir>] [--synthetic <n>]
                          [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
                          [--compare-tia <dll>] [--compare-affected <exe>] [--toolchains <dir>] [--compare <dir>]
-                         [--history <dir>] [--cache <dir>] [--explain] [--keep-clones] [-v]
+                         [--history <dir>] [--cache <dir>] [--explain] [--any-recording] [--keep-clones] [-v]
                testdetta-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -57,6 +57,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --maps <dir>           Use these maps of the evaluated commit instead of recording
           --explain              Only write TestDetta's decisions and evidence for every sampled change to
                                  explain.json (no build, no test run; for the precision round)
+          --any-recording        Reuse the newest cached recording at the commit when this recorder made none
+                                 (with --explain: a precision triage without recording)
           --compare-affected <exe>  Also select each synthetic change with dotnet-affected (its executable),
                                  running every affected test project whole
           --tia-solution <path>  Solution dotnet-tia analyses, relative to the repository (default: discovered)
@@ -145,6 +147,12 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
             if (arg == "--explain")
             {
                 run = run with { ExplainOnly = true };
+                continue;
+            }
+
+            if (arg == "--any-recording")
+            {
+                run = run with { AnyRecording = true };
                 continue;
             }
 
@@ -455,6 +463,13 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
     /// no test run. For the precision round.
     /// </summary>
     public bool ExplainOnly { get; init; }
+
+    /// <summary>
+    /// True to reuse the newest recording the cache holds at the commit when none was made by this recording code:
+    /// a precision triage (<see cref="ExplainOnly"/>) then needs no recording after TestDetta's recorder changed. The
+    /// maps may lack what the newer recorder records (third-party file reads), which only makes selections wider.
+    /// </summary>
+    public bool AnyRecording { get; init; }
 
     /// <summary>
     /// True to keep the clone and every test report when the evaluation ends. Otherwise a clone whose

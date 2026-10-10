@@ -10,6 +10,10 @@ namespace TestDetta.Coverage;
 /// no VSTest collector resolves it: copies the runtime assembly into the test output and lists it
 /// in the test project's <c>deps.json</c>, so the host puts it on the assembly path. A .NET Framework
 /// output has no <c>deps.json</c>: the runtime probes the application's folder, so the copy is enough.
+/// An instrumented assembly of the output that is an application of its own (it has its own
+/// <c>deps.json</c>: a helper program the tests compile against and start, CliWrap's
+/// <c>CliWrap.Tests.Dummy</c>) gets the runtime listed too, or its probes would find no tracker and the
+/// process would die (exit code 134) where it ran fine without the recording.
 /// Disposing puts the output back as it was.
 /// </summary>
 internal sealed class RuntimeDeployment : IDisposable
@@ -22,10 +26,17 @@ internal sealed class RuntimeDeployment : IDisposable
     private readonly string? _originalDeps;
     private readonly bool _runtimeExisted;
 
+    /// <summary>The other applications' <c>deps.json</c> files that list the runtime now, with their original text.</summary>
+    private readonly List<(string File, string Original)> _applications = [];
+
     /// <summary>Deploys the runtime next to <paramref name="testAssembly"/>.</summary>
     /// <param name="testAssembly">Path of the test project's compiled assembly.</param>
+    /// <param name="instrumented">
+    /// Every assembly of the output whose code was instrumented; those with a <c>deps.json</c> of their own get the
+    /// runtime listed as well.
+    /// </param>
     /// <exception cref="InvalidOperationException">The test output has no <c>deps.json</c> to extend.</exception>
-    public RuntimeDeployment(string testAssembly)
+    public RuntimeDeployment(string testAssembly, IReadOnlyCollection<string>? instrumented = null)
     {
         var directory = Path.GetDirectoryName(testAssembly)!;
         var depsFile = Path.ChangeExtension(testAssembly, ".deps.json");
@@ -46,6 +57,21 @@ internal sealed class RuntimeDeployment : IDisposable
         if (_depsFile is not null)
         {
             File.WriteAllText(_depsFile, AddRuntime(_originalDeps!));
+        }
+
+        foreach (var assembly in instrumented ?? [])
+        {
+            var applicationDeps = Path.ChangeExtension(assembly, ".deps.json");
+            if (string.Equals(applicationDeps, depsFile, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(Path.GetDirectoryName(assembly), directory, StringComparison.OrdinalIgnoreCase)
+                || !File.Exists(applicationDeps))
+            {
+                continue;
+            }
+
+            var original = File.ReadAllText(applicationDeps);
+            _applications.Add((applicationDeps, original));
+            File.WriteAllText(applicationDeps, AddRuntime(original));
         }
     }
 
@@ -93,6 +119,11 @@ internal sealed class RuntimeDeployment : IDisposable
         if (_depsFile is not null)
         {
             File.WriteAllText(_depsFile, _originalDeps!);
+        }
+
+        foreach (var (file, original) in _applications)
+        {
+            File.WriteAllText(file, original);
         }
 
         if (!_runtimeExisted)

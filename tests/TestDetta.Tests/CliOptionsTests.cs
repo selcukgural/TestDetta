@@ -126,6 +126,22 @@ public sealed class CliOptionsTests
         Assert.False(CliOptions.TryParse(["affected", "--drift-fallback", "fast"], "/repo", out _, out _));
     }
 
+    [Fact]
+    public void Non_code_files_default_to_readers_and_the_developer_can_choose_the_project_rule()
+    {
+        Assert.True(CliOptions.TryParse(["test"], "/repo", out var defaults, out _));
+        Assert.Equal(TestDetta.Core.NonCodeFileRule.Readers, defaults.Analysis.NonCodeFiles);
+
+        foreach (var command in (string[])["affected", "test", "record", "audit"])
+        {
+            Assert.True(CliOptions.TryParse([command, "--non-code-files", "project"], "/repo", out var chosen, out var error), error);
+            Assert.Equal(TestDetta.Core.NonCodeFileRule.Project, chosen.Analysis.NonCodeFiles);
+        }
+
+        Assert.False(CliOptions.TryParse(["test", "--non-code-files", "none"], "/repo", out _, out var wrong));
+        Assert.Contains("readers or project", wrong, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("affected", "--no-build")]
     [InlineData("affected", "--dry-run")]

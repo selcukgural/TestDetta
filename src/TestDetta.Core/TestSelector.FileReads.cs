@@ -14,20 +14,47 @@ internal sealed record FileReaders(ProjectNode Project, string? WholeProject, So
 /// <param name="BuildUse">How the consumer's build uses the output (<see cref="BuildOutputUse"/>), or null when it does not.</param>
 internal sealed record OutputUse(ProjectNode Consumer, ProjectNode Referenced, string? BuildUse);
 
+/// <summary>A changed non-code file the build of the project that owns it does not use (docs/design/non-code-files.md).</summary>
+/// <param name="File">Path relative to the repository root.</param>
+/// <param name="Owner">The project that owns it.</param>
+internal sealed record InertFile(string File, ProjectNode Owner);
+
+/// <summary>What <c>FindProjectLevelChanges</c> leaves to later steps instead of running a project completely.</summary>
+/// <param name="Generators">Projects that use an affected project as a source generator, for <c>CompareGeneratorOutput</c>.</param>
+/// <param name="Outputs">
+/// Projects that reference an affected project without compiling against it and whose build does not use its
+/// output (<see cref="BuildOutputUse"/>), for <c>AddOutputUsers</c>.
+/// </param>
+/// <param name="NonCode">Tells whether the build uses a non-code file, under the readers rule; null under the project rule.</param>
+internal sealed record ProjectLevelUses(List<GeneratorUse> Generators, List<OutputUse> Outputs, NonCodeFileUses? NonCode)
+{
+    /// <summary>Changed non-code files the build does not use, which run their readers instead of their projects.</summary>
+    public List<InertFile> InertFiles { get; } = [];
+
+    /// <summary>
+    /// Affected projects whose build output cannot have changed: every changed file that reaches them, directly or
+    /// through a reference, is an inert file. Their generator consumers, the projects that reference them without
+    /// compiling against them and the tests that load their output have nothing new to see.
+    /// </summary>
+    public HashSet<string> UnchangedOutputs { get; } = new(Paths.Comparer);
+}
+
 public sealed partial class TestSelector
 {
     /// <summary>
-    /// The readers of the changed files that belong to no project (docs/design/runtime-file-reads.md):
-    /// per test project whose map recorded file reads, the classes that read such a file or listed its
-    /// directory. A read outside the tests, in a fixture's setup or while initializing something shared
-    /// runs the whole project. A file nobody read stays ignored, and a map recorded before reads were
-    /// knows none.
+    /// The readers of changed files that are no code (docs/design/runtime-file-reads.md,
+    /// docs/design/non-code-files.md): per test project whose map recorded file reads, the classes that
+    /// read such a file or listed its directory. A read outside the tests, in a fixture's setup or while
+    /// initializing something shared runs the whole project. A file nobody read selects nothing here, and
+    /// a map recorded before reads were knows none; what else a project-owned file runs is decided at
+    /// project level.
     /// </summary>
     /// <param name="request">Selection input.</param>
-    private Dictionary<string, FileReaders> FindFileReaders(TestSelectionRequest request)
+    /// <param name="files">The changed files no project owns and the non-code files projects own, repository-relative.</param>
+    private Dictionary<string, FileReaders> FindFileReaders(TestSelectionRequest request, IReadOnlyList<string> files)
     {
         var readers = new Dictionary<string, FileReaders>(Paths.Comparer);
-        var unmapped = request.Impact.UnmappedFiles;
+        var unmapped = files;
         if (unmapped.Count == 0)
         {
             return readers;
@@ -242,9 +269,10 @@ public sealed partial class TestSelector
     /// <param name="request">Selection input.</param>
     /// <param name="projectLevel">Projects that run completely; left out.</param>
     /// <param name="readers">Readers per test project; updated in place.</param>
-    private void AddLoadedOutputUsers(TestSelectionRequest request, Dictionary<string, string> projectLevel, Dictionary<string, FileReaders> readers)
+    /// <param name="unchangedOutputs">Projects whose output cannot have changed; see <see cref="ProjectLevelUses.UnchangedOutputs"/>.</param>
+    private void AddLoadedOutputUsers(TestSelectionRequest request, Dictionary<string, string> projectLevel, Dictionary<string, FileReaders> readers, HashSet<string> unchangedOutputs)
     {
-        var changed = request.Impact.Affected.Where(static a => a.Reason == ImpactReason.DirectChange).Select(static a => a.Project).ToList();
+        var changed = request.Impact.Affected.Where(a => a.Reason == ImpactReason.DirectChange && !unchangedOutputs.Contains(a.Project.Path)).Select(static a => a.Project).ToList();
         if (changed.Count == 0)
         {
             return;

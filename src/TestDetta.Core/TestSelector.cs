@@ -17,7 +17,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     public IReadOnlyList<TestProjectSelection> Select(TestSelectionRequest request)
     {
         // Files no project owns select the tests that read them (docs/design/runtime-file-reads.md).
-        var readers = FindFileReaders(request);
+        var readers = FindFileReaders(request, [.. request.Impact.UnmappedFiles, .. OwnedNonCodeFiles(request)]);
         var affectedTests = request.Impact.Tests.ToList();
         if (affectedTests.Count == 0)
         {
@@ -25,12 +25,14 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         }
 
         (request, var driftRunAll) = WithoutDriftedMaps(request);
-        var generatorUses = new List<GeneratorUse>();
-        var outputUses = new List<OutputUse>();
-        var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, generatorUses, outputUses);
-        AddOutputUsers(request, outputUses, projectLevel, readers);
-        AddLoadedOutputUsers(request, projectLevel, readers);
-        var generatorOutput = CompareGeneratorOutput(request, projectLevel, generatorUses);
+        var uses = new ProjectLevelUses([], [], request.NonCodeFiles == NonCodeFileRule.Readers ? new NonCodeFileUses(Paths.Normalize(request.RepoRoot)) : null);
+        var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, uses);
+        // Projects that run completely on their own, without what depends on them.
+        var runAlone = new Dictionary<string, string>(driftRunAll, Paths.Comparer);
+        AddUnvouchedReaders(request, uses.InertFiles, runAlone);
+        AddOutputUsers(request, uses.Outputs, projectLevel, readers);
+        AddLoadedOutputUsers(request, projectLevel, readers, uses.UnchangedOutputs);
+        var generatorOutput = CompareGeneratorOutput(request, projectLevel, uses.Generators);
         var affectedProjects = new HashSet<string>(Paths.Comparer);
         foreach (var affected in request.Impact.Affected)
         {
@@ -43,7 +45,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             m.Generated.Where(g => g.Framework is null || string.Equals(g.Framework, m.Framework, StringComparison.OrdinalIgnoreCase))));
         var index = new SourceIndexBuilder(logger).Build(request.Graph, request.RepoRoot, affectedProjects, generated);
         // Projects that run completely whatever coverage says have no say in what it can answer.
-        var runsCompletely = RunAll(request.Graph, projectLevel).Keys.Concat(driftRunAll.Keys).ToHashSet(Paths.Comparer);
+        var runsCompletely = RunAll(request.Graph, projectLevel).Keys.Concat(runAlone.Keys).ToHashSet(Paths.Comparer);
         var coverage = new CoverageSelection(request, affectedTests, index, runsCompletely, logger);
 
         // Test projects without a coverage map are decided by name alone; those with one use a second
@@ -53,7 +55,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             ? Trace(request, index, projectLevel, coverage, [.. Bridge(request, index, byName), .. generatorOutput.Changes])
             : byName;
 
-        var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { DriftRunAll = driftRunAll });
+        var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { RunAlone = runAlone });
         decisions = WithFileReaders(decisions, readers, request.CoverageMaps);
         for (var i = 0; i < decisions.Count; i++)
         {
@@ -267,24 +269,19 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="changedFiles">Changed paths relative to <paramref name="repoRoot"/>.</param>
     /// <param name="impact">Project-level impact of the same changes.</param>
-    /// <param name="generatorUses">
-    /// Receives the projects that use an affected project as a source generator, instead of a fallback,
-    /// for <see cref="CompareGeneratorOutput"/> to decide; null to fall back for them too (map drift,
-    /// where nothing builds the map's commit).
-    /// </param>
-    /// <param name="outputUses">
-    /// Receives the projects that reference an affected project without compiling against it and whose
-    /// build does not use its output (<see cref="BuildOutputUse"/>), instead of a fallback, for
-    /// <see cref="AddOutputUsers"/> to decide; null to fall back for them too.
+    /// <param name="uses">
+    /// Receives, instead of a fallback, what later steps decide (see <see cref="ProjectLevelUses"/>); null to
+    /// fall back for all of it (map drift, where nothing builds the map's commit and no map is current).
     /// </param>
     private Dictionary<string, string> FindProjectLevelChanges(
         ProjectGraph graph,
         string repoRoot,
         IReadOnlyList<string> changedFiles,
         ImpactResult impact,
-        List<GeneratorUse>? generatorUses = null,
-        List<OutputUse>? outputUses = null)
+        ProjectLevelUses? uses = null)
     {
+        var generatorUses = uses?.Generators;
+        var outputUses = uses?.Outputs;
         var fallbacks = new Dictionary<string, string>(Paths.Comparer);
         var codeChanges = new Dictionary<string, CodeChange>(StringComparer.Ordinal);
         foreach (var change in impact.CodeChanges)
@@ -302,7 +299,8 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
                 continue;
             }
 
-            foreach (var owner in graph.ResolveFile(Paths.Normalize(Path.Combine(root, file))))
+            var full = Paths.Normalize(Path.Combine(root, file));
+            foreach (var owner in graph.ResolveFile(full))
             {
                 var project = owner.Project.Path;
                 if (owner.Role == FileRole.BuildInput)
@@ -313,7 +311,22 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
 
                 if (!SourceLanguage.IsSource(file))
                 {
-                    AddFallback(fallbacks, project, $"{file} is not C#, Visual Basic or F# code");
+                    if (uses?.NonCode is not { } nonCode)
+                    {
+                        AddFallback(fallbacks, project, $"{file} is not C#, Visual Basic or F# code");
+                        continue;
+                    }
+
+                    // The readers rule (docs/design/non-code-files.md): a file the build does not use reaches
+                    // the tests only by being read, which the maps record.
+                    if (nonCode.BuildUse(owner.Project, full) is { } use)
+                    {
+                        AddFallback(fallbacks, project, $"{file} is not C#, Visual Basic or F# code, and {use}");
+                        continue;
+                    }
+
+                    LogInertFile(file, owner.Project.Path);
+                    uses.InertFiles.Add(new InertFile(file, owner.Project));
                     continue;
                 }
 
@@ -330,12 +343,23 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             }
         }
 
+        if (uses is not null)
+        {
+            AddUnchangedOutputs(graph, root, changedFiles, impact, uses);
+        }
+
         // After the file loop, so the file that caused a fallback is what its reason names.
         foreach (var affected in impact.Affected)
         {
             if (affected.Reason == ImpactReason.BuildConfiguration)
             {
                 AddFallback(fallbacks, affected.Project.Path, "build configuration changed");
+            }
+
+            // A project only inert files reach builds what it built before.
+            if (uses is not null && uses.UnchangedOutputs.Contains(affected.Project.Path))
+            {
+                continue;
             }
 
             // An analyzer or source generator runs inside the consumer's compiler, and an output the
@@ -416,17 +440,26 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
                 continue;
             }
 
-            if (type is not null && propagation.SeededThroughCodeOnly(typeName) && coverage?.TryResolveType(typeName, candidates) == true)
+            string? unanswered = null;
+            if (type is not null && coverage is not null && !propagation.SeededThroughCodeOnly(typeName))
             {
-                LogUnreferencedTypeResolvedByCoverage(typeName);
-                continue;
+                unanswered = "the change or its metadata reached it, not only its code";
+            }
+            else if (type is not null && coverage is not null)
+            {
+                if (coverage.TryResolveType(typeName, candidates, out unanswered))
+                {
+                    LogUnreferencedTypeResolvedByCoverage(typeName);
+                    continue;
+                }
             }
 
             // The chain says which reached member brought the type in, the first thing to look at when
-            // a whole project runs for a change that seems unrelated.
+            // a whole project runs for a change that seems unrelated; the maps' answer, why they could not narrow it.
+            var maps = unanswered is null ? string.Empty : $"; the maps cannot answer: {unanswered}";
             var reason = type is null
                 ? $"{typeName} was removed and nothing names it, so it may have been created through reflection"
-                : $"{typeName} is affected and nothing names it, so it may be created through reflection ({propagation.ExplainSeeded(typeName, limit: 4)})";
+                : $"{typeName} is affected and nothing names it, so it may be created through reflection ({propagation.ExplainSeeded(typeName, limit: 4)}){maps}";
             foreach (var projectPath in candidates)
             {
                 AddFallback(fallbacks, projectPath, reason);
@@ -449,8 +482,11 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         TraceResult WithCoverage,
         CoverageSelection Coverage)
     {
-        /// <summary>Test projects that run completely because their map's drift cannot be bridged, with the reason.</summary>
-        public Dictionary<string, string> DriftRunAll { get; init; } = [];
+        /// <summary>
+        /// Test projects that run completely on their own, with the reason, while the projects depending on them do
+        /// not: their map's drift cannot be bridged, or their map cannot vouch for the readers of an inert file.
+        /// </summary>
+        public Dictionary<string, string> RunAlone { get; init; } = [];
     }
 
     /// <summary>Turns fallbacks, name propagation and coverage into one decision per test project.</summary>
@@ -505,7 +541,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             var classDecisions = decisionsByProject.GetValueOrDefault(project.Path) ?? [];
             classDecisions.Sort(static (a, b) => string.CompareOrdinal(a.TestClass, b.TestClass));
             var runAll = coverage.HasMap(project.Path) ? runAllWithCoverage : runAllByName;
-            if (decision.DriftRunAll.TryGetValue(project.Path, out var reason) || runAll.TryGetValue(project.Path, out reason))
+            if (decision.RunAlone.TryGetValue(project.Path, out var reason) || runAll.TryGetValue(project.Path, out reason))
             {
                 var whole = classDecisions.ConvertAll(d => d with { Selected = true, Kind = ClassDecisionKind.WholeProject, Evidence = reason });
                 result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], reason) { Decisions = whole }));
@@ -662,6 +698,98 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         return new ClassDecision(name, Selected: false, ClassDecisionKind.Skipped, $"ran none of the changed code and names none of it ({map}{recordedAs})");
     }
 
+    /// <summary>
+    /// Fills <see cref="ProjectLevelUses.UnchangedOutputs"/>: the affected projects that no changed file reaches
+    /// except inert ones. Every other changed file (code, a build input, a non-code file the build uses, a
+    /// cosmetic edit) and every build-wide change counts as changing its projects and everything depending on them.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="root">Normalized repository root.</param>
+    /// <param name="changedFiles">Changed paths relative to <paramref name="root"/>.</param>
+    /// <param name="impact">Project-level impact of the same changes.</param>
+    /// <param name="uses">The inert files found, and the set to fill.</param>
+    private static void AddUnchangedOutputs(ProjectGraph graph, string root, IReadOnlyList<string> changedFiles, ImpactResult impact, ProjectLevelUses uses)
+    {
+        if (uses.InertFiles.Count == 0)
+        {
+            return;
+        }
+
+        var inert = uses.InertFiles.Select(static i => (i.File, i.Owner.Path)).ToHashSet();
+        var changing = new HashSet<string>(Paths.Comparer);
+        foreach (var file in changedFiles)
+        {
+            foreach (var owner in graph.ResolveFile(Paths.Normalize(Path.Combine(root, file))))
+            {
+                if (!inert.Contains((file, owner.Project.Path)))
+                {
+                    changing.Add(owner.Project.Path);
+                }
+            }
+        }
+
+        changing.UnionWith(impact.Affected.Where(static a => a.Reason is not (ImpactReason.DirectChange or ImpactReason.Dependency)).Select(static a => a.Project.Path));
+        var changed = graph.WithDependents(changing);
+        foreach (var affected in impact.Affected)
+        {
+            if (!changed.Contains(affected.Project.Path))
+            {
+                uses.UnchangedOutputs.Add(affected.Project.Path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Under the readers rule, runs completely every test project that an inert non-code file reaches
+    /// (its owner and the projects depending on it) but whose map cannot vouch for the files its tests
+    /// read: there is no map, or it was recorded before file reads, or without the reads of every
+    /// third-party library (<see cref="CoverageMap.KnowsAllFileReads"/>). Where the map can vouch, only
+    /// the classes that read the file run (<see cref="FindFileReaders"/>).
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="inertFiles">Changed non-code files the build does not use, with their owners.</param>
+    /// <param name="runAlone">
+    /// Test projects that run completely on their own; updated in place. Not a project-level fallback: a test
+    /// helper project without tests has no map, and its dependents' maps can vouch for themselves (AICentral).
+    /// </param>
+    private void AddUnvouchedReaders(TestSelectionRequest request, List<InertFile> inertFiles, Dictionary<string, string> runAlone)
+    {
+        foreach (var (file, owner) in inertFiles)
+        {
+            foreach (var path in request.Graph.WithDependents([owner.Path]))
+            {
+                if (request.Graph.Find(path) is not { IsTestProject: true })
+                {
+                    continue;
+                }
+
+                var unvouched = !request.CoverageMaps.TryGetValue(path, out var map) ? "it has no coverage map to tell which tests read it"
+                    : map.FileReads is null ? "its map was recorded before file reads were"
+                    : map.FileReadsUnseen is null ? "its map was recorded before the reads of third-party libraries were"
+                    : map.FileReadsUnseen.Count > 0 ? $"its map could not see the reads of {string.Join(", ", map.FileReadsUnseen)}"
+                    : null;
+                if (unvouched is not null)
+                {
+                    AddFallback(runAlone, path, $"{file} is not part of the build, but {unvouched}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The changed files that some project owns as an item or by folder but that are not code: their
+    /// readers in every test project are selected, also in test projects that do not depend on the
+    /// owner (integration tests reading <c>../../src/App/seed.json</c>), whatever else they run.
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    private static List<string> OwnedNonCodeFiles(TestSelectionRequest request)
+    {
+        var root = Paths.Normalize(request.RepoRoot);
+        var cosmetic = new HashSet<string>(request.Impact.CosmeticFiles, StringComparer.Ordinal);
+        return [.. request.ChangedFiles.Where(f => !cosmetic.Contains(f) && !SourceLanguage.IsSource(f)
+            && request.Graph.ResolveFile(Paths.Normalize(Path.Combine(root, f))).Any(static o => o.Role == FileRole.Source))];
+    }
+
     /// <summary>Every project downstream of a fallback, with the first reason that reaches it.</summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="fallbacks">Projects that cannot be narrowed, with reasons.</param>
@@ -728,6 +856,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Project} cannot be narrowed below project level: {Reason}")]
     private partial void LogFallback(string project, string reason);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{File} is not part of the build of {Project}: it runs the test classes that read it (non-code files: readers)")]
+    private partial void LogInertFile(string file, string project);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Project}: {Mode} ({Reason})")]
     private partial void LogDecision(string project, TestRunMode mode, string reason);

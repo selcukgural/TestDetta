@@ -1456,6 +1456,11 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
 
         var drift = options.Analysis.DriftFallback == DriftFallback.RunAll ? "all" : "name";
         List<string> selecting = [$"--max-map-age {options.Analysis.MaxMapAge}", $"--drift-fallback {drift}"];
+        if (options.Analysis.NonCodeFiles != AnalysisOptions.DefaultNonCodeFiles)
+        {
+            selecting.Add($"--non-code-files {(options.Analysis.NonCodeFiles == NonCodeFileRule.Readers ? "readers" : "project")}");
+        }
+
         if (options.Analysis.MapsDir is { } mapsDir)
         {
             selecting.Add($"--maps-dir {Quoted(mapsDir)}");

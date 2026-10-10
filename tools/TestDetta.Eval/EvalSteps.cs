@@ -61,6 +61,12 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             LogRecordingReused(sha, cached);
         }
 
+        if (!Directory.Exists(directory) && settings.AnyRecording && settings.RecordingCache is { } recordings && NewestRecording(recordings, sha) is { } older)
+        {
+            CopyDirectory(older, directory);
+            LogRecordingReused(sha, older);
+        }
+
         if (!Directory.Exists(directory))
         {
             workspace.Git.Checkout(sha);
@@ -211,6 +217,20 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         [typeof(CoverageRecorder).Assembly.Location, typeof(TestDetta.Coverage.Runtime.TestDettaTracker).Assembly.Location],
         typeof(ProjectGraphLoader).Assembly.Location,
         [typeof(ProjectGraphLoader).FullName!, typeof(CoverageMapStore).FullName!]));
+
+    /// <summary>
+    /// The newest full recording at <paramref name="sha"/> in the recording cache, whatever recording code made it
+    /// (<see cref="RunSettings.AnyRecording"/>); incremental steps are left out. Null when there is none.
+    /// </summary>
+    /// <param name="cache">The recording cache of the repository.</param>
+    /// <param name="sha">The commit.</param>
+    internal static string? NewestRecording(string cache, string sha) =>
+        Directory.Exists(cache)
+            ? Directory.GetDirectories(cache, sha + "-*")
+                .Where(static d => !Path.GetFileName(d).Contains("-incremental-", StringComparison.Ordinal) && Directory.GetFiles(d, "*.json").Length > 0)
+                .OrderByDescending(static d => Directory.GetLastWriteTimeUtc(d))
+                .FirstOrDefault()
+            : null;
 
     /// <summary>
     /// What decides a recording besides the commit: TestDetta's recording code (<see cref="RecordingCode"/>,

@@ -23,7 +23,7 @@
 <ul>
   <li>Items only a package's props add, or only a <code>Release</code> condition adds, are not seen.</li>
   <li>A project MSBuild cannot evaluate is read as XML, as are imports.</li>
-  <li>A changed file inside a project folder that the project does not compile counts as a change to that project. A file outside every project folder selects only the tests that read it; see <a href="/docs/what-runs-everything/#ignored">files outside every project</a>.</li>
+  <li>A changed file inside a project folder that the project does not compile counts as a change to that project: the project runs completely when its build uses the file, and only the tests that read it when the build does not (see <a href="/docs/what-runs-everything/#non-code">files the build does not use</a>). A file outside every project folder selects only the tests that read it; see <a href="/docs/what-runs-everything/#ignored">files outside every project</a>.</li>
   <li>Test projects are also recognised by a <code>*.Tests</code> or <code>*.Test</code> name.</li>
 </ul>
 
@@ -31,7 +31,7 @@
 <p>{{name}} sees your source code, your project files and what your tests ran while recording. It cannot see:</p>
 <ul>
   <li><strong>External services and databases.</strong> A change in another system, such as a schema migration applied elsewhere or an API your tests call, selects nothing here.</li>
-  <li><strong>Files read at run time by third-party code</strong> from outside the project folders, such as a snapshot library's files at the repository root. Reads by your own code are recorded; see <a href="/docs/what-runs-everything/#ignored">files outside every project</a>.</li>
+  <li><strong>Files read by native code or by programs that are not .NET</strong>, and files read through a .NET API outside the recorded list. Reads by your own code and by the .NET libraries your tests use are recorded; see <a href="/docs/what-runs-everything/#non-code">files the build does not use</a>.</li>
   <li><strong>Programs started by third-party code that are not .NET (Core)</strong>, such as a native or .NET Framework executable of your repository that a process library starts. .NET processes are recorded whoever starts them, and so are starts by your own code.</li>
   <li><strong>Environment</strong>: variables, machine settings and installed tools that differ between runs.</li>
 </ul>

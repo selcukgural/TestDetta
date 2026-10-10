@@ -461,8 +461,10 @@ internal sealed partial class CoverageSelection
     /// </summary>
     /// <param name="typeName">Qualified type name.</param>
     /// <param name="owners">Projects that compile the type.</param>
-    public bool TryResolveType(string typeName, IReadOnlyCollection<string> owners)
+    /// <param name="unanswered">Why the maps cannot answer, for the fallback's reason; null when they did.</param>
+    public bool TryResolveType(string typeName, IReadOnlyCollection<string> owners, out string? unanswered)
     {
+        unanswered = null;
         var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
         var runsCompletely = false;
         foreach (var project in _graph.WithDependents(owners))
@@ -478,11 +480,14 @@ internal sealed partial class CoverageSelection
                 continue;
             }
 
-            if (owners.Any(o => !Instrumented(project, map, o))
-                || map.ClassesRunningType(typeName) is not { } classes
-                || map.TypeRanOutsideTests(typeName)
-                || map.TypeRanDuringInitialization(typeName)
-                || map.TypeHasExternalCallback(typeName))
+            var name = Path.GetFileNameWithoutExtension(project);
+            unanswered = owners.Any(o => !Instrumented(project, map, o)) ? $"{name}'s map did not instrument it"
+                : map.ClassesRunningType(typeName) is null ? $"{name}'s map does not know it"
+                : map.TypeRanOutsideTests(typeName) ? $"a member of it ran outside any test of {name}"
+                : map.TypeRanDuringInitialization(typeName) ? $"a member of it ran in a static constructor or cache fill in {name}"
+                : map.TypeHasExternalCallback(typeName) ? $"a third-party library calls it back in {name}"
+                : null;
+            if (unanswered is not null || map.ClassesRunningType(typeName) is not { } classes)
             {
                 return false;
             }
@@ -493,6 +498,7 @@ internal sealed partial class CoverageSelection
         // Every project with a map below the type runs completely: nothing is left to answer for.
         if (answers.Count == 0)
         {
+            unanswered = runsCompletely ? null : "no affected test project with a map is below it";
             return runsCompletely;
         }
 

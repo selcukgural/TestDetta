@@ -89,6 +89,41 @@ list what a reader of the numbers must know, because each one makes the selectio
 
 The round comparison (`comparison.md`) also says when two rounds were judged by different rules.
 
+## Findings (from 2026-10-10)
+
+`eval/findings.json` lists every class of problem the corpus (or reading code) revealed, once, where it first
+showed: a **miss**, a **narrowing** that could have left a failing class out and was found before it did, a
+**recording** failure, an **analysis** hang, a **precision** problem (a selection far wider than needed), or an
+**evaluation** artefact. A class is a rule TestDetta got wrong or lacked, not a repository: the same class found
+again elsewhere goes into `seenAgain`. `--summarize` writes `findings.md` from it.
+
+The number to watch is **product classes per evaluated new repository, batch by batch** (batches are the dates
+repositories joined `eval/corpus.json`; repositories that could not be evaluated yet do not count). If new
+repositories keep revealing new classes at the same rate, working repository by repository does not converge; if
+the rate falls, it does. Classes that a new TestDetta feature's first measurement exposed (`feature`) are counted
+apart: they rate the feature's design, not the corpus's reach. On 2026-10-10: 0.49 per repository in the first 41,
+0.18 in the 11 application repositories added that day (plus 5 from the readers rule's first measurement).
+
+When a fix closes a class, add it to the ledger in the same change; when repositories join the corpus, add a batch.
+
+## Precision triage and new repositories: the fast path
+
+Mutant runs answer "does it miss?" and take hours; why a repository selects widely needs no test run:
+
+1. **Precision triage** (`--explain --any-recording`): every sampled change's selection and evidence, from the
+   cached maps at the commit (the newest recording there, also from an older recorder: maps without newer data only
+   select more). Minutes per repository. `--summarize` then writes `precision.md`: mean and median share, how many
+   changes run a whole test project, and the rules (evidence with names, paths and numbers taken out) that select
+   the most classes, per repository and across them. `~/sift-corpus/run-triage.sh` runs it on the repositories whose
+   last full run selected 50% or more.
+2. **A new repository**: measure build and test time first (`measure.py`), record once (the recording cache keeps
+   it), run the precision triage, and only then mutants (`--max-mutants 40`, `--focus` for the feature under test,
+   two repositories at a time). The app tier (`--tag app`) is the quick regression set; the whole corpus is for
+   changes to recording or selection rules.
+
+Narrowing a rule the triage points at is a design decision for the owner first (it can cost misses); the triage
+says where the selection goes, not that it may go less far.
+
 ## F#: Argu (2026-10-06)
 
 *Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*
