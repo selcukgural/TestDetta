@@ -4,6 +4,7 @@ using TestDetta.Eval;
 namespace TestDetta.Tests;
 
 /// <summary>Which synthetic changes are in a source generator, and what is built for them (docs/design/generator-mutants.md).</summary>
+[Trait("Category", "Eval")]
 public sealed class EvalGeneratorMutantsTests
 {
     private static readonly string Root = Paths.Normalize(Path.Combine(Path.GetTempPath(), "td-generator-mutants"));

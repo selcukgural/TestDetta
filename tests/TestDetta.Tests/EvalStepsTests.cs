@@ -8,6 +8,7 @@ namespace TestDetta.Tests;
 /// Choosing the test projects to evaluate. Slow: asks MSBuild for each project's frameworks.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalStepsTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

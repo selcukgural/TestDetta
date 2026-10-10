@@ -10,6 +10,7 @@ namespace TestDetta.Tests;
 /// The recording fingerprint follows the code a recording can run: a change there records again, a change
 /// to selection code alone keeps the cached maps (docs/design/eval-result-cache.md).
 /// </summary>
+[Trait("Category", "Eval")]
 public sealed class RecordingFingerprintTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "testdetta-fingerprint-" + Guid.NewGuid().ToString("N"));

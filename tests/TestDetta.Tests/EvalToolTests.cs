@@ -8,6 +8,7 @@ namespace TestDetta.Tests;
 /// checked on a change TestDetta handles and on one TestDetta is known to miss. Slow: builds, records and runs.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalToolTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
