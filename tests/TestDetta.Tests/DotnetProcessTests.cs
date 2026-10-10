@@ -33,6 +33,33 @@ public sealed class DotnetProcessTests : IDisposable
         Assert.Contains("built", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Processes_TestDetta_starts_are_not_handed_the_license()
+    {
+        // A team's tests and its packages' build steps run in these processes; the license is TestDetta's alone.
+        string[] names = ["TESTDETTA_LICENSE", "TESTDETTA_LICENSE_FILE", "TESTDETTA_LICENSE_SCOPE"];
+        var previous = names.Select(Environment.GetEnvironmentVariable).ToArray();
+        try
+        {
+            Environment.SetEnvironmentVariable("TESTDETTA_LICENSE", "testdetta1.secret");
+            Environment.SetEnvironmentVariable("TESTDETTA_LICENSE_FILE", "/secret/license");
+            Environment.SetEnvironmentVariable("TESTDETTA_LICENSE_SCOPE", "github.com/team/repo");
+
+            var environment = new DotnetProcess(NullLogger.Instance, "/usr/bin/env").Capture([], Path.GetTempPath());
+
+            Assert.DoesNotContain("testdetta1.secret", environment, StringComparison.Ordinal);
+            Assert.DoesNotContain("/secret/license", environment, StringComparison.Ordinal);
+            Assert.Contains("TESTDETTA_LICENSE_SCOPE=github.com/team/repo", environment, StringComparison.Ordinal);
+        }
+        finally
+        {
+            for (var i = 0; i < names.Length; i++)
+            {
+                Environment.SetEnvironmentVariable(names[i], previous[i]);
+            }
+        }
+    }
+
     /// <summary>Runs <paramref name="action"/> with dotnet replaced by the script; fails if it takes a minute.</summary>
     private async Task<T> WithFakeDotnet<T>(Func<T> action)
     {
