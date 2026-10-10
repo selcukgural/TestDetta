@@ -117,8 +117,8 @@ public sealed class LicenseGateTests : IDisposable
         using var stderr = new StringWriter();
 
         // The CLI reads the real environment, and on CI for a public repository the status would be
-        // "public repository" instead of the missing license this test is about.
-        string[] visibility = ["GITHUB_EVENT_PATH", "CI_PROJECT_VISIBILITY"];
+        // "public repository" instead of the missing license this test is about; a license the job holds would be found.
+        string[] visibility = ["GITHUB_EVENT_PATH", "CI_PROJECT_VISIBILITY", "TESTDETTA_LICENSE", "TESTDETTA_LICENSE_FILE"];
         var previous = visibility.Select(Environment.GetEnvironmentVariable).ToArray();
         try
         {

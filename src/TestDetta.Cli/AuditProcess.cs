@@ -70,6 +70,8 @@ internal static class AuditProcess
             psi.Environment[name] = value;
         }
 
+        TestDetta.Core.Licensing.LicenseInputs.KeepOutOf(psi.Environment);
+
         using var process = new Process { StartInfo = psi };
         var gate = new Lock();
         CountdownEvent? ended = new(2);

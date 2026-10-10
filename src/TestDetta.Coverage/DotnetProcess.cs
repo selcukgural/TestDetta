@@ -356,6 +356,8 @@ internal sealed partial class DotnetProcess(ILogger logger, string? executable =
             psi.Environment[key] = value;
         }
 
+        TestDetta.Core.Licensing.LicenseInputs.KeepOutOf(psi.Environment);
+
         // Built once per process, which is cheap next to starting dotnet.
         var commandLine = string.Join(' ', arguments);
         LogStarting(commandLine);
