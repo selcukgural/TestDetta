@@ -9,6 +9,7 @@ namespace TestDetta.Tests;
 /// repository.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalConfirmTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

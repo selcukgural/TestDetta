@@ -3,6 +3,7 @@ using TestDetta.Eval;
 namespace TestDetta.Tests;
 
 /// <summary>Every corpus run's summary is kept, and the dashboard shows the latest results with their trends.</summary>
+[Trait("Category", "Eval")]
 public sealed class BatchHistoryTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "testdetta-history-" + Guid.NewGuid().ToString("N"));

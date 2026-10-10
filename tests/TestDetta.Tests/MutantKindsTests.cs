@@ -8,6 +8,7 @@ namespace TestDetta.Tests;
 /// changed field value, which coverage cannot see being read. Slow: builds, records and runs.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class MutantKindsTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

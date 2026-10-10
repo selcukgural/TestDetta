@@ -55,13 +55,36 @@ jobs:
           mode: record
           setup-dotnet: 'false'
 
-      # Pull requests run only the tests their changes affect.
+      # The evaluation tool's tests (Category=Eval, about half of the slow tests' time) run on a pull request
+      # only when it changes the tool, the corpus or one of those tests; the weekly recording runs them all.
+      - name: Choose the tests to leave out
+        id: eval
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE"...HEAD)
+          tests=$(printf '%s\n' "$changed" | { grep -E '^tests/.*\.cs$' || true; } | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done)
+          if printf '%s\n' "$changed" | grep -qE '^(tools/TestDetta\.Eval|eval)/' \
+            || { [ -n "$tests" ] && grep -lF '[Trait("Category", "Eval")]' $tests > /dev/null; }; then
+            echo "Changes reach the evaluation tool: its tests run."
+            echo "args=" >> "$GITHUB_OUTPUT"
+          else
+            echo "No change to the evaluation tool: its tests are left out."
+            echo "args=--filter Category!=Eval" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pull requests run only the tests their changes affect. The repository is private, so selection
+      # needs the license; without it every test runs. Pull requests from forks and Dependabot get no
+      # secrets and run every test.
       - name: Run affected tests
         if: github.event_name == 'pull_request'
         uses: ./
         with:
           mode: test
           setup-dotnet: 'false'
+          license: ${{ secrets.TESTDETTA_LICENSE }}
+          dotnet-test-args: ${{ steps.eval.outputs.args }}
 
   # The pass/fail signal within three minutes on every push. The Slow tests build and run real
   # projects; they run in the weekly recording above and before every push locally. It runs under a

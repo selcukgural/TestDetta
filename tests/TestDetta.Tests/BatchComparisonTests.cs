@@ -3,6 +3,7 @@ using TestDetta.Eval;
 namespace TestDetta.Tests;
 
 /// <summary>A corpus run compared with the one before points out what needs a look beyond "no miss".</summary>
+[Trait("Category", "Eval")]
 public sealed class BatchComparisonTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "testdetta-comparison-" + Guid.NewGuid().ToString("N"));

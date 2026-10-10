@@ -9,6 +9,7 @@ namespace TestDetta.Tests;
 /// and the exact maps stay the reference. Slow: builds, records twice and runs.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalMapAgeTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

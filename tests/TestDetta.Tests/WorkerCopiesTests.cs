@@ -4,6 +4,7 @@ using TestDetta.Eval;
 namespace TestDetta.Tests;
 
 /// <summary>Copies of a built clone, one per extra worker of a parallel evaluation.</summary>
+[Trait("Category", "Eval")]
 public sealed class WorkerCopiesTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "testdetta-worker-copies-" + Guid.NewGuid().ToString("N"));

@@ -11,6 +11,7 @@ namespace TestDetta.Tests;
 /// records and runs a small repository.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalHangTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

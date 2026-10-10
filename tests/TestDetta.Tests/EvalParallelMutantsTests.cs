@@ -10,6 +10,7 @@ namespace TestDetta.Tests;
 /// repository) must be evaluated one mutant at a time. Slow: builds, records and runs several times.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalParallelMutantsTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
