@@ -116,31 +116,17 @@ public sealed class LicenseGateTests : IDisposable
         using var stdout = new StringWriter();
         using var stderr = new StringWriter();
 
-        // The CLI reads the real environment, and on CI for a public repository the status would be
-        // "public repository" instead of the missing license this test is about.
-        string[] visibility = ["GITHUB_EVENT_PATH", "CI_PROJECT_VISIBILITY"];
-        var previous = visibility.Select(Environment.GetEnvironmentVariable).ToArray();
-        try
-        {
-            foreach (var name in visibility)
-            {
-                Environment.SetEnvironmentVariable(name, null);
-            }
+        // An environment and a home of its own: on CI the job's environment says whether the repository is public,
+        // holds the license, and TestDetta's own run has refreshed it into ~/.testdetta/license.
+        string[] hidden = ["GITHUB_EVENT_PATH", "CI_PROJECT_VISIBILITY", "TESTDETTA_LICENSE", "TESTDETTA_LICENSE_FILE"];
+        var host = new CliHost(name => hidden.Contains(name) ? null : Environment.GetEnvironmentVariable(name), Path.Combine(_repo.Root, ".home"));
 
-            Assert.Equal(0, CliApp.Run(["license", "status", "--repo", _repo.Root], stdout, stderr));
-        }
-        finally
-        {
-            for (var i = 0; i < visibility.Length; i++)
-            {
-                Environment.SetEnvironmentVariable(visibility[i], previous[i]);
-            }
-        }
+        Assert.Equal(0, CliApp.Run(["license", "status", "--repo", _repo.Root], stdout, stderr, host));
 
         Assert.Contains("License: Missing", stdout.ToString(), StringComparison.Ordinal);
         Assert.Contains("Every test runs until this is fixed.", stdout.ToString(), StringComparison.Ordinal);
 
-        Assert.Equal(1, CliApp.Run(["license", "install", "testdetta1.not.genuine"], stdout, stderr));
+        Assert.Equal(1, CliApp.Run(["license", "install", "testdetta1.not.genuine"], stdout, stderr, host));
         Assert.Contains("not valid", stderr.ToString(), StringComparison.Ordinal);
     }
 
