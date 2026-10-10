@@ -296,6 +296,16 @@ internal sealed class CoverageIndex
     }
 
     /// <summary>
+    /// Test classes the map saw running <paramref name="member"/> of <paramref name="typeName"/>, also when it ran outside
+    /// any test too, where <see cref="ClassesRunning"/> answers null because they are not all of its users. Empty when the
+    /// map does not know the member or no class ran it.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name as in <see cref="CoveredMethod.MemberName"/>.</param>
+    public IReadOnlySet<string> ClassesSeenRunning(string typeName, string member) =>
+        _classesByMember.GetValueOrDefault(new CoveredMethod(typeName, member)) ?? (IReadOnlySet<string>)new HashSet<string>();
+
+    /// <summary>
     /// Test classes that ran any member of <paramref name="typeName"/> or its nested types; null when
     /// none was instrumented. Not all of them when <see cref="TypeRanOutsideTests"/>.
     /// </summary>

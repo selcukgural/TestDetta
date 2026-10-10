@@ -165,11 +165,11 @@ const CH_MAP = {
     },
     {
       title: "Senaryo 5 · Üye keşif sırasında da çalıştı", nodes: ["start", "q1", "q2", "q3", "q4", "no", "i_null"], edges: ["t0", "t1", "t2", "t3", "a_null", "n4"],
-      who: "<code>Answers</code> → <code>Lookup</code> → <code>ClassesRunning</code> <code>null</code> → <code>RanOutsideTests</code>",
-      file: "src/TestDetta.Core/CoverageSelection.cs:435, :598",
-      input: "Harita: <code>\"ambient\": [7]</code>, <code>methods[7] = [\"App.Rates\", \"All\"]</code> (bir <code>[MemberData]</code> kaynağı onu çağırıyor)",
-      output: "<code>false</code>, gerekçe <code>\"it ran outside any test\"</code>",
-      purpose: "Teori verisi keşifte bir kez üretilir; hangi testin hangi satırı kullandığı görünmez. Haritanın bilmediği üye de buraya düşer: alan, sabit (derlemede gömülür), soyut üye ya da başka assembly. Gerekçe: <code>\"a map does not know it\"</code>.",
+      who: "<code>Answers</code> → <code>Lookup</code> → <code>ClassesRunning</code> <code>null</code> → <code>ClassesSeenRunning</code> (eksik cevap) → <code>RanOutsideTests</code>",
+      file: "src/TestDetta.Core/CoverageSelection.cs, CoverageIndex.cs",
+      input: "Harita: <code>\"ambient\": [7]</code>, <code>methods[7] = [\"App.Rates\", \"All\"]</code> (bir <code>[MemberData]</code> kaynağı onu çağırıyor); ayrıca <code>RatesTests</code> onu doğrudan çalıştırdı",
+      output: "<code>false</code>, gerekçe <code>\"it ran outside any test\"</code>; <code>RatesTests</code> seçili kalır, değişiklik isimle de izlenir",
+      purpose: "Teori verisi keşifte bir kez üretilir; hangi testin hangi satırı kullandığı görünmez, bu yüzden isim izi çalışır. Haritanın onu doğrudan çalıştırdığını gördüğü sınıflar yine de kullanıcıdır ve seçili kalır (2026-10-10): FsCheck varsayılan arbitrary'lerini reflection ile bulur, isim izinin izleyeceği bir şey kalmaz; önceden bu sınıflar da düşüyordu ve iki mutant kaçıyordu (<code>AmbientMemberRunnersTests</code>). Haritanın bilmediği üye (alan, sabit, soyut üye, başka assembly) ise <code>null</code> kalır, gerekçe <code>\"a map does not know it\"</code>.",
     },
     {
       title: "Senaryo 6 · Önbellek doldururken çalışan kod", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "no", "i_run", "i_init"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "a_init", "n5"],
