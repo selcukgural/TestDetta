@@ -4,7 +4,7 @@
 <pre><code>td affected --base origin/main -v</code></pre>
 
 <h2 id="whole-project">The whole test project ran</h2>
-<p>Look for the project in the output: the reason is printed next to it. The usual causes are a build-wide file, a file in the project that is not C#, Visual Basic or F# source, a <code>global using</code>, or a type found through reflection. <a href="/docs/what-runs-everything/">What runs everything</a> lists them all. In the <code>-v</code> log, a line such as <code>affects whole project: True</code> names the file.</p>
+<p>Look for the project in the output: the reason is printed next to it. The usual causes are a build-wide file, a file in the project that is not C#, Visual Basic or F# source and that the build uses (or whose readers the map cannot vouch for), a <code>global using</code>, or a type found through reflection. <a href="/docs/what-runs-everything/">What runs everything</a> lists them all. In the <code>-v</code> log, a line such as <code>affects whole project: True</code> names the file.</p>
 
 <h2 id="no-map">No coverage map was used</h2>
 <p>Without a map, selection traces names, which is wider. The log says why there was none:</p>

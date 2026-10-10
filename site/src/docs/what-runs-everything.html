@@ -21,7 +21,7 @@
   <thead><tr><th>Change</th><th>Why it cannot be narrowed</th></tr></thead>
   <tbody>
     <tr><td>The project file, or a <code>.props</code> or <code>.targets</code> file it imports</td><td>It can change how anything in the project builds.</td></tr>
-    <tr><td>Any file in the project that is not C#, Visual Basic or F# source, such as <code>appsettings.json</code>, a <code>.resx</code>, an F# signature file (<code>.fsi</code>) or a test data file</td><td>No coverage map says who reads it.</td></tr>
+    <tr><td>A file in the project that is not C#, Visual Basic or F# source and that the build uses, such as a copied <code>appsettings.json</code>, a <code>.resx</code>, a <code>.proto</code> or an F# signature file (<code>.fsi</code>). With <code>--non-code-files project</code>, any file in the project that is not code</td><td>It changes what the build produces. Files the build does not use run only their readers (<a href="#non-code">below</a>).</td></tr>
     <tr><td>A <code>global using</code> or an assembly attribute</td><td>It applies to every file.</td></tr>
     <tr><td>A C# change in code no declaration covers, for example under a preprocessor condition</td><td>There is no member to follow.</td></tr>
     <tr><td>A changed type that nothing names, but that a framework could discover through reflection (controllers, message handlers, EF configurations)</td><td>Names and coverage cannot tell who finds it.</td></tr>
@@ -29,6 +29,11 @@
   </tbody>
 </table>
 <p>Each of these also runs every test project that depends on the one affected.</p>
+
+<h2 id="non-code">Files in a project that the build does not use</h2>
+<p>A <code>README.md</code>, a <code>CHANGELOG.md</code> or a data file the tests read from the source tree changes no build output. Under the default <code>--non-code-files readers</code>, a change to such a file runs only the test classes that read it while the coverage map was recorded, in any test project; a read outside any test, in a fixture's setup or while initializing something the tests share runs that test project completely, and a file no recorded test read runs nothing. A file counts as unused by the build when MSBuild lists it as a <code>None</code> item without <code>CopyToOutputDirectory</code> and no build item type (<code>Compile</code>, <code>EmbeddedResource</code>, <code>Content</code>, <code>AdditionalFiles</code>, <code>Protobuf</code>, the WPF, MAUI and Android items) lists it, and no MSBuild file of the repository names it outside comments and package metadata, includes it in an item of another type, or has a target that walks every <code>None</code> item.</p>
+<p>Reads are recorded in your own code and in the libraries your tests use, a snapshot library reading its <code>.verified</code> files for example. A test project still runs completely for such a file when it has no map, or its map was recorded before {{name}} recorded the reads of libraries, or a library could not be rewritten to show its reads (the output names it).</p>
+<div class="callout"><p>What this cannot see: a file read by native code, by a program that is not .NET, or through a .NET API outside the recorded list (<code>ZipFile.OpenRead</code>, an <code>X509Certificate2</code> from a path); and a build step of an SDK or a package that processes files under an item type of its own that is not in the list above. If your build or tests use files that way, choose <code>--non-code-files project</code> (action input <code>non-code-files: project</code>): every non-code file then runs its project and the projects depending on it, as before.</p></div>
 
 <h2 id="maps">Coverage map situations</h2>
 <ul>
@@ -40,7 +45,7 @@
 
 <h2 id="ignored">Files outside every project</h2>
 <p>A changed file outside every project folder, such as <code>README.md</code>, files under <code>.github/</code> or test data at the root of the repository, belongs to no project. If a test read it by a path while the coverage map was recorded, a change to it, or a new file in a folder a test listed, runs the test classes that read it. A read outside any test, in a fixture's setup or while initializing something the tests share runs the whole test project. A file no recorded test read selects nothing. The output counts these files as read by recorded tests or read by none.</p>
-<div class="callout"><p>Reads are recorded in the code of the repository's own projects, not inside third-party libraries (a snapshot library reading its <code>.verified</code> files, for example), and only in coverage maps recorded by a version that records them. Keep files read that way inside the test project, or list them as its items, for example <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code>. Then the file belongs to the project wherever it lives, and changing or deleting it runs the project.</p></div>
+<div class="callout"><p>Reads are recorded in your own code and in the libraries your tests use, and only in coverage maps recorded by a version that records them. A file read in a way TestDetta cannot see (native code, a program that is not .NET) is safest listed as an item of the test project, for example <code>&lt;None Include="..\..\testdata\**" CopyToOutputDirectory="PreserveNewest" /&gt;</code>. Then the file belongs to the project wherever it lives, and changing or deleting it runs the project.</p></div>
 <p>One exception: a source or build file that no project claims (<code>.cs</code>, <code>.fs</code>, <code>.vb</code>, <code>.props</code>, <code>.targets</code>, <code>.projitems</code>) counts as a build input of every project whose imports could not be fully resolved, so those run.</p>
 
 <h2 id="related">Related pages</h2>

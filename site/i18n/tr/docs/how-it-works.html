@@ -1,4 +1,4 @@
-<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: bf59104184cd -->
+<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: ab2096733d84 -->
 <h1>Nasıl karar verir</h1>
 <p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediğini bildiği her şeyde daha fazlasını çalıştırmaya geri döner; hiç göremediği birkaç kalıp <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -22,7 +22,7 @@
 <h3>5. Geri dönüşler</h3>
 <p>Bir değişiklik izlenemediğinde test projesinin tamamı çalışır:</p>
 <ul>
-  <li>bir projede C#, Visual Basic ya da F# kaynağı olmayan dosyalar (bir F# imza dosyası da bunlardan sayılır), örneğin <code>appsettings.json</code>, <code>.csproj</code> ya da bir <code>.resx</code>;</li>
+  <li>bir projede C#, Visual Basic ya da F# kaynağı olmayan (bir F# imza dosyası da bunlardan sayılır) ve derlemenin kullandığı dosyalar, örneğin kopyalanan bir <code>appsettings.json</code>, <code>.csproj</code> ya da bir <code>.resx</code>; derlemenin kullanmadığı bir dosya, örneğin bir <code>README.md</code>, yalnızca onu okuyan test sınıflarını çalıştırır (<a href="/docs/what-runs-everything/#non-code">ayrıntılar</a>);</li>
   <li>global using'ler ve assembly attribute'ları;</li>
   <li>bir framework'ün reflection ile keşfettiği tipler, örneğin controller'lar, mesaj handler'ları ve EF yapılandırmaları.</li>
 </ul>
