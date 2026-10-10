@@ -88,6 +88,12 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                 continue;
             }
 
+            if (arg == "--any-recording")
+            {
+                overrides = overrides with { AnyRecording = true };
+                continue;
+            }
+
             if (arg == "--keep-clones")
             {
                 overrides = overrides with { KeepClones = true };
@@ -247,7 +253,11 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
 /// <param name="DataFiles">Data files to empty per repository; see <see cref="RunSettings.DataFiles"/>.</param>
 /// <param name="Focus">Changes a quick check keeps; see <see cref="RunSettings.Focus"/>.</param>
 /// <param name="MaxMutants">Most changes per repository; see <see cref="RunSettings.MaxMutants"/>.</param>
-internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false, bool KeepClones = false, int DataFiles = 0, EvalFocus Focus = EvalFocus.All, int? MaxMutants = null);
+internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallelism = null, int? Parallel = null, string? MutantKinds = null, int? MapAge = null, string? TiaCli = null, string? AffectedCli = null, bool Explain = false, bool KeepClones = false, int DataFiles = 0, EvalFocus Focus = EvalFocus.All, int? MaxMutants = null)
+{
+    /// <summary>See <see cref="RunSettings.AnyRecording"/>.</summary>
+    public bool AnyRecording { get; init; }
+}
 
 /// <summary>
 /// Evaluates every repository of a corpus, one after another, and adds the results up. A repository
@@ -327,6 +337,16 @@ internal static partial class BatchRunner
         }
 
         Console.Out.WriteLine($"\nSummary: {Path.Combine(options.Output, "summary.md")}");
+        if (PrecisionReport.Write(options.Output, corpus, options.Only) is { } precision)
+        {
+            Console.Out.WriteLine($"Precision: {precision}");
+        }
+
+        if (FindingsReport.LedgerFor(options.CorpusPath) is { } ledger)
+        {
+            Console.Out.WriteLine($"Findings: {FindingsReport.Write(options.Output, ledger)}");
+        }
+
         if (options.History is { } historyDirectory)
         {
             Console.Out.WriteLine($"Dashboard: {BatchHistory.Record(options.Output, historyDirectory, DateTimeOffset.UtcNow)}");
@@ -357,6 +377,7 @@ internal static partial class BatchRunner
             TiaCli = options.Overrides.TiaCli,
             AffectedCli = options.Overrides.AffectedCli,
             ExplainOnly = options.Overrides.Explain,
+            AnyRecording = options.Overrides.AnyRecording,
             KeepClones = options.Overrides.KeepClones,
             DataFiles = options.Overrides.DataFiles,
             Focus = options.Overrides.Focus,
