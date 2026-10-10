@@ -69,6 +69,58 @@ public sealed class TeamTestConfigurationTests : IDisposable
         Assert.Contains("missing.runsettings could not be read", error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(new[] { "--no-build" }, null, new[] { "--no-build", "--ignore-exit-code", "8" })]
+    [InlineData(new[] { "--ignore-exit-code", "2" }, null, new[] { "--ignore-exit-code", "2;8" })]
+    [InlineData(new[] { "--ignore-exit-code=2;8" }, null, new[] { "--ignore-exit-code=2;8" })]
+    [InlineData(new[] { "--ignore-exit-code:2" }, null, new[] { "--ignore-exit-code:2;8" })]
+    [InlineData(new[] { "--no-build" }, "--filter-not-trait category=failing --ignore-exit-code 8", new[] { "--no-build" })]
+    [InlineData(new[] { "--no-build" }, "--report-trx --ignore-exit-codes-are-not-this 8", new[] { "--no-build", "--ignore-exit-code", "8" })]
+    public void An_empty_shard_accepts_zero_tests_without_repeating_the_teams_ignore_exit_code(string[] arguments, string? platformArguments, string[] expected) =>
+        Assert.Equal(expected, CoverageRecorder.AcceptingZeroTests(arguments, platformArguments));
+
+    [Fact]
+    [Trait("Category", "Slow")]
+    public void Recording_in_shards_runs_when_the_project_already_ignores_exit_code_8()
+    {
+        // EF Core and Orleans do this: the testing platform rejects a second --ignore-exit-code with exit code 5.
+        using var repo = new GitRepoFixture();
+        repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
+        repo.Write("src/Calc/Calc.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+        repo.Write("src/Calc/Calculator.cs", "namespace Calc; public static class Calculator { public static int Add(int a, int b) => a + b; public static int Mul(int a, int b) => a * b; }");
+        repo.Write("tests/Calc.Tests/Calc.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <OutputType>Exe</OutputType>
+                <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="xunit.v3" Version="4.0.1" />
+                <ProjectReference Include="../../src/Calc/Calc.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        repo.Write("tests/Calc.Tests/Tests.cs", """
+            using Xunit;
+            namespace Calc.Tests;
+            public class AddTests { [Fact] public void Adds() => Assert.Equal(3, Calculator.Add(1, 2)); }
+            public class MulTests { [Fact] public void Muls() => Assert.Equal(6, Calculator.Mul(2, 3)); }
+            """);
+        repo.Commit("base");
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance, new MsBuildProjectEvaluator(NullLoggerFactory.Instance, diskCache: false)).Load(repo.Root);
+        var testProject = graph.Projects.Single(static p => p.IsTestProject);
+        Assert.Contains("--ignore-exit-code 8", testProject.TestConfiguration?.PlatformArguments, StringComparison.Ordinal);
+        var output = new StringWriter();
+
+        var (map, passed) = new CoverageRecorder(NullLoggerFactory.Instance).Record(new RecordRequest(repo.Root, graph, testProject, new RecordOptions(Parallelism: 2)), output);
+
+        Assert.True(passed, output.ToString());
+        Assert.Empty(map.FailedClasses!);
+        Assert.Contains(new CoveredMethod("Calc.Calculator", "Mul"), map.Classes["Calc.Tests.MulTests"].Select(id => map.Methods[id]));
+    }
+
     [Fact]
     [Trait("Category", "Slow")]
     public void Recording_and_selection_run_only_what_the_team_runs_under_the_teams_settings()

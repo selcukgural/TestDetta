@@ -380,7 +380,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // code 8, reported as an error unless the platform is told to accept it.
             var isCatchAll = shards.Count > 1 && i == shards.Count - 1;
             var arguments = isCatchAll && context.Mode == DotnetTestMode.TestingPlatform
-                ? [.. testArguments, "--ignore-exit-code", TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture)]
+                ? AcceptingZeroTests(testArguments, context.Request.TestProject.TestConfiguration?.PlatformArguments)
                 : testArguments;
             var shard = new ShardRun(dotnet, arguments, shards[i], i, shards.Count);
             runs[i] = Task.Run(() => RunShard(shard, context, output));
@@ -389,6 +389,50 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         Task.WaitAll(runs);
         return runs;
     }
+
+    /// <summary>
+    /// <paramref name="arguments"/> with the testing platform told to accept exit code 8 (zero tests ran). The platform
+    /// rejects a second <c>--ignore-exit-code</c> with exit code 5 before any test runs (docs/design/team-test-configuration.md),
+    /// so a team's own option on the command line takes 8 into its list, and when the project's
+    /// <c>TestingPlatformCommandLineArguments</c> has one, nothing is added: an empty shard then exits with 8 only when the
+    /// team's list leaves it out, and the project is recorded as failing, which selects more rather than less.
+    /// </summary>
+    /// <param name="arguments">The shard's <c>dotnet test</c> arguments, the team's included.</param>
+    /// <param name="platformArguments">The project's <c>TestingPlatformCommandLineArguments</c>, or null.</param>
+    internal static List<string> AcceptingZeroTests(IReadOnlyList<string> arguments, string? platformArguments)
+    {
+        var zeroTests = TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (platformArguments is not null && platformArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(IsIgnoreExitCode))
+        {
+            return [.. arguments];
+        }
+
+        List<string> result = [.. arguments];
+        var at = result.FindIndex(IsIgnoreExitCode);
+        if (at < 0)
+        {
+            return [.. result, IgnoreExitCode, zeroTests];
+        }
+
+        // The value follows the option, or is joined to it with '=' or ':'.
+        var valueAt = result[at] == IgnoreExitCode ? at + 1 : at;
+        var codes = valueAt == at ? result[at][(IgnoreExitCode.Length + 1)..] : valueAt < result.Count ? result[valueAt] : "";
+        if (valueAt < result.Count && !codes.Split(';').Contains(zeroTests, StringComparer.Ordinal))
+        {
+            result[valueAt] += ";" + zeroTests;
+        }
+
+        return result;
+    }
+
+    /// <summary>Whether <paramref name="argument"/> is the testing platform's <c>--ignore-exit-code</c>, with or without a joined value.</summary>
+    /// <param name="argument">A command-line argument.</param>
+    private static bool IsIgnoreExitCode(string argument) =>
+        argument == IgnoreExitCode
+        || (argument.StartsWith(IgnoreExitCode, StringComparison.Ordinal) && argument.Length > IgnoreExitCode.Length && argument[IgnoreExitCode.Length] is '=' or ':');
+
+    /// <summary>The testing platform's option for exit codes to accept, which it allows once.</summary>
+    private const string IgnoreExitCode = "--ignore-exit-code";
 
     /// <summary>Throws when a test process was killed for running too long; a hang would repeat.</summary>
     /// <param name="runs">Finished shards.</param>

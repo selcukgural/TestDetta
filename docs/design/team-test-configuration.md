@@ -34,9 +34,11 @@ What follows for a team:
 3. **Recording does not know the team's command.** `td record` takes no `dotnet test` arguments, and the
    action passes `dotnet-test-args` in test, shadow and audit modes only: a filter or settings file the CI
    passes on the command line is not applied while recording.
-4. **Options that may appear once collide.** The testing platform rejects a second `--ignore-exit-code`
-   (EF Core sets one in `TestingPlatformCommandLineArguments`). EF Core's catch-all shards end with exit code 5
-   ("Handshake failures"), which makes 13 of its 15 maps untrusted; the cause is not confirmed yet.
+4. **Options that may appear once collide.** The testing platform rejects a second `--ignore-exit-code`: the
+   test application exits with 5 (invalid command line) before any test runs, whatever the second value is
+   (checked with xunit.v3 4.0.1 on SDK 10.0.105). EF Core and Orleans set one in
+   `TestingPlatformCommandLineArguments`, and recording added its own to every catch-all shard: EF Core's
+   catch-all shards ended with exit code 5, which made 13 of its 15 maps untrusted.
 
 ## Principle
 
@@ -73,15 +75,16 @@ reason, rather than recording under other settings.
 `dotnet-test-args` applies in record mode too. Their filter and settings are used as above; arguments that
 change what recording controls (`--no-build`, `--logger`, `--results-directory`, `-c`) keep TestDetta's.
 
-**Single-value options.** TestDetta adds `--ignore-exit-code` only when neither the command line nor the
-project's `TestingPlatformCommandLineArguments` has it; an empty catch-all shard's exit code 8 is accepted
-either way.
+**Single-value options.** TestDetta adds `--ignore-exit-code 8` only when neither the command line nor the
+project's `TestingPlatformCommandLineArguments` has it (`CoverageRecorder.AcceptingZeroTests`). The team's
+option on the command line takes 8 into its list (`2` becomes `2;8`); the project's is left as it is, and when
+its list leaves 8 out, an empty catch-all shard fails and the project's map is untrusted, which selects more.
 
 **Visible.** `td test`, `td affected` and `td record` print the team configuration they kept, per test
 project, in debug logs and once in the console summary ("your filter Category!=Integration
 (VSTestTestCaseFilter) and run settings ci.runsettings are kept"); the job summary says the same.
 
-**Documented.** A docs page, "TestDetta and your test configuration", in five languages: what TestDetta adds,
+**Documented.** A docs page, "Your test configuration" (site/src/docs/test-configuration.html), in English and Turkish: what TestDetta adds,
 what it keeps, the table above, and what to do when a filter cannot be combined.
 
 ## Steps
@@ -92,6 +95,20 @@ what it keeps, the table above, and what to do when a filter cannot be combined.
 3. Run settings merged into a copy of the team's, in recording; tests that fail without it (a test that needs
    the team's environment variable, a test the team's run settings filter out).
 4. `td record -- <args>` and the action input in record mode.
-5. Output and docs (site in five languages, README, docs/ci.md, atlas).
+5. Output and docs (site in English and Turkish, README, docs/ci.md, atlas).
 6. Corpus: how many repositories set any of this; failed-while-recording classes before and after; EF Core's
    exit code 5.
+
+## Corpus (2026-10-10)
+
+18 of the 59 corpus repositories set some of this. Read from their project files, run settings files and CI
+scripts:
+
+| What | Repositories |
+|---|---|
+| `TestingPlatformCommandLineArguments` | EF Core (`--filter-not-trait category=failing --ignore-exit-code 8`), Orleans (`--ignore-exit-code 8`), Meziantou.Analyzer (`--report-trx-filename`), Polly and Swashbuckle (coverage and report options) |
+| a `.runsettings` file | Swashbuckle, Autofac, AwesomeAssertions, OpenTelemetry, dotnet/dotnet, MSBuild (most only for code coverage) |
+| a filter or settings file in CI's `dotnet test` | EF Core, FastEndpoints, Lucene.NET, Mediator, MSBuild, NodaTime, OpenTelemetry, Orleans, Orleans.SyncWork, Polly, Swashbuckle |
+
+None sets `VSTestTestCaseFilter`. The command-line filters are what the evaluator cannot see: it runs the
+projects as `dotnet test` does without arguments, so a test CI excludes can still fail a recording there.
