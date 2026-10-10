@@ -71,12 +71,15 @@ public sealed partial class TestSelector
                     continue;
                 }
 
-                // dotnet test runs every framework, and a generator may write other code for another one
-                // (a polyfill a framework lacks): each is compared, which needs each one's recorded code.
-                IReadOnlyList<string?> frameworks = map.Framework is null && test.SymbolSets.Count <= 1 ? [null] : [.. map.GeneratedFrameworks ?? []];
+                // dotnet test runs every framework unless -f names one, and a generator may write other code for
+                // another one (a polyfill a framework lacks): each framework that runs is compared, which needs its
+                // recorded code (docs/design/build-inputs-per-framework.md).
+                var frameworks = GeneratorFrameworks(request, test, map);
                 if (frameworks.Count == 0)
                 {
-                    AddFallback(projectLevel, test.Path, $"{reason}, and it targets several frameworks while its map holds the generated code of {map.Framework ?? "one"} only (record it without -f)");
+                    AddFallback(projectLevel, test.Path, request.Framework is { } run
+                        ? $"{reason}, and it targets several frameworks while its map holds no generated code of {run}, the framework the tests run for (record it without -f, or with -f {run})"
+                        : $"{reason}, and it targets several frameworks while its map holds the generated code of {map.Framework ?? "one"} only (record it without -f, or run the tests with -f {map.Framework ?? "<framework>"})");
                     continue;
                 }
 
@@ -139,6 +142,31 @@ public sealed partial class TestSelector
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// The frameworks whose generated code is compared for <paramref name="test"/>: null alone for a project with one
+    /// framework; the one the tests run for (<see cref="TestSelectionRequest.Framework"/>) when the map holds its code;
+    /// otherwise every framework the map holds code for. Empty when the map cannot answer for the frameworks that run.
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="test">The test project.</param>
+    /// <param name="map">Its coverage map.</param>
+    private static List<string?> GeneratorFrameworks(TestSelectionRequest request, ProjectNode test, CoverageMap map)
+    {
+        if (map.Framework is null && test.SymbolSets.Count <= 1)
+        {
+            return [null];
+        }
+
+        if (request.Framework is not { } run)
+        {
+            return [.. map.GeneratedFrameworks ?? []];
+        }
+
+        var holdsRun = string.Equals(map.Framework, run, StringComparison.OrdinalIgnoreCase)
+                       || map.GeneratedFrameworks?.Contains(run, StringComparer.OrdinalIgnoreCase) == true;
+        return holdsRun ? [run] : [];
     }
 
     /// <summary>

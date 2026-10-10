@@ -1,4 +1,4 @@
-<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: da99c9a5e119 -->
+<!-- title: Neler her şeyi çalıştırır; layout: docs; description: {{name}}'nın bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırmasına yol açan değişiklikler ve yok saydığı dosyalar.; source: 99d631128479 -->
 <h1>Neler her şeyi çalıştırır</h1>
 <p class="lead">Değişikliklerin çoğu birkaç test sınıfı seçer. Bazıları güvenli bir şekilde daraltılamaz; bu yüzden {{name}} bir test projesinin tamamını ya da bir klasörün altındaki her projeyi çalıştırır. Bu sayfa hepsini listeler; böylece geniş bir seçim asla sürpriz olmaz.</p>
 
@@ -11,7 +11,7 @@
     <tr><td><code>Directory.Solution.props</code>, <code>Directory.Solution.targets</code></td><td>Altındaki her test projesi</td></tr>
     <tr><td><code>global.json</code>, <code>NuGet.config</code>, <code>.editorconfig</code></td><td>Altındaki her test projesi</td></tr>
     <tr><td><code>Directory.Packages.props</code>, yalnızca <code>PackageVersion</code> öğeleri değiştiyse</td><td>Yalnızca değişen bir paketi referans alan test projeleri ve onlara bağımlı olanlar</td></tr>
-    <tr><td>Kapsam haritası olmayan, taşınabilir PDB olmadan derlenen ya da birden fazla framework'ünden yalnızca biri için <code>-f</code> ile kaydedilmiş bir test projesi için değişen bir source generator</td><td>Ürettiği kod bir derlemeden karşılaştırılır; burada karşılaştırılacak bir şey yoktur. Diğer durumlarda yalnızca değişen üretilmiş kod sayılır.</td></tr>
+    <tr><td>Kapsam haritası olmayan, taşınabilir PDB olmadan derlenen ya da birden fazla framework'ünden yalnızca biri için <code>-f</code> ile kaydedilmişken testleri başka bir framework ya da hepsi için koşan bir test projesi için değişen bir source generator (testleri aynı <code>-f</code> ile koşturun ya da onsuz kaydedin)</td><td>Ürettiği kod bir derlemeden karşılaştırılır; burada karşılaştırılacak bir şey yoktur. Diğer durumlarda yalnızca değişen üretilmiş kod sayılır.</td></tr>
     <tr><td><code>ReferenceOutputAssembly="false"</code> ile başvurulan ve değişen bir proje; ona başvuran projenin derlemesi çıktısını derlediği koda dönüştürüyorsa ya da test projesinin haritası onu hangi testlerin başlattığını veya yüklediğini kaydetmiyorsa, ya da test projesi birden çok framework hedefliyor ve haritası testlerin koştuğu framework'lerden yalnız birinin derlemesini tutuyorsa (<code>-f</code> ile kaydedilmiş; onsuz kaydedin ya da testleri aynı <code>-f</code> ile koşturun)</td><td>Aksi halde yalnız harita kaydedilirken onu süreç olarak başlatan ya da yükleyen test sınıfları çalışır; yalnız derleme sırası için verilmiş bir başvuru hiçbir şey çalıştırmaz.</td></tr>
   </tbody>
 </table>

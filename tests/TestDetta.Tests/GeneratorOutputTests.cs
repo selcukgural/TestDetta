@@ -152,6 +152,45 @@ public sealed class GeneratorOutputTests : IDisposable
     }
 
     [Fact]
+    public void A_run_of_one_framework_compares_only_that_frameworks_generated_code()
+    {
+        // Recorded with -f net8.0, run with -f net8.0: net10.0's tests do not run, so its code does not matter.
+        var path = CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Lib.Tests/Lib.Tests.csproj"));
+        CoverageMapStore.Write(path, CoverageMapStore.Read(path)! with
+        {
+            Framework = "net8.0",
+            Generated = [Generated("obj/Debug/net8.0/generated/Gen/Gen.Generator/Mapper.g.cs", Mapper) with { Framework = "net8.0" }],
+        });
+        var reader = new FakeReader(framework => GeneratedCodeRead.Read([Generated($"obj/Debug/{framework}/generated/Gen/Gen.Generator/Mapper.g.cs", Mapper)]));
+        _repo.Replace("src/Lib/Calc.cs", "=> 2", "=> 3");
+
+        var selection = Select(reader, framework: "net8.0");
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode} {selection.Reason}");
+        Assert.DoesNotContain("Lib.Tests.MapperTests", selection.TestClasses);
+        Assert.Equal(["net8.0"], reader.Calls.Select(static c => c.Framework));
+    }
+
+    [Fact]
+    public void A_run_of_a_framework_the_map_holds_no_generated_code_of_runs_completely()
+    {
+        var path = CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Lib.Tests/Lib.Tests.csproj"));
+        CoverageMapStore.Write(path, CoverageMapStore.Read(path)! with
+        {
+            Framework = "net8.0",
+            Generated = [Generated("obj/Debug/net8.0/generated/Gen/Gen.Generator/Mapper.g.cs", Mapper) with { Framework = "net8.0" }],
+        });
+        var reader = new FakeReader(GeneratedCodeRead.Failed("must not be called"));
+        _repo.Replace("src/Lib/Calc.cs", "=> 2", "=> 3");
+
+        var selection = Select(reader, framework: "net10.0");
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("its map holds no generated code of net10.0, the framework the tests run for", selection.Reason, StringComparison.Ordinal);
+        Assert.Empty(reader.Calls);
+    }
+
+    [Fact]
     public void Change_that_does_not_reach_a_generator_builds_nothing()
     {
         var reader = new FakeReader(GeneratedCodeRead.Failed("must not be called"));
@@ -163,8 +202,8 @@ public sealed class GeneratorOutputTests : IDisposable
         Assert.Equal(["Lib.Tests.PlainTests"], selection.TestClasses);
     }
 
-    private TestProjectSelection Select(FakeReader reader) =>
-        new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main", new AnalysisOptions { GeneratedCode = reader }).Tests.Single();
+    private TestProjectSelection Select(FakeReader reader, string? framework = null) =>
+        new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main", new AnalysisOptions { GeneratedCode = reader, Framework = framework }).Tests.Single();
 
     private static GeneratedSource Generated(string name, string text) => new("tests/Lib.Tests/Lib.Tests.csproj", name, text);
 

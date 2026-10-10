@@ -41,6 +41,15 @@ is equal. Anything else runs the whole project, with the reason:
 - inputs that differ in any framework: "what the net48 build fed its compiler changed: …";
 - a build that cannot be read, as before.
 
+## Source generators (step 4, immediate-handlers)
+
+A changed source generator already compares what it writes framework by framework
+(`TestSelector.Generators`, `GeneratedFrameworks`), but only for maps recorded without `-f`; a map recorded with
+`-f` ran its project completely whatever the tests ran. The same rule now applies there
+(`GeneratorFrameworks`): a run of one framework compares that framework's generated code when the map holds it, and
+a framework the map holds no code of runs the project ("its map holds no generated code of net10.0, the framework
+the tests run for").
+
 ## Safety
 
 Selection narrows only where every framework that will run was compared and found equal; that is the rule a
