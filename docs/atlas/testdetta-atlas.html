@@ -844,7 +844,7 @@ git ls-files --others --exclude-standard                # yeni, izlenmeyen dosya
       body: ul([
         "İki yayılım koşar: kapsamsız (<code>byName</code>) ve kapsamlı (<code>withCoverage</code>). İkincisi haritanın cevapladığı yerde durur.",
         "Kapsam: private üye yalnız kendi türünde, static üye türüyle nitelenmiş adla, diğerleri her yerde aranır; ama yalnız bildiren proje ve bağımlılarında.",
-        "Hiçbir şeyin anmadığı ve yansımayla bulunabilecek tür (temel sınıf/öznitelik) projeyi tamamen koşturur.",
+        "Hiçbir şeyin anmadığı ve yansımayla bulunabilecek tür (temel sınıf/öznitelik) projeyi tamamen koşturur. Haritalar güvenilirse <code>CoverageSelection.TryResolveType</code> önce onu çalıştırmış sınıfları sorar: türe yalnız kod ulaştıysa, ya da değişiklik türün kendi üyesinin yalnız gövdesindeyse (<code>ImpactPropagation._bodyChanges</code>, <code>IsBodyChange</code>: imzası, metaverisi değişmemiş, soyut olmayan bir metot; 2026-10-10, docs/design/reflection-body-changes.md) cevap haritalardan gelir. Türün bildirimine, üye listesine ya da taban sınıfı üzerinden ada dokunan değişiklikler (<code>_typesSeededNotByCode</code>) yine projeyi tamamen koşturur; gerekçe \"the maps cannot answer: …\" ile neden cevaplanamadığını söyler.",
         "Köprü: harita commit'inden beri değişen ve bu değişikliğe isimle ulaşan her drift üyesi de tohum olur; haritanın bilmediği yolları kapatır.",
       ]),
     },

@@ -644,12 +644,61 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
-    public void Reflection_discovered_type_stays_conservative_with_a_map()
+    public void Reflection_discovered_type_whose_method_body_changed_is_answered_by_the_classes_that_ran_it()
     {
+        // A modified body leaves the declaration reflection reads as it was (docs/design/reflection-body-changes.md).
         WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
         _repo.Replace("src/Shop/PingHandler.cs", "\"pong\"", "\"PONG\"");
 
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.Filtered, selection.Mode);
+        Assert.Equal(["Shop.Tests.TaxTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_whose_metadata_changed_stays_conservative_with_a_map()
+    {
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/PingHandler.cs", "public string Handle()", "[System.Obsolete] public string Handle()");
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("the change or its metadata reached it", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_with_an_added_member_stays_conservative_with_a_map()
+    {
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/PingHandler.cs", "public string Handle() => \"pong\";", "public string Handle() => \"pong\";\n    public string Ping() => \"ping\";");
+
         Assert.Equal(TestRunMode.All, Select().Mode);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_whose_property_changed_stays_conservative_with_a_map()
+    {
+        _repo.Replace("src/Shop/PingHandler.cs", "public string Handle() => \"pong\";", "public string Handle() => \"pong\";\n    public string Name => \"ping\";");
+        _repo.Commit("name");
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/PingHandler.cs", "Name => \"ping\"", "Name => \"PING\"");
+
+        Assert.Equal(TestRunMode.All, Select().Mode);
+    }
+
+    [Fact]
+    public void Reflection_discovered_type_whose_body_changed_stays_conservative_when_it_ran_outside_any_test()
+    {
+        _ambient.Add(("Shop.PingHandler", "Handle"));
+        WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]));
+        _repo.Replace("src/Shop/PingHandler.cs", "\"pong\"", "\"PONG\"");
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("ran outside any test", selection.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -705,14 +754,13 @@ public sealed class TestSelectorTests : IDisposable
     }
 
     [Fact]
-    public void Reflection_discovered_type_that_changed_stays_conservative_however_many_classes_ran_it()
+    public void Reflection_discovered_type_whose_body_changed_selects_every_class_that_ran_it()
     {
-        // Its own change may be to what reflection reads, which no map records.
         WriteMap(("Shop.Tests.TaxTests", [("Shop.PingHandler", "Handle")]),
                  ("Shop.Tests.SlugTests", [("Shop.PingHandler", "Handle")]));
         _repo.Replace("src/Shop/PingHandler.cs", "\"pong\"", "\"PONG\"");
 
-        Assert.Equal(TestRunMode.All, Select().Mode);
+        Assert.Equal(["Shop.Tests.SlugTests", "Shop.Tests.TaxTests"], Select().TestClasses);
     }
 
     [Fact]
