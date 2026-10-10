@@ -2,6 +2,7 @@ using TestDetta.Eval;
 
 namespace TestDetta.Tests;
 
+[Trait("Category", "Eval")]
 public sealed class CorpusTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "sift-corpus-test-" + Guid.NewGuid().ToString("N"));

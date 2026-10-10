@@ -194,6 +194,8 @@ internal sealed partial class TestRunner(ILogger<TestRunner> logger)
             psi.ArgumentList.Add(argument);
         }
 
+        TestDetta.Core.Licensing.LicenseInputs.KeepOutOf(psi.Environment);
+
         // Built once per run, which is cheap next to starting dotnet test.
         var commandLine = string.Join(' ', arguments);
         LogStarting(commandLine);

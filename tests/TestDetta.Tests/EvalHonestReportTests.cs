@@ -10,6 +10,7 @@ namespace TestDetta.Tests;
 /// TestDetta failed to record, a map that recorded nothing or only failures, and fewer recorded classes than the
 /// previous round. The outcome cache keeps nothing judged by the old rules.
 /// </summary>
+[Trait("Category", "Eval")]
 public sealed class EvalHonestReportTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "testdetta-honest-" + Guid.NewGuid().ToString("N"));

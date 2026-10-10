@@ -4,6 +4,7 @@ using TestDetta.Eval;
 namespace TestDetta.Tests;
 
 /// <summary>Test reports an evaluation deletes when it ends.</summary>
+[Trait("Category", "Eval")]
 public sealed class EvalReportCleanupTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "td-trx-" + Guid.NewGuid().ToString("N"));

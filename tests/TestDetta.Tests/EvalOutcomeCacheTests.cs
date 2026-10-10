@@ -9,6 +9,7 @@ namespace TestDetta.Tests;
 /// test. Slow: builds, records and runs twice.
 /// </summary>
 [Trait("Category", "Slow")]
+[Trait("Category", "Eval")]
 public sealed class EvalOutcomeCacheTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

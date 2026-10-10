@@ -70,6 +70,9 @@ A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into 
    none, and e-mail clients, terminals and secret forms break or indent a long string when it is copied.
    Every CI has a way to pass a secret variable or file: GitHub/GitLab secrets, Jenkins
    credentials, Bitbucket and Azure DevOps secret variables, TeamCity parameters.
+   TestDetta removes `TESTDETTA_LICENSE` and `TESTDETTA_LICENSE_FILE` from every process it starts
+   (`dotnet test`, builds, recording and audit runs; `LicenseInputs.KeepOutOf`): the team's tests and its
+   packages' build steps run there and have no use for the license.
 2. **Check the signature** against the embedded key for `kid`.
 3. **Check the scope.** The repository identity is the `origin` remote, normalised. Credentials
    embedded in the URL (common with Jenkins) are stripped before matching, and never logged.

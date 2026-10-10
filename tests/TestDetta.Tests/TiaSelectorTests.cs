@@ -5,6 +5,7 @@ using TestDetta.Eval;
 namespace TestDetta.Tests;
 
 /// <summary>dotnet-tia's <c>analyze --json</c> report read as decisions per test project (docs/design/tia-comparison.md).</summary>
+[Trait("Category", "Eval")]
 public sealed class TiaSelectorTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();

@@ -3,6 +3,7 @@ using TestDetta.Eval;
 namespace TestDetta.Tests;
 
 /// <summary>Options of the evaluation tool.</summary>
+[Trait("Category", "Eval")]
 public sealed class EvalOptionsTests
 {
     [Fact]
@@ -274,6 +275,7 @@ public sealed class EvalOptionsTests
 
 /// <summary>An environment scope sets its variables and puts the previous values back.</summary>
 [Collection(nameof(ProcessEnvironment))]
+[Trait("Category", "Eval")]
 public sealed class EnvironmentScopeTests
 {
     [Fact]

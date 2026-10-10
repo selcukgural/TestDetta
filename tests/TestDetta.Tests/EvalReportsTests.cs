@@ -6,6 +6,7 @@ namespace TestDetta.Tests;
 /// The findings ledger counts classes of problem per corpus batch, and the precision report groups the evidence
 /// of explained selections into rules (docs/evaluation.md, "Findings" and "Precision triage").
 /// </summary>
+[Trait("Category", "Eval")]
 public sealed class EvalReportsTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "testdetta-reports-" + Guid.NewGuid().ToString("N"));
