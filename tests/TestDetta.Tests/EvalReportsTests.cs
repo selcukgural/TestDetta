@@ -75,6 +75,7 @@ public sealed class EvalReportsTests : IDisposable
             PrecisionReport.Rule("WholeProject", "depends on Lib.csproj: src/Lib/README.md is not C#, Visual Basic or F# code"),
             PrecisionReport.Rule("WholeProject", "docs/x.md is not C#, Visual Basic or F# code"));
         Assert.Equal("WholeProject: <file> is not C#, Visual Basic or F# code", PrecisionReport.Rule("WholeProject", "README.md is not C#, Visual Basic or F# code"));
+        Assert.Equal("Coverage: ran <name>, which changed", PrecisionReport.Rule("Coverage", "ran Scrutor.ServiceCollectionExtensions.Scan(this IServiceCollection,Action<ITypeSourceSelector>), which changed"));
     }
 
     [Fact]
@@ -98,7 +99,7 @@ public sealed class EvalReportsTests : IDisposable
 
         Assert.Equal(0.55, repository.Mean, 3);
         Assert.Equal(1, repository.WholeProject);
-        Assert.Contains("| lib | 2 | 10 | 55% | 100% | 50% |", text.Replace(" %", "%", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("| lib | 2 | 10 | 55% | 100% | 50% | 33% | 0% | 67% |", text.Replace(" %", "%", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("| WholeProject: <file> is not C#, Visual Basic or F# code | 2 | 67% |", text.Replace(" %", "%", StringComparison.Ordinal), StringComparison.Ordinal);
     }
 

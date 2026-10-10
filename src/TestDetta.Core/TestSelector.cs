@@ -440,17 +440,26 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
                 continue;
             }
 
-            if (type is not null && propagation.SeededThroughCodeOnly(typeName) && coverage?.TryResolveType(typeName, candidates) == true)
+            string? unanswered = null;
+            if (type is not null && coverage is not null && !propagation.SeededThroughCodeOnly(typeName))
             {
-                LogUnreferencedTypeResolvedByCoverage(typeName);
-                continue;
+                unanswered = "the change or its metadata reached it, not only its code";
+            }
+            else if (type is not null && coverage is not null)
+            {
+                if (coverage.TryResolveType(typeName, candidates, out unanswered))
+                {
+                    LogUnreferencedTypeResolvedByCoverage(typeName);
+                    continue;
+                }
             }
 
             // The chain says which reached member brought the type in, the first thing to look at when
-            // a whole project runs for a change that seems unrelated.
+            // a whole project runs for a change that seems unrelated; the maps' answer, why they could not narrow it.
+            var maps = unanswered is null ? string.Empty : $"; the maps cannot answer: {unanswered}";
             var reason = type is null
                 ? $"{typeName} was removed and nothing names it, so it may have been created through reflection"
-                : $"{typeName} is affected and nothing names it, so it may be created through reflection ({propagation.ExplainSeeded(typeName, limit: 4)})";
+                : $"{typeName} is affected and nothing names it, so it may be created through reflection ({propagation.ExplainSeeded(typeName, limit: 4)}){maps}";
             foreach (var projectPath in candidates)
             {
                 AddFallback(fallbacks, projectPath, reason);
