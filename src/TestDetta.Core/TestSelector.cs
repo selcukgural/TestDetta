@@ -27,7 +27,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         (request, var driftRunAll) = WithoutDriftedMaps(request);
         var uses = new ProjectLevelUses([], [], request.NonCodeFiles == NonCodeFileRule.Readers ? new NonCodeFileUses(Paths.Normalize(request.RepoRoot)) : null);
         var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, uses);
-        AddUnvouchedReaders(request, uses.InertFiles, projectLevel);
+        // Projects that run completely on their own, without what depends on them.
+        var runAlone = new Dictionary<string, string>(driftRunAll, Paths.Comparer);
+        AddUnvouchedReaders(request, uses.InertFiles, runAlone);
         AddOutputUsers(request, uses.Outputs, projectLevel, readers);
         AddLoadedOutputUsers(request, projectLevel, readers, uses.UnchangedOutputs);
         var generatorOutput = CompareGeneratorOutput(request, projectLevel, uses.Generators);
@@ -43,7 +45,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             m.Generated.Where(g => g.Framework is null || string.Equals(g.Framework, m.Framework, StringComparison.OrdinalIgnoreCase))));
         var index = new SourceIndexBuilder(logger).Build(request.Graph, request.RepoRoot, affectedProjects, generated);
         // Projects that run completely whatever coverage says have no say in what it can answer.
-        var runsCompletely = RunAll(request.Graph, projectLevel).Keys.Concat(driftRunAll.Keys).ToHashSet(Paths.Comparer);
+        var runsCompletely = RunAll(request.Graph, projectLevel).Keys.Concat(runAlone.Keys).ToHashSet(Paths.Comparer);
         var coverage = new CoverageSelection(request, affectedTests, index, runsCompletely, logger);
 
         // Test projects without a coverage map are decided by name alone; those with one use a second
@@ -53,7 +55,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             ? Trace(request, index, projectLevel, coverage, [.. Bridge(request, index, byName), .. generatorOutput.Changes])
             : byName;
 
-        var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { DriftRunAll = driftRunAll });
+        var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { RunAlone = runAlone });
         decisions = WithFileReaders(decisions, readers, request.CoverageMaps);
         for (var i = 0; i < decisions.Count; i++)
         {
@@ -471,8 +473,11 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         TraceResult WithCoverage,
         CoverageSelection Coverage)
     {
-        /// <summary>Test projects that run completely because their map's drift cannot be bridged, with the reason.</summary>
-        public Dictionary<string, string> DriftRunAll { get; init; } = [];
+        /// <summary>
+        /// Test projects that run completely on their own, with the reason, while the projects depending on them do
+        /// not: their map's drift cannot be bridged, or their map cannot vouch for the readers of an inert file.
+        /// </summary>
+        public Dictionary<string, string> RunAlone { get; init; } = [];
     }
 
     /// <summary>Turns fallbacks, name propagation and coverage into one decision per test project.</summary>
@@ -527,7 +532,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             var classDecisions = decisionsByProject.GetValueOrDefault(project.Path) ?? [];
             classDecisions.Sort(static (a, b) => string.CompareOrdinal(a.TestClass, b.TestClass));
             var runAll = coverage.HasMap(project.Path) ? runAllWithCoverage : runAllByName;
-            if (decision.DriftRunAll.TryGetValue(project.Path, out var reason) || runAll.TryGetValue(project.Path, out reason))
+            if (decision.RunAlone.TryGetValue(project.Path, out var reason) || runAll.TryGetValue(project.Path, out reason))
             {
                 var whole = classDecisions.ConvertAll(d => d with { Selected = true, Kind = ClassDecisionKind.WholeProject, Evidence = reason });
                 result.Add(Log(new TestProjectSelection(project, TestRunMode.All, [], reason) { Decisions = whole }));
@@ -734,8 +739,11 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     /// </summary>
     /// <param name="request">Selection input.</param>
     /// <param name="inertFiles">Changed non-code files the build does not use, with their owners.</param>
-    /// <param name="fallbacks">Project-level fallbacks; updated in place.</param>
-    private void AddUnvouchedReaders(TestSelectionRequest request, List<InertFile> inertFiles, Dictionary<string, string> fallbacks)
+    /// <param name="runAlone">
+    /// Test projects that run completely on their own; updated in place. Not a project-level fallback: a test
+    /// helper project without tests has no map, and its dependents' maps can vouch for themselves (AICentral).
+    /// </param>
+    private void AddUnvouchedReaders(TestSelectionRequest request, List<InertFile> inertFiles, Dictionary<string, string> runAlone)
     {
         foreach (var (file, owner) in inertFiles)
         {
@@ -753,7 +761,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
                     : null;
                 if (unvouched is not null)
                 {
-                    AddFallback(fallbacks, path, $"{file} is not part of the build, but {unvouched}");
+                    AddFallback(runAlone, path, $"{file} is not part of the build, but {unvouched}");
                 }
             }
         }

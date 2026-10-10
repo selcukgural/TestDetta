@@ -146,17 +146,22 @@ ways TestDetta does not observe.
   `app.config` among the `None` items and ship it as the assembly's `.config`).
 - **MSBuild scan** (`NonCodeFileUses`): every `.csproj`/`.fsproj`/`.vbproj`/`.props`/`.targets`/
   `.projitems`/`.proj` under the repository outside `bin`, `obj` and tool folders, read once per analysis
-  and only when an inert candidate exists. Uses: the file's name anywhere in a file's XML after removing
+  and only when an inert candidate exists. Uses: a value in a file's XML that names it, after removing
   comments, `None` items and `Package*` elements (`PackageReadmeFile`, `PackageReleaseNotes`: pack
-  metadata); an item element of a type that is neither a known non-file type (`PackageReference`,
+  metadata); in an imported file (`.props`, `.targets`) its file name is enough, since a relative path there
+  starts from whichever project imports it, while in a project file the path must resolve to the file from
+  the project's folder, or use a property TestDetta cannot resolve (Alba: `IdentityServer.New.csproj`
+  naming its own `README.md` made the root `README.md` a build input); an item element of a type that is neither a known non-file type (`PackageReference`,
   `ProjectReference`, `Using`, ...) nor one the evaluation reports, whose `Include` or `Update` can match
   the file (`$(MSBuildThisFileDirectory)` and `$(MSBuildProjectDirectory)` are resolved, any other
   property, item or metadata reference matches everything); a target that mentions `@(None`; an MSBuild
   file that is not valid XML.
 - **Selection** (`TestSelector`): `FindProjectLevelChanges` takes a `ProjectLevelUses` (generator and
   output uses as before, plus the `NonCodeFileUses` under the readers rule). A non-code file inert in its
-  owner becomes an `InertFile` instead of a fallback; `AddUnvouchedReaders` then runs completely every test
-  project among the owner and its dependents whose map cannot vouch ("README.md is not part of the build,
+  owner becomes an `InertFile` instead of a fallback; `AddUnvouchedReaders` then runs completely, on its own
+  (`Decision.RunAlone`, as an unbridged drift does; a project-level fallback would reach its dependents, and
+  AICentral's test helper project has no tests and no map), every test project among the owner and its
+  dependents whose map cannot vouch ("README.md is not part of the build,
   but it has no coverage map to tell which tests read it" / "its map was recorded before the reads of
   third-party libraries were" / "its map could not see the reads of X.dll"). `FindFileReaders` now takes
   the changed files no project owns plus every project-owned non-code file, under both rules, so readers in

@@ -21,6 +21,9 @@ internal sealed class NonCodeFileUses(string repoRoot)
     private static readonly FrozenSet<string> MsBuildExtensions =
         FrozenSet.Create(StringComparer.OrdinalIgnoreCase, ".csproj", ".fsproj", ".vbproj", ".props", ".targets", ".projitems", ".proj");
 
+    /// <summary>Extensions of project files, whose relative paths start from their own folder.</summary>
+    private static readonly FrozenSet<string> ProjectExtensions = FrozenSet.Create(StringComparer.OrdinalIgnoreCase, ".csproj", ".fsproj", ".vbproj");
+
     /// <summary>Directories that hold no MSBuild file of the repository.</summary>
     private static readonly FrozenSet<string> SkippedDirectories =
         FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "bin", "obj", ".git", ".vs", ".idea", "node_modules", ".testdetta");
@@ -70,7 +73,7 @@ internal sealed class NonCodeFileUses(string repoRoot)
         }
 
         var name = Path.GetFileName(file);
-        if (scan.Mentions.FirstOrDefault(m => m.Text.Contains(name, StringComparison.OrdinalIgnoreCase)) is { File: { } mentioning })
+        if (scan.Mentions.FirstOrDefault(m => m.Names(file, name)) is { File: { } mentioning })
         {
             return $"{Relative(mentioning)} names it";
         }
@@ -125,7 +128,11 @@ internal sealed class NonCodeFileUses(string repoRoot)
             .ToList()
             .ForEach(static e => e.Remove());
         mentions.DescendantNodes().OfType<XComment>().ToList().ForEach(static c => c.Remove());
-        scan.Mentions.Add(new Mention(file, mentions.ToString(SaveOptions.DisableFormatting)));
+        var values = mentions.Descendants().SelectMany(static e => e.Attributes().Select(static a => a.Value))
+            .Concat(mentions.DescendantNodes().OfType<XText>().Select(static t => t.Value))
+            .Where(static v => v.Length > 0)
+            .ToList();
+        scan.Mentions.Add(new Mention(file, values) { InProjectFile = ProjectExtensions.Contains(Path.GetExtension(file)) });
 
         foreach (var element in document.Descendants())
         {
@@ -227,8 +234,62 @@ internal sealed class NonCodeFileUses(string repoRoot)
 
     /// <summary>The searchable text of an MSBuild file.</summary>
     /// <param name="File">The file.</param>
-    /// <param name="Text">Its XML without pack metadata and <c>None</c> items.</param>
-    private sealed record Mention(string File, string Text);
+    /// <param name="Values">Its attribute values and texts, without comments, pack metadata and <c>None</c> items.</param>
+    private sealed record Mention(string File, List<string> Values)
+    {
+        /// <summary>Characters that end a path inside an MSBuild value: lists, commands, property function arguments.</summary>
+        private static readonly char[] Separators = [';', ' ', '\t', '\n', '\r', '"', '\'', ',', '(', ')', '=', '>', '<', '|'];
+
+        /// <summary>
+        /// True for a project file (<c>.csproj</c>, <c>.fsproj</c>, <c>.vbproj</c>), where a relative path is relative to the
+        /// file itself. In an imported file it is relative to whichever project imports it, so there the name is enough.
+        /// </summary>
+        public bool InProjectFile { get; init; }
+
+        /// <summary>
+        /// True when a value can name <paramref name="file"/>. An imported file names it by its file name. A project file
+        /// names it by a path that resolves to it from the project's folder, or by any path ending in its name that uses a
+        /// property, item or metadata TestDetta cannot resolve (a README named in another project's file is another README).
+        /// </summary>
+        /// <param name="file">Normalized full path of the changed file.</param>
+        /// <param name="name">Its file name.</param>
+        public bool Names(string file, string name)
+        {
+            var directory = Path.GetDirectoryName(File)!;
+            foreach (var value in Values)
+            {
+                if (!value.Contains(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!InProjectFile)
+                {
+                    return true;
+                }
+
+                var resolved = value.Replace("$(MSBuildThisFileDirectory)", directory + "/", StringComparison.OrdinalIgnoreCase)
+                    .Replace("$(MSBuildProjectDirectory)", directory, StringComparison.OrdinalIgnoreCase);
+                if (resolved.Contains("$(", StringComparison.Ordinal) || resolved.Contains("@(", StringComparison.Ordinal) || resolved.Contains("%(", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                foreach (var part in resolved.Split(Separators, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var path = part.Replace('\\', '/');
+                    if (path.EndsWith(name, StringComparison.OrdinalIgnoreCase)
+                        && (path.Length == name.Length || path[^(name.Length + 1)] == '/')
+                        && Paths.Comparer.Equals(Paths.Normalize(Path.IsPathRooted(path) ? path : Path.Combine(directory, path)), file))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>One item element's patterns.</summary>
     /// <param name="File">The MSBuild file it is in.</param>

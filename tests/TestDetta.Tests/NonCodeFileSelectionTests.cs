@@ -122,6 +122,38 @@ public sealed class NonCodeFileSelectionTests : IDisposable
     }
 
     [Fact]
+    public void A_test_project_without_a_map_runs_alone_and_its_dependents_keep_their_readers()
+    {
+        // A test helper project without tests: recognised as a test project, so it has no map.
+        _repo.Write("tests/Helpers/Helpers.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" />
+                <ProjectReference Include="../../src/Lib/Lib.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Lib.Tests/Lib.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" />
+                <ProjectReference Include="../../src/Lib/Lib.csproj" />
+                <ProjectReference Include="../Helpers/Helpers.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Commit("helpers");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var selections = new AnalysisPipeline(NullLoggerFactory.Instance, new Evaluations(Root) { WithHelpers = true })
+            .Run(_repo.Root, "main", new AnalysisOptions()).Tests;
+
+        Assert.Equal(TestRunMode.All, selections.Single(static s => s.Project.Path.EndsWith("Helpers.csproj", StringComparison.Ordinal)).Mode);
+        Assert.Equal(["Lib.Tests.DocsTests"], selections.Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal)).TestClasses);
+    }
+
+    [Fact]
     public void A_file_the_build_copies_runs_its_dependents_completely()
     {
         WriteMaps();
@@ -149,6 +181,41 @@ public sealed class NonCodeFileSelectionTests : IDisposable
 
         Assert.Equal(TestRunMode.All, selection.Mode);
         Assert.Contains("src/Lib/Directory.Build.targets names it", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Another_projects_file_naming_its_own_readme_names_no_other()
+    {
+        _repo.Write("src/Gen/Gen.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <Target Name="Notes" BeforeTargets="Build"><ReadLinesFromFile File="README.md" /></Target>
+            </Project>
+            """);
+        _repo.Commit("gen notes");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.Equal(["Lib.Tests.DocsTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void A_project_file_naming_its_file_by_a_relative_path_is_a_build_input()
+    {
+        _repo.Write("src/Lib/Lib.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <Target Name="Notes" BeforeTargets="Build"><Exec Command="cat ./README.md" /></Target>
+            </Project>
+            """);
+        _repo.Commit("lib notes");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("src/Lib/Lib.csproj names it", selection.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -270,6 +337,9 @@ public sealed class NonCodeFileSelectionTests : IDisposable
     /// <param name="root">Repository root as git reports it.</param>
     private sealed class Evaluations(string root) : IProjectEvaluator
     {
+        /// <summary>True when the repository has the test helper project, which Lib.Tests references.</summary>
+        public bool WithHelpers { get; init; }
+
         public IReadOnlyDictionary<string, EvaluatedProject>? Evaluate(string repoRoot, IReadOnlyCollection<string> projects)
         {
             string Full(string relative) => Paths.Normalize(Path.Combine(root, relative));
@@ -280,17 +350,24 @@ public sealed class NonCodeFileSelectionTests : IDisposable
                 };
 
             var generator = new[] { Full("src/Gen/Gen.csproj") }.ToHashSet(Paths.Comparer);
-            return new Dictionary<string, EvaluatedProject>(Paths.Comparer)
+            string[] libTestsReferences = WithHelpers ? ["src/Lib/Lib.csproj", "src/Gen/Gen.csproj", "tests/Helpers/Helpers.csproj"] : ["src/Lib/Lib.csproj", "src/Gen/Gen.csproj"];
+            var evaluations = new Dictionary<string, EvaluatedProject>(Paths.Comparer)
             {
                 [Full("src/Lib/Lib.csproj")] = Project(false, [], ["src/Lib/Calc.cs", "src/Lib/README.md", "src/Lib/seed.json"], ["src/Lib/README.md"]),
                 [Full("src/Gen/Gen.csproj")] = Project(false, [], ["src/Gen/Generator.cs", "src/Gen/README.md"], ["src/Gen/README.md"]),
-                [Full("tests/Lib.Tests/Lib.Tests.csproj")] = Project(true, ["src/Lib/Lib.csproj", "src/Gen/Gen.csproj"], ["tests/Lib.Tests/Tests.cs"], []) with
+                [Full("tests/Lib.Tests/Lib.Tests.csproj")] = Project(true, libTestsReferences, ["tests/Lib.Tests/Tests.cs"], []) with
                 {
                     OpaqueReferences = generator,
                     GeneratorReferences = generator,
                 },
                 [Full("tests/Seed.Tests/Seed.Tests.csproj")] = Project(true, [], ["tests/Seed.Tests/Tests.cs"], []),
             };
+            if (WithHelpers)
+            {
+                evaluations[Full("tests/Helpers/Helpers.csproj")] = Project(true, ["src/Lib/Lib.csproj"], [], []);
+            }
+
+            return evaluations;
         }
     }
 }
