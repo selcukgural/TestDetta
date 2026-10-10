@@ -46,11 +46,32 @@ function versionConfig() {
           headers: Object.fromEntries(rule.headers.map((header) => [header.key, header.value])),
         }));
         break;
+      case "redirects":
+        config.redirects = value.map((rule) => ({
+          regex: sourceRegex(rule.source),
+          location: rule.destination,
+          statusCode: rule.type ?? 301,
+        }));
+        break;
       default:
         throw new Error(`firebase.json: hosting.${key} is not supported by deploy.mjs; add it there.`);
     }
   }
   return config;
+}
+
+// A firebase.json source path ("/de/:path*") as the RE2 expression the API takes ("^/de/(?P<path>.*)$"): ":name*" captures
+// the rest of the path and ":name" one segment, under names the destination refers to the same way.
+function sourceRegex(source) {
+  const parts = source.split(/(:[A-Za-z_][A-Za-z0-9_]*\*?)/);
+  const pattern = parts.map((part) => {
+    const capture = part.match(/^:([A-Za-z_][A-Za-z0-9_]*)(\*?)$/);
+    if (capture) {
+      return capture[2] ? `(?P<${capture[1]}>.*)` : `(?P<${capture[1]}>[^/]+)`;
+    }
+    return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  });
+  return `^${pattern.join("")}$`;
 }
 
 function walk(directory) {
