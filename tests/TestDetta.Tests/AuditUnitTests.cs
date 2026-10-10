@@ -76,7 +76,7 @@ public sealed class AuditUnitTests
         Assert.False(CliOptions.TryParse(["audit", "--shadow"], "/repo", out _, out error));
         Assert.Contains("Unknown option for td audit", error, StringComparison.Ordinal);
         Assert.False(CliOptions.TryParse(["affected", "--", "-c", "Release"], "/repo", out _, out error));
-        Assert.Contains("td test and td audit", error, StringComparison.Ordinal);
+        Assert.Contains("td test, td record and td audit", error, StringComparison.Ordinal);
 
         // td record keeps its own --parallel.
         Assert.True(CliOptions.TryParse(["record", "--parallel", "3"], "/repo", out var options, out _));

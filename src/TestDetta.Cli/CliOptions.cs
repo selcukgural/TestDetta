@@ -187,6 +187,12 @@ internal sealed record RecordSettings(string Configuration, IReadOnlyList<string
 
     /// <summary>When an incremental recording records a project in full instead.</summary>
     public IncrementalThresholds Thresholds { get; init; } = new();
+
+    /// <summary>
+    /// The team's <c>dotnet test</c> arguments after <c>--</c>: recording runs under their filter and settings, with their
+    /// other options (docs/design/team-test-configuration.md).
+    /// </summary>
+    public IReadOnlyList<string> DotnetTestArguments { get; init; } = [];
 }
 
 /// <summary>
@@ -288,7 +294,8 @@ internal sealed record CliOptions(
         Usage:
           td affected [options]              Print the projects and tests a change affects
           td test [options] [-- <args>]      Run only the tests a change affects
-          td record [options]                Run all tests with coverage and store the map in .testdetta/coverage
+          td record [options] [-- <args>]    Run all tests with coverage and store the map in .testdetta/coverage; <args> are
+                                             your own dotnet test arguments (filter, settings), kept while recording
           td license status [options]        Check the TestDetta license and show what it covers
           td license install <license|file>  Store a license in ~/.testdetta/license (when no CI secret can hold it)
           td --version                       Print the version of td
@@ -450,13 +457,15 @@ internal sealed record CliOptions(
 
             if (arg == "--")
             {
-                if (options.Command is not (CliCommand.Test or CliCommand.Audit))
+                if (options.Command is not (CliCommand.Test or CliCommand.Audit or CliCommand.Record))
                 {
-                    error = "'--' is only valid for td test and td audit";
+                    error = "'--' is only valid for td test, td record and td audit";
                     return false;
                 }
 
-                options = options with { Test = options.Test with { DotnetTestArguments = [.. args[(i + 1)..]] } };
+                options = options.Command == CliCommand.Record
+                    ? options with { Record = options.Record with { DotnetTestArguments = [.. args[(i + 1)..]] } }
+                    : options with { Test = options.Test with { DotnetTestArguments = [.. args[(i + 1)..]] } };
                 return Consistent(options, out error);
             }
 

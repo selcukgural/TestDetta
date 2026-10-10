@@ -4,7 +4,7 @@
 
 <pre><code>td affected [options]              Print the projects and tests a change affects
 td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
-td record [options]                Run all tests with coverage and store the map
+td record [options] [-- &lt;args&gt;]    Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
 td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
 td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection
@@ -128,6 +128,10 @@ td test -- --filter "Category!=Integration"</code></pre>
 <h3 id="project"><code>--project &lt;path&gt;</code></h3>
 <p>Record only this test project, relative to the repository root; repeat it for several. Leave out projects that cannot run in CI, such as integration tests that need a database; they are then decided by name.</p>
 <pre><code>td record --project tests/Shop.Tests/Shop.Tests.csproj --project tests/Api.Tests/Api.Tests.csproj</code></pre>
+
+<h3 id="record-args"><code>-- &lt;args&gt;</code></h3>
+<p>Your own <code>dotnet test</code> arguments, the ones your test job uses: recording runs under their filter and run settings, combined with its own, and passes their other options as given. A filter and run settings set in your project files are kept as well. See <a href="/docs/test-configuration/">Your test configuration</a>.</p>
+<pre><code>td record -- --filter "Category!=Integration" --settings ci.runsettings</code></pre>
 
 <h3 id="parallel"><code>--parallel &lt;n&gt;</code></h3>
 <p>Spread each project's test classes over <em>n</em> test processes to record faster. Each process still runs its tests one at a time. Your suite must tolerate several test processes at once (no fixed ports or shared files). Default: <code>1</code>.</p>

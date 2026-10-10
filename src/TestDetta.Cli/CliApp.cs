@@ -522,6 +522,7 @@ internal static partial class CliApp
                 {
                     NoBuild = options.Record.NoBuild,
                     Classes = step.Kind == StepKind.Partial ? step.Classes : null,
+                    DotnetTestArguments = options.Record.DotnetTestArguments,
                 };
                 CoverageMap map;
                 bool passed;

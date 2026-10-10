@@ -35,6 +35,7 @@ const docsNav = [
   ["/docs/validate/", "docValidate", "navGroupStart"],
   ["/docs/how-it-works/", "docHowItWorks", "navGroupConcepts"],
   ["/docs/what-runs-everything/", "docWhatRunsEverything", "navGroupConcepts"],
+  ["/docs/test-configuration/", "docTestConfiguration", "navGroupConcepts"],
   ["/docs/time-saved/", "docTimeSaved", "navGroupConcepts"],
   ["/docs/github-actions/", "docGitHubActions", "navGroupSetup"],
   ["/docs/other-ci/", "docOtherCi", "navGroupSetup"],

@@ -133,6 +133,45 @@ internal static class ResultWriter
     }
 
     /// <summary>
+    /// What TestDetta kept of each run test project's own test configuration (docs/design/team-test-configuration.md), one
+    /// item per project that has any: its test case filter, run settings file and testing platform arguments, which every
+    /// run TestDetta starts keeps. Empty when no run project sets any.
+    /// </summary>
+    /// <param name="tests">Decisions per test project.</param>
+    /// <param name="repoRoot">Repository root, for the paths.</param>
+    internal static List<(string Project, string Kept)> TeamConfiguration(IReadOnlyList<TestProjectSelection> tests, string repoRoot)
+    {
+        var lines = new List<(string, string)>();
+        foreach (var test in tests)
+        {
+            if (test.Mode == TestRunMode.Skipped || test.Project.TestConfiguration is not { } configuration)
+            {
+                continue;
+            }
+
+            var parts = new List<string>();
+            if (configuration.CaseFilter is { } filter)
+            {
+                parts.Add($"test case filter {filter}");
+            }
+
+            if (configuration.RunSettings is { } settings)
+            {
+                parts.Add($"run settings {Path.GetRelativePath(repoRoot, settings).Replace('\\', '/')}");
+            }
+
+            if (configuration.PlatformArguments is { } arguments)
+            {
+                parts.Add($"testing platform arguments {arguments}");
+            }
+
+            lines.Add((Path.GetRelativePath(repoRoot, test.Project.Path).Replace('\\', '/'), string.Join(", ", parts)));
+        }
+
+        return lines;
+    }
+
+    /// <summary>
     /// A line about the license when it matters to the reader: only when the license is enforced and
     /// it is not simply valid (a warning, or every test running). Null otherwise, so runs with a valid
     /// license, and runs before licensing was enforced, stay quiet.

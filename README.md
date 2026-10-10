@@ -57,7 +57,7 @@ A filter that matches no test is treated as a TestDetta bug: the project is run 
 | `td affected [--format text\|json\|paths\|commands] [--build]` | Print what a change affects and why. `--build` builds the test projects that use a changed source generator, to compare what it generates; without it, an existing build newer than the sources is read. |
 | `td test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
 | `td test --shadow [--shadow-no-classify] [--shadow-*-timeout <time>] [--shadow-classify-budget <time>] [-- <dotnet test args>]` | Shadow mode: run every test your own `dotnet test` arguments run, compare the run with what the selection would have run, and rerun each failing class it would have left out to tell a miss from a flaky or pre-existing failure. Needs no license. Testing-platform projects need a build first and `--no-build`. See [docs/design/shadow-mode.md](docs/design/shadow-mode.md). |
-| `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. A test project that does not build or run on the machine (a mobile app without its workload) gets no map and is decided by name; the command fails only when no map could be written. |
+| `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build] [-- <dotnet test args>]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. Arguments after `--` are your own `dotnet test` arguments: recording runs under their filter and settings. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. A test project that does not build or run on the machine (a mobile app without its workload) gets no map and is decided by name; the command fails only when no map could be written. |
 | `td audit [--target-broken <n>] [--max-mutants <n>] [--budget <time>] [--parallel <n>] [--member <Type.Member>]... [-- <dotnet test args>]` | Check the selection on your own code: break members one at a time with IL mutants in a copy of the working tree (your sources and build output are only read), run every test that can see each change, and report every failing class the selection left out, with the 95% upper bound of the miss rate, the worst case counting unjudged changes as misses, and whether the run meets shadow mode's graduation criterion. Needs no license. Exit code 3 on a miss. See [docs/design/audit.md](docs/design/audit.md). |
 | `td license status` | Check the license and show what it covers. |
 | `td license install <license\|file>` | Store a license in `~/.testdetta/license`, for machines where no CI secret can hold it. |
@@ -75,6 +75,13 @@ your change, and traces new code by name. When something in between cannot be de
 (a build file, `appsettings.json`), the affected test projects run completely; `--drift-fallback name`
 decides them by name instead, as without a map (faster, but blind to calls wired by configuration).
 Add `.testdetta/` to `.gitignore`.
+
+TestDetta narrows your test runs and never widens them: a test case filter (`VSTestTestCaseFilter`, your
+`--filter`) is combined with its class filter, recording runs under a copy of your run settings with only its own
+elements added, and testing platform arguments you set are left to the platform. Pass the arguments your test job
+uses (`td test -- …`, `td record -- …`, the action's `dotnet-test-args`). See
+[docs/design/team-test-configuration.md](docs/design/team-test-configuration.md) and the site's "Your test
+configuration" page.
 
 A changed file in a project folder that is not code (`README.md`, `CHANGELOG.md`, a JSON file) runs
 only the test classes the map saw read it, when the build neither compiles, embeds, copies nor hands it
@@ -142,7 +149,7 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `projects` | all test projects | record mode: `.csproj` paths, one per line |
 | `parallel` | `1` | record mode: test processes per project (the suite must tolerate several at once) |
 | `no-build` | `false` | record mode: `true` to record the build an earlier step made with the same `configuration` |
-| `dotnet-test-args` | | test, shadow and audit modes: extra `dotnet test` arguments; in shadow mode name your solution here to run it as one command, and with testing-platform projects build in a step before and add `--no-build` |
+| `dotnet-test-args` | | test, shadow, audit and record modes: extra `dotnet test` arguments (your test job's filter and settings are kept in every run and while recording); in shadow mode name your solution here to run it as one command, and with testing-platform projects build in a step before and add `--no-build` |
 | `max-map-age` | `50` | test, shadow and audit modes: commits a map may be behind the merge base (0: only an exact map) |
 | `drift-fallback` | `all` | test, shadow and audit modes: `all` runs test projects completely when the changes since an older map include a build file or configuration; `name` decides them by name |
 | `non-code-files` | | test, shadow and audit modes: `readers` runs only the test classes that read a changed non-code file the build does not use; `project` runs its project and the projects depending on it completely; empty keeps the default (`readers`) |

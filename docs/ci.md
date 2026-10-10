@@ -9,6 +9,11 @@ see the README). Everywhere else, two commands and one folder do the same:
   newest map at or before the merge base. It takes the nearest one within 50 first-parent commits
   (`--max-map-age`), and bridges the changes in between. Then it runs only the affected tests.
 
+Give both commands the `dotnet test` arguments your own test job uses, after `--`
+(`td record --maps-dir <maps> -- --filter "Category!=Integration"`): TestDetta keeps their filter and
+settings, and those set in your project files, in every run it starts and while recording
+(docs/design/team-test-configuration.md).
+
 `<maps>` is an ordinary folder. Keep it wherever your CI can keep files between pipelines:
 - a disk shared by the agents (common on-premises: `/srv/testdetta-maps/<repository>`);
 - object storage (S3, Azure Blob, GCS, MinIO) synced before and after.

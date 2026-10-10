@@ -1166,7 +1166,8 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
         {
             var location = DotnetTestLocation.For(workspace.RepoRoot, project.Path);
             var arguments = location.TestArguments(workspace.RepoRoot, project.Path);
-            arguments.AddRange(TestFilter.Arguments(ask.Classes, exclude: true, TestFilter.SyntaxFor(project, location.Mode)));
+            arguments.AddRange(TestDetta.Cli.AuditTrial.ExcludingWithin(ask.Classes, TestFilter.SyntaxFor(project, location.Mode), TestFilter.WithTeamFilter([], project, location.Mode))
+                ?? TestFilter.Arguments(ask.Classes, exclude: true, TestFilter.SyntaxFor(project, location.Mode)));
             return new TestInvocation(new TestProjectSelection(project, TestRunMode.Filtered, [], "the classes TestDetta left out"), arguments, location);
         }
 

@@ -1,10 +1,10 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: b1a677165c35 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 15dc7be3d254 -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
 <pre><code>td affected [options]              Print the projects and tests a change affects
 td test [options] [-- &lt;args&gt;]      Run only the tests a change affects
-td record [options]                Run all tests with coverage and store the map
+td record [options] [-- &lt;args&gt;]    Run all tests with coverage and store the map
 td license status [options]        Check the license and show what it covers
 td license install &lt;license|file&gt;  Store a license in ~/.testdetta/license
 td audit [options] [-- &lt;args&gt;]     Break your code on purpose and check the selection
@@ -128,6 +128,10 @@ td test -- --filter "Category!=Integration"</code></pre>
 <h3 id="project"><code>--project &lt;path&gt;</code></h3>
 <p>Yalnızca bu test projesini kaydeder; yol depo köküne görelidir. Birden fazla proje için tekrarlayın. CI'da çalışamayan projeleri, örneğin veritabanı gerektiren entegrasyon testlerini, dışarıda bırakın; bunlar için isimlere göre karar verilir.</p>
 <pre><code>td record --project tests/Shop.Tests/Shop.Tests.csproj --project tests/Api.Tests/Api.Tests.csproj</code></pre>
+
+<h3 id="record-args"><code>-- &lt;args&gt;</code></h3>
+<p>Kendi <code>dotnet test</code> argümanlarınız, yani test işinizin kullandıkları: kayıt, bunların filtresi ve run settings dosyasıyla, kendi ekledikleriyle birleştirilerek koşar; diğer seçenekleriniz olduğu gibi geçer. Proje dosyalarınızda tanımlı bir filtre ve run settings de korunur. Bkz. <a href="/docs/test-configuration/">Test yapılandırmanız</a>.</p>
+<pre><code>td record -- --filter "Category!=Integration" --settings ci.runsettings</code></pre>
 
 <h3 id="parallel"><code>--parallel &lt;n&gt;</code></h3>
 <p>Daha hızlı kayıt için her projenin test sınıflarını <em>n</em> test sürecine dağıtır. Her süreç testlerini yine birer birer çalıştırır. Test paketinizin aynı anda birden fazla test sürecini kaldırabilmesi gerekir (sabit port ya da paylaşılan dosya olmamalı). Varsayılan: <code>1</code>.</p>

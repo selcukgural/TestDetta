@@ -20,7 +20,7 @@ namespace TestDetta.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 7;
+    private const int EvaluatorVersion = 8;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -76,6 +76,8 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
               <_TestDettaBuilt Include="@(None->'%(FullPath)')" Condition="'%(None.Filename)%(None.Extension)' == 'app.config' or '%(None.Filename)%(None.Extension)' == 'web.config'" />
               <TestDettaEvaluated Include="@(_TestDettaInert)" Kind="Inert" Project="$(MSBuildProjectFullPath)" />
               <TestDettaEvaluated Include="@(_TestDettaBuilt)" Kind="Built" Project="$(MSBuildProjectFullPath)" />
+              <!-- How the team runs this project's tests (docs/design/team-test-configuration.md). -->
+              <TestDettaEvaluated Include="$(MSBuildProjectFullPath)" Kind="TestConfiguration" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" CaseFilter="$(VSTestTestCaseFilter)" RunSettings="$(RunSettingsFilePath)" VSTestSetting="$(VSTestSetting)" PlatformArguments="$(TestingPlatformCommandLineArguments)" />
               <TestDettaEvaluated Include="$(DefineConstants)" Kind="Define" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />
               <TestDettaEvaluated Include="$(MSBuildProjectFullPath)" Kind="Framework" Project="$(MSBuildProjectFullPath)" Framework="$(TargetFramework)" />
             </ItemGroup>
@@ -271,7 +273,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     new XElement("Output", new XAttribute("TaskParameter", "TargetOutputs"), new XAttribute("ItemName", "TestDettaEvaluated"))),
                 new XElement("WriteLinesToFile",
                     new XAttribute("File", Escape(output)),
-                    new XAttribute("Lines", "@(TestDettaEvaluated->'%(Kind)%09%(Project)%09%(Identity)%09%(IsTestProject)%09%(AssemblyName)%09%(Framework)%09%(RootNamespace)')"),
+                    new XAttribute("Lines", "@(TestDettaEvaluated->'%(Kind)%09%(Project)%09%(Identity)%09%(IsTestProject)%09%(AssemblyName)%09%(Framework)%09%(RootNamespace)%09%(CaseFilter)%09%(RunSettings)%09%(VSTestSetting)%09%(PlatformArguments)')"),
                     new XAttribute("Overwrite", "true")))));
         return document.ToString();
     }
@@ -324,6 +326,16 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 case "Item":
                     builder.Items.Add(Paths.Normalize(fields[2]));
                     break;
+                case "TestConfiguration":
+                    // The first framework that sets anything stands for the project: these rarely differ by framework.
+                    if (builder.TestConfiguration is null && fields.Length > 10)
+                    {
+                        var configuration = TestConfiguration.From(
+                            fields[7], Path.GetDirectoryName(project)!, fields[8].Length > 0 ? fields[8] : fields[9], fields[10]);
+                        builder.TestConfiguration = configuration.IsEmpty ? null : configuration;
+                    }
+
+                    break;
                 case "Inert":
                     builder.Inert.Add(Paths.Normalize(fields[2]));
                     break;
@@ -358,6 +370,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 GeneratorReferences = b.Value.GeneratorReferences,
                 // A file a framework copies or builds is no inert file, whatever another framework does with it.
                 InertItems = b.Value.Inert.Where(f => !b.Value.Built.Contains(f)).ToHashSet(Paths.Comparer),
+                TestConfiguration = b.Value.TestConfiguration,
             },
             Paths.Comparer);
     }
@@ -395,6 +408,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     OpaqueReferences = (c.Value.OpaqueReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
                     GeneratorReferences = (c.Value.GeneratorReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
                     InertItems = c.Value.InertItems?.Select(Full).ToHashSet(Paths.Comparer),
+                    TestConfiguration = c.Value.TestConfiguration is { } configuration
+                        ? configuration with { RunSettings = configuration.RunSettings is { } settings ? Full(settings) : null }
+                        : null,
                 },
                 Paths.Comparer);
         }
@@ -423,6 +439,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                 OpaqueReferences = [.. p.Value.OpaqueReferences.Select(Relative)],
                 GeneratorReferences = [.. p.Value.GeneratorReferences.Select(Relative)],
                 InertItems = p.Value.InertItems is { } inert ? [.. inert.Select(Relative).Order(StringComparer.Ordinal)] : null,
+                TestConfiguration = p.Value.TestConfiguration is { } configuration
+                    ? configuration with { RunSettings = configuration.RunSettings is { } settings ? Relative(settings) : null }
+                    : null,
             });
         try
         {
@@ -470,6 +489,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
         /// <summary>Files of item types the build compiles, copies or generates from, under any framework.</summary>
         public HashSet<string> Built { get; } = new(Paths.Comparer);
 
+        /// <summary>See <see cref="EvaluatedProject.TestConfiguration"/>.</summary>
+        public TestConfiguration? TestConfiguration { get; set; }
+
         /// <summary>Preprocessor symbols by target framework; see <see cref="EvaluatedProject.SymbolSets"/>.</summary>
         public Dictionary<string, SortedSet<string>> Symbols { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
@@ -496,6 +518,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 
         /// <summary>See <see cref="EvaluatedProject.InertItems"/>; null in caches written before they were read.</summary>
         public List<string>? InertItems { get; init; }
+
+        /// <summary>See <see cref="EvaluatedProject.TestConfiguration"/>, its run settings relative to the repository.</summary>
+        public TestConfiguration? TestConfiguration { get; init; }
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "MSBuild evaluated {Evaluated} of {Count} project(s) in {Seconds:0.0} s")]

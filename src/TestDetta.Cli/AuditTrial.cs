@@ -731,7 +731,7 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
     /// <param name="classes">Runtime class names.</param>
     /// <param name="project">The test project.</param>
     private List<string>? Within(IReadOnlyCollection<string> classes, AuditProject project) =>
-        TestFilter.WithinUserFilter(classes, project.Syntax, context.UserArguments) is var (filter, others) ? [.. filter, .. others] : null;
+        TestFilter.WithinUserFilter(classes, project.Syntax, TestFilter.WithTeamFilter(context.UserArguments, project.Project, project.Mode)) is var (filter, others) ? [.. filter, .. others] : null;
 
     /// <summary>
     /// The arguments that run every class of a project but <paramref name="classes"/>, within the user's own filter, or
@@ -739,7 +739,8 @@ internal sealed class AuditTrial(AuditContext context, AuditHooks hooks, Cancell
     /// </summary>
     /// <param name="classes">Runtime class names the selection ran.</param>
     /// <param name="project">The test project.</param>
-    private List<string>? Excluding(IReadOnlyCollection<string> classes, AuditProject project) => ExcludingWithin(classes, project.Syntax, context.UserArguments);
+    private List<string>? Excluding(IReadOnlyCollection<string> classes, AuditProject project) =>
+        ExcludingWithin(classes, project.Syntax, TestFilter.WithTeamFilter(context.UserArguments, project.Project, project.Mode));
 
     /// <summary>
     /// See <see cref="Excluding"/>. A VSTest filter of the user's is joined with the excluding filter as
