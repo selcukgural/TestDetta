@@ -41,3 +41,33 @@ A miss would need a test whose result depends on the changed body without the bo
 class while the map was recorded. A reflection-found type's code runs where the framework creates and calls
 it, inside the tests that use it, which the map records; code that ran before or between tests is excluded by
 the outside-test and initialization conditions. Measured on the corpus with mutants before shipping.
+
+## Measured (2026-10-10)
+
+The triage's count did not size the gain. The NLog reason "the change or its metadata reached it" covered two
+paths: the change in the type itself, which this rule answers, and a type reached by name through its base type
+(`RegexReplaceLayoutRendererWrapper` names `LayoutRenderer`, which the change reached), which it does not. NLog
+and Argu selected exactly the same classes with and without the rule (100 mutants each; 0 missed of 55 and
+64 failing mutants).
+
+To find where the rule changes anything, every library repository was explained before and after it
+(`--explain --any-recording`, no build, no test run), and `selectedShare` was compared per change. Of about
+1,370 explained changes in 14 repositories, 12 selected less, none more:
+
+| Repository | Narrower changes | Mean share before → after |
+|---|---|---|
+| Lamar | 4 | 38.3 % → 34.5 % |
+| Open XML SDK | 3 | 31.9 % → 30.8 % |
+| FluentValidation, Serilog, Markdig, Carter, OpenTelemetry | 1 each | down by 1 point or less |
+
+Roslynator, MimeKit, Vogen, immediate-handlers and Argu lost the reason but kept the same selections:
+another reason selects those classes. protobuf-net and Mapperly could not be explained (their generator
+build fails in explain mode).
+
+Full evaluations with the rule on the seven repositories with a narrower change (the 100-mutant sample the
+explain used, so the 12 are in it): **0 missed of 437 failing mutants**. Of the 12 narrower changes, three
+in Open XML SDK broke tests, and every failing class stayed selected; the others broke no test, so the
+classes the rule leaves out are ones no test needed.
+
+The rule is safe and small. The larger case, a reflection-found type reached by name through its base type,
+is a separate proposal (NLog).
