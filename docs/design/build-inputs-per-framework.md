@@ -50,6 +50,14 @@ A changed source generator already compares what it writes framework by framewor
 a framework the map holds no code of runs the project ("its map holds no generated code of net10.0, the framework
 the tests run for").
 
+Measured on immediate-handlers (69 sampled changes, maps recorded for net10.0), full evaluations with the binary
+before and after on the same sample and cached outcomes: **0 missed of 39 failing mutants** both times; the mean
+share went from 61.6 % to 59.6 %. 22 changes selected less and 23 more. The ones that select more are generator
+changes: the comparison now runs, and the generated members it finds changed are traced like code changes, which
+likely selects more in the other test project (not verified per project: `--explain` cannot build the generator
+copy, and the result file keeps no per-project share). The gain is small; the rule is kept because it is the same
+rule as for build inputs and it is what a team running with `-f` needs.
+
 ## Safety
 
 Selection narrows only where every framework that will run was compared and found equal; that is the rule a
