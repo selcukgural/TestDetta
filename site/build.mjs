@@ -25,7 +25,7 @@ const dist = join(root, "dist");
 const site = JSON.parse(readFileSync(join(root, "site.json"), "utf8"));
 
 // English first: it is the source and is served at the root; the others under /<code>/.
-const languages = ["en", "tr", "de", "ja", "es"];
+const languages = ["en", "tr"];
 
 // Docs navigation, in reading order: [path, string key of its title, string key of its group]. The
 // sidebar shows a heading wherever the group changes; the pager walks the list in this order.

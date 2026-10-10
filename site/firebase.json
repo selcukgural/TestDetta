@@ -50,6 +50,38 @@
           }
         ]
       }
+    ],
+    "redirects": [
+      {
+        "source": "/de/:path*",
+        "destination": "/:path",
+        "type": 301
+      },
+      {
+        "source": "/ja/:path*",
+        "destination": "/:path",
+        "type": 301
+      },
+      {
+        "source": "/es/:path*",
+        "destination": "/:path",
+        "type": 301
+      },
+      {
+        "source": "/de",
+        "destination": "/",
+        "type": 301
+      },
+      {
+        "source": "/ja",
+        "destination": "/",
+        "type": 301
+      },
+      {
+        "source": "/es",
+        "destination": "/",
+        "type": 301
+      }
     ]
   }
 }

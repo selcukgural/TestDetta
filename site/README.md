@@ -10,15 +10,16 @@ The build also writes `sitemap.xml` (every page in every language, with hreflang
 
 ## Languages
 
-English (`src/`) is the source. Turkish, German, Japanese and Spanish live in `i18n/<lang>/` with
-the same paths, and the interface strings (menus, footer, docs navigation) in
-`i18n/strings/<lang>.json`. English is served at `/`, the others at `/tr/`, `/de/`, `/ja/`, `/es/`.
+English (`src/`) is the source. Turkish lives in `i18n/tr/` with the same paths, and the interface strings
+(menus, footer, docs navigation) in `i18n/strings/<lang>.json`. English is served at `/`, Turkish at `/tr/`.
+German, Japanese and Spanish were removed on 2026-10-10 (owner); `firebase.json` redirects their old
+addresses (`/de/`, `/ja/`, `/es/`) to the English page, so indexed links keep working.
 
-**Every change to a page updates all five languages in the same commit.** Each translation
-records the English page it was made from (`source: <hash>` in its front matter; `node build.mjs
---hashes` prints the current ones). The build fails when a translation is missing or its English
-page changed since, and lists them; `--allow-stale` builds anyway with English in their place, for
-local previews only. Code, command output, option names and placeholders are never translated.
+**Every change to a page updates both languages in the same commit.** The Turkish translation records
+the English page it was made from (`source: <hash>` in its front matter; `node build.mjs --hashes` prints
+the current ones). The build fails when a translation is missing or its English page changed since, and
+lists them; `--allow-stale` builds anyway with English in their place, for local previews only. Code,
+command output, option names and placeholders are never translated.
 
 ## Images
 
@@ -98,4 +99,4 @@ It reads the round's `summary.md` (and each repository's `synthetic.md` for the 
 `--override` folder replaces the round's results for the repositories it holds. The chart and table sit between
 `<!-- corpus:chart -->` and `<!-- corpus:table -->` markers; the hard-case tiles carry the tag they count
 (`data-tag`). Prose that describes a round (its dates, what the misses were, which repositories gain most) is
-edited by hand in five languages, and the translations' source hashes updated as for any change.
+edited by hand in both languages, and the translation's source hash updated as for any change.

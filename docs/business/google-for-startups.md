@@ -57,7 +57,7 @@ for public repositories, 30-day trial without a card. Polar is the merchant of r
 licenses for networks without internet access.
 
 **Traction.** Pre-revenue. Product built and evaluated (above); licensing and email delivery implemented;
-site live at https://testdetta.com in five languages. [Launch date, trial users, design partners.]
+site live at https://testdetta.com in English and Turkish. [Launch date, trial users, design partners.]
 
 **Use of credits.** Cloud Run for the license service with Cloud SQL (PostgreSQL) and Secret Manager;
 Firebase Hosting for the site; Compute Engine runners for the 41-repository evaluation corpus, rerun before
