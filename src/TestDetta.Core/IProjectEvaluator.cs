@@ -49,4 +49,7 @@ public sealed record EvaluatedProject(
 
     /// <summary>The part of <see cref="Items"/> the build does not use; see <see cref="ProjectNode.InertItems"/>. Null when unknown.</summary>
     public IReadOnlySet<string>? InertItems { get; init; }
+
+    /// <summary>How the team runs the project's tests; see <see cref="ProjectNode.TestConfiguration"/>. Null when it sets nothing.</summary>
+    public TestConfiguration? TestConfiguration { get; init; }
 }

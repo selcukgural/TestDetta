@@ -47,6 +47,12 @@ public sealed record RecordOptions(string Configuration = "Debug", string? Frame
     /// cannot have judged them.
     /// </summary>
     public IReadOnlyCollection<string>? Classes { get; init; }
+
+    /// <summary>
+    /// The team's own <c>dotnet test</c> arguments (<c>td record -- …</c>, the action's <c>dotnet-test-args</c>): recording runs
+    /// under its filter and settings as well as the project's, with its other options (docs/design/team-test-configuration.md).
+    /// </summary>
+    public IReadOnlyList<string> DotnetTestArguments { get; init; } = [];
 }
 
 /// <summary>A recording of some classes of a test project, for an incremental step.</summary>
@@ -374,7 +380,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // code 8, reported as an error unless the platform is told to accept it.
             var isCatchAll = shards.Count > 1 && i == shards.Count - 1;
             var arguments = isCatchAll && context.Mode == DotnetTestMode.TestingPlatform
-                ? [.. testArguments, "--ignore-exit-code", TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture)]
+                ? AcceptingZeroTests(testArguments, context.Request.TestProject.TestConfiguration?.PlatformArguments)
                 : testArguments;
             var shard = new ShardRun(dotnet, arguments, shards[i], i, shards.Count);
             runs[i] = Task.Run(() => RunShard(shard, context, output));
@@ -383,6 +389,50 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         Task.WaitAll(runs);
         return runs;
     }
+
+    /// <summary>
+    /// <paramref name="arguments"/> with the testing platform told to accept exit code 8 (zero tests ran). The platform
+    /// rejects a second <c>--ignore-exit-code</c> with exit code 5 before any test runs (docs/design/team-test-configuration.md),
+    /// so a team's own option on the command line takes 8 into its list, and when the project's
+    /// <c>TestingPlatformCommandLineArguments</c> has one, nothing is added: an empty shard then exits with 8 only when the
+    /// team's list leaves it out, and the project is recorded as failing, which selects more rather than less.
+    /// </summary>
+    /// <param name="arguments">The shard's <c>dotnet test</c> arguments, the team's included.</param>
+    /// <param name="platformArguments">The project's <c>TestingPlatformCommandLineArguments</c>, or null.</param>
+    internal static List<string> AcceptingZeroTests(IReadOnlyList<string> arguments, string? platformArguments)
+    {
+        var zeroTests = TestingPlatformZeroTests.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (platformArguments is not null && platformArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(IsIgnoreExitCode))
+        {
+            return [.. arguments];
+        }
+
+        List<string> result = [.. arguments];
+        var at = result.FindIndex(IsIgnoreExitCode);
+        if (at < 0)
+        {
+            return [.. result, IgnoreExitCode, zeroTests];
+        }
+
+        // The value follows the option, or is joined to it with '=' or ':'.
+        var valueAt = result[at] == IgnoreExitCode ? at + 1 : at;
+        var codes = valueAt == at ? result[at][(IgnoreExitCode.Length + 1)..] : valueAt < result.Count ? result[valueAt] : "";
+        if (valueAt < result.Count && !codes.Split(';').Contains(zeroTests, StringComparer.Ordinal))
+        {
+            result[valueAt] += ";" + zeroTests;
+        }
+
+        return result;
+    }
+
+    /// <summary>Whether <paramref name="argument"/> is the testing platform's <c>--ignore-exit-code</c>, with or without a joined value.</summary>
+    /// <param name="argument">A command-line argument.</param>
+    private static bool IsIgnoreExitCode(string argument) =>
+        argument == IgnoreExitCode
+        || (argument.StartsWith(IgnoreExitCode, StringComparison.Ordinal) && argument.Length > IgnoreExitCode.Length && argument[IgnoreExitCode.Length] is '=' or ':');
+
+    /// <summary>The testing platform's option for exit codes to accept, which it allows once.</summary>
+    private const string IgnoreExitCode = "--ignore-exit-code";
 
     /// <summary>Throws when a test process was killed for running too long; a hang would repeat.</summary>
     /// <param name="runs">Finished shards.</param>
@@ -407,6 +457,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     {
         /// <summary>True when the tests run from the compiled assembly of a legacy project (<see cref="FullMsBuild"/>).</summary>
         public bool Legacy { get; init; }
+
+        /// <summary>
+        /// The team's run settings file, which TestDetta's own settings are added to (<see cref="WriteRunSettings"/>):
+        /// the project's <c>RunSettingsFilePath</c> or <c>VSTestSetting</c>; null for none.
+        /// </summary>
+        public string? TeamSettings => Team.Settings is { } settings ? Path.GetFullPath(settings, Request.RepoRoot) : Request.TestProject.TestConfiguration?.RunSettings;
+
+        /// <summary>The team's <c>dotnet test</c> arguments, split (<see cref="RecordOptions.DotnetTestArguments"/>).</summary>
+        public TeamTestArguments Team { get; } = TeamTestArguments.Parse(Request.Options.DotnetTestArguments);
     }
 
     /// <summary>The full MSBuild for a legacy project, or an error that says how to provide one.</summary>
@@ -441,7 +500,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // Only VSTest needs settings then, for the collector.
             if (run.Mode == DotnetTestMode.VSTest)
             {
-                arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: true, sequential: false, RuntimeDeployment.TrackerFor(run.TargetPath))]);
+                arguments.AddRange(["--settings", WriteRunSettings(work, new SettingsParts(WithCollector: true, Sequential: false, RuntimeDeployment.TrackerFor(run.TargetPath)), run.TeamSettings)]);
             }
         }
         else if (File.Exists(Path.Combine(binaries, "TUnit.Engine.dll")))
@@ -454,7 +513,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
         else
         {
-            arguments.AddRange(["--settings", WriteRunSettings(work, withCollector: run.Mode == DotnetTestMode.VSTest, sequential: true, RuntimeDeployment.TrackerFor(run.TargetPath))]);
+            arguments.AddRange(["--settings", WriteRunSettings(work, new SettingsParts(WithCollector: run.Mode == DotnetTestMode.VSTest, Sequential: true, RuntimeDeployment.TrackerFor(run.TargetPath)), run.TeamSettings)]);
         }
 
         if (run.Framework is not null && !run.Legacy)
@@ -462,6 +521,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             arguments.AddRange(["-f", run.Framework]);
         }
 
+        // The team's other options run as given; its filter joins each shard's, and inline run settings go last (RunShard).
+        arguments.AddRange(run.Team.Others);
         return arguments;
     }
 
@@ -710,7 +771,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             arguments.AddRange(TestReports.Arguments(context.Mode, context.OutputDirectory, reportDirectory, reportName));
         }
 
-        arguments.AddRange(shard.Filter);
+        var team = TeamTestArguments.Parse(request.Options.DotnetTestArguments);
+        arguments.AddRange(WithinTeamFilter(shard.Filter, team.Filter ?? (context.Mode == DotnetTestMode.VSTest ? request.TestProject.TestConfiguration?.CaseFilter : null)));
+        arguments.AddRange(team.InlineSettings);
 
         var environment = new Dictionary<string, string>(UnattendedRun.Variables)
         {
@@ -749,6 +812,24 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         TestReports.Collect(context.Mode, request.RepoRoot, reportName, reportDirectory);
         return new ShardResult(exitCode, written, TrxReport.Read(reportDirectory));
     }
+
+    /// <summary>
+    /// A shard's filter within the team's (docs/design/team-test-configuration.md): the team's <c>--filter</c>, else, under
+    /// VSTest, the project's <c>VSTestTestCaseFilter</c>, which a filter on the command line would replace, so the recording
+    /// would run tests the team's runs exclude. A VSTest-syntax filter becomes <c>(team)&amp;(shard)</c>; an unfiltered shard
+    /// takes the team's filter alone (under VSTest the project's applies anyway). Next to another runner's class options the
+    /// team's filter stays as given: if the runner cannot join them the shard fails, and the project is not recorded,
+    /// rather than recorded beyond the team's filter.
+    /// </summary>
+    /// <param name="filter">The shard's filter arguments.</param>
+    /// <param name="team">The team's filter, or null.</param>
+    internal static IReadOnlyList<string> WithinTeamFilter(IReadOnlyList<string> filter, string? team) => (team, filter) switch
+    {
+        (null, _) => filter,
+        (_, ["--filter", var ours]) => ["--filter", $"({team})&({ours})"],
+        (_, []) => ["--filter", team],
+        _ => [.. filter, "--filter", team],
+    };
 
     /// <summary>Exit code of Microsoft.Testing.Platform when zero tests ran.</summary>
     private const int TestingPlatformZeroTests = 8;
@@ -882,55 +963,85 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return (all, frameworks);
     }
 
+    /// <summary>What recording needs in the run settings.</summary>
+    /// <param name="WithCollector">True to load the in-process collector (VSTest).</param>
+    /// <param name="Sequential">True to make the tests run one at a time.</param>
+    /// <param name="Tracker">The build of the tracker assembly the test host loads (<see cref="RuntimeDeployment.TrackerFor"/>).</param>
+    internal sealed record SettingsParts(bool WithCollector, bool Sequential, string Tracker);
+
     /// <summary>
-    /// Writes run settings that make tests run one at a time and, for VSTest, load
-    /// <see cref="TestDettaInProcCollector"/> into the test host.
+    /// Writes the run settings of a recording: a copy of the team's file, when it has one, with TestDetta's own
+    /// elements set in it, so the team's test case filter, environment variables, parameters, data collectors and
+    /// timeouts stay as in its own runs (docs/design/team-test-configuration.md); on the command line, a file of
+    /// TestDetta's alone would replace all of that. TestDetta sets: no test AppDomains, one test at a time
+    /// (<paramref name="parts"/>), and the in-process collector next to the team's.
     /// </summary>
-    /// <param name="directory">Where to write the file.</param>
-    /// <param name="withCollector">
-    /// True under VSTest, where the collector writes the results at session end, before the host may
-    /// be killed. The runtime is in the test output as well; both are the same assembly, so the host
-    /// loads it once. Microsoft.Testing.Platform has no collectors.
-    /// </param>
-    /// <param name="sequential">True to make the tests run one at a time.</param>
-    /// <param name="tracker">The build of the tracker assembly the test host loads (<see cref="RuntimeDeployment.TrackerFor"/>).</param>
-    private static string WriteRunSettings(string directory, bool withCollector, bool sequential, string tracker)
+    /// <param name="directory">Where the file goes.</param>
+    /// <param name="parts">TestDetta's part.</param>
+    /// <param name="teamSettings">The team's run settings file, or null.</param>
+    /// <exception cref="InvalidOperationException">The team's file cannot be read: recording under other settings would record other paths.</exception>
+    internal static string WriteRunSettings(string directory, SettingsParts parts, string? teamSettings)
     {
+        XElement root;
+        try
+        {
+            root = teamSettings is null ? new XElement("RunSettings") : XDocument.Load(teamSettings).Root ?? new XElement("RunSettings");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        {
+            throw new InvalidOperationException($"its run settings file {teamSettings} could not be read ({ex.Message}); TestDetta records under the team's settings or not at all");
+        }
+
         // Tests run one at a time while recording: code outside every test flow is credited to the
         // test class entered last, which is only right when one class runs at a time.
         // On .NET Framework, xUnit v1/v2 and MSTest run tests in an AppDomain of their own, whose tracker
         // statics the collector in the default domain never sees: recording runs them without one, as on
         // .NET (docs/design/framework-support.md). The settings mean nothing to .NET test hosts.
-        var configuration = new XElement("RunConfiguration", new XElement("DisableAppDomain", "true"));
-        var xunit = new XElement("xUnit", new XElement("AppDomain", "denied"), new XElement("ShadowCopy", "false"));
-        var root = new XElement("RunSettings", configuration, xunit);
-        if (sequential)
+        var configuration = Child(root, "RunConfiguration");
+        Set(configuration, "DisableAppDomain", "true");
+        var xunit = Child(root, "xUnit");
+        Set(xunit, "AppDomain", "denied");
+        Set(xunit, "ShadowCopy", "false");
+        if (parts.Sequential)
         {
-            configuration.Add(new XElement("DisableParallelization", "true"));
-            xunit.Add(new XElement("ParallelizeTestCollections", "false"), new XElement("MaxParallelThreads", "1"));
-            root.Add(
-                new XElement("NUnit", new XElement("NumberOfTestWorkers", "0")),
-                new XElement("MSTest", new XElement("Parallelize", new XElement("Workers", "1"))));
+            Set(configuration, "DisableParallelization", "true");
+            Set(xunit, "ParallelizeTestCollections", "false");
+            Set(xunit, "MaxParallelThreads", "1");
+            Set(Child(root, "NUnit"), "NumberOfTestWorkers", "0");
+            Set(Child(Child(root, "MSTest"), "Parallelize"), "Workers", "1");
         }
 
-        if (withCollector)
+        if (parts.WithCollector)
         {
             // The collector type is named, not loaded: it depends on test platform assemblies that only
             // the test host has. TestDettaTracker lives in the same assembly and has no such dependency.
             var runtime = typeof(TestDettaTracker).Assembly;
             var collectorName = $"{typeof(TestDettaTracker).Namespace}.{nameof(TestDettaInProcCollector)}, {runtime.FullName}";
-            root.Add(new XElement("InProcDataCollectionRunSettings",
-                new XElement("InProcDataCollectors",
-                    new XElement("InProcDataCollector",
-                        new XAttribute("friendlyName", "TestDetta"),
-                        new XAttribute("uri", "InProcDataCollector://TestDetta/Coverage/1.0"),
-                        new XAttribute("assemblyQualifiedName", collectorName),
-                        new XAttribute("codebase", tracker)))));
+            Child(Child(root, "InProcDataCollectionRunSettings"), "InProcDataCollectors").Add(
+                new XElement("InProcDataCollector",
+                    new XAttribute("friendlyName", "TestDetta"),
+                    new XAttribute("uri", "InProcDataCollector://TestDetta/Coverage/1.0"),
+                    new XAttribute("assemblyQualifiedName", collectorName),
+                    new XAttribute("codebase", parts.Tracker)));
         }
 
         var path = Path.Combine(directory, "testdetta.runsettings");
         new XDocument(root).Save(path);
         return path;
+
+        static XElement Child(XElement parent, string name)
+        {
+            if (parent.Element(name) is { } existing)
+            {
+                return existing;
+            }
+
+            var element = new XElement(name);
+            parent.Add(element);
+            return element;
+        }
+
+        static void Set(XElement parent, string name, string value) => Child(parent, name).Value = value;
     }
 
     /// <summary>Combines the method table with the collectors' per-class hits, merging all shards.</summary>

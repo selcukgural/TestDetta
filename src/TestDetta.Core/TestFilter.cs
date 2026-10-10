@@ -58,6 +58,41 @@ public static class TestFilter
     }
 
     /// <summary>
+    /// <paramref name="userArguments"/> with the project's own test case filter as the user's filter, for a VSTest run whose
+    /// command line names none (docs/design/team-test-configuration.md): <c>dotnet test --filter</c> replaces the
+    /// project's <c>VSTestTestCaseFilter</c>, so a class filter of TestDetta's would run the tests the team excludes
+    /// (<c>Category!=Integration</c>). Joined like the user's filter (<see cref="WithinUserFilter"/>), it keeps them out.
+    /// The testing platform applies the project's own arguments to every run, and a run settings filter applies next to
+    /// the command line's: those need nothing.
+    /// </summary>
+    /// <param name="userArguments">The user's <c>dotnet test</c> arguments.</param>
+    /// <param name="project">The test project.</param>
+    /// <param name="mode">How <c>dotnet test</c> runs it.</param>
+    public static IReadOnlyList<string> WithTeamFilter(IReadOnlyList<string> userArguments, ProjectNode project, DotnetTestMode mode)
+    {
+        if (mode != DotnetTestMode.VSTest || project.TestConfiguration?.CaseFilter is not { } team)
+        {
+            return userArguments;
+        }
+
+        foreach (var argument in userArguments)
+        {
+            if (argument == "--")
+            {
+                break;
+            }
+
+            if (argument == "--filter" || argument.StartsWith("--filter=", StringComparison.Ordinal))
+            {
+                // The command line's filter replaces the project's in the team's own runs too.
+                return userArguments;
+            }
+        }
+
+        return ["--filter", team, .. userArguments];
+    }
+
+    /// <summary>
     /// The filter arguments that run <paramref name="testClasses"/> within the user's own filter, and the
     /// rest of <paramref name="userArguments"/> to append after them; null when the runner cannot combine
     /// the two. <c>dotnet test</c> rejects a second <c>--filter</c>, so a VSTest filter of the user's is

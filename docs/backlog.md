@@ -28,19 +28,11 @@ and only the name trace through the registration selects it. OpenAPI and Swagger
 common. A safe version needs a signal for "this class read the type's shape" (reflection inside
 ASP.NET, Swashbuckle, serializers), which nothing records today.
 
-## Next, to discuss with the owner: the test arguments a project already runs with (owner, 2026-10-10)
+## ~~The test arguments a project already runs with~~ (done 2026-10-10)
 
-EF Core adds `--filter-not-trait category=failing --ignore-exit-code 8` to every test run through
-`TestingPlatformCommandLineArguments`; TestDetta adds its own filters (`--filter-class`, `--filter-not-class`,
-`--treenode-filter`, `--filter FullyQualifiedName~…`) and `--ignore-exit-code 8` to catch-all shards. The user's own
-`--filter` after `--` is combined today (`TestFilter.WithinUserFilter`), but filters and options a project sets in
-MSBuild (`TestingPlatformCommandLineArguments`, `VSTestTestCaseFilter`, `RunSettingsFilePath` with a
-`TestCaseFilter`, Arcade's `TestRunnerAdditionalArguments`) are not read. Possible effects: a duplicated option the
-platform rejects; a selection that runs tests the team's own runs exclude (or the other way round); a recording
-of tests the team never runs. Seen: EF Core's catch-all shards end with exit code 5 ("Handshake failures") and 13 of
-15 maps are untrusted (cause not yet confirmed; not reproduced on a small xUnit v3 project). To discuss: read
-the effective test arguments of each project before recording and running, combine TestDetta's filters with
-them, and say in the docs what TestDetta does with a team's filters.
+TestDetta keeps the team's filters, run settings and testing platform arguments in every run it starts, and
+`td record` takes the team's `dotnet test` arguments after `--`. EF Core's catch-all exit code 5 was a second
+`--ignore-exit-code`. docs/design/team-test-configuration.md, site page "Your test configuration".
 
 ## Next: incremental recording on main (owner, 2026-10-09)
 
@@ -75,11 +67,8 @@ with the owner.
 - **Order-dependent state between test classes** (NLog `LogManagerTests`, 1 of 2,562): accepted for v1 (owner,
   2026-10-08); a narrower signal than `leakedReads` (67 % of classes) when a user meets it.
   docs/design/order-dependent-state.md.
-- **Catch-all recording shard with an unexpected exit code** (EF Core under the .NET 11 preview SDK, exit 5 with
-  "Zero tests ran" and no report): the map is not used, selection falls back to names (EF Core 89 %). Owner,
-  2026-10-08: no EF Core-specific fix; a general one (verify with `--list-tests`, per runner, that the shard's
-  filter matches nothing) only when a user reports it or .NET 11 makes it common. Workaround: record without
-  `--parallel`. docs/evaluation.md, "Known limitations".
+- ~~**Catch-all recording shard with an unexpected exit code**~~ (EF Core; done 2026-10-10): a second
+  `--ignore-exit-code` next to the project's own; see "The test arguments a project already runs with".
 - ~~**A test that loads a project's assembly by its path missed changes it sees through reflection**~~
   (done 2026-10-06, AspNetCoreOData `PublicApiTest`, a static field value changed): such classes are now
   selected for any change to that project, and an initializer change counts as a change of its

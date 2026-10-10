@@ -1,0 +1,43 @@
+<!-- title: Your test configuration; layout: docs; description: How {{name}} keeps your test filters, run settings and testing platform arguments in every run it starts, and records under them. -->
+<h1>Your test configuration</h1>
+<p class="lead">{{name}} narrows your test runs. It never widens or changes them: a test your configuration excludes stays excluded, and coverage maps are recorded under your own settings.</p>
+
+<h2 id="adds">What {{name}} adds to a run</h2>
+<ul>
+  <li><strong>A class filter</strong> when only some test classes run: <code>--filter FullyQualifiedName~…</code> under VSTest, <code>--filter-class</code> for xUnit v3 and <code>--treenode-filter</code> for TUnit under Microsoft.Testing.Platform.</li>
+  <li><strong>Run settings while recording</strong>: one test at a time, no test AppDomains, and the collector that records coverage.</li>
+  <li><strong><code>--ignore-exit-code 8</code></strong> for the part of a recording that may find no test, under Microsoft.Testing.Platform.</li>
+</ul>
+
+<h2 id="keeps">What {{name}} keeps</h2>
+<p>Left alone, <code>dotnet test</code> lets some of these replace your own configuration. {{name}} combines them instead:</p>
+<table>
+  <thead><tr><th>Your configuration</th><th>What <code>dotnet test</code> alone would do</th><th>What {{name}} does</th></tr></thead>
+  <tbody>
+    <tr><td><code>VSTestTestCaseFilter</code> in the project file, such as <code>Category!=Integration</code></td><td>A <code>--filter</code> on the command line replaces it: excluded tests run</td><td>Runs <code>(your filter)&amp;(its class filter)</code></td></tr>
+    <tr><td><code>--filter</code> in your own <code>dotnet test</code> arguments</td><td>Takes one <code>--filter</code> only</td><td>Runs <code>(your filter)&amp;(its class filter)</code></td></tr>
+    <tr><td>A run settings file (<code>RunSettingsFilePath</code>, <code>VSTestSetting</code> or your <code>--settings</code>): its <code>TestCaseFilter</code>, <code>EnvironmentVariables</code>, <code>TestRunParameters</code>, data collectors, timeouts</td><td>Another <code>--settings</code> replaces the whole file</td><td>Records under a copy of your file with only its own elements added; your filter, variables and parameters stay</td></tr>
+    <tr><td><code>TestingPlatformCommandLineArguments</code> (Microsoft.Testing.Platform), such as <code>--filter-not-trait category=failing</code></td><td>Applies it to every run</td><td>Leaves it to the platform, and does not repeat an option you already set once</td></tr>
+  </tbody>
+</table>
+<p>When a selected project runs completely, {{name}} adds no filter, and your configuration applies exactly as in your own runs.</p>
+
+<h2 id="give">Give {{name}} your CI's arguments</h2>
+<p>Pass the same <code>dotnet test</code> arguments your own test job uses, both when tests run and when maps are recorded:</p>
+<pre><code>td test --base origin/main -- --filter "Category!=Integration" --settings ci.runsettings
+td record -- --filter "Category!=Integration" --settings ci.runsettings</code></pre>
+<p>In GitHub Actions, the <code>dotnet-test-args</code> input does this in every mode, record mode included. Options a recording controls itself (<code>-c</code>, <code>-f</code>, <code>--no-build</code>, loggers, the results directory and report options) keep {{name}}'s values while recording; everything else runs as you give it.</p>
+
+<h2 id="cannot">When a filter cannot be combined</h2>
+<p>Some filters cannot be joined with a class filter: an xUnit v3 query filter (<code>--filter-query</code>) or class filter of your own, and a TUnit tree-node filter. {{name}} then runs the whole test project under your filter: it runs more, never what your filter leaves out. The job summary says so for that project.</p>
+
+<h2 id="check">Check what was kept</h2>
+<p>Before the tests run, the console names each test project whose own configuration was kept, for example <code>tests/Shop.Tests/Shop.Tests.csproj: your test case filter Category!=Integration, run settings tests/ci.runsettings kept in every run</code>. The job summary lists the same, and <code>-v</code> writes the exact <code>dotnet test</code> command of each run.</p>
+<div class="callout"><p>If your build or CI sets test arguments in a way not listed here (an Arcade property, a wrapper script around <code>dotnet test</code>), pass them through <code>dotnet-test-args</code> or after <code>--</code>, so {{name}} sees what your runs really do.</p></div>
+
+<h2 id="related">Related pages</h2>
+<ul>
+  <li><a href="/docs/cli/">CLI reference</a></li>
+  <li><a href="/docs/github-actions/">GitHub Actions</a></li>
+  <li><a href="/docs/what-runs-everything/">What runs everything</a></li>
+</ul>

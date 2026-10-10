@@ -409,6 +409,39 @@ public sealed class ProjectEvaluationTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Slow")]
+    public void Msbuild_reports_how_the_team_runs_a_test_project()
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write("tests/Directory.Build.props", """
+            <Project>
+              <PropertyGroup><TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --filter-not-trait category=failing</TestingPlatformCommandLineArguments></PropertyGroup>
+            </Project>
+            """);
+        _repo.Write("tests/A.Tests/A.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <IsTestProject>true</IsTestProject>
+                <VSTestTestCaseFilter>Category!=Integration&amp;Priority=1</VSTestTestCaseFilter>
+                <RunSettingsFilePath>../ci.runsettings</RunSettingsFilePath>
+              </PropertyGroup>
+            </Project>
+            """);
+        _repo.Write("tests/B.Tests/B.Tests.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+        _repo.Write("src/Lib/Lib.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+        string[] projects = [Full("tests/A.Tests/A.Tests.csproj"), Full("tests/B.Tests/B.Tests.csproj"), Full("src/Lib/Lib.csproj")];
+
+        var evaluated = new MsBuildProjectEvaluator(NullLoggerFactory.Instance, diskCache: false).Evaluate(Paths.Normalize(_repo.Root), projects)!;
+
+        Assert.Equal(
+            new TestConfiguration("Category!=Integration&Priority=1", Full("tests/ci.runsettings"), "--filter-not-trait category=failing"),
+            evaluated[projects[0]].TestConfiguration);
+        Assert.Equal(new TestConfiguration(null, null, "--filter-not-trait category=failing"), evaluated[projects[1]].TestConfiguration);
+        Assert.Null(evaluated[projects[2]].TestConfiguration);
+    }
+
+    [Fact]
     public void Driver_escapes_msbuild_characters_in_paths() =>
         Assert.Contains("a%25b%40c%24d", MsBuildProjectEvaluator.Driver(["/repo/a%b@c$d/P.csproj"], "/t/x.targets", "/t/out.txt"), StringComparison.Ordinal);
 

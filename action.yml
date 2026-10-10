@@ -29,7 +29,7 @@ inputs:
     required: false
     default: 'false'
   dotnet-test-args:
-    description: "Test, shadow and audit modes. Extra arguments for every dotnet test, separated by spaces. In shadow mode, name your solution here (for example 'MySolution.sln') to have it run as one dotnet test command, as your own job runs it; without one, the one solution or project in working-directory runs, and with none there each test project runs on its own. Testing-platform (Microsoft.Testing.Platform) projects: build first in a step before this one, with the same configuration, and add --no-build here; TestDetta reads the report option a project takes from its build output, so a project not built before the run writes no report and its failures cannot be compared."
+    description: "Test, shadow, audit and record modes. Extra arguments for every dotnet test, separated by spaces: give the same filter and settings your own test job uses (for example '--filter Category!=Integration'), and TestDetta keeps them in every run it starts and while recording, combining its own class filters with yours. In shadow mode, name your solution here (for example 'MySolution.sln') to have it run as one dotnet test command, as your own job runs it; without one, the one solution or project in working-directory runs, and with none there each test project runs on its own. Testing-platform (Microsoft.Testing.Platform) projects: build first in a step before this one, with the same configuration, and add --no-build here; TestDetta reads the report option a project takes from its build output, so a project not built before the run writes no report and its failures cannot be compared."
     required: false
     default: ''
   max-map-age:
@@ -423,7 +423,9 @@ runs:
         PROJECTS: ${{ inputs.projects }}
         PARALLEL: ${{ inputs.parallel }}
         NO_BUILD: ${{ inputs.no-build }}
+        EXTRA_ARGS: ${{ inputs.dotnet-test-args }}
       run: |
+        read -r -a extra <<< "$EXTRA_ARGS"
         if [[ ! "$PARALLEL" =~ ^[1-9][0-9]?$ ]]; then
           echo "::error::'parallel' must be a number from 1 to 99."
           exit 1
@@ -434,6 +436,8 @@ runs:
           if [ -n "$project" ]; then args+=(--project "$project"); fi
         done <<< "$PROJECTS"
         status=0
+        # The team's own dotnet test arguments (filter, settings) are kept while recording (docs/design/team-test-configuration.md).
+        if [ "${#extra[@]}" -gt 0 ]; then args+=(-- "${extra[@]}"); fi
         dotnet "$TESTDETTA" record -c "$CONFIGURATION" "${args[@]}" || status=$?
         echo "status=$status" >> "$GITHUB_OUTPUT"
         # 3 means some tests failed; the map is still valid, so it is saved before the job fails.

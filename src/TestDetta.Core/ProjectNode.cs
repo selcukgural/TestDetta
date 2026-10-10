@@ -150,6 +150,13 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     public IReadOnlySet<string>? InertItems { get; init; }
 
     /// <summary>
+    /// How the team's own runs of this project's tests are configured in its project files: a test case filter,
+    /// a run settings file, testing platform arguments (docs/design/team-test-configuration.md). TestDetta keeps
+    /// them in every run it starts. Null when the project sets none, or was not evaluated.
+    /// </summary>
+    public TestConfiguration? TestConfiguration { get; init; }
+
+    /// <summary>
     /// The preprocessor symbols each of its target frameworks compiles with, from MSBuild evaluation;
     /// empty when unknown. Code under a mix of symbols (<c>#if A &amp;&amp; !B</c>) is only seen by
     /// parsing with these.

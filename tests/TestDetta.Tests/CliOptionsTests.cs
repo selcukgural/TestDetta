@@ -127,6 +127,16 @@ public sealed class CliOptionsTests
     }
 
     [Fact]
+    public void Record_takes_the_teams_dotnet_test_arguments_after_a_double_dash()
+    {
+        Assert.True(CliOptions.TryParse(["record", "--parallel", "2", "--", "--filter", "Category!=Integration"], "/repo", out var options, out var error), error);
+
+        Assert.Equal(["--filter", "Category!=Integration"], options.Record.DotnetTestArguments);
+        Assert.Equal(2, options.Record.Parallelism);
+        Assert.False(CliOptions.TryParse(["affected", "--", "--filter", "x"], "/repo", out _, out _));
+    }
+
+    [Fact]
     public void Non_code_files_default_to_readers_and_the_developer_can_choose_the_project_rule()
     {
         Assert.True(CliOptions.TryParse(["test"], "/repo", out var defaults, out _));

@@ -155,6 +155,7 @@ var tests   = new TestSelector(...).Select(new TestSelectionRequest(graph, root,
       purpose: "Seçilen sınıfları test çerçevesinin anladığı filtreye çevirip projeleri sırayla koşturmak.",
       body: C(`dotnet test tests/Calc.Tests/Calc.Tests.csproj --filter "FullyQualifiedName~Calc.Tests.TaxTests." -c Debug`) + ul([
         "Filtre sözdizimi projeye göre: VSTest <code>--filter FullyQualifiedName~…</code>, xUnit v3 (MTP) <code>--filter-class</code>, TUnit <code>--treenode-filter</code>.",
+        "<b>Ekibin yapılandırması</b> (2026-10-10, docs/design/team-test-configuration.md): VSTest'te komut satırındaki <code>--filter</code> projenin <code>VSTestTestCaseFilter</code>'ını ezer; <code>TestFilter.WithTeamFilter</code> onu kullanıcının filtresi gibi ekler ve <code>WithinUserFilter</code> <code>(ekip)&amp;(TestDetta)</code> koşturur. Kullanıcının kendi <code>--filter</code>'ı varsa o geçerli (dotnet test de öyle yapar). MTP projenin <code>TestingPlatformCommandLineArguments</code>'ını zaten uygular, runsettings içindeki <code>TestCaseFilter</code> da komut satırınınkiyle birlikte geçerlidir. Konsol ve iş özeti korunan yapılandırmayı yazar (<code>ResultWriter.TeamConfiguration</code>).",
         "Filtre hiç teste uymazsa (\"No test matches…\" ya da MTP çıkış kodu 8) proje filtresiz yeniden koşar: daha fazla, asla daha az.",
         "Skipped projeler için komut üretilmez; bir proje başarısız olsa da diğerleri koşar.",
       ]),
@@ -219,7 +220,7 @@ const CH_RECORD = {
       title: "Komut, projeleri ve seçenekleri toplar", nodes: ["cli", "graph"], edges: ["load"],
       who: "<code>CliApp.RecordCoverage</code>",
       file: "src/TestDetta.Cli/CliApp.cs:399",
-      input: "<code>RecordSettings(Configuration, Projects, Parallelism, Framework) { NoBuild, Incremental, Thresholds }</code>",
+      input: "<code>RecordSettings(Configuration, Projects, Parallelism, Framework) { NoBuild, Incremental, Thresholds, DotnetTestArguments }</code>; <code>td record … -- &lt;ekibin dotnet test argümanları&gt;</code> (Action'da <code>dotnet-test-args</code>)",
       output: "<code>ProjectGraph</code> ve kaydedilecek test projelerinin listesi",
       purpose: "Hangi projelerin test projesi olduğunu (MSBuild değerlendirmesi ya da <code>*.Tests</code> adı) bulmak.",
       body: ul([
@@ -295,7 +296,8 @@ call    TestDettaTracker.Hit(int32)`) + ul([
       output: "Parça başına çıkış kodu, TRX raporu ve süreç başına bir sonuç dosyası",
       purpose: "Paralellik kapatılır (xUnit <code>MaxParallelThreads=1</code>, NUnit <code>NumberOfTestWorkers=0</code>, MSTest <code>Workers=1</code>) ki bir anda tek test sınıfı çalışsın ve vuruşlar doğru sınıfa yazılsın. Test AppDomain'leri de kapatılır (<code>DisableAppDomain</code>, xUnit <code>AppDomain=denied</code>): .NET Framework'te izleyicinin verisi aksi halde ayrı domain'de kalır.",
       body: ul([
-        "<code>--parallel n</code>: sınıflar <code>n</code> parçaya dağıtılır, her parça ayrı süreç; sonda bilinen sınıfları dışlayan bir \"artakalan\" parça.",
+        "<code>--parallel n</code>: sınıflar <code>n</code> parçaya dağıtılır, her parça ayrı süreç; sonda bilinen sınıfları dışlayan bir \"artakalan\" parça. MTP'de artakalan parça çoğu zaman hiç test bulmaz (çıkış kodu 8); <code>AcceptingZeroTests</code> <code>--ignore-exit-code 8</code>'i yalnız ekipte yoksa ekler, ekibin komut satırındakine 8'i katar (<code>2</code> → <code>2;8</code>). Platform ikinci bir <code>--ignore-exit-code</code>'u çıkış kodu 5 ile reddeder: EF Core'un 15 haritasından 13'ünün güvenilmez olmasının nedeni buydu.",
+        "<b>Ekibin yapılandırması</b> (2026-10-10): <code>WriteRunSettings</code> ekibin runsettings dosyasının (<code>--settings</code>, yoksa <code>RunSettingsFilePath</code>/<code>VSTestSetting</code>) bir kopyasından başlar ve yalnız kendi öğelerini koyar (sıralı koşu, AppDomain yok, toplayıcı); ekibin <code>TestCaseFilter</code>, <code>EnvironmentVariables</code>, <code>TestRunParameters</code> ve toplayıcıları kalır, dosya okunamazsa kayıt durur. Parça filtresi <code>WithinTeamFilter</code> ile <code>(ekip)&amp;(parça)</code> olur. Ekibin argümanları <code>TeamTestArguments.Parse</code> ile ayrılır: filtre, ayarlar, kaydın denetlediği seçenekler (<code>-c</code>, <code>-f</code>, <code>--no-build</code>, logger, sonuç klasörü, rapor seçenekleri: atılır), geri kalanlar olduğu gibi geçer, <code>--</code> sonrası satır içi ayarlar en sona.",
         "Artımlı adımda (<code>ClassShards</code>, <code>CoverageRecorder.cs:531</code>) yalnız seçilen sınıflar parçalara dağıtılır (paralellik 1 olsa da filtreli); artakalan parça kaynak indeksinin bilmediği testleri yine koşturur. Bir parça çökerse proje filtresiz kaydedilir ve sonuç tam kayıt sayılır (<code>Complete = true</code>).",
         "Bir parça sonuç yazmazsa tek süreçte filtresiz tekrar; o da olmazsa testin kendi paralelliğiyle (<code>TESTDETTA_PARALLEL_FLOWS=1</code>).",
         "Zaman aşımı <code>RecordingTimedOutException</code>; hiç test koşmadıysa <code>NoTestsRecordedException</code>.",

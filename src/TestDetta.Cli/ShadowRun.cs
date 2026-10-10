@@ -1229,7 +1229,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var others = arguments;
         if (request.Classes is { } classes)
         {
-            if (TestFilter.WithinUserFilter([.. classes], TestFilter.SyntaxFor(run.Project, mode), arguments) is not var (joined, rest))
+            if (TestFilter.WithinUserFilter([.. classes], TestFilter.SyntaxFor(run.Project, mode), TestFilter.WithTeamFilter(arguments, run.Project, mode)) is not var (joined, rest))
             {
                 return new RerunResult(null, "could not run: your own filter cannot be joined with a class filter");
             }

@@ -105,9 +105,22 @@ internal static class TextReport
             return;
         }
 
+        WriteTeamConfiguration(analysis, writer, style);
         WriteDecisions(analysis.RepoRoot, analysis.Tests, writer, style);
         WriteEstimate(analysis.Plan, writer, style);
         writer.WriteLine();
+    }
+
+    /// <summary>One line per run test project whose own test configuration TestDetta keeps (<see cref="ResultWriter.TeamConfiguration"/>).</summary>
+    /// <param name="analysis">Finished analysis.</param>
+    /// <param name="writer">Destination.</param>
+    /// <param name="style">Colour, characters and width.</param>
+    private static void WriteTeamConfiguration(AnalysisResult analysis, TextWriter writer, ConsoleStyle style)
+    {
+        foreach (var (project, kept) in ResultWriter.TeamConfiguration(analysis.Tests, analysis.RepoRoot))
+        {
+            writer.WriteLine(style.Paint(Role.Muted, $"{project}: your {kept} kept in every run"));
+        }
     }
 
     /// <summary>

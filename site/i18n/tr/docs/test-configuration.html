@@ -1,0 +1,43 @@
+<!-- title: Test yapılandırmanız; layout: docs; description: {{name}} test filtrelerinizi, run settings dosyanızı ve test platformu argümanlarınızı başlattığı her koşuda nasıl korur ve haritaları bunlarla nasıl kaydeder.; source: 94e12882c15a -->
+<h1>Test yapılandırmanız</h1>
+<p class="lead">{{name}} test koşularınızı daraltır. Hiçbir zaman genişletmez ya da değiştirmez: yapılandırmanızın dışladığı bir test dışlı kalır, kapsam haritaları da sizin ayarlarınızla kaydedilir.</p>
+
+<h2 id="adds">{{name}} bir koşuya ne ekler</h2>
+<ul>
+  <li><strong>Bir sınıf filtresi</strong>, yalnızca bazı test sınıfları koşacaksa: VSTest'te <code>--filter FullyQualifiedName~…</code>, Microsoft.Testing.Platform altında xUnit v3 için <code>--filter-class</code>, TUnit için <code>--treenode-filter</code>.</li>
+  <li><strong>Kayıt sırasında run settings</strong>: testler tek tek koşar, test AppDomain'i kullanılmaz ve kapsamı kaydeden toplayıcı yüklenir.</li>
+  <li><strong><code>--ignore-exit-code 8</code></strong>, Microsoft.Testing.Platform altında kaydın hiç test bulamayabilecek kısmı için.</li>
+</ul>
+
+<h2 id="keeps">{{name}} neyi korur</h2>
+<p>Kendi haline bırakılırsa <code>dotnet test</code> bunların bazılarının sizin yapılandırmanızın yerine geçmesine izin verir. {{name}} ise ikisini birleştirir:</p>
+<table>
+  <thead><tr><th>Sizin yapılandırmanız</th><th>Tek başına <code>dotnet test</code> ne yapar</th><th>{{name}} ne yapar</th></tr></thead>
+  <tbody>
+    <tr><td>Proje dosyasında <code>VSTestTestCaseFilter</code>, örneğin <code>Category!=Integration</code></td><td>Komut satırındaki bir <code>--filter</code> onun yerine geçer: dışlanan testler koşar</td><td><code>(sizin filtreniz)&amp;(kendi sınıf filtresi)</code> koşturur</td></tr>
+    <tr><td>Kendi <code>dotnet test</code> argümanlarınızdaki <code>--filter</code></td><td>Yalnızca tek bir <code>--filter</code> alır</td><td><code>(sizin filtreniz)&amp;(kendi sınıf filtresi)</code> koşturur</td></tr>
+    <tr><td>Bir run settings dosyası (<code>RunSettingsFilePath</code>, <code>VSTestSetting</code> ya da sizin <code>--settings</code>'iniz): içindeki <code>TestCaseFilter</code>, <code>EnvironmentVariables</code>, <code>TestRunParameters</code>, veri toplayıcılar, zaman aşımları</td><td>Başka bir <code>--settings</code> dosyanın tamamının yerine geçer</td><td>Dosyanızın bir kopyasıyla kaydeder, yalnızca kendi öğelerini ekler; filtreniz, değişkenleriniz ve parametreleriniz kalır</td></tr>
+    <tr><td><code>TestingPlatformCommandLineArguments</code> (Microsoft.Testing.Platform), örneğin <code>--filter-not-trait category=failing</code></td><td>Her koşuya uygular</td><td>Platforma bırakır ve sizin zaten bir kez verdiğiniz bir seçeneği tekrar etmez</td></tr>
+  </tbody>
+</table>
+<p>Seçilen bir proje tamamen koşuyorsa {{name}} filtre eklemez; yapılandırmanız tam olarak kendi koşularınızdaki gibi uygulanır.</p>
+
+<h2 id="give">CI argümanlarınızı {{name}}'ya verin</h2>
+<p>Kendi test işinizin kullandığı <code>dotnet test</code> argümanlarının aynısını, hem testler koşarken hem haritalar kaydedilirken verin:</p>
+<pre><code>td test --base origin/main -- --filter "Category!=Integration" --settings ci.runsettings
+td record -- --filter "Category!=Integration" --settings ci.runsettings</code></pre>
+<p>GitHub Actions'ta bunu <code>dotnet-test-args</code> girdisi record modu da dahil her modda yapar. Kaydın kendisinin denetlediği seçenekler (<code>-c</code>, <code>-f</code>, <code>--no-build</code>, logger'lar, sonuç klasörü ve rapor seçenekleri) kayıt sırasında {{name}}'nın değerleriyle kalır; geri kalan her şey verdiğiniz gibi koşar.</p>
+
+<h2 id="cannot">Bir filtre birleştirilemediğinde</h2>
+<p>Bazı filtreler bir sınıf filtresiyle birleştirilemez: sizin bir xUnit v3 sorgu filtreniz (<code>--filter-query</code>) ya da sınıf filtreniz ve bir TUnit tree-node filtresi. {{name}} o zaman test projesinin tamamını sizin filtrenizle koşturur: daha fazlasını koşturur, filtrenizin dışarıda bıraktığını asla. İş özeti bunu o proje için belirtir.</p>
+
+<h2 id="check">Nelerin korunduğunu kontrol edin</h2>
+<p>Testler koşmadan önce konsol, kendi yapılandırması korunan her test projesini adıyla yazar; örneğin <code>tests/Shop.Tests/Shop.Tests.csproj: your test case filter Category!=Integration, run settings tests/ci.runsettings kept in every run</code>. İş özeti de aynısını listeler, <code>-v</code> ise her koşunun tam <code>dotnet test</code> komutunu yazar.</p>
+<div class="callout"><p>Derlemeniz ya da CI'nız test argümanlarını burada sayılmayan bir yolla veriyorsa (bir Arcade özelliği, <code>dotnet test</code>'in etrafında bir betik), bunları <code>dotnet-test-args</code> ile ya da <code>--</code> sonrasında verin; böylece {{name}} koşularınızın gerçekte ne yaptığını görür.</p></div>
+
+<h2 id="related">İlgili sayfalar</h2>
+<ul>
+  <li><a href="/docs/cli/">CLI referansı</a></li>
+  <li><a href="/docs/github-actions/">GitHub Actions</a></li>
+  <li><a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a></li>
+</ul>

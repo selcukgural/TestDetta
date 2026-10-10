@@ -99,7 +99,7 @@ public static class TestInvocationBuilder
             return new TestInvocation(selection, unfiltered, location);
         }
 
-        if (TestFilter.WithinUserFilter(selection.TestClasses, syntax, userArguments) is not var (filter, rest))
+        if (TestFilter.WithinUserFilter(selection.TestClasses, syntax, TestFilter.WithTeamFilter(userArguments, selection.Project, location.Mode)) is not var (filter, rest))
         {
             var whole = selection with
             {

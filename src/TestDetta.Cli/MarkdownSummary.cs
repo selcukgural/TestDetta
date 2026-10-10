@@ -48,6 +48,19 @@ internal static class MarkdownSummary
             return;
         }
 
+        if (ResultWriter.TeamConfiguration(tests, analysis.RepoRoot) is { Count: > 0 } kept)
+        {
+            // The team's own values, filters included, go into code spans.
+            writer.WriteLine("Your own test configuration is kept in every run TestDetta starts:");
+            writer.WriteLine();
+            foreach (var (project, configuration) in kept)
+            {
+                writer.WriteLine($"- {Code(project)}: {Code(configuration)}");
+            }
+
+            writer.WriteLine();
+        }
+
         writer.WriteLine($"- **{run}** of {tests.Count} affected test project(s) ran, **{skipped}** skipped.");
         if (Durations.Summarize(analysis.Plan) is { } total)
         {
