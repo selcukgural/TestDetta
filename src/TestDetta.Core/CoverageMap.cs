@@ -191,6 +191,15 @@ public sealed record CoverageMap(
     public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? BuildInputs { get; init; }
 
     /// <summary>
+    /// <see cref="BuildInputs"/> of the frameworks other than <see cref="Framework"/>, by framework, for a
+    /// multi-targeted test project recorded without <c>-f</c> (the frameworks of
+    /// <see cref="GeneratedFrameworks"/>): another framework's build may compile other files, so each one that
+    /// runs is compared with its own (docs/design/build-inputs-per-framework.md). Null when the map holds one
+    /// framework's build.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>>? FrameworkBuildInputs { get; init; }
+
+    /// <summary>
     /// Test classes (runtime names) the test reports listed although none of their tests executed:
     /// every test was skipped, inconclusive or ignored, so the map cannot say what the class runs.
     /// Together with <see cref="Classes"/> and <see cref="FailedClasses"/> this is every class the

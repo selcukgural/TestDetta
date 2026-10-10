@@ -163,9 +163,12 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var tracked = new GitClient(loggerFactory.CreateLogger<GitClient>()).TrackedFiles(request.RepoRoot).ToHashSet(StringComparer.Ordinal);
         var buildInputs = GeneratedSourceReader.ReadBuildInputs(request.RepoRoot, request.TestProject, targetPath, owners, assemblies, tracked);
         IReadOnlyList<string>? generatedFrameworks = null;
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>>? frameworkBuildInputs = null;
         if (framework is not null && request.Options.Framework is null)
         {
-            (generated, generatedFrameworks) = ReadOtherFrameworks(dotnet, request, runDirectory, framework, owners, generated);
+            var others = ReadOtherFrameworks(dotnet, request, runDirectory, new RecordedBuild(framework, owners, tracked), generated);
+            (generated, generatedFrameworks) = (others.Generated, others.Frameworks);
+            frameworkBuildInputs = others.Frameworks is null ? null : others.BuildInputs;
         }
         else if (framework is not null && TargetFrameworks(dotnet, request, runDirectory) is [] or [_])
         {
@@ -283,6 +286,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 Generated = generated,
                 GeneratedFrameworks = generatedFrameworks,
                 BuildInputs = buildInputs,
+                FrameworkBuildInputs = frameworkBuildInputs,
                 InstrumentedProjects = InstrumentedProjects(request.RepoRoot, owners, assemblies),
                 FileReadsUnseen = instrumentation.ReadsUnseen,
                 LeakedReads = LeakedReads(resultsFiles, instrumentation.Fields),
@@ -925,43 +929,54 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     }
 
     /// <summary>
-    /// Adds the generated code of every other framework of a multi-targeted test project, which the
-    /// build without <c>-f</c> produced too: a generator may write other code for another framework,
-    /// and <c>dotnet test</c> runs them all (docs/design/generator-output-changes.md). The framework list
-    /// is null when an output is missing, so the selection knows the map holds only some of them.
+    /// Adds the generated code and the build inputs of every other framework of a multi-targeted test
+    /// project, which the build without <c>-f</c> produced too: a generator may write other code for another
+    /// framework, another framework's build may compile other files, and <c>dotnet test</c> runs them all
+    /// (docs/design/generator-output-changes.md, docs/design/build-inputs-per-framework.md). The framework
+    /// list is null when an output is missing, so the selection knows the map holds only some of them.
     /// </summary>
     /// <param name="dotnet">Runs dotnet.</param>
     /// <param name="request">What is being recorded.</param>
     /// <param name="runDirectory">Where dotnet runs.</param>
-    /// <param name="recorded">Framework whose tests are recorded, whose generated code is read already.</param>
-    /// <param name="owners">Project of each repository assembly in the test project's build (<see cref="GeneratedSourceReader.CompiledAgainst"/>).</param>
-    /// <param name="generated">Generated code of <paramref name="recorded"/>.</param>
-    private (List<GeneratedSource> Generated, IReadOnlyList<string>? Frameworks) ReadOtherFrameworks(
-        DotnetProcess dotnet,
-        RecordRequest request,
-        string runDirectory,
-        string recorded,
-        IReadOnlyDictionary<string, ProjectNode> owners,
-        List<GeneratedSource> generated)
+    /// <param name="build">The recorded framework's build: its framework, owners and the tracked files.</param>
+    /// <param name="generated">Generated code of the recorded framework.</param>
+    private OtherFrameworks ReadOtherFrameworks(DotnetProcess dotnet, RecordRequest request, string runDirectory, RecordedBuild build, List<GeneratedSource> generated)
     {
         var frameworks = TargetFrameworks(dotnet, request, runDirectory);
         var all = new List<GeneratedSource>(generated);
-        foreach (var other in frameworks.Where(f => !string.Equals(f, recorded, StringComparison.OrdinalIgnoreCase)))
+        var inputs = new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal);
+        foreach (var other in frameworks.Where(f => !string.Equals(f, build.Framework, StringComparison.OrdinalIgnoreCase)))
         {
             List<string> query = ["msbuild", request.TestProject.Path, $"-p:Configuration={request.Configuration}", $"-p:TargetFramework={other}", "-getProperty:TargetPath"];
             var targetPath = dotnet.Capture(query, runDirectory).Trim();
             if (targetPath.Length == 0 || !File.Exists(targetPath))
             {
                 LogFrameworkNotBuilt(request.TestProject.Path, other);
-                return (all, null);
+                return new OtherFrameworks(all, null, inputs);
             }
 
-            var assemblies = GeneratedSourceReader.RepositoryAssemblies(owners.Keys, Path.GetDirectoryName(targetPath)!);
-            all.AddRange(ReadGenerated(request, targetPath, owners, assemblies, other));
+            var assemblies = GeneratedSourceReader.RepositoryAssemblies(build.Owners.Keys, Path.GetDirectoryName(targetPath)!);
+            all.AddRange(ReadGenerated(request, targetPath, build.Owners, assemblies, other));
+            inputs[other] = GeneratedSourceReader.ReadBuildInputs(request.RepoRoot, request.TestProject, targetPath, build.Owners, assemblies, build.Tracked);
         }
 
-        return (all, frameworks);
+        return new OtherFrameworks(all, frameworks, inputs);
     }
+
+    /// <summary>The recorded framework's build, which the other frameworks' builds are read next to.</summary>
+    /// <param name="Framework">Framework whose tests are recorded, whose generated code and inputs are read already.</param>
+    /// <param name="Owners">Project of each repository assembly in the test project's build (<see cref="GeneratedSourceReader.CompiledAgainst"/>).</param>
+    /// <param name="Tracked">Files git tracks, relative, with '/' separators.</param>
+    private sealed record RecordedBuild(string Framework, IReadOnlyDictionary<string, ProjectNode> Owners, IReadOnlySet<string> Tracked);
+
+    /// <summary>What <see cref="ReadOtherFrameworks"/> read.</summary>
+    /// <param name="Generated">Generated code of every framework read, the recorded one's first.</param>
+    /// <param name="Frameworks">Every framework of the project, or null when one was not built.</param>
+    /// <param name="BuildInputs">Build inputs of each other framework read, by framework.</param>
+    private sealed record OtherFrameworks(
+        List<GeneratedSource> Generated,
+        IReadOnlyList<string>? Frameworks,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>> BuildInputs);
 
     /// <summary>What recording needs in the run settings.</summary>
     /// <param name="WithCollector">True to load the in-process collector (VSTest).</param>

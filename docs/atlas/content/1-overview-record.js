@@ -253,7 +253,7 @@ const CH_RECORD = {
       who: "<code>GeneratedSourceReader.Read</code>, <code>ClassLocationReader.Read</code>",
       file: "src/TestDetta.Coverage/GeneratedSourceReader.cs, GeneratedSources.cs, ClassLocationReader.cs",
       input: "Çıktıdaki depo dll'leri (<code>RepositoryAssemblies</code>; yalnız test projesinin derlerken referans verdiği projelerinkiler, <code>CompiledAgainst</code>) ve <code>.pdb</code>'leri. Aynı dll adını birden çok proje üretebilir (Meziantou.Analyzer'ın Roslyn sürümleri): <code>ProjectAssemblies.Owners</code> ad başına hepsini listeler, ad sahiplerinden biri referans kapanışındaysa kalır ve o proje sahibi olur (birden çoksa yola göre ilki)",
-      output: "<code>List&lt;GeneratedSource(Project, Name, Text) { Framework }&gt;</code>, sınıf → <code>[(File, Line)]</code> ve proje başına <code>BuildInputs</code> (git'in izlemediği derlenen belgelerin PDB sağlama toplamları, gömülü kaynakların SHA-256'sı)",
+      output: "<code>List&lt;GeneratedSource(Project, Name, Text) { Framework }&gt;</code>, sınıf → <code>[(File, Line)]</code> ve proje başına <code>BuildInputs</code> (git'in izlemediği derlenen belgelerin PDB sağlama toplamları, gömülü kaynakların SHA-256'sı); <code>-f</code> olmadan kaydedilen çok framework'lü projede <code>ReadOtherFrameworks</code> diğer framework'lerin üretilen kodunu ve girdilerini de okur (<code>FrameworkBuildInputs</code>)",
       purpose: "Kaynak jeneratörlerinin ürettiği kodu (diskte olmayan, PDB'ye gömülü belgeler) ve sınıfların kaynakta nerede olduğunu haritaya eklemek. Yeniden yazmadan önce yapılır, çünkü Cecil PDB'yi değiştirir.",
     },
     {

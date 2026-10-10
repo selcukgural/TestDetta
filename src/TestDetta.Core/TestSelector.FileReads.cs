@@ -353,8 +353,9 @@ public sealed partial class TestSelector
     /// <summary>
     /// Why the build of <paramref name="consumer"/> in <paramref name="testProject"/>'s output may differ
     /// from its recording, or null when what the build fed its compiler from outside git is the same
-    /// now: a current build of the test project is read as for a changed generator. A build that fails
-    /// ends the analysis, since <c>dotnet test</c> would fail the same way.
+    /// now in every framework the tests run for: a current build of the test project is read as for a
+    /// changed generator (docs/design/build-inputs-per-framework.md). A build that fails ends the analysis,
+    /// since <c>dotnet test</c> would fail the same way.
     /// </summary>
     /// <param name="request">Selection input.</param>
     /// <param name="testProject">Test project at or below the consumer.</param>
@@ -363,14 +364,31 @@ public sealed partial class TestSelector
     private string? BuildInputsDiffer(TestSelectionRequest request, ProjectNode testProject, CoverageMap map, ProjectNode consumer)
     {
         var key = Path.GetRelativePath(request.RepoRoot, consumer.Path).Replace('\\', '/');
-        if (map.BuildInputs?.GetValueOrDefault(key) is not { } before)
+        if (map.BuildInputs is null)
         {
             return "its map does not record what that build fed the compiler";
         }
 
-        if (map.Framework is not null || testProject.SymbolSets.Count > 1)
+        // dotnet test runs every framework unless -f names one, and another framework's build may compile
+        // other files: each framework that runs is compared with its own recorded build.
+        var singleFramework = map.Framework is null && testProject.SymbolSets.Count <= 1;
+        var frameworks = new List<string?>();
+        if (request.Framework is { } run)
         {
-            return "the test project targets several frameworks, whose builds are not compared";
+            frameworks.Add(run);
+        }
+        else if (singleFramework)
+        {
+            frameworks.Add(null);
+        }
+        else
+        {
+            frameworks.AddRange(map.GeneratedFrameworks ?? []);
+        }
+
+        if (frameworks.Count == 0)
+        {
+            return $"the test project targets several frameworks, and its map holds the build of {map.Framework ?? "one"} only (record it without -f, or run the tests with -f {map.Framework ?? "<framework>"})";
         }
 
         if (request.GeneratedCode is not { } reader)
@@ -378,30 +396,46 @@ public sealed partial class TestSelector
             return "nothing builds it here to compare";
         }
 
-        LogComparingBuildInputs(testProject.Path, consumer.Path);
-        var read = reader.Read(request.Graph, request.RepoRoot, testProject, framework: null);
-        if (read.BuildErrors is { } errors)
+        foreach (var framework in frameworks)
         {
-            throw new GeneratedCodeBuildException(
-                $"Building {Path.GetFileName(testProject.Path)} to see what its build feeds {Path.GetFileName(consumer.Path)} failed; dotnet test would fail the same way:{Environment.NewLine}{errors}");
+            // "the build" for a project with one framework, "the net8.0 build" for one of several.
+            var build = singleFramework || framework is null ? "the build" : $"the {framework} build";
+            var recorded = singleFramework || framework is null || string.Equals(framework, map.Framework, StringComparison.OrdinalIgnoreCase)
+                ? map.BuildInputs
+                : map.FrameworkBuildInputs?.GetValueOrDefault(framework);
+            if (recorded?.GetValueOrDefault(key) is not { } before)
+            {
+                return $"its map does not record what {build} fed the compiler (record it without -f)";
+            }
+
+            LogComparingBuildInputs(testProject.Path, consumer.Path, framework ?? "its only framework");
+            var read = reader.Read(request.Graph, request.RepoRoot, testProject, singleFramework ? null : framework);
+            if (read.BuildErrors is { } errors)
+            {
+                throw new GeneratedCodeBuildException(
+                    $"Building {Path.GetFileName(testProject.Path)} to see what its build feeds {Path.GetFileName(consumer.Path)} failed; dotnet test would fail the same way:{Environment.NewLine}{errors}");
+            }
+
+            if (read.BuildInputs?.GetValueOrDefault(key) is not { } now)
+            {
+                return read.Unavailable ?? (singleFramework || framework is null ? "its current build could not be read" : $"its current {framework} build could not be read");
+            }
+
+            var differing = before.Keys.Union(now.Keys, StringComparer.Ordinal)
+                .Where(k => !string.Equals(before.GetValueOrDefault(k), now.GetValueOrDefault(k), StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+            if (differing.Count > 0)
+            {
+                return $"what {build} fed its compiler changed: {string.Join(", ", differing.Take(5))}{(differing.Count > 5 ? ", ..." : string.Empty)}";
+            }
         }
 
-        if (read.BuildInputs?.GetValueOrDefault(key) is not { } now)
-        {
-            return read.Unavailable ?? "its current build could not be read";
-        }
-
-        var differing = before.Keys.Union(now.Keys, StringComparer.Ordinal)
-            .Where(k => !string.Equals(before.GetValueOrDefault(k), now.GetValueOrDefault(k), StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)
-            .ToList();
-        return differing.Count == 0
-            ? null
-            : $"what the build fed its compiler changed: {string.Join(", ", differing.Take(5))}{(differing.Count > 5 ? ", ..." : string.Empty)}";
+        return null;
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "{TestProject}: building it to compare what the build feeds {Consumer}'s compiler from outside git with its map")]
-    private partial void LogComparingBuildInputs(string testProject, string consumer);
+    [LoggerMessage(Level = LogLevel.Information, Message = "{TestProject}: building it ({Framework}) to compare what the build feeds {Consumer}'s compiler from outside git with its map")]
+    private partial void LogComparingBuildInputs(string testProject, string consumer, string framework);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{TestProject}: {Classes} test class(es) started or loaded the output of {Output}; whole project: {WholeProject}")]
     private partial void LogOutputUsers(string testProject, string output, int classes, string wholeProject);

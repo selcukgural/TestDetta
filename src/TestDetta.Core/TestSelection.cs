@@ -135,4 +135,7 @@ public sealed record TestSelectionRequest(
 
     /// <summary>See <see cref="AnalysisOptions.GeneratedCode"/>.</summary>
     public IGeneratedCodeReader? GeneratedCode { get; init; }
+
+    /// <summary>See <see cref="AnalysisOptions.Framework"/>.</summary>
+    public string? Framework { get; init; }
 }
