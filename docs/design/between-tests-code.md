@@ -82,6 +82,27 @@ case.
   with exits only on normal returns, one test each fails. 287 tests green. Round 2 is the first corpus run with it: watch recording failures
   (IL wrapping of unusual test methods, F# test assemblies) and the precision change.
 
+## Fixture teardown (2026-10-11)
+
+xUnit disposes a class fixture when its class finishes (`XunitTestClassRunner.BeforeTestClassFinishedAsync`), with no
+test code running. The fixture marker was only on constructors and `InitializeAsync`, so a teardown went to the bucket
+of code outside every test (in a suite recorded with its own parallelism, start-up), and so did every value it read:
+GraphQL's `ComplexityMetaDataFixture` and `AutomaticPersistedQueriesFixture` dispose a schema, `Schema.Dispose` reads its
+fields, and all the code that built the schema (`DefaultNameConverter.NameForField` among it) counted as having built a
+value outside the tests. Coverage could not answer for it, and the name trace selected 99.7 % of the classes for a
+change that one class ran (found with a probe that wrote the stack of every read outside the tests).
+
+A fixture's synchronous `Dispose()` now enters the fixture's bucket (`TestDettaTracker.EnterFixtureTeardown`) when no
+test code runs: no test is running or being prepared, or, recorded with the suite's parallelism, the flow is outside
+every test. The body is wrapped in `try`/`finally`, and `ExitFixtureTeardown` puts the flow's bucket and the last bucket
+entered back, so what the framework runs next between tests (the next class's injected services) still goes to that
+class. A test that disposes its fixture itself keeps the code in its own class. `DisposeAsync` is left as it was: its
+end, a `ValueTask` awaited once, cannot be seen. GraphQL, fresh recordings, seed 1: 45.5 % to 40.9 %, 0 of 53 missed.
+
+Left open: a test that constructs a fixture type itself (`new StoreFixture()` inside a test) enters the fixture's
+bucket through the constructor marker, which has no such guard, so the rest of that test counts for the fixture's
+users ([backlog](../backlog.md)).
+
 ## Pools and caches in collections (2026-10-02)
 
 The same "built for one, reused by others" shape without a framework: a hand-rolled pool keeps

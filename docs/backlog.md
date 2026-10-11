@@ -42,6 +42,16 @@ that inspects a compiled-against output through `typeof(T).Assembly` (an archite
 nothing a call shows, so only coverage selects it and a body change it would catch can be missed; and product code
 that loads an output by name and hands it to such a test is counted as a catalog (docs/design/loaded-outputs.md).
 
+## Next, a possible miss: a test that constructs a fixture type itself (found 2026-10-11)
+
+The fixture marker at the start of a fixture's constructor makes the fixture the current bucket wherever the
+constructor runs. A test that creates a fixture type itself (`using (new StoreFixture()) { ... }`) then credits the
+rest of that test to the fixture's users, not to its own class: a change to code it runs afterwards misses the test.
+Found while adding the teardown guard (docs/design/between-tests-code.md, "Fixture teardown"); no corpus repository
+showed it. The guard that `Dispose` has (enter only when no test code runs) is the likely fix, but in a suite recorded
+with its own parallelism the flow a framework builds a fixture on must be checked first, or setup code would land in
+the wrong class.
+
 ## ~~The test arguments a project already runs with~~ (done 2026-10-10)
 
 TestDetta keeps the team's filters, run settings and testing platform arguments in every run it starts, and

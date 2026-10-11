@@ -30,5 +30,7 @@ then emptied.
   projects) counts as a reference to that project when some project's references also reach that project, since NuGet
   then uses the project in place of the package. Changes to such a project now reach the projects that take it as a
   package.
+- Recording: what a test fixture's `Dispose` runs counts for the classes that use the fixture, not as code outside
+  every test, so changes to code it reaches select those classes instead of being traced by name (xUnit class fixtures).
 - Selection, safer: the classes the map says ran a changed member of a type that may be found through reflection are
   always selected.

@@ -331,6 +331,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         {
             EnterTestCode = Probe(tracker, nameof(TestDettaTracker.EnterTestCode)),
             ExitTestCode = Probe(tracker, nameof(TestDettaTracker.ExitTestCode)),
+            EnterFixtureTeardown = Probe(tracker, nameof(TestDettaTracker.EnterFixtureTeardown)),
+            ExitFixtureTeardown = Probe(tracker, nameof(TestDettaTracker.ExitFixtureTeardown)),
             ExitTestCodeWhenComplete = Probe(tracker, nameof(TestDettaTracker.ExitTestCodeWhenComplete)),
             PrepareTestInstance = Probe(tracker, nameof(TestDettaTracker.PrepareTestInstance)),
             ExitCacheInto = Probe(tracker, nameof(TestDettaTracker.ExitCacheInto)),
@@ -393,13 +395,14 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                     : dataSources.ContainsKey(method) ? Marker.DataSource
                     : isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
                     : isFixture && IsFixtureSetup(method) ? Marker.Fixture
+                    : isFixture && IsFixtureTeardown(method) ? Marker.FixtureTeardown
                     : Marker.None;
 
                 // The test framework calls a test class's entry points and a fixture's setup (xUnit's
                 // IAsyncLifetime.InitializeAsync) per instance and keeps nothing they build; their own
                 // bucket already holds what they run. As callbacks they made all of it run-once code,
                 // which AfterApply's per-class host setup spread to every class of the suite.
-                var isCallback = marker is not (Marker.TestClass or Marker.Fixture) && ExternalContracts.IsCallback(method, ownAssemblies);
+                var isCallback = marker is not (Marker.TestClass or Marker.Fixture or Marker.FixtureTeardown) && ExternalContracts.IsCallback(method, ownAssemblies);
                 if (isCallback)
                 {
                     callbacks.Add(id);
@@ -542,6 +545,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary><see cref="TestDettaTracker.ExitTestCodeWhenComplete"/>.</summary>
         public required MethodReference ExitTestCodeWhenComplete { get; init; }
+
+        /// <summary><see cref="TestDettaTracker.EnterFixtureTeardown"/>.</summary>
+        public required MethodReference EnterFixtureTeardown { get; init; }
+
+        /// <summary><see cref="TestDettaTracker.ExitFixtureTeardown"/>.</summary>
+        public required MethodReference ExitFixtureTeardown { get; init; }
 
         /// <summary><see cref="TestDettaTracker.PrepareTestInstance"/>.</summary>
         public required MethodReference PrepareTestInstance { get; init; }
@@ -920,6 +929,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         /// <summary>Setup of a test fixture.</summary>
         Fixture,
 
+        /// <summary>The synchronous <c>Dispose</c> of a test fixture, see <see cref="TestDettaTracker.EnterFixtureTeardown"/>.</summary>
+        FixtureTeardown,
+
         /// <summary>A member that supplies test data, see <see cref="DataSources"/>.</summary>
         DataSource,
 
@@ -947,6 +959,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         var il = body.GetILProcessor();
         var first = body.Instructions[0];
+        VariableDefinition? teardownSaved = null;
 
         switch (site.Marker)
         {
@@ -972,6 +985,15 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             case Marker.Fixture:
                 il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
                 il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterFixtureInstance));
+                break;
+
+            case Marker.FixtureTeardown:
+                teardownSaved = new VariableDefinition(method.Module.TypeSystem.Object);
+                body.Variables.Add(teardownSaved);
+                body.InitLocals = true;
+                il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterFixtureTeardown));
+                il.InsertBefore(first, il.Create(OpCodes.Stloc, teardownSaved));
                 break;
 
             case Marker.SetUpScope when site.DataUser is { } scope:
@@ -1034,6 +1056,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         if (testCodeEnd is TestCodeEnd.Return or TestCodeEnd.Task)
         {
             TrackTestCode(method, il, probes, first);
+        }
+
+        if (teardownSaved is not null)
+        {
+            TrackFixtureTeardown(body, il, probes, first, teardownSaved);
         }
 
         body.OptimizeMacros();
@@ -1131,6 +1158,40 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         body.ExceptionHandlers.Add(new ExceptionHandler(end == TestCodeEnd.Task ? ExceptionHandlerType.Fault : ExceptionHandlerType.Finally)
+        {
+            TryStart = first,
+            TryEnd = handler,
+            HandlerStart = handler,
+            HandlerEnd = exit,
+        });
+    }
+
+    /// <summary>
+    /// Puts the body of a fixture's <c>Dispose</c> (from <paramref name="first"/>, after the probes) into a <c>try</c> whose
+    /// <c>finally</c> hands what <see cref="TestDettaTracker.EnterFixtureTeardown"/> returned to
+    /// <see cref="TestDettaTracker.ExitFixtureTeardown"/>; every <c>ret</c> becomes a <c>leave</c> to a new return after it.
+    /// The method returns nothing, so no value is kept.
+    /// </summary>
+    /// <param name="body">Body of the <c>Dispose</c>, probes inserted, short branches expanded.</param>
+    /// <param name="il">Processor of the body.</param>
+    /// <param name="probes">Tracker references.</param>
+    /// <param name="first">First instruction of the original body: the start of the protected region.</param>
+    /// <param name="saved">Local that holds what the enter probe returned.</param>
+    private static void TrackFixtureTeardown(MethodBody body, ILProcessor il, Probes probes, Instruction first, VariableDefinition saved)
+    {
+        var exit = il.Create(OpCodes.Ret);
+        foreach (var ret in body.Instructions.Where(static i => i.OpCode == OpCodes.Ret).ToList())
+        {
+            ret.OpCode = OpCodes.Leave;
+            ret.Operand = exit;
+        }
+
+        var handler = il.Create(OpCodes.Ldloc, saved);
+        il.Append(handler);
+        il.Append(il.Create(OpCodes.Call, probes.ExitFixtureTeardown));
+        il.Append(il.Create(OpCodes.Endfinally));
+        il.Append(exit);
+        body.ExceptionHandlers.Add(new ExceptionHandler(ExceptionHandlerType.Finally)
         {
             TryStart = first,
             TryEnd = handler,
@@ -2020,6 +2081,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="fullName">Full name of the attribute type.</param>
     private static bool HasAttribute(IEnumerable<CustomAttribute> attributes, string fullName) =>
         attributes.Any(a => a.AttributeType.FullName == fullName);
+
+    /// <summary>
+    /// The synchronous <c>Dispose()</c> of a fixture type, as <c>IDisposable</c> declares it (also implemented explicitly):
+    /// the framework calls it when the fixture's users have finished. <c>DisposeAsync</c> is left as it was: its end, a
+    /// <c>ValueTask</c> awaited once, cannot be seen.
+    /// </summary>
+    /// <param name="method">Method of a fixture type.</param>
+    private static bool IsFixtureTeardown(MethodDefinition method) =>
+        !method.IsStatic && method.HasBody && method.Parameters.Count == 0 && method.ReturnType.MetadataType == MetadataType.Void
+        && method.Name is "Dispose" or "System.IDisposable.Dispose";
 
     /// <summary>Constructors and <c>InitializeAsync</c> of a fixture type: the code that sets the fixture up.</summary>
     /// <param name="method">Method of a fixture type.</param>
