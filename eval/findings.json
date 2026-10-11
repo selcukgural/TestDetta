@@ -177,6 +177,9 @@
       "fix": "The classes that ran the changed member are selected, and the change is still traced by name" },
     { "id": "twin-owner-spread", "date": "2026-10-11", "repository": "markdig", "kind": "precision",
       "summary": "Markdig.Signed compiles Markdig's files again and no test references it; its copy of a change stayed unanswered, reached abstract members whose implementations are looked up in every project, and selected the runners of test helpers overriding Markdig's: 163 of 177 classes on 64 of 100 changes",
-      "fix": "An owner no affected test project with a map depends on is answered with nothing to select; 90.8 % -> 47.3 %, 0 of 61 missed" }
+      "fix": "An owner no affected test project with a map depends on is answered with nothing to select; 90.8 % -> 47.3 %, 0 of 61 missed" },
+    { "id": "per-call-interceptors-as-callbacks", "date": "2026-10-11", "repository": "nsubstitute", "kind": "precision",
+      "summary": "Castle interceptors, which run for every intercepted call, counted as third-party callbacks: 811 of 1,251 NSubstitute methods became run-once code and every change reaching them fell back to the name spread",
+      "fix": "Castle's IInterceptor and IAsyncInterceptor are per-call contracts, not callbacks; the generation hook stays one; 60.6 % -> 42.0 %, 0 of 63 missed" }
   ]
 }
