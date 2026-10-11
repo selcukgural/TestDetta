@@ -134,8 +134,12 @@ which the compiler embeds, left out) that the tests put on test classes, test me
 users: those classes and every concrete class deriving from one. Each such attribute type, the closures and state
 machines inside it too, gets the shared bucket of data sources (`[data-source]` and the type), so what it runs counts
 for its users. Its methods are not counted as third-party callbacks (run-once code) any more: the framework keeps what
-they build for those classes alone. A test that uses the attribute type itself keeps its own bucket (the stack guard of
-shared data). An attribute a generic class uses keeps the old rule.
+they build for those classes alone. The bucket is entered only while no test code runs: a test of the extension itself
+calls it through the framework's own API (AutoFixture's `AutoDataAttributeTest` calls `BuildFrom`), where the stack shows
+the framework first, and the first version, guarded by the stack alone, switched there and credited the rest of that test
+to the attribute's users (6 of 56 FsCheck mutants and 3 of 71 AutoFixture ones missed in its measurement). A static class
+counts as a user (an F# module compiles to an abstract sealed class: FsCheck's `Internals`, whose properties use
+`[<Property>]`, was left out and missed 2). An attribute a generic class uses keeps the old rule.
 
 ## Pools and caches in collections (2026-10-02)
 
