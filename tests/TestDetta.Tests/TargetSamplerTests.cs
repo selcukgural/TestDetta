@@ -156,5 +156,28 @@ public sealed class TargetSamplerTests : IDisposable
         }
     }
 
+    [Fact]
+    public void A_targeted_sample_takes_only_the_matching_members_and_keeps_their_kinds()
+    {
+        // A rule that narrows the selection is checked with changes where it acts (docs/evaluation.md, "Targeted mutants").
+        var bridge = string.Join("\n", Enumerable.Range(0, 30).Select(static i => $"    public static int B{i:00}(int x) => x + {i};"));
+        _repo.Write("src/Lib/Bridge.cs", $"namespace Lib.Bridge;\npublic static class Linq\n{{\n{bridge}\n}}\n");
+        var others = string.Join("\n", Enumerable.Range(0, 30).Select(static i => $"    public static int O{i:00}(int x) => x - {i};"));
+        _repo.Write("src/Lib/Other.cs", $"namespace Lib;\npublic static class Other\n{{\n{others}\n}}\n");
+        var kinds = new HashSet<MutantKind> { MutantKind.Throw, MutantKind.ReturnDefault, MutantKind.FlipBranch };
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+
+        var targeted = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), new SampleRequest(25, Seed: 5) { Kinds = kinds, TypePattern = "Lib.Bridge.*" });
+        var byMember = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), new SampleRequest(5, Seed: 5) { Kinds = kinds, TypePattern = "Lib.Other.O0*" });
+        var all = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), new SampleRequest(int.MaxValue, Seed: 5) { Kinds = kinds })
+            .ToDictionary(static t => t.Member, static t => t.Kind);
+
+        Assert.Equal(25, targeted.Count);
+        Assert.All(targeted, static t => Assert.Equal("Lib.Bridge.Linq", t.Member.TypeName));
+        Assert.All(byMember, static t => Assert.StartsWith("O0", t.Member.MemberName, StringComparison.Ordinal));
+        Assert.Equal(5, byMember.Count);
+        Assert.All(targeted, t => Assert.Equal(all[t.Member], t.Kind));
+    }
+
     public void Dispose() => _repo.Dispose();
 }

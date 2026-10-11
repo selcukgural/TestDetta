@@ -124,6 +124,22 @@ Mutant runs answer "does it miss?" and take hours; why a repository selects wide
 Narrowing a rule the triage points at is a design decision for the owner first (it can cost misses); the triage
 says where the selection goes, not that it may go less far.
 
+## Targeted mutants (2026-10-11)
+
+A random sample of 100 changes per repository rarely lands where a new narrowing rule acts: Newtonsoft.Json's
+LinqBridge got 11 of 100, Markdig's twin owner a few more. `--target <pattern>` samples only members whose type, or
+type and member (`Type.Member(args)`), match the pattern (`*` for any text), so a rule is checked with as many changes
+as needed where it acts:
+
+    testdetta-eval --corpus eval/corpus.json --only newtonsoft-json --target "Newtonsoft.Json.Utilities.LinqBridge.*" --synthetic 60
+
+Each member keeps the kind and the place a hash of it and the seed give it, so the stored test outcomes stay usable,
+and the recording cache key does not include the pattern. A different `--seed` gives other members of the target.
+First use: 60 changes in LinqBridge (22 flip-branch, 20 throw, 18 return-default) under `-f net10.0`, where it is not
+compiled: none failed a test, and TestDetta selected only the classes that failed while recording (1.6 %).
+The headroom report (`~/sift-corpus/notes/headroom.py`, fine-tune plan 2026-10-11) says where to aim: per repository,
+the selection share against the floor (the classes the map says ran the changed member).
+
 ## F#: Argu (2026-10-06)
 
 *Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*

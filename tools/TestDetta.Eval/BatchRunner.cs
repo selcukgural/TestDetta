@@ -166,6 +166,10 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     overrides = overrides with { MaxMutants = most };
                     break;
 
+                case "--target":
+                    overrides = overrides with { TargetPattern = value };
+                    break;
+
                 case "--data-files":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var files) || files < 0)
                     {
@@ -257,6 +261,9 @@ internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallel
 {
     /// <summary>See <see cref="RunSettings.AnyRecording"/>.</summary>
     public bool AnyRecording { get; init; }
+
+    /// <summary>See <see cref="RunSettings.TargetPattern"/>.</summary>
+    public string? TargetPattern { get; init; }
 }
 
 /// <summary>
@@ -382,6 +389,7 @@ internal static partial class BatchRunner
             DataFiles = options.Overrides.DataFiles,
             Focus = options.Overrides.Focus,
             MaxMutants = options.Overrides.MaxMutants,
+            TargetPattern = options.Overrides.TargetPattern,
             TiaSolution = entry.TiaSolution,
             Toolchain = entry.Toolchain?.ToToolchain(),
             Environment = entry.Environment ?? new Dictionary<string, string>(),

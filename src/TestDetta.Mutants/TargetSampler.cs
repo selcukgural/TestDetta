@@ -56,6 +56,15 @@ internal sealed record SampleRequest(int Count, int Seed, double CoveredShare = 
     /// (docs/design/audit.md).
     /// </summary>
     public bool Uniform { get; init; }
+
+    /// <summary>
+    /// Only members whose type, or type and member (<c>Type.Member(args)</c>), match this pattern join the sample,
+    /// <c>*</c> standing for any text (<c>Newtonsoft.Json.Utilities.LinqBridge.*</c>); null for all. A rule that
+    /// narrows the selection is checked with changes where it acts, not with the few a random sample of the whole
+    /// repository happens to put there (docs/evaluation.md, "Targeted mutants"). Each member keeps the kind and the
+    /// place a hash of it and the seed give it, so the stored test outcomes of a target stay usable.
+    /// </summary>
+    public string? TypePattern { get; init; }
 }
 
 /// <summary>
@@ -75,6 +84,9 @@ internal static class TargetSampler
     {
         var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue));
         MutantKind[] methodKinds = [.. request.Kinds.Where(static k => k != MutantKind.FieldValue).Order()];
+        var pattern = request.TypePattern is { } glob
+            ? new System.Text.RegularExpressions.Regex("^" + System.Text.RegularExpressions.Regex.Escape(glob).Replace(@"\*", ".*", StringComparison.Ordinal) + "$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)
+            : null;
         var coveredPool = new List<SyntheticTarget>();
         var otherPool = new List<SyntheticTarget>();
         foreach (var ((member, isField), edits) in candidates.OrderBy(static c => c.Key.Member.TypeName, StringComparer.Ordinal).ThenBy(static c => c.Key.Member.MemberName, StringComparer.Ordinal))
@@ -88,6 +100,11 @@ internal static class TargetSampler
             }
 
             if (!isField && methodKinds.Length == 0)
+            {
+                continue;
+            }
+
+            if (pattern is not null && !pattern.IsMatch(member.TypeName) && !pattern.IsMatch($"{member.TypeName}.{member.MemberName}"))
             {
                 continue;
             }

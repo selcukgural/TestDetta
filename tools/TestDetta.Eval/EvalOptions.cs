@@ -67,6 +67,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  without compiling against it (output) of the usual sample, so
                                  stored outcomes are reused; all (default) keeps every change
           --max-mutants <n>      Evaluate at most n changes, in sample order after --focus
+          --target <pattern>     Sample only members whose type (or Type.Member) matches the pattern, * for
+                                 any text, to check a rule with changes where it acts (with --synthetic n)
           --data-files <n>       Also empty n data files outside every project, one change each, to check that
                                  the tests reading them are selected (needs maps with file reads)
           --keep-clones          Keep the clone and every test report when the evaluation ends (default: a
@@ -326,6 +328,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { MaxMutants = most };
                     break;
 
+                case "--target":
+                    run = run with { TargetPattern = value };
+                    break;
+
                 case "--data-files":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var files) || files < 0)
                     {
@@ -489,6 +495,9 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
 
     /// <summary>Most changes evaluated, taken in sample order after <see cref="Focus"/> (<c>--max-mutants</c>); null for all.</summary>
     public int? MaxMutants { get; init; }
+
+    /// <summary>Only members matching this pattern are sampled (<c>--target</c>); see <see cref="SampleRequest.TypePattern"/>.</summary>
+    public string? TargetPattern { get; init; }
 
     /// <summary>Solution dotnet-tia analyses, relative to the repository root; null to let it discover one.</summary>
     public string? TiaSolution { get; init; }
