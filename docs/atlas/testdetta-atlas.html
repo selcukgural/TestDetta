@@ -471,7 +471,7 @@ const CH_RECORD = {
       purpose: "Hangi projelerin test projesi olduğunu (MSBuild değerlendirmesi ya da <code>*.Tests</code> adı) bulmak.",
       body: ul([
         "<code>GitClient.TopLevel(repo)</code> depo kökünü verir.",
-        "<code>ProjectGraphLoader.Load(root)</code> her <code>.csproj</code>'u MSBuild ile değerlendirir (önbellek: <code>.testdetta/cache/graph</code>).",
+        "<code>ProjectGraphLoader.Load(root)</code> her <code>.csproj</code>'u MSBuild ile değerlendirir (önbellek: <code>.testdetta/cache/graph</code>). Ardından <code>LinkPackagesToProjects</code>: deponun kendi projelerinden birinin kimliğine (düz <code>PackageId</code>'si ya da assembly adı) verilen <code>PackageReference</code> o projeye referans sayılır; NuGet aynı restore'da ikisi varsa paketin yerine projeyi kullanır, bu yüzden bağ yalnız bir projenin referans kapanışı ikisini birden tutuyorsa eklenir (<code>RestoredTogether</code>; paketi tek başına alan, ör. Vogen'in tüketici testleri, yayınlanmış paketi çalıştırır) (2026-10-11, AICentral: <code>AICentral</code> Core'u paket, testler proje olarak alıyordu; bağ yokken <code>HttpContextWrapper</code> \"hiçbir kod anmıyor\" sanılıp üç test projesi tamamen koşuyordu).",
         "<code>--project</code> verilmemişse bütün test projeleri kaydedilir.",
         "<code>--incremental</code> ile her proje için önce bir adım planlanır (son adım: \"Artımlı kayıt\"); yoksa hepsi tam kaydedilir.",
       ]),

@@ -134,6 +134,12 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     public IReadOnlySet<string> PackageReferences { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// The project's literal <c>PackageId</c>, when its file or an import sets one; null otherwise, and then its package
+    /// goes by <see cref="AssemblyName"/>, as the SDK's default does. See <c>ProjectGraphLoader.LinkPackagesToProjects</c>.
+    /// </summary>
+    public string? PackageId { get; init; }
+
+    /// <summary>
     /// Normalized full paths of the files in the project's build items as MSBuild evaluated them
     /// (see <see cref="IProjectEvaluator"/>), over all its target frameworks; null when the project
     /// was not evaluated and its files are known only by directory and the XML reading.
