@@ -227,6 +227,17 @@ public static class CoverageMapStore
             json.WriteEndArray();
         }
 
+        if (map.OutputLoadsUnseen is { } loadsUnseen)
+        {
+            json.WriteStartArray("outputLoadsUnseen"u8);
+            foreach (var assembly in loadsUnseen)
+            {
+                json.WriteStringValue(assembly);
+            }
+
+            json.WriteEndArray();
+        }
+
         if (map.InstrumentedProjects is { } instrumented)
         {
             json.WriteStartArray("instrumentedProjects"u8);
@@ -361,6 +372,9 @@ public static class CoverageMapStore
                 Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
                 FileReadsUnseen = root.TryGetProperty("fileReadsUnseen", out var unseen)
                     ? [.. unseen.EnumerateArray().Select(static a => a.GetString()!)]
+                    : null,
+                OutputLoadsUnseen = root.TryGetProperty("outputLoadsUnseen", out var loadsUnseen)
+                    ? [.. loadsUnseen.EnumerateArray().Select(static a => a.GetString()!)]
                     : null,
                 InstrumentedProjects = root.TryGetProperty("instrumentedProjects", out var instrumented)
                     ? [.. instrumented.EnumerateArray().Select(static p => p.GetString()!)]

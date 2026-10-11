@@ -56,6 +56,11 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             : byName;
 
         var decisions = Decide(new Decision(request.Graph, affectedTests, index, byName, withCoverage, coverage) { RunAlone = runAlone });
+        foreach (var (path, loaders) in withCoverage.Loaders)
+        {
+            AddReaders(readers, path, loaders);
+        }
+
         decisions = WithFileReaders(decisions, readers, request.CoverageMaps);
         for (var i = 0; i < decisions.Count; i++)
         {
@@ -68,7 +73,19 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     /// <summary>Result of one spread: the propagation and the projects that must run completely.</summary>
     /// <param name="Propagation">Finished propagation.</param>
     /// <param name="Fallbacks">Projects whose whole downstream must run, with the reason.</param>
-    private sealed record TraceResult(ImpactPropagation Propagation, Dictionary<string, string> Fallbacks);
+    private sealed record TraceResult(ImpactPropagation Propagation, Dictionary<string, string> Fallbacks)
+    {
+        /// <summary>
+        /// Classes chosen because they loaded the output that holds a reflection-found type, by test project
+        /// (<see cref="AnswerByLoaders"/>); they join the readers of changed files.
+        /// </summary>
+        public Dictionary<string, FileReaders> Loaders { get; init; } = new(Paths.Comparer);
+    }
+
+    /// <summary>What a spread adds besides the propagation.</summary>
+    /// <param name="Fallbacks">Projects whose whole downstream must run, with the reason; updated in place.</param>
+    /// <param name="Loaders">See <see cref="TraceResult.Loaders"/>; updated in place.</param>
+    private sealed record TraceOutput(Dictionary<string, string> Fallbacks, Dictionary<string, FileReaders> Loaders);
 
     /// <summary>
     /// Drops the maps whose drift changed something no member describes (build files, non-C# files,
@@ -257,8 +274,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         }
 
         propagation.Run();
-        AddUnreferencedTypes(request.Graph, index, propagation, fallbacks, coverage);
-        return new TraceResult(propagation, fallbacks);
+        var loaders = new Dictionary<string, FileReaders>(Paths.Comparer);
+        AddUnreferencedTypes(request, index, propagation, new TraceOutput(fallbacks, loaders), coverage);
+        return new TraceResult(propagation, fallbacks) { Loaders = loaders };
     }
 
     /// <summary>
@@ -402,20 +420,22 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
     /// names is dead code and cannot affect a test. A type that no longer exists is unknown, so it
     /// also falls back.
     /// </summary>
-    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="request">Selection input.</param>
     /// <param name="index">Indexed source code.</param>
     /// <param name="propagation">Finished propagation.</param>
-    /// <param name="fallbacks">Project-level fallbacks; updated in place.</param>
+    /// <param name="output">Project-level fallbacks and loader classes; updated in place.</param>
     /// <param name="coverage">
-    /// Coverage maps, for a type reached through its code only (<see cref="CoverageSelection.TryResolveType"/>); null for a pure name spread.
+    /// Coverage maps, for a type reached through its code only (<see cref="CoverageSelection.TryResolveType"/>) and for the
+    /// classes that loaded a type's output (<see cref="AnswerByLoaders"/>); null for a pure name spread.
     /// </param>
     private void AddUnreferencedTypes(
-        ProjectGraph graph,
+        TestSelectionRequest request,
         SourceIndex index,
         ImpactPropagation propagation,
-        Dictionary<string, string> fallbacks,
+        TraceOutput output,
         CoverageSelection? coverage)
     {
+        var (graph, fallbacks) = (request.Graph, output.Fallbacks);
         foreach (var (typeName, projects) in propagation.SeededTypes)
         {
             // Every project compiling the type gets the same answer: a fallback for one of them alone
@@ -460,12 +480,117 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             var reason = type is null
                 ? $"{typeName} was removed and nothing names it, so it may have been created through reflection"
                 : $"{typeName} is affected and nothing names it, so it may be created through reflection ({propagation.ExplainSeeded(typeName, limit: 4)}){maps}";
+            if (type is not null && coverage is not null && AnswerByLoaders(request, index, typeName, candidates, output))
+            {
+                continue;
+            }
+
             foreach (var projectPath in candidates)
             {
                 AddFallback(fallbacks, projectPath, reason);
             }
         }
     }
+
+    /// <summary>
+    /// The classes that can create <paramref name="typeName"/> through reflection when every test project that depends on its
+    /// projects references them directly (not as an analyzer) and through no other project, either without compiling
+    /// against them (<c>ReferenceOutputAssembly="false"</c>) or compiling against one whose types no code outside it names:
+    /// the type reaches such a test process only when its project's output is loaded by path or by name, so the classes
+    /// whose map recorded loading it are the ones that can use it (NLog's <c>ManuallyLoadedExtension</c> and its auto-loaded
+    /// <c>NLogAutoLoadExtension</c>, docs/design/loaded-outputs.md). A load the runtime makes for code that names a type
+    /// shows as a load the recording did not see. A test project whose map is untrusted, lacks output uses or did not track
+    /// assembly loads, or saw the output loaded without a call it could attribute, runs completely, and so does one that
+    /// loaded it outside the tests, while initializing or in a fixture's setup. False, leaving the whole downstream to run
+    /// as before, when a test project reaches one of the projects through another project, or compiles against one whose
+    /// types are named elsewhere.
+    /// </summary>
+    /// <param name="request">Selection input.</param>
+    /// <param name="index">Indexed source code, which says whether anything names the projects' types.</param>
+    /// <param name="typeName">The reflection-found type.</param>
+    /// <param name="owners">The non-test projects that compile it.</param>
+    /// <param name="output">Fallbacks and loader classes; updated in place.</param>
+    private bool AnswerByLoaders(TestSelectionRequest request, SourceIndex index, string typeName, List<string> owners, TraceOutput output)
+    {
+        var graph = request.Graph;
+        var tests = graph.WithDependents(owners).Where(p => graph.Find(p) is { IsTestProject: true }).ToList();
+        if (tests.Count == 0 || !tests.TrueForAll(t => LoadsOnly(graph, index, graph[t], owners)))
+        {
+            return false;
+        }
+
+        foreach (var path in tests)
+        {
+            var test = graph[path];
+            if (!request.CoverageMaps.TryGetValue(path, out var map) || map.FailedClasses is null || map.OutputUses is not { } recorded)
+            {
+                AddFallback(output.Fallbacks, path, $"{typeName} may be created through reflection once its project's output is loaded, and no trusted map says which classes load it");
+                continue;
+            }
+
+            foreach (var owner in owners.Where(o => test.References.Contains(o, Paths.Comparer)))
+            {
+                var project = graph[owner];
+                var ownerFile = Path.GetFileName(owner);
+                string[] names = [project.AssemblyName, Path.GetFileNameWithoutExtension(project.Path)];
+                if (UnseenLoads(map, names) is { } unseen)
+                {
+                    AddFallback(output.Fallbacks, path, $"{typeName} may be created through reflection once {ownerFile}'s output is loaded, and {unseen}");
+                    continue;
+                }
+
+                LogReflectionTypeByLoaders(typeName, path, ownerFile);
+                AddUsersOf(path, test, map, recorded, ownerFile, names, "loaded the output of", output.Loaders);
+            }
+        }
+
+        return true;
+
+        // The test project's only way to the owners is a direct reference that does not compile against them, or compiles
+        // against a project whose types nothing outside it names.
+        static bool LoadsOnly(ProjectGraph graph, SourceIndex index, ProjectNode test, List<string> owners)
+        {
+            foreach (var owner in owners)
+            {
+                var direct = test.References.Contains(owner, Paths.Comparer) && !test.GeneratorReferences.Contains(owner);
+                var throughOther = test.References.Any(r => !Paths.Comparer.Equals(r, owner) && Reaches(graph, r, owner));
+                var named = !test.OpaqueReferences.Contains(owner) && index.IsAnyTypeNamedOutside(owner);
+                if (throughOther || !direct || named)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Whether project `from` references `target`, directly or through other projects, compiling against it or not.
+        static bool Reaches(ProjectGraph graph, string from, string target)
+        {
+            var seen = new HashSet<string>(Paths.Comparer) { from };
+            var queue = new Queue<string>([from]);
+            while (queue.TryDequeue(out var project))
+            {
+                if (Paths.Comparer.Equals(project, target))
+                {
+                    return true;
+                }
+
+                foreach (var reference in graph.Find(project)?.References ?? [])
+                {
+                    if (seen.Add(reference))
+                    {
+                        queue.Enqueue(reference);
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName}: found through reflection; in {TestProject}, the classes that loaded {Owner}'s output can create it")]
+    private partial void LogReflectionTypeByLoaders(string typeName, string testProject, string owner);
 
     /// <summary>Everything <see cref="Decide"/> combines.</summary>
     /// <param name="Graph">Projects of the repository.</param>
