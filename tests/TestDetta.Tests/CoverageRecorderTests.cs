@@ -307,6 +307,8 @@ public sealed class CoverageRecorderTests : IDisposable
             </Project>
             """);
         var system = Path.GetTempPath().Replace("\\", "\\\\", StringComparison.Ordinal);
+        var scratch = (Environment.GetEnvironmentVariable("NUGET_SCRATCH") is { Length: > 0 } set ? set : Path.Combine(Path.GetTempPath(), "NuGetScratch"))
+            .Replace("\\", "\\\\", StringComparison.Ordinal);
         _repo.Write("tests/Claims.Tests/Tests.cs", $$"""
             using Xunit;
             namespace Claims.Tests;
@@ -318,6 +320,9 @@ public sealed class CoverageRecorderTests : IDisposable
                     var temporary = Path.GetTempPath();
                     Assert.StartsWith("{{system}}", temporary, StringComparison.Ordinal);
                     Assert.NotEqual("{{system}}", temporary);
+
+                    // NuGet's cross-process locks stay where every shard finds them (Carter's analyzer tests, 2026-10-11).
+                    Assert.Equal("{{scratch}}", Environment.GetEnvironmentVariable("NUGET_SCRATCH"));
                     File.Open(Path.Combine(temporary, "testdetta-claim"), FileMode.CreateNew).Dispose();
                 }
             }

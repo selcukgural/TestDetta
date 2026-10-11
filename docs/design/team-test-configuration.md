@@ -17,6 +17,11 @@ has one test process, and fixtures that claim or clean fixed names under the sys
 shards when two did it together (LibGit2Sharp's `BaseFixture`, 2026-10-11: 15 of 64 classes, which then ran on every
 change). The folder stays in the system's directory so the suite sees the path of its own runs: a first version under
 `/tmp`, a link to `/private/tmp` on macOS, failed 4 LibGit2Sharp classes that compare it with paths libgit2 resolved.
+NuGet keeps the locks that make processes take turns on its shared HTTP cache under the temporary directory
+(`NuGetScratch/lock`), so shards keep the scratch folder they would share without folders of their own
+(`NUGET_SCRATCH`, `NuGetScratch.KeepShared`; one the team set is kept): with a folder each, Carter's analyzer tests in two
+shards resolved reference packages at once, wrote the same cache file and failed ("being used by another process",
+2026-10-11). Audit and evaluation workers do the same.
 
 Measured on 2026-10-10 (SDK 10.0.105 VSTest, SDK 11 rc Microsoft.Testing.Platform with xUnit v3):
 

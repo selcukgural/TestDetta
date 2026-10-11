@@ -18,7 +18,8 @@ then emptied.
 ## Changes
 
 - Recording: each shard of a parallel recording gets its own temporary directory, so fixtures that claim or clean fixed
-  names there no longer fail each other.
+  names there no longer fail each other; NuGet's lock folder stays shared (`NUGET_SCRATCH`), so tests that restore
+  packages in two shards at once no longer fail on its HTTP cache.
 - Selection, more precise: F# modules with only compiler attributes (`AutoOpen`, `RequireQualifiedAccess`,
   `CompilationRepresentation`); a project that compiles another's files again and no test references
   (`Markdig.Signed`); Castle DynamicProxy interceptors, which run per call; reflection-found types in plugins the tests

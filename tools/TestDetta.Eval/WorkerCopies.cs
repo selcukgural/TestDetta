@@ -47,14 +47,19 @@ internal sealed partial class WorkerCopies : IDisposable
     /// </summary>
     public IReadOnlyList<string> Temporary { get; }
 
-    /// <summary>Environment of worker <paramref name="index"/>'s processes: its temporary directory.</summary>
+    /// <summary>Environment of worker <paramref name="index"/>'s processes: its temporary directory, with NuGet's shared locks (<see cref="NuGetScratch"/>).</summary>
     /// <param name="index">Position in <see cref="Roots"/>.</param>
-    public IReadOnlyDictionary<string, string> Environment(int index) => new Dictionary<string, string>(StringComparer.Ordinal)
+    public IReadOnlyDictionary<string, string> Environment(int index)
     {
-        ["TMPDIR"] = Temporary[index] + Path.DirectorySeparatorChar,
-        ["TMP"] = Temporary[index],
-        ["TEMP"] = Temporary[index],
-    };
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["TMPDIR"] = Temporary[index] + Path.DirectorySeparatorChar,
+            ["TMP"] = Temporary[index],
+            ["TEMP"] = Temporary[index],
+        };
+        NuGetScratch.KeepShared(environment);
+        return environment;
+    }
 
     /// <summary>
     /// Makes <paramref name="workers"/> - 1 copies of <paramref name="repoRoot"/> next to it, or returns
