@@ -94,7 +94,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         var nested = new List<int>();
         var dataUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        var extensions = ExtensionAttributes.Find(testAssemblies, ownAssemblies, static type => IsTestClass(type, depth: 0), dataUsers);
+        var extensions = FindExtensions(testAssemblies, ownAssemblies, dataUsers);
         var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks, NestedMethods = nested };
         try
         {
@@ -2104,6 +2104,29 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="fullName">Full name of the attribute type.</param>
     private static bool HasAttribute(IEnumerable<CustomAttribute> attributes, string fullName) =>
         attributes.Any(a => a.AttributeType.FullName == fullName);
+
+    /// <summary>
+    /// <see cref="ExtensionAttributes.Find"/>, or none when the test assemblies cannot be read for it: the extensions' code
+    /// then counts as code outside every test, as before, and the recording goes on.
+    /// </summary>
+    /// <param name="testAssemblies">Paths of the test assemblies.</param>
+    /// <param name="ownAssemblies">Names of the repository's assemblies.</param>
+    /// <param name="dataUsers">Users of each shared bucket; updated in place.</param>
+    private Dictionary<string, string> FindExtensions(IReadOnlySet<string> testAssemblies, IReadOnlySet<string> ownAssemblies, Dictionary<string, List<string>> dataUsers)
+    {
+        try
+        {
+            return ExtensionAttributes.Find(testAssemblies, ownAssemblies, static type => IsTestClass(type, depth: 0), dataUsers);
+        }
+        catch (Exception ex) when (ex is AssemblyResolutionException or BadImageFormatException or IOException or InvalidOperationException)
+        {
+            LogExtensionsUnread(ex.Message);
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The test assemblies could not be read for the test framework extensions they use ({Reason}); their code counts as outside every test")]
+    private partial void LogExtensionsUnread(string reason);
 
     /// <summary>
     /// The shared bucket of the repository attribute type <paramref name="type"/> belongs to (itself, or the type around a

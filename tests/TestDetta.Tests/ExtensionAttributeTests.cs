@@ -31,6 +31,7 @@ public sealed class ExtensionAttributeTests : IDisposable
             using System.Reflection;
             namespace Lib;
             public static class Rows { public static int Make() => 1; public static int Two() => 2; }
+            public abstract class TestBase { }
             public sealed class RowsAttribute : Xunit.Sdk.DataAttribute
             {
                 public override IEnumerable<object[]> GetData(MethodInfo testMethod) { yield return [Rows.Make()]; }
@@ -51,7 +52,8 @@ public sealed class ExtensionAttributeTests : IDisposable
             using Xunit;
             namespace Lib.Tests;
             public class FirstTests { [Theory, Rows] public void Row(int x) => Assert.Equal(1, x); }
-            public class SecondTests { [Theory, Rows] public void Row(int x) => Assert.Equal(1, x); }
+            // Its base type lives in another assembly, which reading the test assembly must resolve (Carter's tests).
+            public class SecondTests : TestBase { [Theory, Rows] public void Row(int x) => Assert.Equal(1, x); }
             public class PlainTests { [Fact] public void Two() => Assert.Equal(2, Rows.Two()); }
             """);
         _repo.Commit("base");

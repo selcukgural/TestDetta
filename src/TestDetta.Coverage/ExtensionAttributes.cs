@@ -32,11 +32,22 @@ internal static class ExtensionAttributes
         var owners = new Dictionary<string, HashSet<TypeDefinition>>(StringComparer.Ordinal);
         var derived = new Dictionary<TypeDefinition, List<TypeDefinition>>();
         var modules = new List<ModuleDefinition>();
+        var resolvers = new List<DefaultAssemblyResolver>();
         try
         {
             foreach (var path in testAssemblies)
             {
-                var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true });
+                // Telling a test class needs its base types and attributes, which live in the other assemblies of the
+                // output and the shared framework, as for instrumenting.
+                var resolver = new DefaultAssemblyResolver();
+                resolvers.Add(resolver);
+                resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
+                foreach (var directory in AssemblyInstrumenter.SharedFrameworkDirectories.Value)
+                {
+                    resolver.AddSearchDirectory(directory);
+                }
+
+                var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, AssemblyResolver = resolver });
                 modules.Add(module);
                 Collect(module, ownAssemblies, isTestClass, owners, derived);
             }
@@ -67,6 +78,11 @@ internal static class ExtensionAttributes
             {
                 module.Dispose();
             }
+
+            foreach (var resolver in resolvers)
+            {
+                resolver.Dispose();
+            }
         }
     }
 
@@ -85,7 +101,7 @@ internal static class ExtensionAttributes
     {
         foreach (var type in module.GetTypes())
         {
-            if (type.BaseType is { } baseType && baseType.Module == module && baseType.Resolve() is { } resolved)
+            if (type.BaseType is { Scope: ModuleDefinition } baseType && baseType.Resolve() is { } resolved)
             {
                 if (!derived.TryGetValue(resolved, out var children))
                 {
