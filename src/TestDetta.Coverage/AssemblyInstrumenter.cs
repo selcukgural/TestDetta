@@ -30,6 +30,9 @@ internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Method
     /// see <see cref="CoverageMap.FileReadsUnseen"/>. Null when third-party assemblies were not asked for.
     /// </summary>
     public IReadOnlyList<string>? ReadsUnseen { get; init; }
+
+    /// <summary>The users of each shared data source bucket; see <see cref="CoverageMap.DataSourceUsers"/>.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> DataSourceUsers { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
 }
 
 /// <summary>
@@ -90,6 +93,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var coreLibrary = TestHostCoreLibrary(testAssemblies);
 
         var nested = new List<int>();
+        var dataUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks, NestedMethods = nested };
         try
         {
@@ -101,10 +105,12 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 var before = methods.Count;
                 InstrumentOne(assembly, testAssemblies.Contains(assembly), productAssemblies?.Contains(assembly) == true, new MethodTables(methods, fields, callbacks, ownAssemblies)
                 {
-                    CoreLibrary = coreLibrary, Nested = nested,
+                    CoreLibrary = coreLibrary, Nested = nested, DataSourceUsers = dataUsers,
                 });
                 LogInstrumented(assembly, methods.Count - before);
             }
+
+            result = result with { DataSourceUsers = dataUsers.ToDictionary(static d => d.Key, static IReadOnlyList<string> (d) => d.Value, StringComparer.Ordinal) };
 
             if (thirdParty is not null)
             {
@@ -283,6 +289,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>Ids of methods compiled from lambdas and local functions; see <see cref="InstrumentationResult.NestedMethods"/>.</summary>
         public List<int> Nested { get; init; } = [];
+
+        /// <summary>Users of each shared data source bucket; see <see cref="InstrumentationResult.DataSourceUsers"/>.</summary>
+        public Dictionary<string, List<string>> DataSourceUsers { get; init; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>Rewrites one assembly, appending its methods to the shared tables.</summary>
@@ -333,6 +342,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             ExitTestCode = Probe(tracker, nameof(TestDettaTracker.ExitTestCode)),
             EnterFixtureTeardown = Probe(tracker, nameof(TestDettaTracker.EnterFixtureTeardown)),
             ExitFixtureTeardown = Probe(tracker, nameof(TestDettaTracker.ExitFixtureTeardown)),
+            EnterSharedDataSource = Probe(tracker, nameof(TestDettaTracker.EnterSharedDataSource)),
             ExitTestCodeWhenComplete = Probe(tracker, nameof(TestDettaTracker.ExitTestCodeWhenComplete)),
             PrepareTestInstance = Probe(tracker, nameof(TestDettaTracker.PrepareTestInstance)),
             ExitCacheInto = Probe(tracker, nameof(TestDettaTracker.ExitCacheInto)),
@@ -359,7 +369,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
-        var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0)) : [];
+        var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0), tables.DataSourceUsers) : [];
         probes = probes with { ReusedCollections = ReusedCollections(module), Tracked = tracked, Registering = RegisteringConstructors(module, tracked), Initializers = initializers };
 
         foreach (var type in module.GetTypes())
@@ -551,6 +561,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary><see cref="TestDettaTracker.ExitFixtureTeardown"/>.</summary>
         public required MethodReference ExitFixtureTeardown { get; init; }
+
+        /// <summary><see cref="TestDettaTracker.EnterSharedDataSource"/>.</summary>
+        public required MethodReference EnterSharedDataSource { get; init; }
 
         /// <summary><see cref="TestDettaTracker.PrepareTestInstance"/>.</summary>
         public required MethodReference PrepareTestInstance { get; init; }
@@ -963,6 +976,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         switch (site.Marker)
         {
+            case Marker.DataSource when site.DataUser is { } shared && shared.StartsWith(CoverageMap.DataSourcePrefix, StringComparison.Ordinal):
+                il.InsertBefore(first, il.Create(OpCodes.Ldstr, shared));
+                il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterSharedDataSource));
+                break;
+
             case Marker.DataSource when site.DataUser is { } user:
                 il.InsertBefore(first, il.Create(OpCodes.Ldstr, user));
                 il.InsertBefore(first, il.Create(OpCodes.Call, probes.EnterDataSource));

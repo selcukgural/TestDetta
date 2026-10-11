@@ -293,6 +293,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 FrameworkBuildInputs = frameworkBuildInputs,
                 InstrumentedProjects = InstrumentedProjects(request.RepoRoot, owners, assemblies),
                 FileReadsUnseen = instrumentation.ReadsUnseen,
+                DataSourceUsers = instrumentation.DataSourceUsers.Count > 0 ? instrumentation.DataSourceUsers : null,
                 LeakedReads = LeakedReads(resultsFiles, instrumentation.Fields),
                 OutputLoadsUnseen = LoadsUnseen(resultsFiles),
                 Timings = suiteParallelism ? null : map.Timings,

@@ -1564,6 +1564,25 @@ public static class TestDettaTracker
     }
 
     /// <summary>
+    /// Makes the shared data source <paramref name="name"/> (<c>[data-source]</c> and the type declaring it) the current bucket: a test data
+    /// member several classes use, whose rows serve all of them and no other. The recorder names its users, so its code
+    /// counts for them rather than as code outside every test (GraphQL's <c>GraphQLSerializersTestData</c>, the
+    /// <c>[ClassData]</c> of 13 classes). A test that calls it itself keeps its own bucket.
+    /// </summary>
+    /// <param name="name">Bucket name, written by the instrumenter.</param>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static void EnterSharedDataSource(string name)
+    {
+        if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
+            && CalledFromRunningTest(current.Name, entered: null, current.InstanceType))
+        {
+            return;
+        }
+
+        Enter(Fixtures, name, isFixture: true, data: true);
+    }
+
+    /// <summary>
     /// Makes code outside every test the current bucket. Called at the start of a test data source
     /// that several test classes use: its rows serve all of them, so the map must not credit them to
     /// one, and code that ran outside every test is answered by the safe fallback rules instead.
