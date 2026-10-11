@@ -58,6 +58,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             ApplyEvaluation(root, nodes, evaluator);
         }
 
+        LinkPackagesToProjects(nodes);
         var graph = new ProjectGraph(nodes);
         WarnAboutMissingReferences(nodes);
         LogLoaded(nodes.Count, stopwatch.ElapsedMilliseconds);
@@ -320,6 +321,12 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
             UnknownItemPatterns = inputs.UnknownItems,
             PackageReferences = inputs.Packages,
         };
+
+        if (inputs.Properties.TryGetValue("PackageId", out var packageIds) && packageIds.Count == 1 && packageIds.First() is { Length: > 0 } packageId
+            && !packageId.Contains("$(", StringComparison.Ordinal))
+        {
+            node = node with { PackageId = packageId };
+        }
 
         // A literal RootNamespace the XML alone can tell; MSBuild's evaluation replaces it.
         if (inputs.Properties.TryGetValue("RootNamespace", out var rootNamespaces) && rootNamespaces.Count == 1 && rootNamespaces.First() is { Length: > 0 } rootNamespace)
@@ -973,4 +980,129 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Loaded {Count} project(s) in {ElapsedMs} ms")]
     private partial void LogLoaded(int count, long elapsedMs);
+
+    /// <summary>
+    /// Adds a reference for every package a project takes that one of the repository's own projects makes: a
+    /// <c>PackageReference</c> to its <see cref="ProjectNode.PackageId"/>, or its assembly name, which the SDK takes for
+    /// one. A restore whose graph also holds that project uses the project in place of the package (NuGet: a project wins
+    /// over a package of its id), so the code built against the package runs with the repository's build: AICentral and
+    /// its Azure AI Search proxy take AICentral.Core as a package, its tests take the project, and their output holds the
+    /// project's AICentral.Core.dll. Without the reference, a change to AICentral.Core reached neither project, their code
+    /// was not indexed, and a type only they create looked as if nothing named it. The reference is added only where some
+    /// project's references, followed through, hold both the package's user and its maker, as one restore then does: a
+    /// test project that takes the package alone (Vogen's consumer tests) runs the published package, which the
+    /// repository's change does not reach.
+    /// </summary>
+    /// <param name="nodes">Projects by path; replaced in place.</param>
+    private void LinkPackagesToProjects(Dictionary<string, ProjectNode> nodes)
+    {
+        var byPackage = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes.Values)
+        {
+            foreach (var id in (ReadOnlySpan<string?>)[node.PackageId, node.AssemblyName])
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    continue;
+                }
+
+                if (!byPackage.TryGetValue(id, out var makers))
+                {
+                    byPackage[id] = makers = [];
+                }
+
+                if (!makers.Contains(node.Path, Paths.Comparer))
+                {
+                    makers.Add(node.Path);
+                }
+            }
+        }
+
+        // A restore follows project references only, not the references this adds.
+        var projectReferences = nodes.ToDictionary(static n => n.Key, static n => n.Value.References, Paths.Comparer);
+        var closures = new Dictionary<string, HashSet<string>>(Paths.Comparer);
+        foreach (var (path, node) in nodes.ToList())
+        {
+            List<string>? added = null;
+            foreach (var package in node.PackageReferences)
+            {
+                if (!byPackage.TryGetValue(package, out var makers))
+                {
+                    continue;
+                }
+
+                foreach (var maker in makers)
+                {
+                    if (Paths.Comparer.Equals(maker, path) || node.References.Contains(maker, Paths.Comparer) || added?.Contains(maker, Paths.Comparer) == true
+                        || !RestoredTogether(projectReferences, closures, path, maker))
+                    {
+                        continue;
+                    }
+
+                    (added ??= []).Add(maker);
+                    LogPackageOfProject(path, package, maker);
+                }
+            }
+
+            if (added is not null)
+            {
+                nodes[path] = node with { References = [.. node.References, .. added] };
+            }
+        }
+    }
+
+    /// <summary>True when the project references of some project, followed through, reach both <paramref name="user"/> and <paramref name="maker"/>.</summary>
+    /// <param name="projectReferences">Each project's project references, by path.</param>
+    /// <param name="closures">Each project's closure, computed on first use; updated in place.</param>
+    /// <param name="user">The project that takes the package.</param>
+    /// <param name="maker">The project that makes it.</param>
+    private static bool RestoredTogether(
+        Dictionary<string, IReadOnlyList<string>> projectReferences,
+        Dictionary<string, HashSet<string>> closures,
+        string user,
+        string maker)
+    {
+        foreach (var path in projectReferences.Keys)
+        {
+            var closure = ClosureOf(path);
+            if (closure.Contains(user) && closure.Contains(maker))
+            {
+                return true;
+            }
+        }
+
+        return false;
+
+        HashSet<string> ClosureOf(string start)
+        {
+            if (closures.TryGetValue(start, out var known))
+            {
+                return known;
+            }
+
+            var reached = new HashSet<string>(Paths.Comparer) { start };
+            var pending = new Stack<string>([start]);
+            while (pending.TryPop(out var current))
+            {
+                if (!projectReferences.TryGetValue(current, out var references))
+                {
+                    continue;
+                }
+
+                foreach (var reference in references)
+                {
+                    if (reached.Add(reference))
+                    {
+                        pending.Push(reference);
+                    }
+                }
+            }
+
+            closures[start] = reached;
+            return reached;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Project} takes package {Package}, which {Maker} makes: it depends on that project, which a restore holding both uses in place of the package")]
+    private partial void LogPackageOfProject(string project, string package, string maker);
 }

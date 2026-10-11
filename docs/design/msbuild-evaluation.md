@@ -71,6 +71,21 @@ as the fallback:
 - **Assembly names** come from evaluation; `AssemblyNameUnresolved` only stays for projects that
   could not be evaluated.
 - Imports (build inputs) keep the XML rule; evaluation does not report them reliably.
+- **Packages the repository makes** (2026-10-11, `ProjectGraphLoader.LinkPackagesToProjects`): a `PackageReference`
+  to the id of one of the repository's projects (its literal `PackageId`, or its assembly name, the SDK's default
+  id; any case) is a reference to that project. NuGet uses a project in place of a package of its id when one
+  restore holds both, so code built against the package runs with the repository's build. Found on AICentral:
+  `AICentral` and `AICentral.AzureAISearchVectorizer` take `AICentral.Core` 0.21.0-pullrequest… as a package, the
+  test projects take the project, and the tests' `project.assets.json` resolves `AICentral.Core/1.0.0` as a project;
+  their output holds the project's build byte for byte. Without the reference, a change to `AICentral.Core` reached
+  neither project, their code was not indexed, and `HttpContextWrapper`, which only they create, looked as if
+  nothing named it: every class of three test projects ran. The reference is added only where some project's
+  project references, followed through, hold both the package's user and its maker, as one restore then does: a
+  project that takes the package alone (Vogen's consumer tests) runs the published package, which a change in the
+  repository does not reach. A scan of the 59 corpus repositories (project files at their pinned commits) found
+  18 with such a package reference, mostly samples, benchmarks and documentation snippets; with the restore
+  condition, AICentral is the only one where it adds a reference a test project's selection sees (MSBuild's test
+  assets and a UnitsNet sample add one each; Mapperly, protobuf-net, Autofac and Mediator reference the project too).
 
 A project whose evaluation failed (missing SDK, an error in its files) keeps its XML node, and the
 analysis logs it. When the process fails as a whole, or the SDK is too old for the hooks, the whole
