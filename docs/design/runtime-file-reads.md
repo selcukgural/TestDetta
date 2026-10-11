@@ -82,6 +82,17 @@ the test project; a change or a deletion then runs the project.
 - **Tracker**: `FileRead`/`DirectoryListed` resolve the path against the current directory and add it
   to the bucket a hit would go to; inside a static constructor or cache fill, to a separate
   initialization set. Results gain `fileReads` (classes, fixtures, ambient, initialization).
+  `File.Exists` goes to `FileChecked` (2026-10-11), which keeps the path with `?` before it
+  (`TestDettaTracker.CheckPrefix`; a full path starts with `/` or a drive letter). A check stands for the
+  tracked file it names, as a read does, since a change adding or deleting the file alters what it returns.
+  It is no read of a build output: a changed project's output exists before and after the change, and a
+  load of the file found shows as a load of its own. Found on NodaTime: `new XmlSerializer(...)` looks for a
+  pregenerated `*.XmlSerializers` assembly by name, `ResourceManager` for satellite assemblies, and for every
+  name the runtime cannot resolve NUnit's engine (`TestAssemblyResolver`, through
+  `Microsoft.Extensions.DependencyModel`) checks the build output for every library of the dependency
+  context, NodaTime.dll among them: 27 classes "read" every output, and every change to NodaTime ran them
+  (share 22.7 %; 13.2 % with checks apart, 0 of 60 missed; Heron.MudCalendar 37.7 % to 31.0 %, its floor, 0 of 55; FastEndpoints, CliWrap and Autofac unchanged). Left open: a build that writes a file into the
+  output or not depending on the code it compiles; a check for that file would no longer select.
 - **Map**: optional `fileReads` section, no format change; a map without it knows no reads.
   `FileReadPaths` keeps repository paths only (outside, `.git/` and `.testdetta/` dropped); a copy under
   `bin`/`obj` stands for the tracked files with its name and content (its name alone when no content

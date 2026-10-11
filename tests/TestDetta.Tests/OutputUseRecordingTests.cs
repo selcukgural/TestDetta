@@ -92,6 +92,12 @@ public sealed class OutputUseRecordingTests : IDisposable
                 [Fact] public void Loads() => Assert.Equal("Helper", Assembly.LoadFrom(HelperPath.Dll()).GetName().Name);
             }
 
+            // Only looks for it, as an assembly resolver probing every library does: its content is not read.
+            public class CheckTests { [Fact] public void Finds() => Assert.True(File.Exists(HelperPath.Dll())); }
+
+            // Reads its bytes, as a compilation test does.
+            public class ReadTests { [Fact] public void Reads() => Assert.NotEmpty(File.ReadAllBytes(HelperPath.Dll())); }
+
             public class PlainTests { [Fact] public void Adds() => Assert.Equal(2, 1 + 1); }
             """);
         _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
@@ -124,7 +130,12 @@ public sealed class OutputUseRecordingTests : IDisposable
         Assert.Contains("Helper", uses.Classes["Tools.Tests.StartTests"]);
         Assert.Contains("Helper", uses.Classes["Tools.Tests.HiddenStartTests"]);
         Assert.Contains("Helper", uses.Classes["Tools.Tests.LoadTests"]);
+        Assert.Contains("Helper", uses.Classes["Tools.Tests.ReadTests"]);
+        Assert.DoesNotContain("Helper", uses.Classes.GetValueOrDefault("Tools.Tests.CheckTests") ?? []);
         Assert.False(uses.Classes.ContainsKey("Tools.Tests.PlainTests"));
+
+        // A check for a tracked file still stands for it: a change adding or deleting it alters what the check returns.
+        Assert.Contains("global.json", map.FileReads!.Classes["Tools.Tests.CheckTests"]);
         Assert.DoesNotContain("Helper", uses.Ambient);
 
         var path = Path.Combine(_repo.Root, ".testdetta", "roundtrip.json");

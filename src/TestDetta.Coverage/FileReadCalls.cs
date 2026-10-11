@@ -56,6 +56,15 @@ internal static class FileReadCalls
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>
+    /// The part of <see cref="Readers"/> that only checks whether a file exists: reported through
+    /// <see cref="FileProbes.Checked"/>. A check sees a non-code file a change adds or deletes, but not a
+    /// project's changed code in its build output, which exists before and after; an assembly resolver probing
+    /// every library of the dependency context (NUnit's engine, for each name the runtime could not resolve)
+    /// is no read of the outputs it finds (docs/design/runtime-file-reads.md).
+    /// </summary>
+    private static readonly FrozenSet<string> Checkers = FrozenSet.Create(StringComparer.Ordinal, "System.IO.File::Exists");
+
+    /// <summary>
     /// Methods that start a process or load an assembly, by declaring type and name, every overload:
     /// their first two arguments (the object first, for an instance method) go to
     /// <see cref="TestDettaTracker.OutputUsed"/>, which finds the paths and names among them.
@@ -98,15 +107,14 @@ internal static class FileReadCalls
 
     /// <summary>Wraps every file-reading, process-starting and assembly-loading call in the bodies of <paramref name="module"/>.</summary>
     /// <param name="module">Module being instrumented.</param>
-    /// <param name="fileRead">Reference to <see cref="TestDettaTracker.FileRead"/> in the module.</param>
-    /// <param name="directoryListed">Reference to <see cref="TestDettaTracker.DirectoryListed"/> in the module.</param>
+    /// <param name="files">References to the tracker's file probes in the module.</param>
     /// <param name="outputs">
     /// References to the tracker's output probes in the module; null to leave process starts and
     /// assembly loads alone, as in third-party code, where the test platform loading the test assembly would
     /// look like a use of the test project's output.
     /// </param>
     /// <returns>The number of calls wrapped.</returns>
-    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed, OutputProbes? outputs)
+    public static int Wrap(ModuleDefinition module, FileProbes files, OutputProbes? outputs)
     {
         TypeDefinition? holder = null;
         var wrappers = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
@@ -135,7 +143,7 @@ internal static class FileReadCalls
                     var probe = starter && NameLoaders.Contains($"{target.DeclaringType.FullName}::{target.Name}") ? outputs!.LoadedByName : outputs?.Used;
                     wrapper = starter
                         ? Wrapper(module, holder, target, instruction.OpCode, probe!, wrappers.Count, arguments: 2)
-                        : Wrapper(module, holder, target, instruction.OpCode, Directory(target) == true ? directoryListed : fileRead, wrappers.Count, arguments: 1);
+                        : Wrapper(module, holder, target, instruction.OpCode, FileProbe(target, files), wrappers.Count, arguments: 1);
                     wrappers[key] = wrapper;
                 }
 
@@ -158,6 +166,14 @@ internal static class FileReadCalls
         && Readers.TryGetValue($"{target.DeclaringType.FullName}::{target.Name}", out var directory)
             ? directory
             : null;
+
+    /// <summary>The probe a wrapped file or directory call reports its path to.</summary>
+    /// <param name="target">The called method, one of <see cref="Readers"/>.</param>
+    /// <param name="files">The tracker's file probes.</param>
+    private static MethodReference FileProbe(MethodReference target, FileProbes files) =>
+        Directory(target) == true ? files.Listed
+        : Checkers.Contains($"{target.DeclaringType.FullName}::{target.Name}") ? files.Checked
+        : files.Read;
 
     /// <summary>True for a call that starts a process or loads an assembly; see <see cref="Starters"/>.</summary>
     /// <param name="target">The called method.</param>
@@ -246,6 +262,12 @@ internal static class FileReadCalls
         return wrapper;
     }
 }
+
+/// <summary>The tracker's probes for file reads, as references in the module being instrumented.</summary>
+/// <param name="Read">Reference to <see cref="TestDettaTracker.FileRead"/>: a file opened, read, copied or described.</param>
+/// <param name="Checked">Reference to <see cref="TestDettaTracker.FileChecked"/>: a file looked for.</param>
+/// <param name="Listed">Reference to <see cref="TestDettaTracker.DirectoryListed"/>: a directory listed or looked for.</param>
+internal sealed record FileProbes(MethodReference Read, MethodReference Checked, MethodReference Listed);
 
 /// <summary>The tracker's probes for process starts and assembly loads, as references in the module being instrumented.</summary>
 /// <param name="Used">Reference to <see cref="TestDettaTracker.OutputUsed"/>: starts, loads by a path, scans.</param>

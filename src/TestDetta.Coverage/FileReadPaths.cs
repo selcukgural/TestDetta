@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using TestDetta.Core;
+using TestDetta.Coverage.Runtime;
 
 namespace TestDetta.Coverage;
 
@@ -31,8 +32,12 @@ internal sealed class FileReadPaths(string repoRoot, IReadOnlyList<string> track
     /// <summary>Resolved paths, since a file is read by many classes.</summary>
     private readonly Dictionary<string, IReadOnlyList<string>> _resolved = new(StringComparer.Ordinal);
 
-    /// <summary>The repository paths a full path the tracker saw stands for; a directory ends in '/'.</summary>
-    /// <param name="full">Full path with '/' separators; a listed directory ends in '/'.</param>
+    /// <summary>
+    /// The repository paths a full path the tracker saw stands for; a directory ends in '/'. A file only checked for
+    /// (<see cref="TestDettaTracker.CheckPrefix"/>) stands for the same files as one read: a change adding or deleting
+    /// it alters what the check returns.
+    /// </summary>
+    /// <param name="full">Full path with '/' separators; a listed directory ends in '/', a checked file starts with '?'.</param>
     public IReadOnlyList<string> Resolve(string full)
     {
         if (!_resolved.TryGetValue(full, out var paths))
@@ -72,6 +77,11 @@ internal sealed class FileReadPaths(string repoRoot, IReadOnlyList<string> track
     /// <param name="full">Full path.</param>
     private List<string> Compute(string full)
     {
+        if (full.StartsWith(TestDettaTracker.CheckPrefix, StringComparison.Ordinal))
+        {
+            full = full[TestDettaTracker.CheckPrefix.Length..];
+        }
+
         // The test may reach the repository through a link (macOS's /var is /private/var).
         var directory = full.EndsWith('/');
         var path = Paths.ResolveLinks(directory ? full.TrimEnd('/') : full);

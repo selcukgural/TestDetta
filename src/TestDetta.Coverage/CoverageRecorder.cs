@@ -1395,7 +1395,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         /// <summary>
         /// The names (see <see cref="TestDettaTracker.OutputUsed"/>) of the files read under a <c>bin</c> or
         /// <c>obj</c> folder of the repository that stand for no tracked file: a build wrote them, so they
-        /// may be the output of a project referenced without compiling against it.
+        /// may be the output of a project referenced without compiling against it. A file only checked for
+        /// (<see cref="TestDettaTracker.CheckPrefix"/>) is left out: a changed project's output exists before and after
+        /// the change, so the check cannot see it, and NUnit's engine checks for every library of the dependency
+        /// context whenever the runtime cannot resolve a name (an XmlSerializer looking for its pregenerated assembly).
+        /// A load of what it found shows as a load of its own.
         /// </summary>
         /// <param name="paths">Resolves full paths.</param>
         public FileReads BuildOutputs(FileReadPaths paths)
@@ -1410,7 +1414,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             IReadOnlyList<string> Of(HashSet<string> fulls)
             {
                 var names = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var full in fulls.Where(f => !f.EndsWith('/') && paths.IsUntrackedBuildOutput(f)))
+                foreach (var full in fulls.Where(f => !f.EndsWith('/') && !f.StartsWith(TestDettaTracker.CheckPrefix, StringComparison.Ordinal) && paths.IsUntrackedBuildOutput(f)))
                 {
                     TestDettaTracker.AddNames(names, full);
                 }
