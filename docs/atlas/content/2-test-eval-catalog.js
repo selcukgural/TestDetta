@@ -326,7 +326,7 @@ const CH_EVAL = {
     },
     {
       title: "Bozulacak üyeler örneklenir", nodes: ["rec", "sample"], edges: ["e4"],
-      who: "<code>TargetSampler.Sample(graph, root, covered, SampleRequest(Count, Seed) { Kinds, DataFiles, TypePattern, Replay })</code>, <code>DataFileSampler.Sample</code> / <code>Replay</code>",
+      who: "<code>TargetSampler.Sample(graph, root, covered, SampleRequest(Count, Seed) { Kinds, DataFiles, TypePattern, Replay, Framework })</code> (<code>Framework</code>: <code>-f</code> ile C# dosyaları o framework'ün sembolleriyle okunur, düzenleme mutantın değiştirdiği tanıma düşer; 2026-10-11, Alba), <code>DataFileSampler.Sample</code> / <code>Replay</code>",
       file: "src/TestDetta.Mutants/TargetSampler.cs, MutantKind.cs; tools/TestDetta.Eval/DataFileSampler.cs",
       input: "Kütüphane kodundaki üyeler; haritaya göre kapsanmış olanlar (%80 kapsanmış, %20 kapsanmamış)",
       output: "<code>SyntheticTarget(Member, Edits, Covered) { Kind }</code> listesi; tür Throw, ReturnDefault, FlipBranch, FieldValue ya da EmptyFile",

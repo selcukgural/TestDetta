@@ -162,6 +162,17 @@ pattern outside them (AfterApply's architecture tests, which load each layer by 
 
 Tests of the evaluator that compare two runs or expect particular changes pass `--seed 1`.
 
+## A run's framework decides where the edit goes (2026-10-11)
+
+The sampler read C# with no preprocessor symbols. Alba declares `WebApplicationFactoryHostBuilderAdapter` under
+`#if NET11_0_OR_GREATER` and again under `#else`; its corpus entry runs `-f net11.0`. The edit went to the `#else`
+declaration, which a `net11.0` run does not compile, while the mutant, applied by member name to the run's build,
+changed the other one: TestDetta rightly selected nothing for an edit its run cannot see, and the tests failed on a
+mutant of code no edit touched, a miss of the evaluation's own making (seen since framework-only code selects nothing
+with `-f`, #22). With a run framework, each C# file is now read with the symbols its project defines for it
+(`SampleRequest.Framework`), so the edit lands on the declaration the mutant changes: Alba 0 of 64 missed, the change
+selected 82.5 % of the classes and caught.
+
 ## F#: Argu (2026-10-06)
 
 *Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*
