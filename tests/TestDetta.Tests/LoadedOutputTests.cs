@@ -88,9 +88,24 @@ public sealed class LoadedOutputTests : IDisposable
     }
 
     [Fact]
+    public void Loading_a_compiled_against_output_by_its_name_in_product_code_is_no_load_to_inspect()
+    {
+        // Carter's module catalog loads every library of the dependency context by name: before, every class using it ran.
+        // A test's own Assembly.Load(name) is recorded as any load and still selects (AfterApply's architecture tests).
+        WriteMap(Uses(new() { ["Lib.Tests.OtherTests"] = [CoverageMap.OutputNameLoadPrefix + "Lib"] }));
+        _repo.Replace("src/Lib/Calc.cs", "=> 2", "=> 3");
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.CalcTests"], selection.TestClasses);
+    }
+
+    [Fact]
     public void The_recorder_and_the_selection_mark_scans_alike()
     {
         Assert.Equal(TestDetta.Coverage.Runtime.TestDettaTracker.ScanPrefix, CoverageMap.OutputScanPrefix);
+        Assert.Equal(TestDetta.Coverage.Runtime.TestDettaTracker.NameLoadPrefix, CoverageMap.OutputNameLoadPrefix);
     }
 
     [Fact]

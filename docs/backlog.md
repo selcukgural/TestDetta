@@ -37,7 +37,10 @@ project completely (docs/design/loaded-outputs.md). What remains: an assembly is
 class that uses it through third-party code (a plugin host handing out the loaded assembly, a third-party scan of the
 loaded assemblies, `AssemblyLoadContext.Assemblies`) is not recorded. The owner wants to talk about it: whether to
 treat any third-party scan or host as "every class may use every loaded plugin", whether to wrap more enumeration
-APIs, and whether the residual order-dependent case needs its own signal.
+APIs, and whether the residual order-dependent case needs its own signal. Found with Carter's fix (2026-10-11): a test
+that inspects a compiled-against output through `typeof(T).Assembly` (an architecture test written that way) loads
+nothing a call shows, so only coverage selects it and a body change it would catch can be missed; and product code
+that loads an output by name and hands it to such a test is counted as a catalog (docs/design/loaded-outputs.md).
 
 ## ~~The test arguments a project already runs with~~ (done 2026-10-10)
 

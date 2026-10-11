@@ -278,14 +278,16 @@ public sealed partial class TestSelector
             : added;
 
     /// <summary>
-    /// <paramref name="names"/> and the same names as a scan of the loaded assemblies records them
-    /// (<see cref="CoverageMap.OutputScanPrefix"/>): a class that enumerated the loaded assemblies may have found an
-    /// output's types there, as a plugin host does. Only the rules for outputs found at run time count scans; a project
-    /// the tests compile against is loaded by every class that names it, and repository code scans for its own
-    /// converters while initializing (docs/design/loaded-outputs.md).
+    /// <paramref name="names"/> and the same names as a scan of the loaded assemblies (<see cref="CoverageMap.OutputScanPrefix"/>)
+    /// and a load by name (<see cref="CoverageMap.OutputNameLoadPrefix"/>) record them: a class that enumerated the
+    /// loaded assemblies, or loaded one by its name, may have found an output's types there, as a plugin host does. Only
+    /// the rules for outputs found at run time count them; a project the tests compile against is loaded by every class
+    /// that names it, repository code scans for its own converters while initializing (Newtonsoft.Json), and a module
+    /// catalog loads every library of the dependency context by name (Carter) (docs/design/loaded-outputs.md).
     /// </summary>
     /// <param name="names">An output's assembly and project names.</param>
-    internal static string[] WithScans(string[] names) => [.. names, .. names.Select(static n => CoverageMap.OutputScanPrefix + n)];
+    internal static string[] WithScans(string[] names) =>
+        [.. names, .. names.Select(static n => CoverageMap.OutputScanPrefix + n), .. names.Select(static n => CoverageMap.OutputNameLoadPrefix + n)];
 
     /// <summary>
     /// Why <paramref name="map"/>'s output uses may miss a class that loaded <paramref name="names"/>, or null when they
