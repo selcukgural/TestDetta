@@ -90,3 +90,7 @@ review.
 
 - **Select more, never less.** When the analysis is unsure whether a change affects a project,
   it treats the project as affected. A missed test is a bug; an extra test only costs CI time.
+- **Say when selection depends on the environment.** A change that makes the same code change select more or fewer
+  tests depending on how the tests run (target framework, `-f`, operating system, a map recorded by an older version)
+  is stated on the site's Limitations page (both languages) and in `docs/release-notes-unreleased.md` under
+  "Behaviour users must know about", in the same change.

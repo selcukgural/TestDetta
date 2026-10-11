@@ -1,0 +1,27 @@
+# Release notes: next version (draft)
+
+Collected as changes merge; copied into the release notes on `TestDetta/action` at release (docs/release.md, step 5),
+then emptied.
+
+## Behaviour users must know about
+
+- **Selection depends on the target frameworks the tests run for.** For a test project that targets several
+  frameworks, a run with `-f <tfm>` loads only that framework's builds: a change compiled only for other frameworks
+  (code under an `#if` that framework leaves out) now selects nothing in that run, when the changed project and every
+  project between it and the test projects target that framework. The same change still selects its tests in a run
+  without `-f`. A CI job that runs one framework can therefore skip tests only another framework's build could fail:
+  run every framework somewhere, for example nightly (site: Limitations, "Target frameworks").
+- **Maps need recording again after upgrading.** Recording now tracks assembly loads. A map recorded by an earlier
+  version runs a test project completely for a changed project it references with `ReferenceOutputAssembly="false"`,
+  until the map is recorded again (site: What runs everything).
+
+## Changes
+
+- Recording: each shard of a parallel recording gets its own temporary directory, so fixtures that claim or clean fixed
+  names there no longer fail each other.
+- Selection, more precise: F# modules with only compiler attributes (`AutoOpen`, `RequireQualifiedAccess`,
+  `CompilationRepresentation`); a project that compiles another's files again and no test references
+  (`Markdig.Signed`); Castle DynamicProxy interceptors, which run per call; reflection-found types in plugins the tests
+  load by path.
+- Selection, safer: the classes the map says ran a changed member of a type that may be found through reflection are
+  always selected.

@@ -111,6 +111,7 @@ td test --shadow --summary-file "$GITHUB_STEP_SUMMARY" -- MySolution.sln -c Rele
 
 <h3 id="dotnet-test-args"><code>-- &lt;dotnet test arguments&gt;</code></h3>
 <p>Everything after <code>--</code> is passed to every <code>dotnet test</code> call. Your own <code>--filter</code> is kept: {{name}} joins it with its class filter, so only the selected tests inside your filter run. xUnit v3 trait, method and namespace filters narrow the selection the same way. A filter the runner cannot join with a class filter (an xUnit v3 class or query filter, a TUnit tree-node filter) makes the project run completely under your filter. In shadow mode they are your own test command; see <a href="#shadow"><code>--shadow</code></a>.</p>
+<p>With <code>-f &lt;tfm&gt;</code> the run loads that framework's builds only, so a change compiled only for other frameworks (code under an <code>#if</code> those builds leave out) selects nothing, when the changed project and every project between it and your test projects target that framework.</p>
 <pre><code>td test -- -c Release --logger trx
 td test -- --no-restore
 td test -- --filter "Category!=Integration"</code></pre>

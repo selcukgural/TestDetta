@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 4e72dab11ef7 -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 989abdf0af1c -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -39,6 +39,14 @@
 
 <h2>Önişlemci sembolleri</h2>
 <p>C# dosyaları her hedef framework'ün gerçek önişlemci sembolleriyle, ayrıca hiç sembol olmadan ve <code>#if</code>'lerinin andığı tüm sembollerle ayrıştırılır; böylece herhangi bir etkin koşul altındaki kod görülür.</p>
+
+<h2 id="target-frameworks">Hedef framework'ler</h2>
+<p>Birden fazla framework hedefleyen bir test projesinde neyin seçileceği, testlerin hangi framework'ler için koştuğuna bağlıdır. Aynı değişiklik bir koşuda daha çok, başka bir koşuda daha az test seçtirebilir:</p>
+<ul>
+  <li><b>Haritanın kaydedilmediği framework'ler için daha çok.</b> Bir harita tek bir framework'ün koşusunu tutar. Testler başka bir framework için de koşuyorsa, o framework'ün derlemesinin derlediğini ya da ürettiğini değiştiren bir değişiklik (kaynak üreticisi çıktısı, derlemenin okuduğu dosyalar) test projesinin tamamını çalıştırır. Kaydı <code>-f</code> olmadan alın ya da testleri aynı <code>-f</code> ile koşturun; bkz. <a href="/docs/what-runs-everything/">Neler her şeyi çalıştırır</a>.</li>
+  <li><b><code>-f</code> ile daha az.</b> Tek bir framework için yapılan koşu yalnızca o framework'ün derlemelerini yükler. Değişen proje ve onunla test projeleriniz arasındaki her proje o framework'ü hedefliyorsa, yalnızca başka framework'ler için derlenen bir değişiklik (o framework'ün dışarıda bıraktığı bir <code>#if</code> altındaki kod, örneğin .NET Framework 2.0 için bir polyfill) o koşuda hiçbir test seçtirmez. <code>-f</code> olmadan aynı değişiklik onu çalıştırabilecek testleri seçer.</li>
+</ul>
+<p>Yani tek bir framework koşturan bir CI işi, yalnızca başka bir framework'ün derlemesinin bozabileceği testleri atlayabilir. Test projeleriniz birden fazla framework hedefliyorsa her framework'ü bir yerde, örneğin gece çalışan tam bir koşuda, koşturun.</p>
 
 <h2>Atlanan testler</h2>
 <p>Bir harita kaydedilirken atlanan testlerin kapsam verisi yoktur. Tüm testleri atlanmış bir sınıf, çalışabileceği başka bir platformda seçilir, kaydın yapıldığı platformda ise atlanır. Docker daemon'ının bulunmaması gibi başka nedenlerle atlanan testler, ancak testlerin çalıştığı yerde kayıt yapılarak kapsanır.</p>

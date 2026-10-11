@@ -94,6 +94,53 @@ public sealed partial class CodeChangeDetector(ILogger<CodeChangeDetector> logge
         return new CodeChange(path, IsCosmetic: false, affectsWholeProject, symbols);
     }
 
+    /// <summary>
+    /// The changes the builds of one target framework see: <paramref name="change"/>'s symbols that also differ when both
+    /// versions are parsed with exactly one of <paramref name="symbolSets"/> (that framework's symbols in each project
+    /// compiling the file). Code under <c>#if</c> for other frameworks, such as Newtonsoft.Json's LinqBridge
+    /// (<c>#if !HAVE_LINQ</c>), changes nothing those builds compile (docs/design/framework-only-code.md). Null, so the
+    /// change counts for every build, when the file is not C# or has no <c>#if</c>, the sets are unknown, a set's view
+    /// affects the whole project, or a set's view differs in a way no declaration explains.
+    /// </summary>
+    /// <param name="change">The change <see cref="Detect(string, SourceText?, SourceText?, IReadOnlyCollection{IReadOnlyList{string}}, string)"/> found.</param>
+    /// <param name="oldText">Content at the base revision, or null when the file was added.</param>
+    /// <param name="newText">Content in the working tree, or null when the file was deleted.</param>
+    /// <param name="symbolSets">The framework's symbols, one set per project compiling the file.</param>
+    /// <param name="rootNamespace">Root namespace of the project compiling the file.</param>
+    public static IReadOnlyList<SymbolChange>? SeenUnder(CodeChange change, SourceText? oldText, SourceText? newText, IReadOnlyCollection<IReadOnlyList<string>> symbolSets, string rootNamespace = "")
+    {
+        if (change.IsCosmetic || change.AffectsWholeProject || symbolSets.Count == 0 || !change.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+            || !HasConditionals(oldText) && !HasConditionals(newText))
+        {
+            return null;
+        }
+
+        var language = SourceLanguage.For(change.Path);
+        var seen = new List<SymbolChange>();
+        foreach (var symbols in symbolSets)
+        {
+            // The tokens are what the build compiles; code under a false #if is trivia, and directives compile to nothing.
+            var oldRoot = language.Parse(oldText, symbols);
+            var newRoot = language.Parse(newText, symbols);
+            if (oldRoot.DescendantTokens().Select(static t => t.Text).SequenceEqual(newRoot.DescendantTokens().Select(static t => t.Text), Comparer(language)))
+            {
+                continue;
+            }
+
+            var (affectsWholeProject, visible) = Compare(language, oldRoot, newRoot, rootNamespace);
+            if (affectsWholeProject || visible.Count == 0)
+            {
+                return null;
+            }
+
+            seen.AddRange(change.Symbols.Where(s => visible.Exists(v => v.TypeName == s.TypeName && v.MemberName == s.MemberName)));
+        }
+
+        return [.. seen.Distinct()];
+
+        static bool HasConditionals(SourceText? text) => text is not null && text.ToString().Contains("#if", StringComparison.Ordinal);
+    }
+
     /// <summary>Compares two versions of an F# file (<see cref="FSharpChangeDetector"/>).</summary>
     /// <param name="path">File path relative to the repository root.</param>
     /// <param name="oldText">Content at the base revision, or null when the file was added.</param>

@@ -20,7 +20,7 @@ namespace TestDetta.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 8;
+    private const int EvaluatorVersion = 9;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -365,6 +365,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
             static b => new EvaluatedProject(b.Value.IsTestProject, b.Value.AssemblyName, [.. b.Value.References.Order(StringComparer.Ordinal)], b.Value.Items, b.Value.Packages)
             {
                 SymbolSets = SymbolSets(b.Value.Symbols.Values),
+                FrameworkSymbols = FrameworkSymbols(b.Value.Symbols),
                 RootNamespace = b.Value.RootNamespace,
                 OpaqueReferences = b.Value.OpaqueReferences,
                 GeneratorReferences = b.Value.GeneratorReferences,
@@ -374,6 +375,15 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
             },
             Paths.Comparer);
     }
+
+    /// <summary>The symbols of each target framework, sorted; a project evaluated without a framework (one target) has none.</summary>
+    /// <param name="symbols">Symbols per target framework, the empty key for a project without one.</param>
+    private static Dictionary<string, IReadOnlyList<string>> FrameworkSymbols<T>(IReadOnlyDictionary<string, T> symbols)
+        where T : IEnumerable<string> =>
+        symbols.Where(static s => s.Key.Length > 0).ToDictionary(
+            static s => s.Key,
+            static s => (IReadOnlyList<string>)[.. s.Value.Order(StringComparer.Ordinal)],
+            StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Distinct symbol sets, each sorted, in a fixed order.</summary>
     /// <param name="sets">Symbols per target framework.</param>
@@ -404,6 +414,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
                     c.Value.Packages.ToHashSet(StringComparer.OrdinalIgnoreCase))
                 {
                     SymbolSets = SymbolSets(c.Value.SymbolSets ?? []),
+                    FrameworkSymbols = FrameworkSymbols(c.Value.FrameworkSymbols ?? []),
                     RootNamespace = c.Value.RootNamespace,
                     OpaqueReferences = (c.Value.OpaqueReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
                     GeneratorReferences = (c.Value.GeneratorReferences ?? []).Select(Full).ToHashSet(Paths.Comparer),
@@ -435,6 +446,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
             p => new CachedProject(p.Value.IsTestProject, p.Value.AssemblyName, [.. p.Value.References.Select(Relative)], [.. p.Value.Items.Select(Relative)], [.. p.Value.Packages])
             {
                 SymbolSets = [.. p.Value.SymbolSets.Select(static s => s.ToList())],
+                FrameworkSymbols = p.Value.FrameworkSymbols.ToDictionary(static f => f.Key, static f => f.Value.ToList(), StringComparer.OrdinalIgnoreCase),
                 RootNamespace = p.Value.RootNamespace,
                 OpaqueReferences = [.. p.Value.OpaqueReferences.Select(Relative)],
                 GeneratorReferences = [.. p.Value.GeneratorReferences.Select(Relative)],
@@ -506,6 +518,9 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
     {
         /// <summary>See <see cref="EvaluatedProject.SymbolSets"/>; null in caches written before symbols were read.</summary>
         public List<List<string>>? SymbolSets { get; init; }
+
+        /// <summary>See <see cref="EvaluatedProject.FrameworkSymbols"/>; null in caches written before they were kept.</summary>
+        public Dictionary<string, List<string>>? FrameworkSymbols { get; init; }
 
         /// <summary>See <see cref="EvaluatedProject.RootNamespace"/>.</summary>
         public string? RootNamespace { get; init; }

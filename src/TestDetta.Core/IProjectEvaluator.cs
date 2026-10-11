@@ -38,6 +38,12 @@ public sealed record EvaluatedProject(
     /// </summary>
     public IReadOnlyList<IReadOnlyList<string>> SymbolSets { get; init; } = [];
 
+    /// <summary>
+    /// The same symbols by target framework (<c>net10.0</c> → <c>NET10_0;…</c>), sorted; empty when unknown. Says which
+    /// framework's build compiles code under <c>#if</c> (docs/design/framework-only-code.md).
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> FrameworkSymbols { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+
     /// <summary>The <c>RootNamespace</c> property, or null when empty; see <see cref="ProjectNode.RootNamespace"/>.</summary>
     public string? RootNamespace { get; init; }
 

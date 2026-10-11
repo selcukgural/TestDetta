@@ -162,4 +162,10 @@ public sealed record ProjectNode(string Path, string Directory, bool IsTestProje
     /// parsing with these.
     /// </summary>
     public IReadOnlyList<IReadOnlyList<string>> SymbolSets { get; init; } = [];
+
+    /// <summary>
+    /// The preprocessor symbols by target framework, from MSBuild evaluation (<see cref="EvaluatedProject.FrameworkSymbols"/>);
+    /// empty when unknown. Its keys are the frameworks the project targets.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> FrameworkSymbols { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
 }

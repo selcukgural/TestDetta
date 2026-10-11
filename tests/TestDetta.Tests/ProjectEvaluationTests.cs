@@ -324,6 +324,11 @@ public sealed class ProjectEvaluationTests : IDisposable
 
         // net9.0 compiles with the same symbols as net8.0 here: one set.
         Assert.Equal(["NET;NET8_0_OR_GREATER", "NETSTANDARD2_0"], evaluated["/r/Lib.csproj"].SymbolSets.Select(static s => string.Join(';', s)));
+        // By framework, every framework keeps its own (docs/design/framework-only-code.md).
+        var byFramework = evaluated["/r/Lib.csproj"].FrameworkSymbols;
+        Assert.Equal(["net8.0", "net9.0", "netstandard2.0"], byFramework.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["NET", "NET8_0_OR_GREATER"], byFramework["net9.0"]);
+        Assert.Equal(["NETSTANDARD2_0"], byFramework["NETSTANDARD2.0"]);
     }
 
     [Fact]

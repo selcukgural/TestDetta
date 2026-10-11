@@ -56,4 +56,13 @@ public sealed record CodeChange(
     string Path,
     bool IsCosmetic,
     bool AffectsWholeProject,
-    IReadOnlyList<SymbolChange> Symbols);
+    IReadOnlyList<SymbolChange> Symbols)
+{
+    /// <summary>
+    /// The part of <see cref="Symbols"/> the builds of the framework the tests run for (<c>-f</c>) compile differently,
+    /// when the file has code under <c>#if</c> (<see cref="CodeChangeDetector.SeenUnder"/>); null when not known, which
+    /// counts every symbol. A symbol left out changes only builds for other frameworks, which this run does not load
+    /// (Newtonsoft.Json's LinqBridge, compiled without <c>HAVE_LINQ</c>; docs/design/framework-only-code.md).
+    /// </summary>
+    public IReadOnlyList<SymbolChange>? SeenByRunFramework { get; init; }
+}

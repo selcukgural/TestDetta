@@ -155,6 +155,7 @@ public sealed partial class ProjectGraphLoader(ILogger<ProjectGraphLoader> logge
                 InertItems = project.InertItems,
                 TestConfiguration = project.TestConfiguration,
                 SymbolSets = project.SymbolSets,
+                FrameworkSymbols = project.FrameworkSymbols,
             };
         }
 
