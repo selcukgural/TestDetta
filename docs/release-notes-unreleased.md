@@ -23,6 +23,7 @@ then emptied.
   `CompilationRepresentation`); a project that compiles another's files again and no test references
   (`Markdig.Signed`); Castle DynamicProxy interceptors, which run per call; reflection-found types in plugins the tests
   load by path; assemblies a framework loads by name to find modules (Carter's module catalog), which no longer select
-  every class that loaded them.
+  every class that loaded them; `File.Exists` on a build output, which is no read of it (NUnit's engine checks every
+  library of the dependency context whenever the runtime cannot resolve a name).
 - Selection, safer: the classes the map says ran a changed member of a type that may be found through reflection are
   always selected.

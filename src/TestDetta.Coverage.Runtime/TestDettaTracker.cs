@@ -218,6 +218,12 @@ public static class TestDettaTracker
     public const string ScanPrefix = "scan:";
 
     /// <summary>
+    /// Before a full path in the file reads: the bucket only checked whether the file exists (<see cref="FileChecked"/>). A
+    /// full path never starts with it: it starts with '/' or a drive letter.
+    /// </summary>
+    public const string CheckPrefix = "?";
+
+    /// <summary>
     /// Before an assembly name in the output uses: the bucket loaded it by its name (<c>Assembly.Load(name)</c>,
     /// <c>AssemblyLoadContext.LoadFromAssemblyName</c>), as a scanner does with every library of the dependency context
     /// (Carter's module catalog), rather than by a path. A load by name of a project the tests compile against resolves
@@ -363,6 +369,15 @@ public static class TestDettaTracker
     /// <summary>Records that the current bucket listed (or checked) the directory at <paramref name="path"/>; see <see cref="FileRead"/>.</summary>
     /// <param name="path">The path the code passes.</param>
     public static void DirectoryListed(string? path) => NoteFile(path, directory: true);
+
+    /// <summary>
+    /// Records that the current bucket checked whether the file at <paramref name="path"/> exists, without reading it
+    /// (<c>File.Exists</c>): the path is kept with <see cref="CheckPrefix"/> before it. A check stands for the tracked file
+    /// it names, which a change can add or delete, but is no read of a build output, whose existence a code change does not
+    /// alter (docs/design/runtime-file-reads.md).
+    /// </summary>
+    /// <param name="path">The path the code passes.</param>
+    public static void FileChecked(string? path) => NoteFile(path, directory: false, check: true);
 
     /// <summary>
     /// Records that the current bucket started a process or loaded an assembly by a file or name.
@@ -636,10 +651,14 @@ public static class TestDettaTracker
         }
     }
 
-    /// <summary>Adds a full path, a directory with a trailing <c>/</c>, to the bucket a hit would go to.</summary>
+    /// <summary>
+    /// Adds a full path, a directory with a trailing <c>/</c> and a file only looked for with <see cref="CheckPrefix"/>
+    /// before it, to the bucket a hit would go to.
+    /// </summary>
     /// <param name="path">The path the code passes.</param>
     /// <param name="directory">True for a directory.</param>
-    private static void NoteFile(string? path, bool directory)
+    /// <param name="check">True for a file whose existence alone was checked.</param>
+    private static void NoteFile(string? path, bool directory, bool check = false)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -660,6 +679,10 @@ public static class TestDettaTracker
         if (directory)
         {
             full = full.TrimEnd('/') + "/";
+        }
+        else if (check)
+        {
+            full = CheckPrefix + full;
         }
 
         lock (Gate)

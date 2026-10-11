@@ -210,8 +210,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         AddCoreLibraryReference(module, coreLibrary);
         FileReadCalls.Wrap(
             module,
-            Probe(tracker, nameof(TestDettaTracker.FileRead)),
-            Probe(tracker, nameof(TestDettaTracker.DirectoryListed)),
+            Files(tracker),
             outputs: null);
         module.Write(path);
     }
@@ -417,11 +416,17 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var used = Probe(tracker, nameof(TestDettaTracker.OutputUsed));
         FileReadCalls.Wrap(
             module,
-            Probe(tracker, nameof(TestDettaTracker.FileRead)),
-            Probe(tracker, nameof(TestDettaTracker.DirectoryListed)),
+            Files(tracker),
             new OutputProbes(used, productCode ? Probe(tracker, nameof(TestDettaTracker.OutputLoadedByName)) : used));
         module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
     }
+
+    /// <summary>The tracker's file probes as references in the module that <paramref name="tracker"/> was imported into.</summary>
+    /// <param name="tracker">The tracker type, imported into the module.</param>
+    private static FileProbes Files(TypeReference tracker) => new(
+        Probe(tracker, nameof(TestDettaTracker.FileRead)),
+        Probe(tracker, nameof(TestDettaTracker.FileChecked)),
+        Probe(tracker, nameof(TestDettaTracker.DirectoryListed)));
 
     /// <summary>
     /// A reference to tracker method <paramref name="name"/>, built by hand with the instrumented
