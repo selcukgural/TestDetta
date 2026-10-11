@@ -104,6 +104,7 @@ internal static partial class EvalApp
             var request = new SampleRequest(options.Target.Synthetic, options.Target.Seed)
             {
                 Kinds = options.Run.MutantKinds, DataFiles = options.Run.DataFiles, TypePattern = options.Run.TargetPattern, Replay = replay?.Mutants,
+                Framework = options.Run.Framework,
             };
             SyntheticRun Stamped(SyntheticRun run) => run with { Seed = options.Target.Seed, SeedDrawn = options.Target.SeedDrawn, ReplayOf = replay?.Source };
             var run = Stamped(new SyntheticEvaluator(workspace, options.Run).Evaluate(

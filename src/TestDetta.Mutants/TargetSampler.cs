@@ -73,6 +73,16 @@ internal sealed record SampleRequest(int Count, int Seed, double CoveredShare = 
     /// sample; a member no longer in the source is left out. Null to sample.
     /// </summary>
     public IReadOnlyList<ReplayedMutant>? Replay { get; init; }
+
+    /// <summary>
+    /// The target framework the tests run for (<c>-f</c>), or null for every framework the projects target. With one,
+    /// each C# file is read with the preprocessor symbols its project defines for that framework, so the source edit
+    /// lands on the declaration the run compiles, the one the mutant changes: Alba declares
+    /// <c>WebApplicationFactoryHostBuilderAdapter</c> under <c>#if NET11_0_OR_GREATER</c> and again under <c>#else</c>,
+    /// and an edit to the <c>#else</c> one, which a run for <c>net11.0</c> does not compile, was judged against a mutant of
+    /// the other (a miss of the evaluation's own making).
+    /// </summary>
+    public string? Framework { get; init; }
 }
 
 /// <summary>One change of an earlier sample, as its report names it.</summary>
@@ -95,7 +105,7 @@ internal static class TargetSampler
     /// <param name="request">How many and how.</param>
     public static List<SyntheticTarget> Sample(ProjectGraph graph, string repoRoot, IReadOnlySet<CoveredMethod> covered, SampleRequest request)
     {
-        var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue));
+        var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue), request.Framework);
         MutantKind[] methodKinds = [.. request.Kinds.Where(static k => k != MutantKind.FieldValue).Order()];
         var pattern = request.TypePattern is { } glob
             ? new System.Text.RegularExpressions.Regex("^" + System.Text.RegularExpressions.Regex.Escape(glob).Replace(@"\*", ".*", StringComparison.Ordinal) + "$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)
@@ -196,6 +206,31 @@ internal static class TargetSampler
         return targets;
     }
 
+    /// <summary>
+    /// The preprocessor symbols a C# file is compiled with for <paramref name="framework"/>: those of the first project
+    /// owning it that defines the framework; none without a framework or when no owner targets it.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="file">Normalized file path.</param>
+    /// <param name="framework">Target framework of the run, or null.</param>
+    private static IReadOnlyCollection<string> SymbolsFor(ProjectGraph graph, string file, string? framework)
+    {
+        if (framework is null)
+        {
+            return [];
+        }
+
+        foreach (var owner in graph.ResolveFile(file))
+        {
+            if (owner.Role == FileRole.Source && owner.Project.FrameworkSymbols.TryGetValue(framework, out var symbols))
+            {
+                return [.. symbols];
+            }
+        }
+
+        return [];
+    }
+
     /// <summary>A 64-bit FNV-1a hash of the member, the seed and a purpose, the same on every run and machine.</summary>
     /// <param name="member">Sampled member.</param>
     /// <param name="seed">Sample seed.</param>
@@ -218,7 +253,8 @@ internal static class TargetSampler
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="withFields">True to add fields with a constant initial value.</param>
-    private static Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot, bool withFields)
+    /// <param name="framework">Target framework of the run, whose preprocessor symbols C# files are read with; null for none.</param>
+    private static Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot, bool withFields, string? framework)
     {
         var candidates = new Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?>();
         var testProjects = graph.Projects.Where(static p => p.IsTestProject).Select(static p => p.Path).ToHashSet(StringComparer.Ordinal);
@@ -244,7 +280,7 @@ internal static class TargetSampler
                 continue;
             }
 
-            var root = DeclarationWalker.Parse(SourceText.From(text));
+            var root = DeclarationWalker.Parse(SourceText.From(text), SymbolsFor(graph, file, framework));
             foreach (var declaration in DeclarationWalker.Collect(root).Values)
             {
                 if (withFields && FieldEdit(file, declaration) is { } field)
