@@ -88,7 +88,8 @@ internal sealed record IndexedMember(
 /// <param name="MayBeFoundByReflection">
 /// True when the type has a base list or attributes. Frameworks that discover types at run time
 /// (controllers, message handlers, hosted services, validators) find them through exactly these.
-/// For a partial type, true as soon as one part has either.
+/// For a partial type, true as soon as one part has either. An F# module only with an attribute other
+/// than the compiler's own (<c>AutoOpen</c>, <c>RequireQualifiedAccess</c>, <c>CompilationRepresentation</c>).
 /// </param>
 internal sealed record IndexedType(
     string TypeName,

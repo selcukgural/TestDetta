@@ -68,6 +68,14 @@ internal sealed record FsDeclaration(string TypeName, string RuntimeTypeName, st
     /// <summary>For a type: a module, whose header and <c>open</c>s apply to everything below it.</summary>
     public bool IsModule { get; init; }
 
+    /// <summary>
+    /// For a module: an attribute other than those only the F# compiler reads (<c>AutoOpen</c>, <c>RequireQualifiedAccess</c>,
+    /// <c>CompilationRepresentation</c>). A module compiles to a static class, which nothing creates; a framework could still
+    /// find it by an attribute of its own, but not by those, so a module with only those is not found through reflection
+    /// (Argu's <c>[&lt;AutoOpen&gt;] module internal Argu.PreCompute</c>).
+    /// </summary>
+    public bool HasDiscoverableAttributes { get; init; }
+
     /// <summary>For a member: <c>inline</c>, so its body is compiled into its callers.</summary>
     public bool IsInline { get; init; }
 
@@ -421,6 +429,7 @@ internal static partial class FSharpSource
             IsModule = true,
             IsRunnableClass = true,
             HasTestMethods = hasTests,
+            HasDiscoverableAttributes = attributes.SelectMany(static l => l.Attributes).Any(static a => !IsCompilerAttribute(LastName(a.TypeName.LongIdent))),
         });
     }
 
@@ -669,6 +678,12 @@ internal static partial class FSharpSource
     /// <param name="attributes">Attribute lists.</param>
     private static bool HasTest(FSharpList<SynAttributeList> attributes) =>
         attributes.SelectMany(static l => l.Attributes).Any(static a => LastName(a.TypeName.LongIdent) is { } name && IsTestAttribute(name));
+
+    /// <summary>True for an attribute only the F# compiler reads on a module (see <see cref="FsDeclaration.HasDiscoverableAttributes"/>).</summary>
+    /// <param name="name">The attribute's name as written, with or without <c>Attribute</c>; null when it has none.</param>
+    private static bool IsCompilerAttribute(string? name) =>
+        name is "AutoOpen" or "AutoOpenAttribute" or "RequireQualifiedAccess" or "RequireQualifiedAccessAttribute"
+            or "CompilationRepresentation" or "CompilationRepresentationAttribute";
 
     /// <summary>True for <c>[&lt;CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)&gt;]</c>.</summary>
     /// <param name="lines">The file's lines.</param>

@@ -122,6 +122,14 @@ records, name tracing, coverage and the selection rules stay shared.
   `CompilationArgumentCounts`) took the code of the tests of the nested module `EnvVarTests.Prefixed`,
   and 4 of 64 failing mutants were missed. Independently, a running class nested in the entry point's
   class (`Outer+Inner`) now keeps its frames in `CalledFromRunningTest`.
+- Reflection (2026-10-11, high-share repositories step 6): a module compiles to a static class that nothing creates,
+  so it may be found through reflection only by an attribute of its own; `AutoOpen`, `RequireQualifiedAccess` and
+  `CompilationRepresentation` only tell the compiler how to name or open it (`FsDeclaration.HasDiscoverableAttributes`).
+  Argu's `[<AutoOpen>] module internal Argu.PreCompute`, whose functions are called without its name, ran the whole
+  test project on 25 of 100 sampled changes as a type nothing names; and a direct change in an `AutoOpen` module could
+  not be answered by the maps, so classes that ran it but did not reach it by name were left out (`CliParser`: 4 of
+  11). Argu's mean share 48.3 % -> 46.9 % (`--explain`); the 25 whole-project rows that remain are changes every class
+  reaches.
 - `TestSelector` no longer falls back for F# projects; `.fsi` files fall back as non-source files.
 - Tests: `FSharpTests` (identities, overloads, constructors, cosmetic vs indentation, inline,
   metadata, `open`s, added types, implicit modules, assembly attributes, `#if`, selection by name from
