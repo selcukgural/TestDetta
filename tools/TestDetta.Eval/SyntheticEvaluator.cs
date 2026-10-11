@@ -132,7 +132,9 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             var targets = TargetSampler.Sample(graph, workspace.RepoRoot, CoveredMembers(maps), request);
 
             // After the members, so the member sample and its stored outcomes stay as they were.
-            targets.AddRange(DataFileSampler.Sample(graph, workspace.RepoRoot, maps.Values, request.DataFiles, request.Seed));
+            targets.AddRange(request.Replay is { } replay
+                ? DataFileSampler.Replay(workspace.RepoRoot, maps.Values, SyntheticReplay.DataFilesOf(replay))
+                : DataFileSampler.Sample(graph, workspace.RepoRoot, maps.Values, request.DataFiles, request.Seed));
             var coveredTargets = targets.Count(static t => t.Covered);
             LogSampled(targets.Count, coveredTargets);
             var generatorMutants = new GeneratorMutants(graph);

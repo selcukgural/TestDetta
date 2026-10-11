@@ -65,7 +65,7 @@ public sealed class EvalHangTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--out", _output]);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--seed", "1", "--out", _output]);
         }
         finally
         {

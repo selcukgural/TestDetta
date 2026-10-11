@@ -66,6 +66,15 @@ internal static class SyntheticReport
             text.AppendLine(CultureInfo.InvariantCulture, $"- Toolchain: {run.Toolchain}");
         }
 
+        if (run.ReplayOf is not null)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture, $"- Changes replayed from {Cell(run.ReplayOf)}");
+        }
+        else if (run.Seed is { } seed)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture, $"- Sample seed: {seed} ({(run.SeedDrawn ? "drawn" : "given")}; `--seed {seed}` repeats it, `--replay` takes the exact changes)");
+        }
+
         text.AppendLine(CultureInfo.InvariantCulture,
             $"- Members changed: {mutants.Count} ({mutants.Count(static m => m.Target.Covered)} covered by a recorded test)");
         text.AppendLine(CultureInfo.InvariantCulture,
@@ -320,6 +329,13 @@ internal static class SyntheticReport
             json.WriteNumber("mutantParallelism", run.MutantParallelism);
             json.WriteString("toolchain", run.Toolchain);
             json.WriteString("testdettaCommit", EvalBuild.Commit);
+            if (run.Seed is { } seed)
+            {
+                json.WriteNumber("seed", seed);
+                json.WriteBoolean("seedDrawn", run.SeedDrawn);
+            }
+
+            json.WriteString("replayOf", run.ReplayOf);
             json.WriteNumber("seconds", Math.Round(run.Seconds, 1));
             json.WriteNumber("mapAge", run.MapAge);
             json.WriteString("mapCommit", run.MapCommit);

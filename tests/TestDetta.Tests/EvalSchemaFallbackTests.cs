@@ -56,7 +56,7 @@ public sealed class EvalSchemaFallbackTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--out", _output]);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--seed", "1", "--out", _output]);
         }
         finally
         {
@@ -99,7 +99,7 @@ public sealed class EvalSchemaFallbackTests : IDisposable
         {
             Console.SetOut(TextWriter.Null);
             // No analysis finishes in a millisecond: it stands for a hang in TestDetta.
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "2", "--out", _output, "--analysis-timeout", "00:00:00.001"]);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "2", "--seed", "1", "--out", _output, "--analysis-timeout", "00:00:00.001"]);
         }
         finally
         {

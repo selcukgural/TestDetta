@@ -55,7 +55,7 @@ public sealed class EvalConfirmTests : IDisposable
         {
             Console.SetOut(TextWriter.Null);
             // The clone is looked at afterwards: kept although nothing was missed.
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--out", _output, "--keep-clones"]);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "5", "--seed", "1", "--out", _output, "--keep-clones"]);
         }
         finally
         {

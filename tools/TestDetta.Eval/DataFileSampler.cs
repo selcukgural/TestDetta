@@ -30,10 +30,7 @@ internal static class DataFileSampler
             return [];
         }
 
-        var reads = maps.Select(static m => m.FileReads).OfType<FileReads>()
-            .SelectMany(static r => r.Classes.Values.Concat(r.Fixtures.Values).Append(r.Ambient).Append(r.Initialization))
-            .SelectMany(static p => p)
-            .ToHashSet(StringComparer.Ordinal);
+        var read = Reads(maps);
         var tracked = new GitClient(NullLogger<GitClient>.Instance).TrackedFiles(repoRoot)
             .Where(f => !f.StartsWith(".git", StringComparison.Ordinal) && !f.StartsWith(".testdetta/", StringComparison.Ordinal)
                         && IsData(repoRoot, f) && IsSmallText(Path.Combine(repoRoot, f)))
@@ -43,9 +40,29 @@ internal static class DataFileSampler
                                           && graph.ResolveFile(Paths.Normalize(Path.Combine(repoRoot, f))).Count == 0).ToList();
         var inert = tracked.Where(f => IsInert(graph, Paths.Normalize(Path.Combine(repoRoot, f)))).ToList();
 
-        bool Read(string file) => reads.Contains(file) || reads.Any(r => r.EndsWith('/') && file.StartsWith(r, StringComparison.Ordinal));
         // Inert files after the others, so the files sampled before inert files were stay the same.
-        return [.. Pick(unmapped, Read, count, seed).Concat(Pick(inert, Read, count, seed)).Select(f => Target(repoRoot, f, Read(f)))];
+        return [.. Pick(unmapped, read, count, seed).Concat(Pick(inert, read, count, seed)).Select(f => Target(repoRoot, f, read(f)))];
+    }
+
+    /// <summary>The data files of an earlier sample (<c>--replay</c>) that still exist, in their order.</summary>
+    /// <param name="repoRoot">Repository root.</param>
+    /// <param name="maps">Coverage maps at the commit.</param>
+    /// <param name="files">Repository paths of the files.</param>
+    public static List<SyntheticTarget> Replay(string repoRoot, IEnumerable<CoverageMap> maps, IReadOnlyList<string> files)
+    {
+        var read = Reads(maps);
+        return [.. files.Where(f => File.Exists(Path.Combine(repoRoot, f))).Select(f => Target(repoRoot, f, read(f)))];
+    }
+
+    /// <summary>Tells whether some map recorded a read of a repository path, or a listing of a folder above it.</summary>
+    /// <param name="maps">Coverage maps at the commit.</param>
+    private static Func<string, bool> Reads(IEnumerable<CoverageMap> maps)
+    {
+        var reads = maps.Select(static m => m.FileReads).OfType<FileReads>()
+            .SelectMany(static r => r.Classes.Values.Concat(r.Fixtures.Values).Append(r.Ambient).Append(r.Initialization))
+            .SelectMany(static p => p)
+            .ToHashSet(StringComparer.Ordinal);
+        return file => reads.Contains(file) || reads.Any(r => r.EndsWith('/') && file.StartsWith(r, StringComparison.Ordinal));
     }
 
     /// <summary>Up to <paramref name="count"/> of <paramref name="candidates"/>, 80% of them from files some map read when there are enough.</summary>

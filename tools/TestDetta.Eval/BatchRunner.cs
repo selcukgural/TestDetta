@@ -170,6 +170,26 @@ internal sealed record BatchOptions(string CorpusPath, IReadOnlySet<string> Only
                     overrides = overrides with { TargetPattern = value };
                     break;
 
+                case "--seed":
+                    if (!SampleSeed.TryParse(value, out var seed))
+                    {
+                        error = $"--seed needs a number or {SampleSeed.Random}, not {value}";
+                        return false;
+                    }
+
+                    overrides = overrides with { Seed = seed, SeedGiven = true };
+                    break;
+
+                case "--replay":
+                    if (!Directory.Exists(value))
+                    {
+                        error = $"--replay of a corpus run needs the folder of an earlier corpus run, not {value}";
+                        return false;
+                    }
+
+                    overrides = overrides with { ReplayFrom = Path.GetFullPath(value) };
+                    break;
+
                 case "--data-files":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var files) || files < 0)
                     {
@@ -264,6 +284,20 @@ internal sealed record BatchOverrides(int? Synthetic = null, int? MutantParallel
 
     /// <summary>See <see cref="RunSettings.TargetPattern"/>.</summary>
     public string? TargetPattern { get; init; }
+
+    /// <summary>
+    /// The seed for every repository (<c>--seed</c>); null with <see cref="SeedGiven"/> for a new seed each repository
+    /// even where the corpus pins one (<c>--seed random</c>).
+    /// </summary>
+    public int? Seed { get; init; }
+
+    /// <summary>True when the run gave <c>--seed</c>: it then replaces each entry's own seed.</summary>
+    public bool SeedGiven { get; init; }
+
+    /// <summary>
+    /// An earlier corpus run whose <c>&lt;name&gt;/synthetic.json</c> each repository replays (<c>--replay</c>); null to sample.
+    /// </summary>
+    public string? ReplayFrom { get; init; }
 }
 
 /// <summary>
@@ -412,8 +446,21 @@ internal static partial class BatchRunner
             run = run with { MutantKinds = kinds };
         }
 
+        if (options.Overrides.ReplayFrom is { } earlier)
+        {
+            var replay = SyntheticReplay.Load(Path.Combine(earlier, entry.Name));
+            run = run with { Replay = replay };
+            synthetic = options.Overrides.Synthetic ?? replay.Mutants.Count;
+        }
+
+        // The run's --seed, else the entry's, else the replayed run's, else a new one (docs/evaluation.md, "Seeds and replays").
+        var seed = options.Overrides.SeedGiven ? options.Overrides.Seed : entry.Seed ?? run.Replay?.Seed;
+
         // A pinned commit first; without a branch, the repository's default branch, whatever it is called.
-        var target = new EvalTarget(entry.Url, entry.Commit ?? entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, entry.Seed ?? 1);
+        var target = new EvalTarget(entry.Url, entry.Commit ?? entry.Branch ?? "origin/HEAD", entry.Merges ?? (synthetic > 0 ? 0 : 8), synthetic, seed ?? SampleSeed.Draw())
+        {
+            SeedDrawn = seed is null,
+        };
         return (target, run);
     }
 

@@ -66,7 +66,7 @@ public sealed class EvalDataFileTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "1", "--data-files", "1", "--out", _output]);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "1", "--seed", "1", "--data-files", "1", "--out", _output]);
         }
         finally
         {

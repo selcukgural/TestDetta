@@ -65,7 +65,7 @@ public sealed class EvalRecordingCacheTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "2", "--out", output, "--recording-cache", cache]);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "2", "--seed", "1", "--out", output, "--recording-cache", cache]);
         }
         finally
         {

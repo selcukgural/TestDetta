@@ -124,6 +124,18 @@ internal sealed record SyntheticRun(string Sha, int TestClasses, double Baseline
     /// <summary>Test projects left out because they wrote no test report, relative to the repository root.</summary>
     public IReadOnlyList<string> Unreported { get; init; } = [];
 
+    /// <summary>
+    /// Seed of the sample, so the run can be repeated with <c>--seed</c>; null in a run made before seeds were reported.
+    /// A replay keeps its source's seed, which picked its changes.
+    /// </summary>
+    public int? Seed { get; init; }
+
+    /// <summary>True when the seed was drawn for this run rather than given.</summary>
+    public bool SeedDrawn { get; init; }
+
+    /// <summary>The <c>synthetic.json</c> whose changes this run replayed (<c>--replay</c>); null for a sample.</summary>
+    public string? ReplayOf { get; init; }
+
     /// <summary>True when the mutants were switched on in a schema rather than written in one at a time.</summary>
     public bool Schema { get; init; }
 

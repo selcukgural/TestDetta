@@ -90,11 +90,31 @@ internal static partial class EvalApp
         {
             var head = git.Head(options.Target.Branch);
             LogSynthetic(logger, options.Target.Synthetic, head[..7]);
-            var run = new SyntheticEvaluator(workspace, options.Run).Evaluate(
+            var replay = options.Run.Replay;
+            LogSeed(logger, options.Target.Seed, replay is not null ? "the replayed run's" : options.Target.SeedDrawn ? "drawn" : "given");
+            if (replay is not null)
+            {
+                LogReplay(logger, replay.Mutants.Count, replay.Source);
+                if (replay.Sha is { } sha && !head.StartsWith(sha, StringComparison.OrdinalIgnoreCase) && !sha.StartsWith(head, StringComparison.OrdinalIgnoreCase))
+                {
+                    LogReplayElsewhere(logger, sha[..Math.Min(7, sha.Length)], head[..7]);
+                }
+            }
+
+            var request = new SampleRequest(options.Target.Synthetic, options.Target.Seed)
+            {
+                Kinds = options.Run.MutantKinds, DataFiles = options.Run.DataFiles, TypePattern = options.Run.TargetPattern, Replay = replay?.Mutants,
+            };
+            SyntheticRun Stamped(SyntheticRun run) => run with { Seed = options.Target.Seed, SeedDrawn = options.Target.SeedDrawn, ReplayOf = replay?.Source };
+            var run = Stamped(new SyntheticEvaluator(workspace, options.Run).Evaluate(
                 head,
-                new SampleRequest(options.Target.Synthetic, options.Target.Seed) { Kinds = options.Run.MutantKinds, DataFiles = options.Run.DataFiles, TypePattern = options.Run.TargetPattern },
-                progress => SyntheticReport.Write(options.Output, options.Repository, progress));
+                request,
+                progress => SyntheticReport.Write(options.Output, options.Repository, Stamped(progress))));
             SyntheticReport.Write(options.Output, options.Repository, run);
+            if (replay is not null && run.Mutants.Count < replay.Mutants.Count)
+            {
+                LogReplayShort(logger, replay.Mutants.Count - run.Mutants.Count);
+            }
 
             output.Write(SyntheticReport.Markdown(options.Repository, run).Split("\n## Mutants", 2)[0]);
             output.WriteLine($"\nReports: {Path.Combine(options.Output, "synthetic.md")}");
@@ -146,4 +166,16 @@ internal static partial class EvalApp
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Evaluating {Sha} {Subject}")]
     private static partial void LogEvaluating(ILogger logger, string sha, string subject);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sample seed {Seed} ({How}); --seed {Seed} repeats this sample")]
+    private static partial void LogSeed(ILogger logger, int seed, string how);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Replaying the {Count} change(s) of {Source}")]
+    private static partial void LogReplay(ILogger logger, int count, string source);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The replayed changes were made at {Sha}, this run is at {Head}: members since removed or renamed are left out")]
+    private static partial void LogReplayElsewhere(ILogger logger, string sha, string head);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Count} replayed change(s) left out: their member or file is no longer in the source")]
+    private static partial void LogReplayShort(ILogger logger, int count);
 }
