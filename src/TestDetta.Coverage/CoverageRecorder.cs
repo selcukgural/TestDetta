@@ -394,6 +394,15 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         return runs;
     }
 
+    /// <summary>The longest path a Unix domain socket may have, without its terminating zero (macOS; Linux allows 107).</summary>
+    private const int SocketPathLimit = 103;
+
+    /// <summary>
+    /// The longest name .NET gives a socket in the temporary directory: a diagnostics socket,
+    /// <c>dotnet-diagnostic-&lt;pid&gt;-&lt;start time&gt;-socket</c>.
+    /// </summary>
+    private const int LongestSocketName = 41;
+
     /// <summary>
     /// <paramref name="arguments"/> with the testing platform told to accept exit code 8 (zero tests ran). The platform
     /// rejects a second <c>--ignore-exit-code</c> with exit code 5 before any test runs (docs/design/team-test-configuration.md),
@@ -830,21 +839,32 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// Gives a shard's processes a temporary directory of their own (<c>TMPDIR</c>, <c>TMP</c>, <c>TEMP</c>) and returns
     /// it. Shards run at once, while the suite's own runs have one test process; fixtures often claim or clean fixed names
     /// under the system's temporary directory (LibGit2Sharp's <c>BaseFixture</c> deletes old test repositories there),
-    /// so two shards doing it together failed every class of one of them, which then ran on every change. A short path
-    /// under <c>/tmp</c> on Unix, since .NET puts Unix domain sockets there and macOS limits their path to 104 bytes;
-    /// hexadecimal, so it has no letter <c>i</c> for a Turkish <c>ToUpper</c> to change.
+    /// so two shards doing it together failed every class of one of them, which then ran on every change. A short folder
+    /// in the system's own temporary directory, so the suite sees the path it sees in its own runs: macOS links
+    /// <c>/tmp</c> to <c>/private/tmp</c>, which fails suites that compare the temporary directory with a path a native
+    /// library resolved (LibGit2Sharp adds <c>/private</c> to a <c>/var</c> one only), and <c>/private</c> has an
+    /// <c>i</c> a Turkish <c>ToUpper</c> changes. .NET puts Unix domain sockets there, whose path may not exceed
+    /// <see cref="SocketPathLimit"/> bytes; when the system's directory leaves no room for the longest (a diagnostics
+    /// socket), the folder goes under the real path of <c>/tmp</c> instead.
     /// </summary>
     /// <param name="environment">The shard's environment, which receives the variables.</param>
     private static string ShardTemporary(Dictionary<string, string> environment)
     {
-        var root = OperatingSystem.IsWindows() ? Path.GetTempPath() : "/tmp";
-        var temporary = Path.Combine(root, $"tdr-{Guid.NewGuid():N}"[..16]);
+        var name = $"td{Guid.NewGuid():N}"[..8];
+        var system = Path.GetTempPath();
+        var root = OperatingSystem.IsWindows() || system.Length + name.Length + 1 + LongestSocketName <= SocketPathLimit ? system : RealPath("/tmp");
+        var temporary = Path.Combine(root, name);
         Directory.CreateDirectory(temporary);
         environment["TMPDIR"] = temporary + Path.DirectorySeparatorChar;
         environment["TMP"] = temporary;
         environment["TEMP"] = temporary;
         return temporary;
     }
+
+    /// <summary>The directory a link points to, through every link; the directory itself when it is none.</summary>
+    /// <param name="directory">A directory.</param>
+    private static string RealPath(string directory) =>
+        new DirectoryInfo(directory).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? directory;
 
     /// <summary>
     /// Deletes a shard's temporary directory; a file a leftover process still holds keeps it, which costs only disk

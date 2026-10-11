@@ -12,9 +12,11 @@ Microsoft.Testing.Platform, and the arguments its CI passes to `dotnet test` (`-
 `--settings ci.runsettings`). TestDetta adds its own arguments to the same runs: class filters to run a
 selection or a recording shard, run settings that make recording sequential and load the collector,
 `--ignore-exit-code 8` for a recording's catch-all shard, and, when shards run at once, a temporary directory of
-each shard's own (`TMPDIR`, `TMP`, `TEMP` under a short `/tmp/tdr-…`): the team's run has one test process, and
-fixtures that claim or clean fixed names under the system's temporary directory failed whole shards when two did it
-together (LibGit2Sharp's `BaseFixture`, 2026-10-11: 15 of 64 classes, which then ran on every change).
+each shard's own (`TMPDIR`, `TMP`, `TEMP`: a short `td…` folder in the system's temporary directory): the team's run
+has one test process, and fixtures that claim or clean fixed names under the system's temporary directory failed whole
+shards when two did it together (LibGit2Sharp's `BaseFixture`, 2026-10-11: 15 of 64 classes, which then ran on every
+change). The folder stays in the system's directory so the suite sees the path of its own runs: a first version under
+`/tmp`, a link to `/private/tmp` on macOS, failed 4 LibGit2Sharp classes that compare it with paths libgit2 resolved.
 
 Measured on 2026-10-10 (SDK 10.0.105 VSTest, SDK 11 rc Microsoft.Testing.Platform with xUnit v3):
 

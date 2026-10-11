@@ -306,10 +306,21 @@ public sealed class CoverageRecorderTests : IDisposable
               </ItemGroup>
             </Project>
             """);
-        _repo.Write("tests/Claims.Tests/Tests.cs", """
+        var system = Path.GetTempPath().Replace("\\", "\\\\", StringComparison.Ordinal);
+        _repo.Write("tests/Claims.Tests/Tests.cs", $$"""
             using Xunit;
             namespace Claims.Tests;
-            static class Claim { public static void Take() => File.Open(Path.Combine(Path.GetTempPath(), "testdetta-claim"), FileMode.CreateNew).Dispose(); }
+            static class Claim
+            {
+                // The suite sees its own runs' temporary directory, one folder deeper (LibGit2Sharp adds /private to a /var one).
+                public static void Take()
+                {
+                    var temporary = Path.GetTempPath();
+                    Assert.StartsWith("{{system}}", temporary, StringComparison.Ordinal);
+                    Assert.NotEqual("{{system}}", temporary);
+                    File.Open(Path.Combine(temporary, "testdetta-claim"), FileMode.CreateNew).Dispose();
+                }
+            }
             public class FirstTests { [Fact] public void Claims() => Claim.Take(); }
             public class SecondTests { [Fact] public void Claims() => Claim.Take(); }
             """);
@@ -323,7 +334,7 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.True(passed, output.ToString());
         Assert.Equal(["Claims.Tests.FirstTests", "Claims.Tests.SecondTests"], map.Classes.Keys.Order(StringComparer.Ordinal));
         Assert.Empty(map.FailedClasses!);
-        Assert.DoesNotContain(Directory.GetDirectories("/tmp", "tdr-*"), static d => File.Exists(Path.Combine(d, "testdetta-claim")));
+        Assert.DoesNotContain(Directory.GetDirectories(Path.GetTempPath(), "td*"), static d => File.Exists(Path.Combine(d, "testdetta-claim")));
     }
 
     // The fixture's worker thread starts in its constructor. Whether its first hit lands before the
