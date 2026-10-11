@@ -73,7 +73,7 @@ public sealed class MutantKindsTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            exitCode = EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--mutant-kinds", kinds, "--out", _output]);
+            exitCode = EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--seed", "1", "--mutant-kinds", kinds, "--out", _output]);
         }
         finally
         {

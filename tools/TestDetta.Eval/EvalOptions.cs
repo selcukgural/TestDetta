@@ -10,7 +10,11 @@ namespace TestDetta.Eval;
 /// <param name="Merges">How many of the latest merges (or commits) to evaluate; 0 for none.</param>
 /// <param name="Synthetic">Members to change synthetically at the branch head; 0 for none.</param>
 /// <param name="Seed">Seed for picking the synthetic changes.</param>
-internal sealed record EvalTarget(string Repository, string Branch, int Merges, int Synthetic = 0, int Seed = 1);
+internal sealed record EvalTarget(string Repository, string Branch, int Merges, int Synthetic = 0, int Seed = 1)
+{
+    /// <summary>True when <see cref="Seed"/> was drawn for this run (no <c>--seed</c>, or <c>--seed random</c>).</summary>
+    public bool SeedDrawn { get; init; }
+}
 
 /// <summary>Parsed command line of <c>testdetta-eval</c>.</summary>
 /// <param name="Target">What to evaluate.</param>
@@ -28,7 +32,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                testdetta-eval --corpus <file> [--only <name,...>] [--tag <tag,...>] [--out <dir>] [--synthetic <n>]
                          [--mutant-parallelism <n>] [--mutant-kinds <list>] [--map-age <n>] [--parallel <n>]
                          [--compare-tia <dll>] [--compare-affected <exe>] [--toolchains <dir>] [--compare <dir>]
-                         [--history <dir>] [--cache <dir>] [--explain] [--any-recording] [--keep-clones] [-v]
+                         [--history <dir>] [--cache <dir>] [--seed <n|random>] [--replay <dir>]
+                         [--explain] [--any-recording] [--keep-clones] [-v]
                testdetta-eval --summarize <dir> --corpus <file> [--compare <dir>] [--history <dir>]
 
         Clones the repository and, for each of the latest merges on a branch, records coverage at the
@@ -40,7 +45,10 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
           --merges <n>           Latest first-parent commits to evaluate (default: 8, or 0 with --synthetic)
           --synthetic <n>        Also change <n> sampled members at the branch head, one at a time, and
                                  check each selection against a mutant of that member
-          --seed <n>             Seed for sampling the synthetic changes (default: 1)
+          --seed <n|random>      Seed for sampling the synthetic changes (default: random, a new seed each run,
+                                 written to the reports; give the same number to compare two builds)
+          --replay <file>        Evaluate the changes of an earlier synthetic.json (or its folder) again, the
+                                 same members with the same kinds, instead of sampling
           --mutant-kinds <list>  throw, return-default, flip-branch, field-value, or all (default: throw)
           --mutant-parallelism <n>  Run n synthetic mutants at once on the clone (default: 1); needs the
                                  schema, and falls back to 1 when parallel runs of the suite interfere
@@ -109,6 +117,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
         --history <dir> keeps the run's summary there and redraws <dir>/dashboard.html from all runs.
         --cache <dir> keeps test outcomes and coverage maps for every round there instead of in <out>;
         with a corpus entry's "commit" pinned, a later round reuses them (docs/design/eval-result-cache.md).
+        Each repository draws its own seed unless --seed gives one for all (an entry's "seed" otherwise);
+        --replay <dir> evaluates again the changes of an earlier corpus run in <dir>, repository by repository.
         """;
 
     /// <summary>Parses the command line.</summary>
@@ -121,7 +131,7 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
         var branch = "main";
         int? merges = null;
         var synthetic = 0;
-        var seed = 1;
+        int? seed = null;
         var run = new RunSettings(Parallelism: 1, Mutants: 3, Projects: [], new RepoCommands(Setup: null, Cleanup: null), Framework: null);
         var logLevel = LogLevel.Information;
         string? sdk = null;
@@ -342,7 +352,29 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                     run = run with { DataFiles = files };
                     break;
 
-                case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--seed" or "--mutant-parallelism":
+                case "--seed":
+                    if (!SampleSeed.TryParse(value, out seed))
+                    {
+                        error = $"--seed needs a number or {SampleSeed.Random}, not {value}";
+                        return false;
+                    }
+
+                    break;
+
+                case "--replay":
+                    try
+                    {
+                        run = run with { Replay = SyntheticReplay.Load(value) };
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        error = ex.Message;
+                        return false;
+                    }
+
+                    break;
+
+                case "--merges" or "--parallel" or "--mutants" or "--synthetic" or "--mutant-parallelism":
                     if (!int.TryParse(value, CultureInfo.InvariantCulture, out var number) || number < 0 || (number == 0 && arg is "--parallel" or "--mutant-parallelism"))
                     {
                         error = $"{arg} needs a positive number, not {value}";
@@ -351,7 +383,6 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
 
                     merges = arg == "--merges" ? number : merges;
                     synthetic = arg == "--synthetic" ? number : synthetic;
-                    seed = arg == "--seed" ? number : seed;
                     run = arg switch
                     {
                         "--parallel" => run with { Parallelism = number },
@@ -396,7 +427,14 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
             run = run with { Toolchain = toolchain };
         }
 
-        var target = new EvalTarget(repository, branch, merges ?? (synthetic > 0 ? 0 : 8), synthetic, seed);
+        // A replay runs every change it lists; its seed picked them, a drawn one would pick nothing.
+        if (run.Replay is { } replay && synthetic == 0)
+        {
+            synthetic = replay.Mutants.Count;
+        }
+
+        seed ??= run.Replay?.Seed;
+        var target = new EvalTarget(repository, branch, merges ?? (synthetic > 0 ? 0 : 8), synthetic, seed ?? SampleSeed.Draw()) { SeedDrawn = seed is null };
         if (target is { Merges: 0, Synthetic: 0 })
         {
             error = "Nothing to evaluate: give --merges or --synthetic a positive number";
@@ -418,6 +456,9 @@ internal sealed record RunSettings(int Parallelism, int Mutants, IReadOnlyList<s
 {
     /// <summary>Test projects (paths in the repository) to leave out, such as ones that need a database server.</summary>
     public IReadOnlyList<string> Excluded { get; init; } = [];
+
+    /// <summary>The changes of an earlier run to evaluate again (<c>--replay</c>); null to sample.</summary>
+    public SyntheticReplay? Replay { get; init; }
 
     /// <summary>Kinds of synthetic mutants; throwing at the start of a member unless told otherwise.</summary>
     public IReadOnlySet<MutantKind> MutantKinds { get; init; } = new HashSet<MutantKind> { MutantKind.Throw };

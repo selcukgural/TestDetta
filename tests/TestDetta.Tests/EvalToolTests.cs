@@ -121,7 +121,7 @@ public sealed class EvalToolTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            exitCode = EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--out", _output]);
+            exitCode = EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--seed", "1", "--out", _output]);
         }
         finally
         {
@@ -158,7 +158,7 @@ public sealed class EvalToolTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            exitCode = EvalApp.Run(["--corpus", corpus, "--out", Path.Combine(_output, "runs")]);
+            exitCode = EvalApp.Run(["--corpus", corpus, "--seed", "1", "--out", Path.Combine(_output, "runs")]);
         }
         finally
         {

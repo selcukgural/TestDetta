@@ -54,7 +54,7 @@ public sealed class EvalMapAgeTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            exitCode = EvalApp.Run(["--repo", _repo.Root, "--branch", "main", "--synthetic", "10", "--map-age", "1", "--out", _output]);
+            exitCode = EvalApp.Run(["--repo", _repo.Root, "--branch", "main", "--synthetic", "10", "--seed", "1", "--map-age", "1", "--out", _output]);
         }
         finally
         {

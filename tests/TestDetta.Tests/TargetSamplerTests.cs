@@ -179,5 +179,32 @@ public sealed class TargetSamplerTests : IDisposable
         Assert.All(targeted, t => Assert.Equal(all[t.Member], t.Kind));
     }
 
+    [Fact]
+    public void A_replay_takes_the_named_members_in_their_order_with_their_kinds()
+    {
+        // After a fix, the changes that failed run again exactly, whatever a new sample would pick (docs/evaluation.md, "Seeds and replays").
+        var members = string.Join("\n", Enumerable.Range(0, 20).Select(static i => $"    public static int M{i:00}(int x) => x + {i};"));
+        _repo.Write("src/Lib/Many.cs", $"namespace Lib;\npublic static class Many\n{{\n{members}\n}}\n");
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var request = new SampleRequest(50, Seed: 9)
+        {
+            Replay =
+            [
+                new ReplayedMutant("Lib.Many.M17", MutantKind.FlipBranch),
+                new ReplayedMutant("Lib.Log.Run", MutantKind.ReturnDefault),
+                new ReplayedMutant("Lib.Many.Gone", MutantKind.Throw),
+                new ReplayedMutant("Lib.Many.M03", MutantKind.FieldValue),
+                new ReplayedMutant("(file).data/rates.json", MutantKind.EmptyFile),
+            ],
+        };
+
+        var targets = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod> { new("Lib.Log", "Run") }, request);
+
+        // A removed member, a method given a field's kind and a data file (the evaluator's) are left out.
+        Assert.Equal(["Lib.Many.M17:FlipBranch", "Lib.Log.Run:ReturnDefault"], targets.Select(static t => $"{t.Member.TypeName}.{t.Member.MemberName}:{t.Kind}"));
+        Assert.Equal([false, true], targets.Select(static t => t.Covered));
+        Assert.All(targets, static t => Assert.NotEmpty(t.Edits));
+    }
+
     public void Dispose() => _repo.Dispose();
 }

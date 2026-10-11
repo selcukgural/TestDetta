@@ -140,6 +140,28 @@ compiled: none failed a test, and TestDetta selected only the classes that faile
 The headroom report (`~/sift-corpus/notes/headroom.py`, fine-tune plan 2026-10-11) says where to aim: per repository,
 the selection share against the floor (the classes the map says ran the changed member).
 
+## Seeds and replays (owner, 2026-10-11)
+
+Up to 2026-10-11 every corpus entry sampled with seed 1, so each round tried the same 100 changes per repository:
+fair for comparing two builds, but every narrowing was judged on changes the earlier rounds had already seen, and a
+pattern outside them (AfterApply's architecture tests, which load each layer by name) could pass unnoticed.
+
+- **Discovery runs draw a seed.** Without `--seed`, or with `--seed random`, each run (each repository of a corpus
+  run) draws a seed from 1 to 999999. A corpus entry's `"seed"` pins its own; `--seed` on the command line replaces
+  every entry's. The seed goes into `synthetic.json` (`seed`, `seedDrawn`), `synthetic.md` and the log
+  ("Sample seed 418230 (drawn); --seed 418230 repeats this sample"), so any run can be repeated. A new seed means
+  new changes, which the outcome cache does not know: every one runs the whole suite, hours instead of minutes for
+  a large repository, so discovery runs belong to the night.
+- **Comparisons give one seed.** Two builds of TestDetta compared on a repository (a fix against main) run with the
+  same `--seed`, or the difference comes from the sample. The rounds measured before 2026-10-11 used `--seed 1`.
+- **Replays take the exact changes.** `--replay <synthetic.json or its folder>` evaluates again the changes of an
+  earlier run, the same members with the same kinds and the same data files, in their order; a corpus run takes
+  `--replay <earlier round>` and reads `<round>/<name>/synthetic.json` per repository. A seed reproduces a sample only
+  while the candidate list stays the same; a fix to TestDetta's project graph can move a pick, and a replay cannot.
+  A member no longer in the source is left out, with a warning, and so is a run at another commit than the report's.
+
+Tests of the evaluator that compare two runs or expect particular changes pass `--seed 1`.
+
 ## F#: Argu (2026-10-06)
 
 *Judged with the lenient rules used up to round `runs-full-1006` (see "How mutants are judged").*

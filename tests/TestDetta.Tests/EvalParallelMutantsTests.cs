@@ -139,7 +139,7 @@ public sealed class EvalParallelMutantsTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--out", output,
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--seed", "1", "--out", output,
                 "--mutant-parallelism", parallelism.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         }
         finally

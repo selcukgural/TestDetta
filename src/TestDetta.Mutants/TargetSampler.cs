@@ -65,7 +65,20 @@ internal sealed record SampleRequest(int Count, int Seed, double CoveredShare = 
     /// place a hash of it and the seed give it, so the stored test outcomes of a target stay usable.
     /// </summary>
     public string? TypePattern { get; init; }
+
+    /// <summary>
+    /// The members and kinds of an earlier sample, in its order, to evaluate again exactly (the evaluator's
+    /// <c>--replay</c>): after a fix, the changes that failed are tried once more, even where a different candidate
+    /// list would move a seed's picks. <see cref="Count"/>, the seed, the kinds and the pattern no longer decide the
+    /// sample; a member no longer in the source is left out. Null to sample.
+    /// </summary>
+    public IReadOnlyList<ReplayedMutant>? Replay { get; init; }
 }
+
+/// <summary>One change of an earlier sample, as its report names it.</summary>
+/// <param name="Target">The member, as <c>Type.Member</c>; for a data file, its repository path.</param>
+/// <param name="Kind">The mutant kind it had.</param>
+internal sealed record ReplayedMutant(string Target, MutantKind Kind);
 
 /// <summary>
 /// Picks methods, constructors, properties and events of library code that a test project depends
@@ -87,6 +100,11 @@ internal static class TargetSampler
         var pattern = request.TypePattern is { } glob
             ? new System.Text.RegularExpressions.Regex("^" + System.Text.RegularExpressions.Regex.Escape(glob).Replace(@"\*", ".*", StringComparison.Ordinal) + "$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)
             : null;
+        if (request.Replay is { } replay)
+        {
+            return Replayed(candidates, covered, replay);
+        }
+
         var coveredPool = new List<SyntheticTarget>();
         var otherPool = new List<SyntheticTarget>();
         foreach (var ((member, isField), edits) in candidates.OrderBy(static c => c.Key.Member.TypeName, StringComparer.Ordinal).ThenBy(static c => c.Key.Member.MemberName, StringComparer.Ordinal))
@@ -139,6 +157,43 @@ internal static class TargetSampler
         var fromOther = Math.Min(otherPool.Count, request.Count - fromCovered);
         fromCovered = Math.Min(coveredPool.Count, request.Count - fromOther);
         return [.. coveredPool.Take(fromCovered), .. otherPool.Take(fromOther)];
+    }
+
+    /// <summary>
+    /// The candidates <paramref name="replay"/> names, in its order and with its kinds. A field takes only
+    /// <see cref="MutantKind.FieldValue"/> and a method none of it, as when it was sampled; data files are the evaluator's.
+    /// </summary>
+    /// <param name="candidates">Every editable member.</param>
+    /// <param name="covered">Members that ran in some test, class, fixture or start-up.</param>
+    /// <param name="replay">The earlier sample.</param>
+    private static List<SyntheticTarget> Replayed(
+        Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> candidates,
+        IReadOnlySet<CoveredMethod> covered,
+        IReadOnlyList<ReplayedMutant> replay)
+    {
+        var byName = new Dictionary<string, (CoveredMethod Member, bool IsField, List<SourceEdit> Edits)>(StringComparer.Ordinal);
+        foreach (var ((member, isField), edits) in candidates)
+        {
+            if (edits is { Count: > 0 })
+            {
+                byName.TryAdd($"{member.TypeName}.{member.MemberName}", (member, isField, edits));
+            }
+        }
+
+        var targets = new List<SyntheticTarget>(replay.Count);
+        foreach (var (name, kind) in replay)
+        {
+            if (kind == MutantKind.EmptyFile || !byName.TryGetValue(name, out var found) || found.IsField != (kind == MutantKind.FieldValue))
+            {
+                continue;
+            }
+
+            var isCovered = covered.Contains(found.IsField ? new CoveredMethod(found.Member.TypeName, ".cctor") : found.Member)
+                            || (found.IsField && covered.Contains(new CoveredMethod(found.Member.TypeName, ".ctor")));
+            targets.Add(new SyntheticTarget(found.Member, found.Edits, isCovered) { Kind = kind });
+        }
+
+        return targets;
     }
 
     /// <summary>A 64-bit FNV-1a hash of the member, the seed and a purpose, the same on every run and machine.</summary>

@@ -39,6 +39,16 @@ internal static class MutantKinds
     /// <param name="kind">Mutant kind.</param>
     public static string Name(MutantKind kind) => Array.Find(Names, n => n.Kind == kind).Name;
 
+    /// <summary>Reads one kind by its name, <see cref="MutantKind.EmptyFile"/> included, as a report writes it.</summary>
+    /// <param name="name">Kind name, such as <c>flip-branch</c>.</param>
+    /// <param name="kind">The kind.</param>
+    public static bool TryParseOne(string name, out MutantKind kind)
+    {
+        var match = Array.FindIndex(Names, n => string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase));
+        kind = match < 0 ? default : Names[match].Kind;
+        return match >= 0;
+    }
+
     /// <summary>Parses a comma-separated list such as <c>throw,field-value</c>; <c>all</c> means every kind.</summary>
     /// <param name="value">List from the command line or corpus.</param>
     /// <param name="kinds">Parsed kinds.</param>

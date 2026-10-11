@@ -180,7 +180,7 @@ public sealed class EvalOutcomeCacheTests : IDisposable
         try
         {
             Console.SetOut(TextWriter.Null);
-            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--out", output, "--outcome-cache", cache]);
+            EvalApp.Run(["--repo", _repo.Root, "--synthetic", "10", "--seed", "1", "--out", output, "--outcome-cache", cache]);
         }
         finally
         {
