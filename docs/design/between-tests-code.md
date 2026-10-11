@@ -119,6 +119,24 @@ declares the data is among them although it never names that base. The selection
 (`CoverageSelection.ClassesUsing`). A member a generic class uses keeps the old rule (its runtime names may differ from
 the map's), and so does a map recorded before (no `dataSourceUsers`).
 
+## Test framework extensions the repository ships (2026-10-12)
+
+Some repositories ship extensions of a test framework and use them on their own tests: AutoFixture's
+`AutoFixture.NUnit4.AutoDataAttribute` builds a `Fixture` while NUnit builds the test cases, FsCheck's
+`FsCheck.Xunit.PropertyAttribute` reads its configuration and runs the properties through its own runner, and a test
+project may declare its own attributes (GraphQL's `TheoryExAttribute`). That code ran outside every test, and with it
+everything it called (AutoFixture's whole `Fixture`), so coverage could not answer for any of it. Found with the probe
+that writes the stack of every read outside the tests.
+
+`ExtensionAttributes.Find` reads the test assemblies before instrumenting and collects the attribute types of the
+repository (declared in a test module or another repository assembly; `System.*` and `Microsoft.CodeAnalysis.*` ones,
+which the compiler embeds, left out) that the tests put on test classes, test methods or their parameters, with their
+users: those classes and every concrete class deriving from one. Each such attribute type, the closures and state
+machines inside it too, gets the shared bucket of data sources (`[data-source]` and the type), so what it runs counts
+for its users. Its methods are not counted as third-party callbacks (run-once code) any more: the framework keeps what
+they build for those classes alone. A test that uses the attribute type itself keeps its own bucket (the stack guard of
+shared data). An attribute a generic class uses keeps the old rule.
+
 ## Pools and caches in collections (2026-10-02)
 
 The same "built for one, reused by others" shape without a framework: a hand-rolled pool keeps
