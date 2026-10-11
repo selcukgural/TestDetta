@@ -1248,7 +1248,7 @@ const CH_MAP = {
       input: "<code>SymbolChange(\"Calc.Calculator\", \"Round\", Added)</code>",
       output: "<code>false</code>: değişiklik isimle izlenir; <code>Round</code>'u anan kodu çalıştıran sınıflar seçilir",
       purpose: "Harita geçmişi kaydeder. Yeni üyeyi henüz kimse çalıştırmadı ama yeni çağıranlar onu çağırıyor olabilir; bunu yalnız isimler gösterir.",
-      body: "<p>Aynı dal: tür, bir çatının yansımayla bulabileceği bir türse (temel sınıfı ya da özniteliği var ve hiçbir şey adını anmıyor), çatı onun bildirimini kodu çalıştırmadan okur. Gerekçe: <code>\"its type may be found through reflection\"</code>.</p>",
+      body: "<p>Aynı dal: tür, bir çatının yansımayla bulabileceği bir türse (temel sınıfı ya da özniteliği var ve hiçbir şey adını anmıyor), çatı onun bildirimini kodu çalıştırmadan okur. Gerekçe: <code>\"its type may be found through reflection\"</code>. Haritanın değişen üyeyi çalıştırdığını söylediği sınıflar yine seçilir (2026-10-11), değişiklik ayrıca isimle izlenir: türün proje düzeyindeki yedeği türün adının yayılmasını ister, başka yerde adı geçen bir üye bunu yapmaz (C# extension metodu, F# <code>AutoOpen</code> modül fonksiyonu); Argu'nun <code>CliParser</code>'ında onu çalıştıran 11 sınıftan 4'ü dışarıda kalıyordu.</p>",
     },
     {
       title: "Senaryo 3 · Static constructor değişti", nodes: ["start", "q1", "no", "i_run"], edges: ["t0", "n1"],

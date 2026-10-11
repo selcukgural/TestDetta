@@ -350,14 +350,23 @@ internal sealed partial class CoverageSelection
             typeUsersKnown = typeWide.Known;
         }
 
+        var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
         if (!IsAnswerable(change, reached))
         {
+            // The classes that ran the changed code are affected whatever else reads the type; the rest is left to the
+            // name trace and the type's fallback. That fallback needs the type's name spread, which a member named
+            // elsewhere does not do: an F# AutoOpen module's functions or a C# extension method are called without it,
+            // and the classes that ran them through a path no name shows were left out (Argu's CliParser, 4 of 11).
+            if (change.Kind != SymbolChangeKind.Added)
+            {
+                SelectAll(Answers(change, owner).Answers, $"ran {member}, which changed");
+            }
+
             return Unanswered(change, change.Kind == SymbolChangeKind.Added ? "added" : "its type may be found through reflection");
         }
 
         var answerSet = Answers(change, owner);
         var (answers, unresolved) = answerSet;
-        var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
         SelectAll(answers, reached ? $"ran {member}, which names the changed code" : $"ran {member}, which changed");
         // Changed metadata is read through reflection without running the code: the classes that ran
         // it stay selected, and the change is traced through its type as well. An owner no affected test project with a
