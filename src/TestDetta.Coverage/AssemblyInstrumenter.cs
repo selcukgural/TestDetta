@@ -31,7 +31,7 @@ internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Method
     /// </summary>
     public IReadOnlyList<string>? ReadsUnseen { get; init; }
 
-    /// <summary>The users of each shared data source bucket; see <see cref="CoverageMap.DataSourceUsers"/>.</summary>
+    /// <summary>The users of each shared data source bucket, repository attributes the tests use included; see <see cref="CoverageMap.DataSourceUsers"/>.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> DataSourceUsers { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
 }
 
@@ -94,6 +94,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         var nested = new List<int>();
         var dataUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var extensions = ExtensionAttributes.Find(testAssemblies, ownAssemblies, static type => IsTestClass(type, depth: 0), dataUsers);
         var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks, NestedMethods = nested };
         try
         {
@@ -105,7 +106,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 var before = methods.Count;
                 InstrumentOne(assembly, testAssemblies.Contains(assembly), productAssemblies?.Contains(assembly) == true, new MethodTables(methods, fields, callbacks, ownAssemblies)
                 {
-                    CoreLibrary = coreLibrary, Nested = nested, DataSourceUsers = dataUsers,
+                    CoreLibrary = coreLibrary, Nested = nested, DataSourceUsers = dataUsers, ExtensionBuckets = extensions,
                 });
                 LogInstrumented(assembly, methods.Count - before);
             }
@@ -292,6 +293,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>Users of each shared data source bucket; see <see cref="InstrumentationResult.DataSourceUsers"/>.</summary>
         public Dictionary<string, List<string>> DataSourceUsers { get; init; } = new(StringComparer.Ordinal);
+
+        /// <summary>The shared bucket of each repository attribute type the tests use, by full name; see <see cref="ExtensionAttributes"/>.</summary>
+        public IReadOnlyDictionary<string, string> ExtensionBuckets { get; init; } = new Dictionary<string, string>();
     }
 
     /// <summary>Rewrites one assembly, appending its methods to the shared tables.</summary>
@@ -383,6 +387,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
             var isTestClass = containsTests && IsTestClass(type, depth: 0);
             var isFixture = fixtures.Contains(type);
+            var extension = ExtensionBucket(type, tables.ExtensionBuckets);
 
             foreach (var method in type.Methods)
             {
@@ -398,11 +403,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                     tables.Nested.Add(id);
                 }
 
-                var dataUser = dataSources.GetValueOrDefault(method);
+                var dataUser = dataSources.GetValueOrDefault(method) ?? extension;
                 // A data source serves the classes that name it, whatever class declares it.
                 var scope = scopes.GetValueOrDefault(method);
                 var marker = scope is not null ? Marker.SetUpScope
-                    : dataSources.ContainsKey(method) ? Marker.DataSource
+                    : dataSources.ContainsKey(method) || extension is not null ? Marker.DataSource
                     : isTestClass && IsTestClassEntryPoint(method) ? Marker.TestClass
                     : isFixture && IsFixtureSetup(method) ? Marker.Fixture
                     : isFixture && IsFixtureTeardown(method) ? Marker.FixtureTeardown
@@ -412,7 +417,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 // IAsyncLifetime.InitializeAsync) per instance and keeps nothing they build; their own
                 // bucket already holds what they run. As callbacks they made all of it run-once code,
                 // which AfterApply's per-class host setup spread to every class of the suite.
-                var isCallback = marker is not (Marker.TestClass or Marker.Fixture or Marker.FixtureTeardown) && ExternalContracts.IsCallback(method, ownAssemblies);
+                var isCallback = marker is not (Marker.TestClass or Marker.Fixture or Marker.FixtureTeardown) && extension is null && ExternalContracts.IsCallback(method, ownAssemblies);
                 if (isCallback)
                 {
                     callbacks.Add(id);
@@ -2099,6 +2104,28 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="fullName">Full name of the attribute type.</param>
     private static bool HasAttribute(IEnumerable<CustomAttribute> attributes, string fullName) =>
         attributes.Any(a => a.AttributeType.FullName == fullName);
+
+    /// <summary>
+    /// The shared bucket of the repository attribute type <paramref name="type"/> belongs to (itself, or the type around a
+    /// lambda's closure or an iterator's state machine in it), or null; see <see cref="ExtensionAttributes"/>.
+    /// </summary>
+    /// <param name="type">A type being instrumented.</param>
+    /// <param name="buckets">Buckets by attribute type full name.</param>
+    private static string? ExtensionBucket(TypeDefinition type, IReadOnlyDictionary<string, string> buckets)
+    {
+        if (buckets.Count == 0)
+        {
+            return null;
+        }
+
+        var declaring = type;
+        while (declaring.IsNested && declaring.Name.StartsWith('<'))
+        {
+            declaring = declaring.DeclaringType;
+        }
+
+        return buckets.GetValueOrDefault(declaring.FullName);
+    }
 
     /// <summary>
     /// The synchronous <c>Dispose()</c> of a fixture type, as <c>IDisposable</c> declares it (also implemented explicitly):
