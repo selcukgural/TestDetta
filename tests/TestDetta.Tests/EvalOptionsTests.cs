@@ -51,6 +51,19 @@ public sealed class EvalOptionsTests
     }
 
     [Fact]
+    public void A_target_pattern_reaches_the_sample_in_both_modes()
+    {
+        Assert.True(EvalOptions.TryParse(["--repo", "r", "--target", "Lib.Bridge.*"], out var options, out var error), error);
+        Assert.Equal("Lib.Bridge.*", options.Run.TargetPattern);
+
+        var entry = new CorpusEntry { Name = "fluid", Url = "https://example.com/fluid.git", Synthetic = 100 };
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json", "--target", "Fluid.Ast.*"], out var batch, out error), error);
+        Assert.Equal("Fluid.Ast.*", BatchRunner.SettingsFor(entry, batch).Run.TargetPattern);
+        Assert.True(BatchOptions.TryParse(["--corpus", "c.json"], out var defaults, out _));
+        Assert.Null(BatchRunner.SettingsFor(entry, defaults).Run.TargetPattern);
+    }
+
+    [Fact]
     public void A_quick_check_keeps_a_focus_and_a_most_of_the_sample()
     {
         Assert.True(EvalOptions.TryParse(["--repo", "r", "--focus", "generator", "--max-mutants", "20"], out var options, out var error), error);
