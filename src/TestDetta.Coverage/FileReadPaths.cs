@@ -84,7 +84,16 @@ internal sealed class FileReadPaths(string repoRoot, IReadOnlyList<string> track
 
         // The test may reach the repository through a link (macOS's /var is /private/var).
         var directory = full.EndsWith('/');
-        var path = Paths.ResolveLinks(directory ? full.TrimEnd('/') : full);
+        var trimmed = directory ? full.TrimEnd('/') : full;
+
+        // A listing of a file system root ("/", "C:/") is outside every repository; trimmed, it named no path at all and
+        // failed the whole recording (MSBuild's tests list "/").
+        if (trimmed.Length == 0 || trimmed[^1] == ':')
+        {
+            return [];
+        }
+
+        var path = Paths.ResolveLinks(trimmed);
         if (!Paths.IsUnder(path, _root.Value))
         {
             return [];
