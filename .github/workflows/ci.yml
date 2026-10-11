@@ -55,8 +55,10 @@ jobs:
           mode: record
           setup-dotnet: 'false'
 
-      # The evaluation tool's tests (Category=Eval, about half of the slow tests' time) run on a pull request
-      # only when it changes the tool, the corpus or one of those tests; the weekly recording runs them all.
+      # The evaluation tool's tests (Category=Eval) and the tests that build and record real projects
+      # (Category=Slow, 28 of a pull request's 30 minutes) run on a pull request only when it changes
+      # what they test: the tool, the corpus, the recorder and its runtime, the mutants, the build
+      # settings, or one of those tests. The weekly recording runs them all; locally they run before a push.
       - name: Choose the tests to leave out
         id: eval
         if: github.event_name == 'pull_request'
@@ -65,13 +67,24 @@ jobs:
         run: |
           changed=$(git diff --name-only "$BASE"...HEAD)
           tests=$(printf '%s\n' "$changed" | { grep -E '^tests/.*\.cs$' || true; } | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done)
-          if printf '%s\n' "$changed" | grep -qE '^(tools/TestDetta\.Eval|eval)/' \
-            || { [ -n "$tests" ] && grep -lF '[Trait("Category", "Eval")]' $tests > /dev/null; }; then
+          has_trait() { [ -n "$tests" ] && grep -lF "[Trait(\"Category\", \"$1\")]" $tests > /dev/null; }
+          filters=()
+          if printf '%s\n' "$changed" | grep -qE '^(tools/TestDetta\.Eval|eval)/' || has_trait Eval; then
             echo "Changes reach the evaluation tool: its tests run."
-            echo "args=" >> "$GITHUB_OUTPUT"
           else
             echo "No change to the evaluation tool: its tests are left out."
-            echo "args=--filter Category!=Eval" >> "$GITHUB_OUTPUT"
+            filters+=("Category!=Eval")
+          fi
+          if printf '%s\n' "$changed" | grep -qE '^(src/TestDetta\.Coverage(\.Runtime)?|src/TestDetta\.Mutants|tools/TestDetta\.Eval)/|^(global\.json|Directory\.Build\.(props|targets)|Directory\.Packages\.props)$' || has_trait Slow; then
+            echo "Changes reach the recorder or the build: the slow tests run."
+          else
+            echo "No change to the recorder or the build: the slow tests are left out."
+            filters+=("Category!=Slow")
+          fi
+          if [ ${#filters[@]} -eq 0 ]; then
+            echo "args=" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=--filter $(IFS='&'; echo "${filters[*]}")" >> "$GITHUB_OUTPUT"
           fi
 
       # Pull requests run only the tests their changes affect. The repository is private, so selection
