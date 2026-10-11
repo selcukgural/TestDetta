@@ -1588,13 +1588,15 @@ public static class TestDettaTracker
     }
 
     /// <summary>
-    /// True when no test code is running or being prepared; recorded with the suite's own parallelism, when the flow is
-    /// outside every test.
+    /// True when no test method or other test code is running; recorded with the suite's own parallelism, when the flow is
+    /// outside every test. A class instance being prepared does not count: entering a class's own data member marks one
+    /// (<see cref="EnterDataSource"/>), and a shared member the framework enumerates right after it must still get its
+    /// bucket, or its code would go to that class (DataSourceTests).
     /// </summary>
     private static bool NoTestCodeRuns() =>
         ParallelFlows
             ? BucketForHit() is var bucket && (ReferenceEquals(bucket, Startup) || bucket.IsFixture)
-            : Volatile.Read(ref _testCodeDepth) == 0 && !Volatile.Read(ref _instancePending);
+            : Volatile.Read(ref _testCodeDepth) == 0;
 
     /// <summary>
     /// Makes code outside every test the current bucket. Called at the start of a test data source
