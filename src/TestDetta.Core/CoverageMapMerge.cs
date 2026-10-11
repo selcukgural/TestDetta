@@ -92,6 +92,10 @@ public static class CoverageMapMerge
             FileReadsUnseen = partial.FileReadsUnseen is { } unseen && previous.FileReadsUnseen is { } previousUnseen
                 ? [.. unseen.Union(previousUnseen, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)]
                 : null,
+            // A carried class's loads were seen by the previous recording: what either could not see stays unseen.
+            OutputLoadsUnseen = partial.OutputLoadsUnseen is { } loads && previous.OutputLoadsUnseen is { } previousLoads
+                ? [.. loads.Union(previousLoads, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)]
+                : null,
             SkippedClasses = partial.SkippedClasses is { } skipped && previous.SkippedClasses is { } previousSkipped
                 ? new HashSet<string>([.. skipped, .. previousSkipped.Where(carried.Contains)], StringComparer.Ordinal)
                 : null,

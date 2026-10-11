@@ -57,6 +57,31 @@ public sealed class OutputUseSelectionTests : IDisposable
     }
 
     [Fact]
+    public void A_map_recorded_before_loads_were_tracked_runs_the_whole_project()
+    {
+        // Such a map cannot tell a load by a third-party plugin host from no load at all (docs/design/loaded-outputs.md).
+        WriteMap(Uses(classes: ["Tool", "dotnet"]), loadsTracked: false);
+        ChangeTool();
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("recorded before TestDetta tracked assembly loads", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_tool_loaded_where_the_recording_could_not_see_who_loaded_it_runs_the_whole_project()
+    {
+        WriteMap(Uses(classes: ["Tool", "dotnet"]), loadsUnseen: ["Tool"]);
+        ChangeTool();
+
+        var selection = Select();
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("loaded it without a call the recording saw", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_tool_no_test_used_selects_nothing()
     {
         WriteMap(Uses(classes: ["dotnet"]));
@@ -187,7 +212,7 @@ public sealed class OutputUseSelectionTests : IDisposable
     private TestProjectSelection Select() =>
         new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main", new AnalysisOptions()).Tests.Single(static t => t.Project.IsTestProject);
 
-    private void WriteMap(FileReads? uses)
+    private void WriteMap(FileReads? uses, IReadOnlyList<string>? loadsUnseen = null, bool loadsTracked = true)
     {
         var head = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
         var map = new CoverageMap(
@@ -202,6 +227,7 @@ public sealed class OutputUseSelectionTests : IDisposable
             FailedClasses = new HashSet<string>(),
             FileReads = new FileReads(new Dictionary<string, IReadOnlyList<string>>(), new Dictionary<string, IReadOnlyList<string>>(), [], []),
             OutputUses = uses,
+            OutputLoadsUnseen = loadsTracked ? loadsUnseen ?? [] : null,
         };
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, Path.Combine(_repo.Root, "tests/Lib.Tests/Lib.Tests.csproj")), map);
     }

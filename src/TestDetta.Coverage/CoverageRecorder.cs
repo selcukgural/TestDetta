@@ -290,6 +290,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 InstrumentedProjects = InstrumentedProjects(request.RepoRoot, owners, assemblies),
                 FileReadsUnseen = instrumentation.ReadsUnseen,
                 LeakedReads = LeakedReads(resultsFiles, instrumentation.Fields),
+                OutputLoadsUnseen = LoadsUnseen(resultsFiles),
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
                 NestedMethods = instrumentation.NestedMethods,
@@ -910,7 +911,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     private const int TestingPlatformZeroTests = 8;
 
     /// <summary>Results of a test host that ran no test.</summary>
-    private const string EmptyResults = "{\"classes\":{},\"fixtures\":{},\"ambient\":[],\"classSeconds\":{},\"fixtureSeconds\":{}}";
+    private const string EmptyResults = "{\"classes\":{},\"fixtures\":{},\"ambient\":[],\"outputLoadsUnseen\":[],\"classSeconds\":{},\"fixtureSeconds\":{}}";
 
     /// <summary>
     /// Asks MSBuild for the test assembly path. A multi-targeted project has no single path, so
@@ -1570,6 +1571,31 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
             return used;
         }
+    }
+
+    /// <summary>
+    /// The <c>outputLoadsUnseen</c> of every process's results, merged and sorted (<see cref="CoverageMap.OutputLoadsUnseen"/>);
+    /// null when a process wrote none, whose loads are then unknown.
+    /// </summary>
+    /// <param name="resultsFiles">Every process's results.</param>
+    internal static List<string>? LoadsUnseen(IReadOnlyList<string> resultsFiles)
+    {
+        var merged = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in resultsFiles)
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(file));
+            if (!document.RootElement.TryGetProperty("outputLoadsUnseen", out var element))
+            {
+                return null;
+            }
+
+            foreach (var name in element.EnumerateArray())
+            {
+                merged.Add(name.GetString()!);
+            }
+        }
+
+        return [.. merged];
     }
 
     /// <summary>

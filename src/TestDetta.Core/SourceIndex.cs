@@ -346,6 +346,34 @@ internal sealed class SourceIndex
         return false;
     }
 
+    /// <summary>
+    /// True when code outside <paramref name="projectPath"/> mentions the simple name of a type the project declares. A
+    /// project whose types nothing else names can reach a test process only through its output being loaded by path or by
+    /// name, like NLog's auto-loaded extensions (docs/design/loaded-outputs.md). A name another type shares counts too,
+    /// which only keeps more tests.
+    /// </summary>
+    /// <param name="projectPath">The project whose types are looked up.</param>
+    public bool IsAnyTypeNamedOutside(string projectPath)
+    {
+        foreach (var type in _types.Values)
+        {
+            if (!Paths.Comparer.Equals(type.ProjectPath, projectPath))
+            {
+                continue;
+            }
+
+            foreach (var member in ReferencesTo(DeclarationWalker.SimpleTypeName(type.TypeName)))
+            {
+                if (!Paths.Comparer.Equals(member.ProjectPath, projectPath))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>True when a member other than <paramref name="self"/> mentions <paramref name="name"/>.</summary>
     /// <param name="name">Simple identifier.</param>
     /// <param name="self">Member whose own references, such as recursion, are ignored.</param>

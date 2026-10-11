@@ -171,6 +171,24 @@ public sealed record CoverageMap(
     public bool KnowsAllFileReads => FileReads is not null && FileReadsUnseen is [];
 
     /// <summary>
+    /// Assemblies the test processes loaded without a wrapped call naming them, by simple and file name, sorted: by
+    /// code the recording does not rewrite (a third-party plugin host), by the runtime (a dependency), or before the
+    /// tracker started (docs/design/loaded-outputs.md). <see cref="OutputUses"/> cannot say who loaded these. Null for
+    /// a map recorded before loads were tracked, whose <see cref="OutputUses"/> may miss any load.
+    /// </summary>
+    public IReadOnlyList<string>? OutputLoadsUnseen { get; init; }
+
+    /// <summary>
+    /// True when <see cref="OutputUses"/> names every class that loaded <paramref name="names"/>: loads were tracked
+    /// and none of the names was loaded unseen.
+    /// </summary>
+    /// <param name="names">An output's assembly and project names.</param>
+    public bool KnowsLoadsOf(IReadOnlyCollection<string> names) =>
+        OutputUses is not null
+        && OutputLoadsUnseen is { } unseen
+        && !unseen.Any(u => names.Any(n => string.Equals(u, n, StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>
     /// What the tests started as a process, loaded as an assembly, or read from a build output that git
     /// does not track, by name: the last path segment without <c>.dll</c>, <c>.exe</c> or a project
     /// extension, shaped like <see cref="FileReads"/>. A project referenced without compiling against

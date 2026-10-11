@@ -198,6 +198,22 @@ public static class TestDettaTracker
     private static readonly HashSet<string> InitializationOutputs = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Every name a wrapped start or load gave (<see cref="OutputUsed"/>), in any bucket, for the whole process: an
+    /// assembly the runtime then loads under one of them was loaded by code the recording saw.
+    /// </summary>
+    private static readonly HashSet<string> WrappedNames = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Assemblies loaded with no wrapped call naming them before: by code the recording does not wrap (a third-party
+    /// plugin host, the runtime resolving a dependency, <c>Assembly.Load(bytes)</c>) or before the tracker started. Who
+    /// loaded them is unknown, so the selection cannot narrow to the classes that used them (docs/design/loaded-outputs.md).
+    /// </summary>
+    private static readonly HashSet<string> LoadsUnseen = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Guards <see cref="WrappedNames"/> and <see cref="LoadsUnseen"/>; assembly loads come from any thread.</summary>
+    private static readonly object LoadGate = new();
+
+    /// <summary>
     /// Per tracked field, the files read inside the initialization scopes whose result was stored into
     /// it: every reader of the field uses them, as it depends on the field's <see cref="Builders"/>.
     /// Guarded by <see cref="Gate"/>.
@@ -281,6 +297,12 @@ public static class TestDettaTracker
     /// </summary>
     static TestDettaTracker()
     {
+        AppDomain.CurrentDomain.AssemblyLoad += static (_, loaded) => AssemblyLoaded(loaded.LoadedAssembly);
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            AssemblyLoaded(assembly);
+        }
+
         AppDomain.CurrentDomain.ProcessExit += static (_, _) => WriteResults();
         if (!AppDomain.CurrentDomain.IsDefaultAppDomain() && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(OutputVariable)))
         {
@@ -355,6 +377,11 @@ public static class TestDettaTracker
             return;
         }
 
+        lock (LoadGate)
+        {
+            WrappedNames.UnionWith(names);
+        }
+
         lock (Gate)
         {
             if (_typeInitializerDepth == 0 && _cacheDepth == 0)
@@ -402,6 +429,17 @@ public static class TestDettaTracker
             case System.Reflection.AssemblyName name:
                 AddNames(names, name.Name);
                 break;
+            case AppDomain domain:
+                // AppDomain.GetAssemblies: code that enumerates the loaded assemblies may use any of them.
+                foreach (var assembly in domain.GetAssemblies())
+                {
+                    foreach (var assemblyName in AssemblyNames(assembly))
+                    {
+                        names.Add(assemblyName);
+                    }
+                }
+
+                break;
             case IEnumerable<string> items:
                 foreach (var item in items)
                 {
@@ -410,6 +448,48 @@ public static class TestDettaTracker
 
                 break;
         }
+    }
+
+    /// <summary>
+    /// Notes an assembly that was loaded without a wrapped call naming it (<see cref="LoadsUnseen"/>). Called for every
+    /// load and, when the tracker starts, for every assembly loaded before it.
+    /// </summary>
+    /// <param name="assembly">The loaded assembly.</param>
+    private static void AssemblyLoaded(System.Reflection.Assembly assembly)
+    {
+        try
+        {
+            var names = AssemblyNames(assembly);
+            lock (LoadGate)
+            {
+                if (!names.Exists(static n => WrappedNames.Contains(n)))
+                {
+                    LoadsUnseen.UnionWith(names);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is NotSupportedException or System.Security.SecurityException or IOException)
+        {
+            // An assembly without a name or a location to read: nothing to compare.
+        }
+    }
+
+    /// <summary>The names an assembly is known by: its simple name and its file name without the extension.</summary>
+    /// <param name="assembly">An assembly.</param>
+    private static List<string> AssemblyNames(System.Reflection.Assembly assembly)
+    {
+        var names = new List<string>(2);
+        if (assembly.GetName().Name is { Length: > 0 } simple)
+        {
+            names.Add(simple);
+        }
+
+        if (!assembly.IsDynamic && assembly.Location is { Length: > 0 } location)
+        {
+            names.Add(Path.GetFileNameWithoutExtension(location));
+        }
+
+        return names;
     }
 
     /// <summary>
@@ -1515,6 +1595,7 @@ public static class TestDettaTracker
                 json.WriteEndObject();
                 WriteFileReads(json);
                 WriteOutputUses(json);
+                WriteLoadsUnseen(json);
                 WriteLeakedReads(json);
                 WriteSeconds(json, "classSeconds", Classes);
                 WriteSeconds(json, "fixtureSeconds", Fixtures);
@@ -1723,6 +1804,25 @@ public static class TestDettaTracker
 
             json.WriteEndArray();
         }
+    }
+
+    /// <summary>Writes <c>outputLoadsUnseen</c>: the names of the assemblies loaded without a wrapped call (<see cref="LoadsUnseen"/>).</summary>
+    /// <param name="json">Writer positioned inside the results object.</param>
+    private static void WriteLoadsUnseen(ResultsJsonWriter json)
+    {
+        string[] names;
+        lock (LoadGate)
+        {
+            names = [.. LoadsUnseen.OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)];
+        }
+
+        json.WriteStartArray("outputLoadsUnseen");
+        foreach (var name in names)
+        {
+            json.WriteStringValue(name);
+        }
+
+        json.WriteEndArray();
     }
 
     /// <summary>

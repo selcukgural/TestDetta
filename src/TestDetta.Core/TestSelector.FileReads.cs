@@ -252,10 +252,42 @@ public sealed partial class TestSelector
                     continue;
                 }
 
+                // Only a map that tracked every assembly load can say no other class loaded it (docs/design/loaded-outputs.md).
+                if (UnseenLoads(map, names) is { } unseen)
+                {
+                    AddFallback(projectLevel, path, $"it may start or load the output of {output}, which is affected, and {unseen}");
+                    continue;
+                }
+
                 AddUsersOf(path, project, map, recorded, output, names, "started or loaded the output of", readers);
             }
         }
     }
+
+    /// <summary>Adds <paramref name="added"/> to the readers of its test project, keeping the first reason and evidence of each.</summary>
+    /// <param name="readers">Readers per test project; updated in place.</param>
+    /// <param name="path">The test project's path.</param>
+    /// <param name="added">Readers to add.</param>
+    private static void AddReaders(Dictionary<string, FileReaders> readers, string path, FileReaders added) =>
+        readers[path] = readers.TryGetValue(path, out var existing)
+            ? existing with
+            {
+                WholeProject = existing.WholeProject ?? added.WholeProject,
+                Classes = new SortedDictionary<string, string>(existing.Classes.Concat(added.Classes.Where(c => !existing.Classes.ContainsKey(c.Key))).ToDictionary(), StringComparer.Ordinal),
+            }
+            : added;
+
+    /// <summary>
+    /// Why <paramref name="map"/>'s output uses may miss a class that loaded <paramref name="names"/>, or null when they
+    /// cannot: the map was recorded before assembly loads were tracked, or a test process loaded the output without a
+    /// call the recording saw (a third-party plugin host, the runtime, before the tracker started).
+    /// </summary>
+    /// <param name="map">A test project's coverage map.</param>
+    /// <param name="names">The output's assembly and project names.</param>
+    private static string? UnseenLoads(CoverageMap map, string[] names) =>
+        map.KnowsLoadsOf(names) ? null
+        : map.OutputLoadsUnseen is null ? "its map was recorded before TestDetta tracked assembly loads (record it again to narrow)"
+        : "a test process loaded it without a call the recording saw, so the map cannot say which classes used it";
 
     /// <summary>
     /// The tests that load the output of a changed project from its path (<c>Assembly.LoadFrom</c>, a
@@ -338,13 +370,7 @@ public sealed partial class TestSelector
             return;
         }
 
-        readers[path] = readers.TryGetValue(path, out var existing)
-            ? existing with
-            {
-                WholeProject = existing.WholeProject ?? whole,
-                Classes = new SortedDictionary<string, string>(existing.Classes.Concat(classes.Where(c => !existing.Classes.ContainsKey(c.Key))).ToDictionary(), StringComparer.Ordinal),
-            }
-            : new FileReaders(testProject, whole, classes);
+        AddReaders(readers, path, new FileReaders(testProject, whole, classes));
 
         static bool Uses(IReadOnlyList<string> used, string[] names) =>
             used.Any(u => names.Any(n => string.Equals(u, n, StringComparison.OrdinalIgnoreCase)));

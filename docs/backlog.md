@@ -28,6 +28,17 @@ and only the name trace through the registration selects it. OpenAPI and Swagger
 common. A safe version needs a signal for "this class read the type's shape" (reflection inside
 ASP.NET, Swashbuckle, serializers), which nothing records today.
 
+## Next, to discuss with the owner: assemblies loaded where the recording cannot see who loaded them (owner, 2026-10-10)
+
+The rules that narrow to the classes that loaded an output (opaque outputs, reflection-found types in a loaded output)
+know only the loads TestDetta wraps in repository code. Since 2026-10-10 the tracker also lists every assembly loaded
+without such a call (`CoverageMap.OutputLoadsUnseen`), and a map without the list or with the output in it runs the
+project completely (docs/design/loaded-outputs.md). What remains: an assembly is loaded once per process, so a later
+class that uses it through third-party code (a plugin host handing out the loaded assembly, a third-party scan of the
+loaded assemblies, `AssemblyLoadContext.Assemblies`) is not recorded. The owner wants to talk about it: whether to
+treat any third-party scan or host as "every class may use every loaded plugin", whether to wrap more enumeration
+APIs, and whether the residual order-dependent case needs its own signal.
+
 ## ~~The test arguments a project already runs with~~ (done 2026-10-10)
 
 TestDetta keeps the team's filters, run settings and testing platform arguments in every run it starts, and

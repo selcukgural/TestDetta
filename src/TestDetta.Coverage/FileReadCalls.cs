@@ -59,6 +59,8 @@ internal static class FileReadCalls
     /// Methods that start a process or load an assembly, by declaring type and name, every overload:
     /// their first two arguments (the object first, for an instance method) go to
     /// <see cref="TestDettaTracker.OutputUsed"/>, which finds the paths and names among them.
+    /// <c>AppDomain.GetAssemblies</c> is one too: code that enumerates the loaded assemblies may use any of
+    /// them, so the tracker names every one loaded at that moment (docs/design/loaded-outputs.md).
     /// </summary>
     private static readonly FrozenSet<string> Starters = FrozenSet.Create(
         StringComparer.Ordinal,
@@ -71,7 +73,8 @@ internal static class FileReadCalls
         "System.Runtime.Loader.AssemblyLoadContext::LoadFromAssemblyName",
         "System.Runtime.Loader.AssemblyLoadContext::LoadFromNativeImagePath",
         "System.AppDomain::ExecuteAssembly",
-        "System.AppDomain::ExecuteAssemblyByName");
+        "System.AppDomain::ExecuteAssemblyByName",
+        "System.AppDomain::GetAssemblies");
 
     /// <summary>
     /// True when <paramref name="module"/> references a method whose calls <see cref="Wrap"/> reports as
