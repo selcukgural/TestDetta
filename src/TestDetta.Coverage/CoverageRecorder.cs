@@ -793,8 +793,17 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             environment[TestDettaTracker.ParallelFlowsVariable] = "1";
         }
 
+        var temporary = shard.Count > 1 ? ShardTemporary(environment) : null;
         var writer = shard.Count == 1 ? output : new PrefixWriter(output, $"[shard {shard.Index + 1}/{shard.Count}] ");
-        var exitCode = shard.Dotnet.Run(arguments, context.RunDirectory, environment, writer, request.Options.Timeout);
+        int exitCode;
+        try
+        {
+            exitCode = shard.Dotnet.Run(arguments, context.RunDirectory, environment, writer, request.Options.Timeout);
+        }
+        finally
+        {
+            RemoveTemporary(temporary);
+        }
 
         // The catch-all shard legitimately matches no test when the source index knew every class,
         // and then the test host never starts the collector.
@@ -815,6 +824,48 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         TestReports.Collect(context.Mode, request.RepoRoot, reportName, reportDirectory);
         return new ShardResult(exitCode, written, TrxReport.Read(reportDirectory));
+    }
+
+    /// <summary>
+    /// Gives a shard's processes a temporary directory of their own (<c>TMPDIR</c>, <c>TMP</c>, <c>TEMP</c>) and returns
+    /// it. Shards run at once, while the suite's own runs have one test process; fixtures often claim or clean fixed names
+    /// under the system's temporary directory (LibGit2Sharp's <c>BaseFixture</c> deletes old test repositories there),
+    /// so two shards doing it together failed every class of one of them, which then ran on every change. A short path
+    /// under <c>/tmp</c> on Unix, since .NET puts Unix domain sockets there and macOS limits their path to 104 bytes;
+    /// hexadecimal, so it has no letter <c>i</c> for a Turkish <c>ToUpper</c> to change.
+    /// </summary>
+    /// <param name="environment">The shard's environment, which receives the variables.</param>
+    private static string ShardTemporary(Dictionary<string, string> environment)
+    {
+        var root = OperatingSystem.IsWindows() ? Path.GetTempPath() : "/tmp";
+        var temporary = Path.Combine(root, $"tdr-{Guid.NewGuid():N}"[..16]);
+        Directory.CreateDirectory(temporary);
+        environment["TMPDIR"] = temporary + Path.DirectorySeparatorChar;
+        environment["TMP"] = temporary;
+        environment["TEMP"] = temporary;
+        return temporary;
+    }
+
+    /// <summary>
+    /// Deletes a shard's temporary directory; a file a leftover process still holds keeps it, which costs only disk
+    /// space, so a failure is ignored.
+    /// </summary>
+    /// <param name="temporary">The directory, or null when the shard had none.</param>
+    private static void RemoveTemporary(string? temporary)
+    {
+        if (temporary is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(temporary, recursive: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Left for the system to clean.
+        }
     }
 
     /// <summary>
