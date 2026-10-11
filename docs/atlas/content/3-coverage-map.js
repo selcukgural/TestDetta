@@ -197,11 +197,11 @@ const CH_MAP = {
     },
     {
       title: "Senaryo 9 · Bağımlı haritalı proje yok", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "no"], edges: ["t0", "t1", "t2", "t3", "t4", "t5", "t6", "n7"],
-      who: "<code>answers.Count == 0 &amp;&amp; !CoveredByFullRuns</code> → <code>\"no affected test project with a map depends on it\"</code>",
+      who: "<code>answers.Count == 0</code> → cevaplanmış, seçilecek bir şey yok (2026-10-11, docs/design/twin-owners.md)",
       file: "src/TestDetta.Core/CoverageSelection.cs:356",
-      input: "Bir benchmark ya da örnek projede değişiklik; altında haritası olan test projesi yok",
-      output: "<code>false</code>: isimle izlenir (haritası olmayan projeler zaten isimle karar verir)",
-      purpose: "Cevap verecek harita yoksa \"hiçbir test çalıştırmadı\" demek yanlış olur. Altındaki tek proje zaten tamamen koşuyorsa (<code>CoveredByFullRuns</code>) cevaplanmış sayılır.",
+      input: "Bir benchmark, örnek proje ya da ikiz derleme (<code>Markdig.Signed</code>, Markdig'in dosyalarını yeniden derler) değişti; altında haritası olan test projesi yok",
+      output: "<code>true</code>: kapsam izi o kopyadan yayılmaz; haritası olmayan projeler isim izinden karar verir",
+      purpose: "Kapsam izi yalnız haritası olan test projeleri için karar verir (<code>Decide</code>: <code>HasMap</code> → <code>withCoverage</code>). Sahibin kodunu yalnız kendisi ve ona bağlı projeler anabilir; altında haritalı test projesi yoksa o kopyanın yayılması onlara meşru bir yoldan ulaşamaz. Önceden cevapsız kalıyordu: <code>Markdig.Signed</code>'in soyut <code>InlineParser.Match</code>'i <code>ResolveThroughImplementations</code>'a gidiyor, <code>SourceIndex.Implementations</code> tür adıyla her projede arıyor ve <code>Markdig</code>'inkini override eden test yardımcıları üzerinden 154 sınıf seçiliyordu (ortalama %90,8 → %47,3).",
     },
     {
       title: "Senaryo 10 · İsim izlemenin ulaştığı üye", nodes: ["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "ok", "i_run"], edges: ["t0", "t1", "t2", "t3", "a_run", "t4", "t5", "t6", "t7"],
