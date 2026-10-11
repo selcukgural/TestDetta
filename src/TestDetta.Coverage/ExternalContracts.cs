@@ -49,7 +49,7 @@ internal static class ExternalContracts
         // An explicit implementation names what it implements.
         foreach (var implemented in method.Overrides)
         {
-            if (IsThirdParty(implemented.DeclaringType, ownAssemblies))
+            if (IsThirdParty(implemented.DeclaringType, ownAssemblies) && !IsPerCall(implemented.DeclaringType))
             {
                 return true;
             }
@@ -59,7 +59,7 @@ internal static class ExternalContracts
         {
             foreach (var contract in type.Interfaces)
             {
-                if (IsThirdParty(contract.InterfaceType, ownAssemblies) && Declares(contract.InterfaceType, method.Name))
+                if (IsThirdParty(contract.InterfaceType, ownAssemblies) && !IsPerCall(contract.InterfaceType) && Declares(contract.InterfaceType, method.Name))
                 {
                     return true;
                 }
@@ -80,17 +80,35 @@ internal static class ExternalContracts
     /// <summary>True when <paramref name="type"/> comes from neither the repository nor the shared framework.</summary>
     /// <param name="type">A type reference or definition.</param>
     /// <param name="ownAssemblies">Names of the repository's assemblies.</param>
-    private static bool IsThirdParty(TypeReference type, IReadOnlySet<string> ownAssemblies)
-    {
-        var name = type.GetElementType().Scope switch
-        {
-            AssemblyNameReference reference => reference.Name,
-            ModuleDefinition module => module.Assembly.Name.Name,
-            var other => other?.Name,
-        };
+    private static bool IsThirdParty(TypeReference type, IReadOnlySet<string> ownAssemblies) =>
+        AssemblyOf(type) is { } name && !ownAssemblies.Contains(name) && !FrameworkAssemblies.Value.Contains(name) && !LanguageRuntimes.Contains(name);
 
-        return name is not null && !ownAssemblies.Contains(name) && !FrameworkAssemblies.Value.Contains(name) && !LanguageRuntimes.Contains(name);
-    }
+    /// <summary>The name of the assembly that declares <paramref name="type"/>, or null when the reference does not say.</summary>
+    /// <param name="type">A type reference or definition.</param>
+    private static string? AssemblyOf(TypeReference type) => type.GetElementType().Scope switch
+    {
+        AssemblyNameReference reference => reference.Name,
+        ModuleDefinition module => module.Assembly.Name.Name,
+        var other => other?.Name,
+    };
+
+    /// <summary>
+    /// Third-party contracts whose methods the library calls on every call it handles and caches nothing from, by
+    /// assembly and type: Castle DynamicProxy runs a proxy's interceptors for each intercepted call, and all of
+    /// NSubstitute's call routing runs inside <c>CastleForwardingInterceptor.Intercept</c>. As callbacks they made
+    /// 811 of NSubstitute's 1,251 methods run-once code, 236 of which ran in 50 or more classes, which run-once code
+    /// cannot do. Castle's <c>IProxyGenerationHook</c> and <c>IInterceptorSelector</c>, consulted when a proxy type is
+    /// built and then kept, stay callbacks (docs/design/external-callbacks.md). Only contracts whose per-call use is
+    /// documented go here.
+    /// </summary>
+    private static readonly FrozenSet<string> PerCallContracts = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "Castle.Core|Castle.DynamicProxy.IInterceptor",
+        "Castle.Core.AsyncInterceptor|Castle.DynamicProxy.IAsyncInterceptor");
+
+    /// <summary>True for a contract of <see cref="PerCallContracts"/>.</summary>
+    /// <param name="type">A contract type.</param>
+    private static bool IsPerCall(TypeReference type) => PerCallContracts.Contains($"{AssemblyOf(type)}|{type.GetElementType().FullName}");
 
     /// <summary>
     /// Runtime libraries a language compiles its own constructs against, counted as part of the

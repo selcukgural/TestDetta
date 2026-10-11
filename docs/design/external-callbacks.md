@@ -78,3 +78,25 @@ nothing they build, and the tracker already puts what they run into the class's 
   overrides of a test framework's types (a custom `DataAttribute`) keep the rule.
 - **Tests**: `ExternalCallbackTests` (a test class and a class fixture implementing `IAsyncLifetime`; the
   helper their setup calls is not initialization).
+
+## Per-call contracts are not callbacks (2026-10-11, high-share repositories)
+
+Castle DynamicProxy runs a proxy's interceptors for every intercepted call and keeps nothing they do. NSubstitute routes
+every call through `CastleForwardingInterceptor.Intercept`, so with interceptors counted as callbacks, 811 of the 1,251
+NSubstitute methods in the Acceptance.Specs map were run-once code, 236 of which ran in 50 or more classes, which code
+run once per process cannot do. Every change reaching them fell back to the name spread.
+
+`ExternalContracts.PerCallContracts` lists the third-party contracts whose per-call use is documented, by assembly and
+type: `Castle.Core|Castle.DynamicProxy.IInterceptor` and `Castle.Core.AsyncInterceptor|Castle.DynamicProxy.IAsyncInterceptor`.
+A method implementing one of them is not a callback. `IProxyGenerationHook` and `IInterceptorSelector`, which Castle
+consults when it builds a proxy type and then caches, stay callbacks; the round-2 misses were in the hook. Run-once code
+inside an interceptor keeps its own scopes (repository cache fills, pools, static constructors).
+
+The list is a judgement about each library's contract, not something the recording observes, so it stays short.
+
+Measured on NSubstitute, fresh recordings with main's binary and this one, 100 changes: mean share 60.6 % → 42.0 %,
+64 changes narrower, none wider, 0 of 63 failing mutants missed in both.
+
+Tests: `ExternalCallbackTests` (a fake `Castle.Core` assembly: the interceptor is not a callback, the generation hook
+is; sabotage-checked).
+

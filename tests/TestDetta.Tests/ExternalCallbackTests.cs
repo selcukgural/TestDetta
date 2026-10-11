@@ -15,6 +15,7 @@ public sealed class ExternalCallbackTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
     private readonly string _vendor = Directory.CreateTempSubdirectory("testdetta-vendor-").FullName;
+    private readonly string _castle = Directory.CreateTempSubdirectory("testdetta-castle-").FullName;
 
     [Fact]
     public void Change_to_code_a_callback_runs_selects_every_class_that_uses_what_the_library_cached()
@@ -47,16 +48,33 @@ public sealed class ExternalCallbackTests : IDisposable
                 }
             }
             """);
-        BuildVendor();
+        // Castle DynamicProxy's contracts, under its assembly name: interceptors run per call, a generation hook once per proxy type.
+        var castle = _castle;
+        File.WriteAllText(Path.Combine(castle, "global.json"), globalJson);
+        File.WriteAllText(Path.Combine(castle, "Castle.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>Castle.Core</AssemblyName></PropertyGroup></Project>
+            """);
+        File.WriteAllText(Path.Combine(castle, "Contracts.cs"), """
+            namespace Castle.DynamicProxy;
+            public interface IInvocation { }
+            public interface IInterceptor { void Intercept(IInvocation invocation); }
+            public interface IProxyGenerationHook { bool ShouldInterceptMethod(string name); }
+            """);
+        BuildVendor(_vendor);
+        BuildVendor(castle);
         Directory.CreateDirectory(Path.Combine(_repo.Root, "lib"));
         File.Copy(Path.Combine(_vendor, "out", "Vendor.dll"), Path.Combine(_repo.Root, "lib", "Vendor.dll"));
+        File.Copy(Path.Combine(castle, "out", "Castle.Core.dll"), Path.Combine(_repo.Root, "lib", "Castle.Core.dll"));
 
         _repo.Write("global.json", globalJson);
         _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
         _repo.Write("src/App/App.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
-              <ItemGroup><Reference Include="Vendor"><HintPath>../../lib/Vendor.dll</HintPath></Reference></ItemGroup>
+              <ItemGroup>
+                <Reference Include="Vendor"><HintPath>../../lib/Vendor.dll</HintPath></Reference>
+                <Reference Include="Castle.Core"><HintPath>../../lib/Castle.Core.dll</HintPath></Reference>
+              </ItemGroup>
             </Project>
             """);
         _repo.Write("src/App/Names.cs", """
@@ -72,6 +90,9 @@ public sealed class ExternalCallbackTests : IDisposable
             // Called back by the vendor: explicitly implemented, and an override of its base class.
             public sealed class QuietHook : Vendor.IHook { string Vendor.IHook.Decorate(string name) => name; }
             public sealed class Echo : Vendor.Plugin { public override string Run() => "echo"; }
+            // Castle calls an interceptor for every intercepted call and keeps nothing it does; a hook once per proxy type.
+            public sealed class Forwarder : Castle.DynamicProxy.IInterceptor { public void Intercept(Castle.DynamicProxy.IInvocation invocation) { } }
+            public sealed class AllMethods : Castle.DynamicProxy.IProxyGenerationHook { public bool ShouldInterceptMethod(string name) => true; }
             // Not third-party contracts: the framework's and the repository's own.
             public sealed class ByLength : IComparer<string> { public int Compare(string? x, string? y) => (x?.Length ?? 0) - (y?.Length ?? 0); }
             public interface IShape { int Corners(); }
@@ -132,6 +153,8 @@ public sealed class ExternalCallbackTests : IDisposable
         Assert.Contains(new CoveredMethod("App.QuietHook", "Decorate"), callbacks);
         Assert.Contains(new CoveredMethod("App.Echo", "Run"), callbacks);
         Assert.DoesNotContain(new CoveredMethod("App.Names", "Of"), callbacks);
+        Assert.DoesNotContain(new CoveredMethod("App.Forwarder", "Intercept"), callbacks);
+        Assert.Contains(new CoveredMethod("App.AllMethods", "ShouldInterceptMethod"), callbacks);
         Assert.DoesNotContain(new CoveredMethod("App.ByLength", "Compare"), callbacks);
         Assert.DoesNotContain(new CoveredMethod("App.Square", "Corners"), callbacks);
         Assert.DoesNotContain(new CoveredMethod("App.Tests.LifecycleTests", "InitializeAsync"), callbacks);
@@ -144,11 +167,11 @@ public sealed class ExternalCallbackTests : IDisposable
         Assert.Equal(["App.Tests.AlphaTests", "App.Tests.BetaTests"], selection.TestClasses);
     }
 
-    private void BuildVendor()
+    private static void BuildVendor(string directory)
     {
         var psi = new ProcessStartInfo("dotnet", ["build", "-c", "Release", "-o", "out", "-nologo", "-v:q"])
         {
-            WorkingDirectory = _vendor,
+            WorkingDirectory = directory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
@@ -163,5 +186,6 @@ public sealed class ExternalCallbackTests : IDisposable
     {
         _repo.Dispose();
         Directory.Delete(_vendor, recursive: true);
+        Directory.Delete(_castle, recursive: true);
     }
 }
