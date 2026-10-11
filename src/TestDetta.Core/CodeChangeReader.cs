@@ -16,7 +16,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     /// <param name="repoRoot">Repository root directory.</param>
     /// <param name="baseRevision">Commit the working tree is compared with, normally the merge base.</param>
     /// <param name="changedFiles">All changed paths relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
-    /// <param name="symbolSets">The symbol sets the compiler uses for a file (relative path), from its projects; null when unknown.</param>
+    /// <param name="symbols">The symbols the compiler uses for a file (relative path), from its projects; null when unknown.</param>
     /// <param name="rootNamespaces">The root namespace of the project compiling a file (Visual Basic); null for none.</param>
     /// <param name="overlay">Working-tree text that stands in for a file on disk, by relative path (<see cref="AnalysisOptions.WorkingTreeOverlay"/>); null for none.</param>
     /// <returns>One entry per changed .cs or .vb file, in the order of <paramref name="changedFiles"/>.</returns>
@@ -24,7 +24,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
         string repoRoot,
         string baseRevision,
         IReadOnlyList<string> changedFiles,
-        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null,
+        FileSymbols? symbols = null,
         Func<string, string>? rootNamespaces = null,
         IReadOnlyDictionary<string, string>? overlay = null)
     {
@@ -49,7 +49,15 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
         foreach (var file in csharpFiles)
         {
             var current = overlay is not null && overlay.TryGetValue(file, out var text) ? SourceText.From(text) : ReadWorkingTree(Path.Combine(repoRoot, file));
-            changes.Add(detector.Detect(file, Text(oldContents, file), current, symbolSets?.Invoke(file) ?? [], rootNamespaces?.Invoke(file) ?? string.Empty));
+            var old = Text(oldContents, file);
+            var rootNamespace = rootNamespaces?.Invoke(file) ?? string.Empty;
+            var change = detector.Detect(file, old, current, symbols?.All(file) ?? [], rootNamespace);
+            if (symbols?.RunFramework?.Invoke(file) is { } runSets)
+            {
+                change = change with { SeenByRunFramework = CodeChangeDetector.SeenUnder(change, old, current, runSets, rootNamespace) };
+            }
+
+            changes.Add(change);
         }
 
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
@@ -61,7 +69,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     /// <param name="from">Older commit.</param>
     /// <param name="to">Newer commit.</param>
     /// <param name="changedFiles">Paths changed between the two, relative to <paramref name="repoRoot"/>; non-C# files are skipped.</param>
-    /// <param name="symbolSets">The symbol sets the compiler uses for a file (relative path); null when unknown.</param>
+    /// <param name="symbols">The symbols the compiler uses for a file (relative path); null when unknown.</param>
     /// <param name="rootNamespaces">The root namespace of the project compiling a file (Visual Basic); null for none.</param>
     /// <returns>One entry per changed .cs or .vb file, in the order of <paramref name="changedFiles"/>.</returns>
     public IReadOnlyList<CodeChange> ReadBetween(
@@ -69,7 +77,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
         string from,
         string to,
         IReadOnlyList<string> changedFiles,
-        Func<string, IReadOnlyCollection<IReadOnlyList<string>>>? symbolSets = null,
+        FileSymbols? symbols = null,
         Func<string, string>? rootNamespaces = null)
     {
         var csharpFiles = changedFiles.Where(SourceLanguage.IsSource).ToList();
@@ -81,7 +89,7 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var oldContents = git.ReadFiles(repoRoot, from, csharpFiles);
         var newContents = git.ReadFiles(repoRoot, to, csharpFiles);
-        var changes = csharpFiles.ConvertAll(file => detector.Detect(file, Text(oldContents, file), Text(newContents, file), symbolSets?.Invoke(file) ?? [], rootNamespaces?.Invoke(file) ?? string.Empty));
+        var changes = csharpFiles.ConvertAll(file => detector.Detect(file, Text(oldContents, file), Text(newContents, file), symbols?.All(file) ?? [], rootNamespaces?.Invoke(file) ?? string.Empty));
         LogRead(csharpFiles.Count, stopwatch.ElapsedMilliseconds);
         return changes;
     }
@@ -108,3 +116,14 @@ public sealed partial class CodeChangeReader(GitClient git, CodeChangeDetector d
     [LoggerMessage(Level = LogLevel.Debug, Message = "Compared {Count} C# file(s) in {ElapsedMs} ms")]
     private partial void LogRead(int count, long elapsedMs);
 }
+
+/// <summary>The preprocessor symbols the projects compiling a file use for it, by repository-relative path.</summary>
+/// <param name="All">One set per target framework of every project compiling the file; empty when unknown.</param>
+/// <param name="RunFramework">
+/// The sets of the one framework the tests run for (<c>-f</c>), one per project compiling the file, or null when no
+/// framework was given or a project compiling the file does not target it: the changes that framework's builds see
+/// (<see cref="CodeChange.SeenByRunFramework"/>, docs/design/framework-only-code.md).
+/// </param>
+public sealed record FileSymbols(
+    Func<string, IReadOnlyCollection<IReadOnlyList<string>>> All,
+    Func<string, IReadOnlyCollection<IReadOnlyList<string>>?>? RunFramework = null);

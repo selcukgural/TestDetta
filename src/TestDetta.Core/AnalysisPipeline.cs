@@ -76,7 +76,7 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
         // The graph first: its evaluation says which preprocessor symbols each project compiles with.
         var graph = new ProjectGraphLoader(loggerFactory.CreateLogger<ProjectGraphLoader>(), evaluator).Load(root);
         options.Cancellation.ThrowIfCancellationRequested();
-        var symbolSets = SymbolSetsOf(graph, root);
+        var symbolSets = new FileSymbols(SymbolSetsOf(graph, root), options.Framework is { } run ? RunSymbolSetsOf(graph, root, run) : null);
         var reader = new CodeChangeReader(git, new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()), loggerFactory.CreateLogger<CodeChangeReader>());
         var rootNamespaces = RootNamespaceOf(graph, root);
         var codeChanges = reader.Read(root, mergeBase, changed, symbolSets, rootNamespaces, options.WorkingTreeOverlay);
@@ -126,6 +126,32 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
             .Where(static o => o.Role == FileRole.Source)
             .Select(static o => o.Project.RootNamespace)
             .FirstOrDefault() ?? string.Empty;
+
+    /// <summary>
+    /// The symbols the run's framework compiles a file with, one set per project compiling it, by repository-relative
+    /// path; null when a project compiling it does not target exactly that framework, whose build the run would then
+    /// pick by compatibility rules this does not model (docs/design/framework-only-code.md).
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="root">Repository root.</param>
+    /// <param name="framework">The framework the tests run for (<c>-f</c>).</param>
+    private static Func<string, IReadOnlyCollection<IReadOnlyList<string>>?> RunSymbolSetsOf(ProjectGraph graph, string root, string framework) =>
+        file =>
+        {
+            var owners = graph.ResolveFile(Paths.Normalize(Path.Combine(root, file))).Where(static o => o.Role == FileRole.Source).ToList();
+            var sets = new List<IReadOnlyList<string>>(owners.Count);
+            foreach (var owner in owners)
+            {
+                if (!owner.Project.FrameworkSymbols.TryGetValue(framework, out var symbols))
+                {
+                    return null;
+                }
+
+                sets.Add(symbols);
+            }
+
+            return sets.Count == 0 ? null : sets;
+        };
 
     /// <summary>The symbol sets of every project that compiles a file, by repository-relative path.</summary>
     /// <param name="graph">Projects of the repository.</param>

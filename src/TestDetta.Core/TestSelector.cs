@@ -250,8 +250,18 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
                     continue;
                 }
 
+                var seenByRun = change.SeenByRunFramework is { } seen && request.Framework is { } run && LoadsOnlyRunBuild(request.Graph, owner.Project, run)
+                    ? seen
+                    : null;
                 foreach (var symbol in change.Symbols)
                 {
+                    // Code under #if for other frameworks (Newtonsoft.Json's LinqBridge): no build this run loads compiles it.
+                    if (seenByRun is not null && !seenByRun.Contains(symbol))
+                    {
+                        LogNotCompiledForRun(symbol.TypeName, symbol.MemberName ?? "(type)", request.Framework!);
+                        continue;
+                    }
+
                     if (coverage?.TryResolve(symbol, owner.Project) == true)
                     {
                         LogResolvedByCoverage(symbol.TypeName, symbol.MemberName ?? "(type)");
@@ -277,6 +287,59 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         var loaders = new Dictionary<string, FileReaders>(Paths.Comparer);
         AddUnreferencedTypes(request, index, propagation, new TraceOutput(fallbacks, loaders), coverage);
         return new TraceResult(propagation, fallbacks) { Loaders = loaders };
+    }
+
+    /// <summary>
+    /// True when every test project below <paramref name="owner"/> that targets <paramref name="framework"/> reaches it
+    /// only through projects that target that framework too, so each builds for it and the test process loads the
+    /// owner's build of that framework. A project between them that does not target it (or whose frameworks are
+    /// unknown) builds for whatever framework of it is nearest, which may compile code under another <c>#if</c>. A test
+    /// project that does not target the framework does not run in a <c>-f</c> run (docs/design/framework-only-code.md).
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="owner">The project compiling the change.</param>
+    /// <param name="framework">The framework the tests run for.</param>
+    private static bool LoadsOnlyRunBuild(ProjectGraph graph, ProjectNode owner, string framework)
+    {
+        var below = graph.WithDependents([owner.Path]).ToHashSet(Paths.Comparer);
+        foreach (var path in below)
+        {
+            if (graph.Find(path) is not { IsTestProject: true } test)
+            {
+                continue;
+            }
+
+            // Frameworks not known (a project read from its XML alone) are not a framework it lacks.
+            if (test.FrameworkSymbols.Count == 0)
+            {
+                return false;
+            }
+
+            if (!test.FrameworkSymbols.ContainsKey(framework))
+            {
+                continue;
+            }
+
+            var seen = new HashSet<string>(Paths.Comparer) { test.Path };
+            var pending = new Stack<ProjectNode>([test]);
+            while (pending.TryPop(out var project))
+            {
+                if (!project.FrameworkSymbols.ContainsKey(framework))
+                {
+                    return false;
+                }
+
+                foreach (var reference in project.References)
+                {
+                    if (below.Contains(reference) && seen.Add(reference) && graph.Find(reference) is { } next)
+                    {
+                        pending.Push(next);
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -588,6 +651,9 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} {MemberName}: compiled only for other frameworks than {Framework}, which the tests run for; no test of this run can run it")]
+    private partial void LogNotCompiledForRun(string typeName, string memberName, string framework);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName}: found through reflection; in {TestProject}, the classes that loaded {Owner}'s output can create it")]
     private partial void LogReflectionTypeByLoaders(string typeName, string testProject, string owner);

@@ -282,6 +282,37 @@ public sealed class CodeChangeDetectorTests
     }
 
     [Fact]
+    public void A_framework_whose_build_compiles_none_of_a_change_sees_none_of_it()
+    {
+        const string before = """
+            namespace Lib;
+            #if !HAVE_LINQ
+            public static class Bridge { public static int Max(int a, int b) => a > b ? a : b; }
+            #endif
+            public static class Calc { public static int Tax() => 2; }
+            """;
+        var bridge = before.Replace("a > b", "a >= b", StringComparison.Ordinal);
+        var both = bridge.Replace("=> 2;", "=> 3;", StringComparison.Ordinal);
+        string[] linq = ["HAVE_LINQ", "NET10_0"];
+        string[] noLinq = ["NET20"];
+
+        var change = _detector.Detect("Bridge.cs", SourceText.From(before), SourceText.From(bridge), [linq, noLinq]);
+        Assert.Contains(change.Symbols, static s => s.TypeName == "Lib.Bridge");
+        Assert.Empty(CodeChangeDetector.SeenUnder(change, SourceText.From(before), SourceText.From(bridge), [linq])!);
+        Assert.Contains(CodeChangeDetector.SeenUnder(change, SourceText.From(before), SourceText.From(bridge), [noLinq])!, static s => s.TypeName == "Lib.Bridge");
+
+        // A change both builds compile is seen by both; the one under #if only by the build that compiles it.
+        var mixed = _detector.Detect("Bridge.cs", SourceText.From(before), SourceText.From(both), [linq, noLinq]);
+        var seen = CodeChangeDetector.SeenUnder(mixed, SourceText.From(before), SourceText.From(both), [linq])!;
+        Assert.Contains(seen, static s => s.TypeName == "Lib.Calc");
+        Assert.DoesNotContain(seen, static s => s.TypeName == "Lib.Bridge");
+
+        // No #if: every build sees the change.
+        var plain = _detector.Detect("Calc.cs", SourceText.From("namespace Lib; public static class Calc { public static int Tax() => 2; }"), SourceText.From("namespace Lib; public static class Calc { public static int Tax() => 3; }"), [linq]);
+        Assert.Null(CodeChangeDetector.SeenUnder(plain, SourceText.From("namespace Lib; public static class Calc { public static int Tax() => 2; }"), SourceText.From("namespace Lib; public static class Calc { public static int Tax() => 3; }"), [linq]));
+    }
+
+    [Fact]
     public void Change_under_a_mix_of_symbols_is_seen_with_the_frameworks_real_symbols()
     {
         const string before = """

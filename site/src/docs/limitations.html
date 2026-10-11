@@ -40,6 +40,14 @@
 <h2>Preprocessor symbols</h2>
 <p>C# files are parsed with each target framework's real preprocessor symbols, and also with no symbols and with every symbol their <code>#if</code>s name, so code under any active condition is seen.</p>
 
+<h2 id="target-frameworks">Target frameworks</h2>
+<p>For a test project that targets several frameworks, what is selected depends on the frameworks the tests run for. The same change can select more tests in one run and fewer in another:</p>
+<ul>
+  <li><b>More, for frameworks the map was not recorded for.</b> A map holds one framework's run. When the tests also run for another framework, a change that alters what that framework's build compiles or generates (source generator output, files the build reads) runs the test project completely. Record without <code>-f</code>, or run the tests with the same <code>-f</code>; see <a href="/docs/what-runs-everything/">What runs everything</a>.</li>
+  <li><b>Fewer, with <code>-f</code>.</b> A run for one framework loads only that framework's builds. A change compiled only for other frameworks (code under an <code>#if</code> that framework leaves out, such as a polyfill for .NET Framework 2.0) selects nothing in that run, when the changed project and every project between it and your test projects target that framework. Without <code>-f</code>, the same change selects the tests that may run it.</li>
+</ul>
+<p>So a CI job that runs one framework can skip tests that only another framework's build could fail. If your test projects target several frameworks, run every framework somewhere, for example in a nightly full run.</p>
+
 <h2>Skipped tests</h2>
 <p>Tests skipped while a map was recorded have no coverage. A class whose tests were all skipped is selected on another platform, where it may run, and skipped on the recording platform. Tests skipped for other reasons, such as a missing Docker daemon, are covered only by recording where the tests run.</p>
 

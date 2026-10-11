@@ -102,6 +102,7 @@ git ls-files --others --exclude-standard                # yeni, izlenmeyen dosya
         "Öznitelik ya da varsayılan parametre değeri değiştiyse <code>MetadataChanged = true</code> (kapsam haritası bunu cevaplayamaz).",
         "<code>global using</code> ya da assembly özniteliği değiştiyse <code>AffectsWholeProject = true</code>.",
         "<code>#if</code> içeren dosya her ilgili sembol kümesiyle ayrı ayrı ayrıştırılır, sonuçlar birleşir.",
+        "<b>Yalnız başka framework'ler için derlenen kod</b> (2026-10-11, docs/design/framework-only-code.md): <code>-f</code> verildiyse ve dosyayı derleyen her proje o framework'ü birebir hedefliyorsa <code>CodeChangeReader</code> dosyayı o framework'ün sembolleriyle de karşılaştırır (<code>CodeChangeDetector.SeenUnder</code>, <code>ProjectNode.FrameworkSymbols</code>): derlenen token'lar aynıysa o derleme değişmemiştir. Görülmeyen semboller <code>CodeChange.SeenByRunFramework</code>'te yer almaz; <code>TestSelector</code> onları, o framework'ü hedefleyen her test projesi sahibe yalnız o framework'ü hedefleyen projeler üzerinden ulaşıyorsa (<code>LoadsOnlyRunBuild</code>) tohum yapmaz. Newtonsoft.Json'un LinqBridge'i (<code>#if !HAVE_LINQ</code>): %51,5 → %40,7.",
         "Alan ya da property başlatıcısı eklenince, silinince ya da değişince türün <code>.cctor</code>'u (static) ya da <code>.ctor</code>'u (instance) da değişmiş sayılır (<code>SourceLanguage.Initializer</code>); yalnız öznitelik değişirse sayılmaz. Sabitlerin başlatıcısı yoktur.",
       ]),
     },

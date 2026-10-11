@@ -26,7 +26,8 @@ GitHub Action `testdetta/action`, which downloads that package. This repository 
 5. Check every README before announcing: the bundled action README (its example names the new version), the NuGet
    README (`dist/nuget/README.md`: frameworks, CI systems, trial length and pricing as the site states them; a fix
    there needs the next package version), this README and `site/site.json` (`actionRef` pinned to the new action
-   commit), and the release notes on `TestDetta/action`. A README fix after tagging is a README-only commit in
+   commit), and the release notes on `TestDetta/action`, which take the items of `docs/release-notes-unreleased.md`
+   (behaviour users must know about first; empty the file after the release). A README fix after tagging is a README-only commit in
    `TestDetta/action` with the version and major tags moved to it.
 
 `action.yml` is the same file in both places. Here it builds TestDetta from source (this repository's
