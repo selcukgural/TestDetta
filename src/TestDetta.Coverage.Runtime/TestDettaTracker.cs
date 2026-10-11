@@ -1573,7 +1573,12 @@ public static class TestDettaTracker
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     public static void EnterSharedDataSource(string name)
     {
-        if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
+        // Only while no test code runs: the framework discovering tests or building a theory's cases. A test that tests
+        // the extension itself calls it through the framework's own API (AutoFixture's AutoDataAttributeTest calls
+        // BuildFrom), where the stack shows the framework first; switching there credited the rest of that test to the
+        // attribute's users, which it is not among.
+        if (!NoTestCodeRuns()
+            || Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
             && CalledFromRunningTest(current.Name, entered: null, current.InstanceType))
         {
             return;
@@ -1581,6 +1586,15 @@ public static class TestDettaTracker
 
         Enter(Fixtures, name, isFixture: true, data: true);
     }
+
+    /// <summary>
+    /// True when no test code is running or being prepared; recorded with the suite's own parallelism, when the flow is
+    /// outside every test.
+    /// </summary>
+    private static bool NoTestCodeRuns() =>
+        ParallelFlows
+            ? BucketForHit() is var bucket && (ReferenceEquals(bucket, Startup) || bucket.IsFixture)
+            : Volatile.Read(ref _testCodeDepth) == 0 && !Volatile.Read(ref _instancePending);
 
     /// <summary>
     /// Makes code outside every test the current bucket. Called at the start of a test data source
