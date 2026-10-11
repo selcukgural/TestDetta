@@ -141,7 +141,8 @@ internal static class DataSources
                 return null;
             }
 
-            if (!type.IsAbstract)
+            // A static class (abstract and sealed, as an F# module compiles) holds tests of its own.
+            if (!type.IsAbstract || type.IsSealed)
             {
                 concrete.Add(type.FullName.Replace('/', '+'));
             }
