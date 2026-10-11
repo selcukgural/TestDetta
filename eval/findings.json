@@ -171,6 +171,9 @@
       "fix": "Each shard of a recording running at once gets its own TMPDIR/TMP/TEMP, a folder in the system's temporary directory (one under /tmp, a link on macOS, failed 4 classes comparing libgit2's resolved paths)" },
     { "id": "fsharp-module-compiler-attributes", "date": "2026-10-11", "repository": "argu", "kind": "precision",
       "summary": "An F# module with only compiler attributes ([<AutoOpen>] Argu.PreCompute) counted as a type a framework may find through reflection: whole test project on 25 of 100 changes, and a direct change in it went unanswered by the maps",
-      "fix": "AutoOpen, RequireQualifiedAccess and CompilationRepresentation do not make a module discoverable; 48.3 % -> 46.9 %, 0 of 64 missed" }
+      "fix": "AutoOpen, RequireQualifiedAccess and CompilationRepresentation do not make a module discoverable; 48.3 % -> 46.9 %, 0 of 64 missed" },
+    { "id": "reflection-type-runners-dropped", "date": "2026-10-11", "repository": "argu", "kind": "narrowing",
+      "summary": "A direct change in a type that may be found through reflection left the classes its map says ran it to the name trace; when a member is named elsewhere (an F# AutoOpen function, a C# extension method) the type's fallback never comes, and Argu's CliParser lost 4 of 11 runners",
+      "fix": "The classes that ran the changed member are selected, and the change is still traced by name" }
   ]
 }
