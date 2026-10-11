@@ -103,6 +103,22 @@ Left open: a test that constructs a fixture type itself (`new StoreFixture()` in
 bucket through the constructor marker, which has no such guard, so the rest of that test counts for the fixture's
 users ([backlog](../backlog.md)).
 
+## Shared data sources (2026-10-11)
+
+A test data member (`[ClassData]`, `[MemberData]`, `[TestCaseSource]` and the like) that one class uses was already
+credited to that class; one that several classes use, or an abstract base declares, counted as code outside every test,
+so coverage did not answer for what it ran or the values it read (GraphQL's `GraphQLSerializersTestData`, the
+`[ClassData]` of 13 classes, enumerated while xUnit discovers tests and again while it formats the test names).
+
+`DataSources.Find` now gives such a member a bucket of its own, `[data-source]` and the type declaring it
+(`CoverageMap.DataSourcePrefix`; an iterator's state machine belongs to the type around it), entered through
+`TestDettaTracker.EnterSharedDataSource` with the guard `EnterAmbient` has (a test calling the member itself keeps its
+bucket). Its users go into the map (`dataSourceUsers`): the classes naming it in a data attribute and every concrete
+class deriving from one that does, found by the recorder in the test assembly, so a class two levels below the base that
+declares the data is among them although it never names that base. The selection reads them as a fixture's users
+(`CoverageSelection.ClassesUsing`). A member a generic class uses keeps the old rule (its runtime names may differ from
+the map's), and so does a map recorded before (no `dataSourceUsers`).
+
 ## Pools and caches in collections (2026-10-02)
 
 The same "built for one, reused by others" shape without a framework: a hand-rolled pool keeps
