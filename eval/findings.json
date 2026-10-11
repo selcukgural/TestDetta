@@ -165,6 +165,9 @@
       "fix": "Builds and tests run under en-US (2cb12e3, 21ce3cc)" },
     { "id": "crash-under-load", "date": "2026-10-08", "repository": "meziantou-analyzer", "kind": "evaluation",
       "summary": "A test host died once under load in a part the selection left out",
-      "fix": "Strict judging: a left-out crash is a miss only when it repeats (2026-10-08)" }
+      "fix": "Strict judging: a left-out crash is a miss only when it repeats (2026-10-08)" },
+    { "id": "record-shards-share-temp", "date": "2026-10-11", "repository": "libgit2sharp", "kind": "recording",
+      "summary": "Recording shards shared the system's temporary directory; two BaseFixture static constructors cleaning old test repositories there at once failed all 15 classes of one shard, which then ran on every change (26 % -> 44 %)",
+      "fix": "Each shard of a recording running at once gets its own TMPDIR/TMP/TEMP, a folder in the system's temporary directory (one under /tmp, a link on macOS, failed 4 classes comparing libgit2's resolved paths)" }
   ]
 }

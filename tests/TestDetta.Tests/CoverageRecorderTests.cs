@@ -292,6 +292,51 @@ public sealed class CoverageRecorderTests : IDisposable
         Assert.Equal(sequential.SkippedClasses!.Order(), parallel.SkippedClasses!.Order());
     }
 
+    [Fact]
+    public void Shards_running_at_once_have_their_own_temporary_directories()
+    {
+        // Each class claims the same fixed name under the temporary directory; in one shared directory the second fails.
+        _repo.Write("tests/Claims.Tests/Claims.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                <PackageReference Include="xunit" Version="2.9.3" />
+                <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+              </ItemGroup>
+            </Project>
+            """);
+        var system = Path.GetTempPath().Replace("\\", "\\\\", StringComparison.Ordinal);
+        _repo.Write("tests/Claims.Tests/Tests.cs", $$"""
+            using Xunit;
+            namespace Claims.Tests;
+            static class Claim
+            {
+                // The suite sees its own runs' temporary directory, one folder deeper (LibGit2Sharp adds /private to a /var one).
+                public static void Take()
+                {
+                    var temporary = Path.GetTempPath();
+                    Assert.StartsWith("{{system}}", temporary, StringComparison.Ordinal);
+                    Assert.NotEqual("{{system}}", temporary);
+                    File.Open(Path.Combine(temporary, "testdetta-claim"), FileMode.CreateNew).Dispose();
+                }
+            }
+            public class FirstTests { [Fact] public void Claims() => Claim.Take(); }
+            public class SecondTests { [Fact] public void Claims() => Claim.Take(); }
+            """);
+        _repo.Commit("claims");
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var testProject = graph.Projects.Single(static p => p.Path.EndsWith("Claims.Tests.csproj", StringComparison.Ordinal));
+        var output = new StringWriter();
+
+        var (map, passed) = new CoverageRecorder(NullLoggerFactory.Instance).Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: 2)), output);
+
+        Assert.True(passed, output.ToString());
+        Assert.Equal(["Claims.Tests.FirstTests", "Claims.Tests.SecondTests"], map.Classes.Keys.Order(StringComparer.Ordinal));
+        Assert.Empty(map.FailedClasses!);
+        Assert.DoesNotContain(Directory.GetDirectories(Path.GetTempPath(), "td*"), static d => File.Exists(Path.Combine(d, "testdetta-claim")));
+    }
+
     // The fixture's worker thread starts in its constructor. Whether its first hit lands before the
     // fixture's scope ends or after the test started depends on the scheduler (a busy CI runner
     // delays it), so the hit is the fixture's in one recording and the class's in the other.

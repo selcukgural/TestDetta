@@ -168,7 +168,8 @@ public sealed class TrialTests : IAsyncLifetime
         var proof = await Solve(client);
 
         var wrong = await Ask(client, "dev@acme.com", "github.com/acme/*", (proof.Challenge, "x1"));
-        var forged = await Ask(client, "dev@acme.com", "github.com/acme/*", (proof.Challenge[..^2] + "AA", proof.Nonce));
+        // The MAC's last character takes one of four values, so a fixed replacement would sometimes be the real one.
+        var forged = await Ask(client, "dev@acme.com", "github.com/acme/*", (proof.Challenge[..^2] + (proof.Challenge[^2] == 'A' ? "BA" : "AA"), proof.Nonce));
         var first = await Ask(client, "dev@acme.com", "github.com/acme/*", proof);
         var replay = await Ask(client, "dev@beta.io", "github.com/beta/*", proof);
 
