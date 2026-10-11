@@ -259,7 +259,7 @@ public sealed partial class TestSelector
                     continue;
                 }
 
-                AddUsersOf(path, project, map, recorded, output, names, "started or loaded the output of", readers);
+                AddUsersOf(path, project, map, recorded, output, WithScans(names), "started or loaded the output of", readers);
             }
         }
     }
@@ -276,6 +276,16 @@ public sealed partial class TestSelector
                 Classes = new SortedDictionary<string, string>(existing.Classes.Concat(added.Classes.Where(c => !existing.Classes.ContainsKey(c.Key))).ToDictionary(), StringComparer.Ordinal),
             }
             : added;
+
+    /// <summary>
+    /// <paramref name="names"/> and the same names as a scan of the loaded assemblies records them
+    /// (<see cref="CoverageMap.OutputScanPrefix"/>): a class that enumerated the loaded assemblies may have found an
+    /// output's types there, as a plugin host does. Only the rules for outputs found at run time count scans; a project
+    /// the tests compile against is loaded by every class that names it, and repository code scans for its own
+    /// converters while initializing (docs/design/loaded-outputs.md).
+    /// </summary>
+    /// <param name="names">An output's assembly and project names.</param>
+    internal static string[] WithScans(string[] names) => [.. names, .. names.Select(static n => CoverageMap.OutputScanPrefix + n)];
 
     /// <summary>
     /// Why <paramref name="map"/>'s output uses may miss a class that loaded <paramref name="names"/>, or null when they

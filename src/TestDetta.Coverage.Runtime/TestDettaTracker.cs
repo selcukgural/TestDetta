@@ -210,6 +210,13 @@ public static class TestDettaTracker
     /// </summary>
     private static readonly HashSet<string> LoadsUnseen = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Before an assembly name in the output uses: the bucket enumerated the loaded assemblies (<c>AppDomain.GetAssemblies</c>)
+    /// while that one was loaded, rather than loading it by a path or name. Only the rules for outputs found at run time
+    /// (plugins) count it (docs/design/loaded-outputs.md).
+    /// </summary>
+    public const string ScanPrefix = "scan:";
+
     /// <summary>Guards <see cref="WrappedNames"/> and <see cref="LoadsUnseen"/>; assembly loads come from any thread.</summary>
     private static readonly object LoadGate = new();
 
@@ -379,7 +386,14 @@ public static class TestDettaTracker
 
         lock (LoadGate)
         {
-            WrappedNames.UnionWith(names);
+            // A scan loads nothing.
+            foreach (var name in names)
+            {
+                if (!name.StartsWith(ScanPrefix, StringComparison.Ordinal))
+                {
+                    WrappedNames.Add(name);
+                }
+            }
         }
 
         lock (Gate)
@@ -430,12 +444,15 @@ public static class TestDettaTracker
                 AddNames(names, name.Name);
                 break;
             case AppDomain domain:
-                // AppDomain.GetAssemblies: code that enumerates the loaded assemblies may use any of them.
+                // AppDomain.GetAssemblies: code that enumerates the loaded assemblies may use any of them, as a plugin
+                // host finds a plugin's types. The names are marked as a scan: a scan is no load by path, which reads
+                // the assembly's declarations (a public API test), and repository code scans for its own serializers
+                // and converters while initializing (Newtonsoft.Json), which would make every change run every class.
                 foreach (var assembly in domain.GetAssemblies())
                 {
                     foreach (var assemblyName in AssemblyNames(assembly))
                     {
-                        names.Add(assemblyName);
+                        names.Add(ScanPrefix + assemblyName);
                     }
                 }
 

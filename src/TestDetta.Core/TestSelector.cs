@@ -603,7 +603,7 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
                 }
 
                 LogReflectionTypeByLoaders(typeName, path, ownerFile);
-                AddUsersOf(path, test, map, recorded, ownerFile, names, "loaded the output of", output.Loaders);
+                AddUsersOf(path, test, map, recorded, ownerFile, WithScans(names), "loaded the output of", output.Loaders);
             }
         }
 

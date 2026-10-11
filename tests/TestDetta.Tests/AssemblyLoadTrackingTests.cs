@@ -61,7 +61,8 @@ public sealed class AssemblyLoadTrackingTests : IDisposable
         Assert.True(passed, output.ToString());
         var uses = map.OutputUses!.Classes;
         Assert.Contains("Tool", uses["Tools.Tests.LoadFromTests"]);
-        Assert.Contains("Tools.Tests", uses["Tools.Tests.ScanTests"]);
+        Assert.Contains(CoverageMap.OutputScanPrefix + "Tools.Tests", uses["Tools.Tests.ScanTests"]);
+        Assert.DoesNotContain("Tools.Tests", uses["Tools.Tests.ScanTests"]);
         Assert.NotNull(map.OutputLoadsUnseen);
         Assert.Contains("Hidden", map.OutputLoadsUnseen!);
         Assert.DoesNotContain("Tool", map.OutputLoadsUnseen!);

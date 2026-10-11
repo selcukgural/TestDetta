@@ -75,6 +75,25 @@ public sealed class LoadedOutputTests : IDisposable
     }
 
     [Fact]
+    public void Scanning_the_loaded_assemblies_while_initializing_is_no_load_of_a_compiled_against_output()
+    {
+        // Newtonsoft.Json's own code enumerates the loaded assemblies while initializing: before, every change ran every class.
+        WriteMap(Uses(new() { ["Lib.Tests.OtherTests"] = [CoverageMap.OutputScanPrefix + "Lib"] }, initialization: [CoverageMap.OutputScanPrefix + "Lib"]));
+        _repo.Replace("src/Lib/Calc.cs", "=> 2", "=> 3");
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.CalcTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void The_recorder_and_the_selection_mark_scans_alike()
+    {
+        Assert.Equal(TestDetta.Coverage.Runtime.TestDettaTracker.ScanPrefix, CoverageMap.OutputScanPrefix);
+    }
+
+    [Fact]
     public void A_static_initializer_change_selects_the_classes_that_ran_the_type()
     {
         // PublicApiTests read the field through reflection: no member of Keys ran but its static constructor.
@@ -117,8 +136,8 @@ public sealed class LoadedOutputTests : IDisposable
         Assert.Equal(constructor is null ? [] : [constructor], constructors);
     }
 
-    private static FileReads Uses(Dictionary<string, IReadOnlyList<string>> classes, string[]? ambient = null) =>
-        new(classes, new Dictionary<string, IReadOnlyList<string>>(), ambient ?? [], []);
+    private static FileReads Uses(Dictionary<string, IReadOnlyList<string>> classes, string[]? ambient = null, string[]? initialization = null) =>
+        new(classes, new Dictionary<string, IReadOnlyList<string>>(), ambient ?? [], initialization ?? []);
 
     private TestProjectSelection Select() =>
         new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main", new AnalysisOptions()).Tests.Single(static t => t.Project.IsTestProject);

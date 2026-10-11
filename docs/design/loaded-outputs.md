@@ -26,7 +26,12 @@ A map would then say that no class loaded the output, and the rules would run no
 starts. An assembly loaded with no wrapped call naming it before (any class, the whole process) is listed in
 `outputLoadsUnseen` (simple and file name). The recorder merges the lists of every test process into
 `CoverageMap.OutputLoadsUnseen`; a process that wrote none makes it null. `AppDomain.GetAssemblies` is wrapped too: the
-class that enumerates the loaded assemblies is a user of each one loaded at that moment.
+class that enumerates the loaded assemblies is a user of each one loaded at that moment, recorded as a scan
+(`scan:<name>`, `CoverageMap.OutputScanPrefix`, 2026-10-11). Only the rules for outputs found at run time count scans
+(opaque outputs and `AnswerByLoaders`), as a plugin host finds a plugin's types among the loaded assemblies. The rule for
+a compiled-against output loaded by its path (`AddLoadedOutputUsers`, a public API test reading the declarations) does
+not: every class that names a project loads it, and repository code scans for its own converters while initializing.
+Counted there, Newtonsoft.Json's scan while initializing ran every class on every change of a fresh recording: 100 %, 40.5 % once scans were apart (0 of 69 missed); Autofac 42.3 % either way (its compilation test reads Autofac.dll by path, a file read the rule still counts; 0 of 73).
 
 `CoverageMap.KnowsLoadsOf(names)` is true when the map tracked loads and none of the output's names was loaded unseen.
 
