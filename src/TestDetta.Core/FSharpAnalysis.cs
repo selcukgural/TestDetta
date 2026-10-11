@@ -230,7 +230,7 @@ internal static class FSharpIndexer
                         declaration.HasTestMethods,
                         declaration.BaseTypeNames,
                         CanContainTests: false,
-                        declaration.AttributeSpans.Count > 0 || declaration.BaseTypeNames.Count > 0)
+                        declaration.IsModule ? declaration.HasDiscoverableAttributes : declaration.AttributeSpans.Count > 0 || declaration.BaseTypeNames.Count > 0)
                     {
                         Spans = owner.IsTestProject ? [new DeclarationSpan(path, declaration.Span.StartLine, declaration.Span.EndLine)] : [],
                     });

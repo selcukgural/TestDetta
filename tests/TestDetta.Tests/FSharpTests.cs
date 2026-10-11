@@ -226,6 +226,47 @@ public sealed class FSharpTests : IDisposable
         Assert.Equal(["Shop.FsTests.OtherTests"], selection.TestClasses);
     }
 
+    [Fact]
+    public void A_module_with_only_compiler_attributes_is_not_found_through_reflection()
+    {
+        WriteAutoOpenModule("[<AutoOpen>]");
+
+        var selection = Select("Shop.FsTests.fsproj");
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, selection.Reason);
+        Assert.Equal(["Shop.FsTests.OtherTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void A_module_with_an_attribute_of_its_own_may_be_found_through_reflection()
+    {
+        WriteAutoOpenModule("[<AutoOpen; System.ComponentModel.Description(\"steps\")>]");
+
+        var selection = Select("Shop.FsTests.fsproj");
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("may be created through reflection", selection.Reason, StringComparison.Ordinal);
+    }
+
+    // Argu's [<AutoOpen>] module internal Argu.PreCompute: its functions are called without its name.
+    private void WriteAutoOpenModule(string attributes)
+    {
+        WriteLibraryAndTests();
+        // A module value runs in the module's initializer, unnamed (Argu's primitiveParsers), so it spreads the module's name.
+        _repo.Write("src/Calc/Calculator.fs", Calculator + $"\n{attributes}\nmodule Steps =\n    let triple x = x * 3\n\n    let table = [ triple 1 ]\n");
+        _repo.Write("tests/Shop.FsTests/OtherTests.fs", """
+            module Shop.FsTests.OtherTests
+
+            open Xunit
+            open Shop.Calc
+
+            [<Fact>]
+            let ``triples`` () = Assert.Equal(6, triple 2)
+            """);
+        _repo.Commit("steps");
+        _repo.Replace("src/Calc/Calculator.fs", "x * 3", "x + x + x");
+    }
+
     private void WriteLibraryAndTests()
     {
         _repo.Write("src/Calc/Calc.fsproj", """

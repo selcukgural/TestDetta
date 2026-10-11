@@ -30,7 +30,11 @@ Reflection reads a type's **metadata** without running it: attributes, the membe
 default values. Coverage records only code that runs. That means:
 
 - A change to the type or one of its members may change metadata. The map cannot answer it, and the
-  project-level fallback stays.
+  project-level fallback stays. The classes the map says ran the changed member are still selected (2026-10-11):
+  the fallback needs the type's name spread, which a member named elsewhere does not do (a C# extension method, an
+  F# `AutoOpen` module's function), and the name trace alone left out a class that ran the member through a path no
+  name shows (Argu's `CliParser`: 4 of the 11 classes that ran it;
+  `The_classes_that_ran_a_changed_member_of_a_reflection_found_type_are_selected`).
 - A member reached only through its **code** (its body names a changed name) has the same
   declaration as before. It behaves differently only when it runs, which the map records.
 - A member reached through its **metadata** (`[DefaultValue(Limits.Max)]` when `Limits.Max`
