@@ -850,13 +850,16 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// library resolved (LibGit2Sharp adds <c>/private</c> to a <c>/var</c> one only), and <c>/private</c> has an
     /// <c>i</c> a Turkish <c>ToUpper</c> changes. .NET puts Unix domain sockets there, whose path may not exceed
     /// <see cref="SocketPathLimit"/> bytes; when the system's directory leaves no room for the longest (a diagnostics
-    /// socket), the folder goes under the real path of <c>/tmp</c> instead.
+    /// socket), the folder goes under the real path of <c>/tmp</c> instead. NuGet keeps the locks that make processes
+    /// take turns writing its shared HTTP cache under the temporary directory too (<c>NuGetScratch/lock</c>), so the
+    /// shards keep the one they would share without folders of their own (<see cref="NuGetScratch"/>).
     /// </summary>
     /// <param name="environment">The shard's environment, which receives the variables.</param>
     private static string ShardTemporary(Dictionary<string, string> environment)
     {
         var name = $"td{Guid.NewGuid():N}"[..8];
         var system = Path.GetTempPath();
+        NuGetScratch.KeepShared(environment);
         var root = OperatingSystem.IsWindows() || system.Length + name.Length + 1 + LongestSocketName <= SocketPathLimit ? system : RealPath("/tmp");
         var temporary = Path.Combine(root, name);
         Directory.CreateDirectory(temporary);

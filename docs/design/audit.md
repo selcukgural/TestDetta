@@ -341,7 +341,8 @@ for both (`AuditJudgingTests`, `EvalJudgingTests`).
   test fixture a caught change took 2.2 s instead of about 1 s; on a real suite the two runs cost a test host
   start and the failing classes' tests each, small next to the full run of the project.
 - **Parallel**: worker k > 1 gets a copy of the first copy made after the baseline (same binaries, space checked
-  first) and, with more than one worker, its own `TMPDIR` under the work folder. One analysis at a time
+  first) and, with more than one worker, its own `TMPDIR` under the work folder, with NuGet's shared lock folder
+  kept (`NuGetScratch.KeepShared`, docs/design/team-test-configuration.md). One analysis at a time
   (`AuditSelector` holds a lock).
 - **Report first**: the JSON report and the summary are written before the work folder is deleted, the JSON again
   after it with `workFolderRemoved`.
