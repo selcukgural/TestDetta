@@ -1594,6 +1594,59 @@ public static class TestDettaTracker
     public static void EnterFixtureInstance(object instance) => Enter(Fixtures, FixtureName(instance.GetType()), isFixture: true);
 
     /// <summary>
+    /// Makes the fixture <paramref name="instance"/> the current bucket while its <c>Dispose</c> runs outside every test, and
+    /// returns what <see cref="ExitFixtureTeardown"/> puts back; null when a test is running, which keeps its own bucket
+    /// (a test that builds and disposes a fixture type itself). xUnit disposes a class fixture when its class finishes, with
+    /// no test code running: there it counted as code outside every test, and so did every value its teardown read, so the
+    /// code that built a shared schema could not be answered by coverage (GraphQL's <c>ComplexityMetaDataFixture</c>). The
+    /// teardown serves the fixture's users as its setup does.
+    /// </summary>
+    /// <param name="instance">The fixture instance (<c>this</c>).</param>
+    public static object? EnterFixtureTeardown(object instance)
+    {
+        var outsideTests = ParallelFlows
+            ? ReferenceEquals(BucketForHit(), Startup)
+            : _testsStarted && Volatile.Read(ref _testCodeDepth) == 0 && !Volatile.Read(ref _instancePending);
+        if (!outsideTests)
+        {
+            return null;
+        }
+
+        var saved = new SavedBuckets(Current.Value, Volatile.Read(ref _lastEntered));
+        Enter(Fixtures, FixtureName(instance.GetType()), isFixture: true);
+        return saved;
+    }
+
+    /// <summary>
+    /// Puts back the buckets <see cref="EnterFixtureTeardown"/> replaced, when the teardown returns or throws: what the
+    /// framework runs next between tests (the next class's injected services) must not count for the fixture.
+    /// </summary>
+    /// <param name="saved">What <see cref="EnterFixtureTeardown"/> returned.</param>
+    public static void ExitFixtureTeardown(object? saved)
+    {
+        if (saved is not SavedBuckets buckets)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _lastEntered, buckets.LastEntered);
+        Current.Value = buckets.Current;
+        SetBucketVariable(buckets.Current ?? buckets.LastEntered ?? Startup);
+    }
+
+    /// <summary>The flow's current bucket and the last bucket entered, as a fixture's teardown found them.</summary>
+    /// <param name="current">The flow's current bucket.</param>
+    /// <param name="lastEntered">The last bucket entered.</param>
+    private sealed class SavedBuckets(Bucket? current, Bucket? lastEntered)
+    {
+        /// <summary>The flow's current bucket.</summary>
+        public Bucket? Current { get; } = current;
+
+        /// <summary>The last bucket entered.</summary>
+        public Bucket? LastEntered { get; } = lastEntered;
+    }
+
+    /// <summary>
     /// Makes the setup scope <paramref name="name"/> the current bucket. Called at the start of
     /// NUnit <c>[SetUpFixture]</c> setup and MSTest <c>[AssemblyInitialize]</c> methods, which may be
     /// static and run once before every test of their namespace or assembly.
