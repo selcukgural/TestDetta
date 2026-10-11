@@ -179,6 +179,13 @@ public sealed record CoverageMap(
     public IReadOnlyList<string>? OutputLoadsUnseen { get; init; }
 
     /// <summary>
+    /// Before a name in <see cref="OutputUses"/>: the bucket enumerated the loaded assemblies (<c>AppDomain.GetAssemblies</c>)
+    /// while that assembly was loaded, rather than loading it; the tracker's <c>TestDettaTracker.ScanPrefix</c>. A map
+    /// recorded before 2026-10-11 has scans as plain names.
+    /// </summary>
+    public const string OutputScanPrefix = "scan:";
+
+    /// <summary>
     /// True when <see cref="OutputUses"/> names every class that loaded <paramref name="names"/>: loads were tracked
     /// and none of the names was loaded unseen.
     /// </summary>
