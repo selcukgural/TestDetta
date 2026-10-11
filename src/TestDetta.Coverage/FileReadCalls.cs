@@ -77,6 +77,17 @@ internal static class FileReadCalls
         "System.AppDomain::GetAssemblies");
 
     /// <summary>
+    /// The part of <see cref="Starters"/> that loads an assembly by its name rather than by a path: reported through
+    /// <see cref="OutputProbes.LoadedByName"/>, so a scanner in the product's code loading every library of the dependency
+    /// context (Carter's module catalog) is not taken for a test that loads a project's output to inspect it.
+    /// </summary>
+    private static readonly FrozenSet<string> NameLoaders = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "System.Reflection.Assembly::Load",
+        "System.Runtime.Loader.AssemblyLoadContext::LoadFromAssemblyName",
+        "System.AppDomain::ExecuteAssemblyByName");
+
+    /// <summary>
     /// True when <paramref name="module"/> references a method whose calls <see cref="Wrap"/> reports as
     /// a file read or a directory listing. Reads only the member reference table, no method body, so a
     /// third-party assembly that reads no file costs almost nothing to check.
@@ -89,13 +100,13 @@ internal static class FileReadCalls
     /// <param name="module">Module being instrumented.</param>
     /// <param name="fileRead">Reference to <see cref="TestDettaTracker.FileRead"/> in the module.</param>
     /// <param name="directoryListed">Reference to <see cref="TestDettaTracker.DirectoryListed"/> in the module.</param>
-    /// <param name="outputUsed">
-    /// Reference to <see cref="TestDettaTracker.OutputUsed"/> in the module; null to leave process starts and
+    /// <param name="outputs">
+    /// References to the tracker's output probes in the module; null to leave process starts and
     /// assembly loads alone, as in third-party code, where the test platform loading the test assembly would
     /// look like a use of the test project's output.
     /// </param>
     /// <returns>The number of calls wrapped.</returns>
-    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed, MethodReference? outputUsed)
+    public static int Wrap(ModuleDefinition module, MethodReference fileRead, MethodReference directoryListed, OutputProbes? outputs)
     {
         TypeDefinition? holder = null;
         var wrappers = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
@@ -111,7 +122,7 @@ internal static class FileReadCalls
                     continue;
                 }
 
-                var starter = outputUsed is not null && IsStarter(target);
+                var starter = outputs is not null && IsStarter(target);
                 if (!starter && Directory(target) is null)
                 {
                     continue;
@@ -121,8 +132,9 @@ internal static class FileReadCalls
                 if (!wrappers.TryGetValue(key, out var wrapper))
                 {
                     holder ??= AddHolder(module);
+                    var probe = starter && NameLoaders.Contains($"{target.DeclaringType.FullName}::{target.Name}") ? outputs!.LoadedByName : outputs?.Used;
                     wrapper = starter
-                        ? Wrapper(module, holder, target, instruction.OpCode, outputUsed!, wrappers.Count, arguments: 2)
+                        ? Wrapper(module, holder, target, instruction.OpCode, probe!, wrappers.Count, arguments: 2)
                         : Wrapper(module, holder, target, instruction.OpCode, Directory(target) == true ? directoryListed : fileRead, wrappers.Count, arguments: 1);
                     wrappers[key] = wrapper;
                 }
@@ -234,3 +246,11 @@ internal static class FileReadCalls
         return wrapper;
     }
 }
+
+/// <summary>The tracker's probes for process starts and assembly loads, as references in the module being instrumented.</summary>
+/// <param name="Used">Reference to <see cref="TestDettaTracker.OutputUsed"/>: starts, loads by a path, scans.</param>
+/// <param name="LoadedByName">
+/// Reference to <see cref="TestDettaTracker.OutputLoadedByName"/> for loads by name in code that also runs outside the tests;
+/// <paramref name="Used"/> again in a test or its helpers.
+/// </param>
+internal sealed record OutputProbes(MethodReference Used, MethodReference LoadedByName);

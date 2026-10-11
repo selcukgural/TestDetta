@@ -299,6 +299,41 @@ public sealed class ProjectGraph
         return result;
     }
 
+    /// <summary>
+    /// Whether the code of <paramref name="path"/> also runs outside the tests: nothing references the project (an
+    /// application, a sample), or a project does that is no test project and itself runs outside them. A test project,
+    /// and a project that only such projects reference, directly or through other such projects, serve the tests alone;
+    /// so does a project the graph does not know. A load by name in code that runs outside the tests is what the product
+    /// does at run time (Carter's module catalog), not a test choosing an output to inspect (docs/design/loaded-outputs.md).
+    /// </summary>
+    /// <param name="path">Normalized absolute path of a .csproj file.</param>
+    public bool RunsOutsideTests(string path) => RunsOutsideTests(path, new Dictionary<string, bool>(Paths.Comparer));
+
+    /// <summary>
+    /// <see cref="RunsOutsideTests(string)"/> with the answers found so far. A project met again while its answer is
+    /// being found (a reference cycle) counts as serving the tests alone, the answer that keeps its loads by name counted.
+    /// </summary>
+    /// <param name="path">Normalized absolute path of a .csproj file.</param>
+    /// <param name="known">Answers by project; updated in place.</param>
+    private bool RunsOutsideTests(string path, Dictionary<string, bool> known)
+    {
+        if (known.TryGetValue(path, out var answer))
+        {
+            return answer;
+        }
+
+        if (Find(path) is not { IsTestProject: false })
+        {
+            return false;
+        }
+
+        known[path] = false;
+        var dependents = DependentsOf(path);
+        answer = dependents.Count == 0 || dependents.Any(d => RunsOutsideTests(d, known));
+        known[path] = answer;
+        return answer;
+    }
+
     /// <summary>Projects that reference <paramref name="path"/> directly. Empty when nothing does.</summary>
     /// <param name="path">Normalized absolute path of a .csproj file.</param>
     public IReadOnlyList<string> DependentsOf(string path) =>

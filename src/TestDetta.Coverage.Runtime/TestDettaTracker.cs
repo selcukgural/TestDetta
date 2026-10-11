@@ -217,6 +217,15 @@ public static class TestDettaTracker
     /// </summary>
     public const string ScanPrefix = "scan:";
 
+    /// <summary>
+    /// Before an assembly name in the output uses: the bucket loaded it by its name (<c>Assembly.Load(name)</c>,
+    /// <c>AssemblyLoadContext.LoadFromAssemblyName</c>), as a scanner does with every library of the dependency context
+    /// (Carter's module catalog), rather than by a path. A load by name of a project the tests compile against resolves
+    /// the assembly every class naming it loads anyway; only the rules for outputs found at run time count it
+    /// (docs/design/loaded-outputs.md).
+    /// </summary>
+    public const string NameLoadPrefix = "name:";
+
     /// <summary>Guards <see cref="WrappedNames"/> and <see cref="LoadsUnseen"/>; assembly loads come from any thread.</summary>
     private static readonly object LoadGate = new();
 
@@ -366,7 +375,22 @@ public static class TestDettaTracker
     /// </summary>
     /// <param name="first">The call's first argument.</param>
     /// <param name="second">Its second argument, or null.</param>
-    public static void OutputUsed(object? first, object? second)
+    public static void OutputUsed(object? first, object? second) => RecordOutputs(first, second, prefix: null);
+
+    /// <summary>
+    /// Records that code which also runs outside the tests loaded an assembly by its name for the current bucket (see
+    /// <see cref="NameLoadPrefix"/>): the names go to the bucket marked as such, and count as wrapped loads for
+    /// <see cref="LoadsUnseen"/>, since this call loads them. A test's own load by name goes through <see cref="OutputUsed"/>.
+    /// </summary>
+    /// <param name="first">The call's first argument.</param>
+    /// <param name="second">Its second argument, or null.</param>
+    public static void OutputLoadedByName(object? first, object? second) => RecordOutputs(first, second, NameLoadPrefix);
+
+    /// <summary>Records the names a start or load of the current bucket gave; see <see cref="OutputUsed"/>.</summary>
+    /// <param name="first">The call's first argument.</param>
+    /// <param name="second">Its second argument, or null.</param>
+    /// <param name="prefix">Put before every name in the bucket (<see cref="NameLoadPrefix"/>), or null.</param>
+    private static void RecordOutputs(object? first, object? second, string? prefix)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         try
@@ -384,12 +408,28 @@ public static class TestDettaTracker
             return;
         }
 
-        lock (LoadGate)
+        if (prefix is not null)
         {
-            // A scan loads nothing.
+            lock (LoadGate)
+            {
+                WrappedNames.UnionWith(names);
+            }
+
+            var marked = new HashSet<string>(StringComparer.Ordinal);
             foreach (var name in names)
             {
-                if (!name.StartsWith(ScanPrefix, StringComparison.Ordinal))
+                marked.Add(prefix + name);
+            }
+
+            names = marked;
+        }
+
+        lock (LoadGate)
+        {
+            // A scan loads nothing; a load by name added its plain names above.
+            foreach (var name in names)
+            {
+                if (!name.StartsWith(ScanPrefix, StringComparison.Ordinal) && !name.StartsWith(NameLoadPrefix, StringComparison.Ordinal))
                 {
                     WrappedNames.Add(name);
                 }

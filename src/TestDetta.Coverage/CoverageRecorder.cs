@@ -183,7 +183,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var instrumenter = new AssemblyInstrumenter(_logger);
         var testAssemblies = new HashSet<string>(StringComparer.Ordinal) { targetPath };
         var thirdParty = ThirdPartyAssemblies.Find(outputDirectory, AssemblyOwners(request).Keys);
-        var instrumentation = instrumenter.Instrument(assemblies, testAssemblies, Path.Combine(work, "backup"), thirdParty);
+        // Loads by name in code that also runs outside the tests are the product finding its modules (docs/design/loaded-outputs.md).
+        var productAssemblies = assemblies
+            .Where(a => owners.TryGetValue(Path.GetFileName(a), out var owner) && request.Graph.RunsOutsideTests(owner.Path))
+            .ToHashSet(StringComparer.Ordinal);
+        var instrumentation = instrumenter.Instrument(assemblies, testAssemblies, Path.Combine(work, "backup"), thirdParty, productAssemblies);
         var mode = legacy ? DotnetTestMode.VSTest : location.Mode;
         RuntimeDeployment? deployment = null;
 

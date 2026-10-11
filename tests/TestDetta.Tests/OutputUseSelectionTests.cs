@@ -70,6 +70,18 @@ public sealed class OutputUseSelectionTests : IDisposable
     }
 
     [Fact]
+    public void A_class_that_loaded_the_tool_by_its_name_is_selected()
+    {
+        WriteMap(Uses(classes: [CoverageMap.OutputNameLoadPrefix + "Tool"]));
+        ChangeTool();
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.ToolTests"], selection.TestClasses);
+    }
+
+    [Fact]
     public void A_map_recorded_before_loads_were_tracked_runs_the_whole_project()
     {
         // Such a map cannot tell a load by a third-party plugin host from no load at all (docs/design/loaded-outputs.md).

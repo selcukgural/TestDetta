@@ -186,6 +186,12 @@ public sealed record CoverageMap(
     public const string OutputScanPrefix = "scan:";
 
     /// <summary>
+    /// Before a name in <see cref="OutputUses"/>: the bucket loaded that assembly by its name rather than by a path; the
+    /// tracker's <c>TestDettaTracker.NameLoadPrefix</c>. A map recorded before 2026-10-11 has such loads as plain names.
+    /// </summary>
+    public const string OutputNameLoadPrefix = "name:";
+
+    /// <summary>
     /// True when <see cref="OutputUses"/> names every class that loaded <paramref name="names"/>: loads were tracked
     /// and none of the names was loaded unseen.
     /// </summary>

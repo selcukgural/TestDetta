@@ -31,6 +31,20 @@ class that enumerates the loaded assemblies is a user of each one loaded at that
 (opaque outputs and `AnswerByLoaders`), as a plugin host finds a plugin's types among the loaded assemblies. The rule for
 a compiled-against output loaded by its path (`AddLoadedOutputUsers`, a public API test reading the declarations) does
 not: every class that names a project loads it, and repository code scans for its own converters while initializing.
+Loads by name (`Assembly.Load(name)`, `AssemblyLoadContext.LoadFromAssemblyName`, `ExecuteAssemblyByName`) in code
+that also runs outside the tests are recorded the same way (`name:<name>`, `CoverageMap.OutputNameLoadPrefix`, through
+`TestDettaTracker.OutputLoadedByName`, 2026-10-11): Carter's module catalog loads every library of the dependency
+context by name to find its modules, and the compiled-against rule ran 8 of Carter.Tests' 12 classes on every change
+(share 47.2 %; 17.4 % recorded apart, no miss in 64 failing mutants; CliWrap and Autofac unchanged). The same call in a
+test, or in a helper only tests use, stays a load like one by path: AfterApply's architecture tests load each layer by
+name (`Assembly.Load("AfterApply.Application")`) and check with NetArchTest which assemblies its method bodies depend
+on, so any change to the layer can fail them though none of its code runs there. Which code runs outside the tests is
+read from the project graph (`ProjectGraph.RunsOutsideTests`): a project nothing references (an application, a
+sample), or one a non-test project that runs outside them references. A library only its tests reference serves the
+tests alone, and its loads by name keep selecting: the analysis cannot tell a catalog from an inspection there. A load
+by name still counts as a wrapped load for `outputLoadsUnseen`, since the call loads the assembly; a scan does not.
+Left open: product code that loads an output by name and hands the assembly to a test that inspects it is counted
+as a catalog; an inspection through `typeof(T).Assembly` loads nothing a call can see ([backlog](../backlog.md)).
 Counted there, Newtonsoft.Json's scan while initializing ran every class on every change of a fresh recording: 100 %, 40.5 % once scans were apart (0 of 69 missed); Autofac 42.3 % either way (its compilation test reads Autofac.dll by path, a file read the rule still counts; 0 of 73).
 
 `CoverageMap.KnowsLoadsOf(names)` is true when the map tracked loads and none of the output's names was loaded unseen.

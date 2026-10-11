@@ -69,11 +69,17 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// Other assemblies of the test output whose file-read calls are wrapped, without probes; null to leave
     /// every other assembly alone, and <see cref="InstrumentationResult.ReadsUnseen"/> null.
     /// </param>
+    /// <param name="productAssemblies">
+    /// The subset of <paramref name="assemblies"/> whose code also runs outside the tests (<see cref="ProjectGraph.RunsOutsideTests"/>):
+    /// their loads by name are recorded apart (<see cref="TestDettaTracker.OutputLoadedByName"/>). Elsewhere, and for all of them
+    /// when null, a load by name is recorded as any other load.
+    /// </param>
     public InstrumentationResult Instrument(
         IReadOnlyList<string> assemblies,
         IReadOnlySet<string> testAssemblies,
         string backupDirectory,
-        IReadOnlyList<string>? thirdParty = null)
+        IReadOnlyList<string>? thirdParty = null,
+        IReadOnlySet<string>? productAssemblies = null)
     {
         var methods = new List<CoveredMethod>();
         var fields = new List<string>();
@@ -93,7 +99,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 BackUp(Path.ChangeExtension(assembly, ".pdb"), backupDirectory, backups);
 
                 var before = methods.Count;
-                InstrumentOne(assembly, testAssemblies.Contains(assembly), new MethodTables(methods, fields, callbacks, ownAssemblies)
+                InstrumentOne(assembly, testAssemblies.Contains(assembly), productAssemblies?.Contains(assembly) == true, new MethodTables(methods, fields, callbacks, ownAssemblies)
                 {
                     CoreLibrary = coreLibrary, Nested = nested,
                 });
@@ -206,7 +212,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module,
             Probe(tracker, nameof(TestDettaTracker.FileRead)),
             Probe(tracker, nameof(TestDettaTracker.DirectoryListed)),
-            outputUsed: null);
+            outputs: null);
         module.Write(path);
     }
 
@@ -283,8 +289,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <summary>Rewrites one assembly, appending its methods to the shared tables.</summary>
     /// <param name="path">Assembly file.</param>
     /// <param name="containsTests">True for a test assembly, whose test classes get entry markers.</param>
+    /// <param name="productCode">True when its code also runs outside the tests, so its loads by name are recorded apart.</param>
     /// <param name="tables">Tables shared by all assemblies; updated in place.</param>
-    private static void InstrumentOne(string path, bool containsTests, MethodTables tables)
+    private static void InstrumentOne(string path, bool containsTests, bool productCode, MethodTables tables)
     {
         var (methods, fields, callbacks, ownAssemblies) = tables;
         var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
@@ -404,12 +411,15 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         }
 
         // Files the tests read by a path, processes they start and assemblies they load, whichever of the
-        // module's code does it (docs/design/runtime-file-reads.md).
+        // module's code does it (docs/design/runtime-file-reads.md). A load by name is recorded apart only in code that
+        // also runs outside the tests: a test or its helpers loading an output by name may inspect it, as an
+        // architecture test does (docs/design/loaded-outputs.md).
+        var used = Probe(tracker, nameof(TestDettaTracker.OutputUsed));
         FileReadCalls.Wrap(
             module,
             Probe(tracker, nameof(TestDettaTracker.FileRead)),
             Probe(tracker, nameof(TestDettaTracker.DirectoryListed)),
-            Probe(tracker, nameof(TestDettaTracker.OutputUsed)));
+            new OutputProbes(used, productCode ? Probe(tracker, nameof(TestDettaTracker.OutputLoadedByName)) : used));
         module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
     }
 
