@@ -1,7 +1,10 @@
 # Shape reads: which classes read a type's shape
 
-Status: the recording half, 2026-10-12 (branch feat/shape-reads). The selection rule that would use it narrows, so the
-owner decides it after measurement (below).
+Status: recording and the shape-reader rule (which only adds classes) in this change, 2026-10-12. The narrowing rule for
+types that only carry data stays on branch feat/shape-rule (owner, 2026-10-12): in the shape A/B on 11 repositories it
+caused no miss (86 failing shape mutants) but moved shares by at most 0.9 points, since the corpus has few such types;
+its target, AfterApply's response records, cannot be measured here (no Docker for its Testcontainers, CI closed until
+2026-11-01). It is decided once AfterApply can be measured.
 
 ## Problem
 
@@ -54,7 +57,7 @@ setup did; it only adds classes, whatever else answers the change (`ShapeReaderS
 - A cache across classes: a document generated once and served from a host that several classes share (a collection
   fixture, a static host) is read by the first class only. Per-class hosts (`IClassFixture`, AfterApply) read it per class.
 
-## Proposed rule (not decided)
+## Proposed rule (on branch feat/shape-rule)
 
 For changed metadata of a type whose members only carry data: the classes that ran its constructor or accessors, the
 classes that read its shape (`shape:`), and the users of a shared host or fixture one of them used, instead of the name

@@ -398,6 +398,14 @@ repositories a change touches; the full corpus runs at milestones.
 
 ## Next
 
+- **Shape rule for data-only types (branch feat/shape-rule, owner 2026-10-12: kept until AfterApply can be measured).**
+  Answers a metadata change of a record that only carries data through its member users and shape readers instead of
+  the name trace through the endpoint registrations (AfterApply 96 of 99). Needs AfterApply's integration tests, which
+  need Docker (Testcontainers) or CI (closed until 2026-11-01). docs/design/shape-reads.md.
+- **A timing test that fails under heavy load.** `ShadowRunTests.A_checkout_of_the_base_commit_that_runs_out_of_time_leaves_no_worktree_registered`
+  failed twice on 2026-10-12 at load averages of 20 and 50 and passed alone each time (3 of 3). Give it a margin that does
+  not depend on the machine's load.
+
 - ~~**A fixture whose server another class built first (FastEndpoints, 2026-10-12).**~~ Fixed the same day: a test
   that builds a fixture type is its user, and its flow counts for the fixture too (docs/design/between-tests-code.md). `TestServerTests` builds
   `FixtureA` itself (`Only_One_TestServer_Is_Created_Per_Fixture_Type`), and FastEndpoints.Testing keeps one test server
