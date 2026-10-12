@@ -1,10 +1,12 @@
 # Shape reads: which classes read a type's shape
 
 Status: recording and the shape-reader rule (which only adds classes) in this change, 2026-10-12. The narrowing rule for
-types that only carry data stays on branch feat/shape-rule (owner, 2026-10-12): in the shape A/B on 11 repositories it
-caused no miss (86 failing shape mutants) but moved shares by at most 0.9 points, since the corpus has few such types;
-its target, AfterApply's response records, cannot be measured here (no Docker for its Testcontainers, CI closed until
-2026-11-01). It is decided once AfterApply can be measured.
+types that only carry data (branch feat/shape-rule) is closed (owner, 2026-10-12): on AfterApply, its target, adding an
+optional parameter to `ApplicationDetailResponse` still ran 97 of 100 integration classes with the rule, as without it,
+because every `ApiHost` fixture read the record's shape while its host started and one read came while initializing; the
+full suite with the change failed none of its 981 tests. On the corpus it caused no miss (86 failing shape mutants) and
+moved shares by at most 0.9 points. Telling a host building its metadata from a test that depends on the shape would
+be a new signal and a new narrowing.
 
 ## Problem
 
@@ -57,7 +59,7 @@ setup did; it only adds classes, whatever else answers the change (`ShapeReaderS
 - A cache across classes: a document generated once and served from a host that several classes share (a collection
   fixture, a static host) is read by the first class only. Per-class hosts (`IClassFixture`, AfterApply) read it per class.
 
-## Proposed rule (on branch feat/shape-rule)
+## Rule for types that only carry data (closed, branch feat/shape-rule)
 
 For changed metadata of a type whose members only carry data: the classes that ran its constructor or accessors, the
 classes that read its shape (`shape:`), and the users of a shared host or fixture one of them used, instead of the name

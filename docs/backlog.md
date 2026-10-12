@@ -398,10 +398,10 @@ repositories a change touches; the full corpus runs at milestones.
 
 ## Next
 
-- **Shape rule for data-only types (branch feat/shape-rule, owner 2026-10-12: kept until AfterApply can be measured).**
-  Answers a metadata change of a record that only carries data through its member users and shape readers instead of
-  the name trace through the endpoint registrations (AfterApply 96 of 99). Needs AfterApply's integration tests, which
-  need Docker (Testcontainers) or CI (closed until 2026-11-01). docs/design/shape-reads.md.
+- ~~**Shape rule for data-only types**~~ (closed by the owner, 2026-10-12, branch feat/shape-rule kept): measured on
+  AfterApply with podman, it left the record change at 97 of 100 classes, as without it, since every host reads the
+  record's shape at start-up; the change failed none of the 981 tests. AfterApply's width stays a precision gap: what
+  reads the shape at start-up, and whether that can be told from a test depending on it, is open (docs/design/shape-reads.md).
 - **A timing test that fails under heavy load.** `ShadowRunTests.A_checkout_of_the_base_commit_that_runs_out_of_time_leaves_no_worktree_registered`
   failed twice on 2026-10-12 at load averages of 20 and 50 and passed alone each time (3 of 3). Give it a margin that does
   not depend on the machine's load.
