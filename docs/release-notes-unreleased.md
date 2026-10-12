@@ -34,3 +34,10 @@ then emptied.
   every test, so changes to code it reaches select those classes instead of being traced by name (xUnit class fixtures).
 - Selection, safer: the classes the map says ran a changed member of a type that may be found through reflection are
   always selected.
+- Recording: a test data member several classes use (`[ClassData]`, a shared `[MemberData]` source) and a test framework
+  extension the repository ships and puts on its own tests (AutoFixture's `[AutoData]`, FsCheck's `[Property]`) count
+  for the classes that use them, not as code outside every test. Maps record their users (`dataSourceUsers`); a map
+  from an earlier version has none and selects as before.
+- Recording: a test that builds a fixture type itself keeps what follows in its own class, instead of crediting it to
+  the fixture's users; a shard whose test report was cut off counts as one without a report instead of failing the
+  recording.
