@@ -303,6 +303,14 @@ public sealed record CoverageMap(
     public IReadOnlyDictionary<string, IReadOnlyList<string>>? DataSourceUsers { get; init; }
 
     /// <summary>
+    /// Fixture name to the test classes whose tests built that fixture type themselves (<c>new FixtureA()</c>): users of the
+    /// fixture as much as the classes it is injected into, since a fixture type may share what any instance built (a
+    /// server cached per fixture type, FastEndpoints). What such a test ran after building it is in the fixture's hits too.
+    /// Null for a map recorded before 2026-10-12.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>>? FixtureBuilders { get; init; }
+
+    /// <summary>
     /// Methods (indexes into <see cref="Methods"/>) whose users no recording at <see cref="Commit"/> could name: members that
     /// were added, belong to a type whose declaration changed, or whose metadata changed since the last full recording, in a
     /// map built by incremental steps (docs/design/incremental-recording.md). Carried-over classes were recorded before such

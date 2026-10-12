@@ -1170,6 +1170,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var merged = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var mergedFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var ambientIds = new SortedSet<int>();
+        var fixtureBuilders = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         var classSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var fixtureSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var startupSeconds = new List<double>();
@@ -1220,6 +1221,20 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 }
             }
 
+            if (root.TryGetProperty("fixtureBuilders", out var builders))
+            {
+                foreach (var fixture in builders.EnumerateObject())
+                {
+                    if (!fixtureBuilders.TryGetValue(fixture.Name, out var classesBuilding))
+                    {
+                        classesBuilding = new SortedSet<string>(StringComparer.Ordinal);
+                        fixtureBuilders[fixture.Name] = classesBuilding;
+                    }
+
+                    classesBuilding.UnionWith(fixture.Value.EnumerateArray().Select(static c => c.GetString()!));
+                }
+            }
+
             // A fixture set up in several shards cost its time in each, so times add up.
             AddSeconds(root, "classSeconds", classSeconds);
             AddSeconds(root, "fixtureSeconds", fixtureSeconds);
@@ -1259,6 +1274,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             new CoverageTimings(classSeconds, fixtureSeconds, startupSeconds.Count == 0 ? 0 : startupSeconds.Average()))
         {
             Initialization = [.. initialization],
+            FixtureBuilders = fixtureBuilders.ToDictionary(static f => f.Key, static IReadOnlyList<string> (f) => [.. f.Value], StringComparer.Ordinal),
             // Linked in some process and unlinked in none: one path the probes do not see is enough to stay run-once.
             LinkedInitialization = [.. initialization.Where(id => linked.Contains(id) && !unlinked.Contains(id))],
             BuiltValues = new CoverageHits(Freeze(builtClasses), Freeze(builtFixtures), [.. builtAmbient]),
