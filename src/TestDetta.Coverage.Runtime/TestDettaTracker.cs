@@ -222,8 +222,8 @@ public static class TestDettaTracker
     private static readonly HashSet<string> LoadsUnseen = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Before an assembly name in the output uses: the bucket enumerated the loaded assemblies (<c>AppDomain.GetAssemblies</c>)
-    /// while that one was loaded, rather than loading it by a path or name. Only the rules for outputs found at run time
+    /// Before an assembly name in the output uses: the bucket enumerated the loaded assemblies while that one was loaded,
+    /// or that assembly's types (<see cref="OutputScanned"/>), rather than loading it by a path or name. Only the rules for outputs found at run time
     /// (plugins) count it (docs/design/loaded-outputs.md).
     /// </summary>
     public const string ScanPrefix = "scan:";
@@ -417,6 +417,73 @@ public static class TestDettaTracker
     /// <param name="second">Its second argument, or null.</param>
     public static void OutputLoadedByName(object? first, object? second) => RecordOutputs(first, second, NameLoadPrefix);
 
+    /// <summary>
+    /// Records that the current bucket enumerated loaded assemblies or the types of one: called before such a call of
+    /// instrumented code, repository or third-party, with the object it is called on (an <see cref="AppDomain"/>, an
+    /// <c>AssemblyLoadContext</c> or an <see cref="System.Reflection.Assembly"/>). Every
+    /// assembly it stands for is named with <see cref="ScanPrefix"/>: an assembly loads once per process, so a class that
+    /// finds a plugin an earlier class loaded and inspects its types is seen through this call, not through a load
+    /// (docs/design/loaded-outputs.md). A scan loads nothing and counts as no wrapped load for <see cref="LoadsUnseen"/>.
+    /// </summary>
+    /// <param name="receiver">The object the call is made on.</param>
+    public static void OutputScanned(object? receiver)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            AddScanned(names, receiver);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or ArgumentException or System.Reflection.TargetInvocationException)
+        {
+            // A context being unloaded or an odd receiver: the call itself reports the problem.
+        }
+
+        if (names.Count > 0)
+        {
+            RecordScan(names);
+        }
+    }
+
+    /// <summary>Adds the scanned names the receiver of a scan stands for; see <see cref="OutputScanned"/>.</summary>
+    /// <param name="names">Names found so far.</param>
+    /// <param name="receiver">The object the scan was called on.</param>
+    private static void AddScanned(HashSet<string> names, object? receiver)
+    {
+        var assemblies = receiver switch
+        {
+            System.Reflection.Assembly assembly => [assembly],
+            AppDomain domain => domain.GetAssemblies(),
+            // AssemblyLoadContext is not in netstandard2.0, which this tracker also targets: read it by name.
+            not null when IsLoadContext(receiver.GetType()) => (receiver.GetType().GetProperty("Assemblies")?.GetValue(receiver) as IEnumerable<System.Reflection.Assembly>)?.ToArray(),
+            _ => null,
+        };
+        if (assemblies is null)
+        {
+            return;
+        }
+
+        foreach (var assembly in assemblies)
+        {
+            foreach (var assemblyName in AssemblyNames(assembly))
+            {
+                names.Add(ScanPrefix + assemblyName);
+            }
+        }
+
+        static bool IsLoadContext(Type? type)
+        {
+            for (; type is not null; type = type.BaseType)
+            {
+                if (type.FullName == "System.Runtime.Loader.AssemblyLoadContext")
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Records the names a start or load of the current bucket gave; see <see cref="OutputUsed"/>.</summary>
     /// <param name="first">The call's first argument.</param>
     /// <param name="second">Its second argument, or null.</param>
@@ -455,6 +522,39 @@ public static class TestDettaTracker
             names = marked;
         }
 
+        RecordNames(names);
+    }
+
+    /// <summary>
+    /// Adds scanned names to the current bucket, also inside a cache fill: the class that filled the cache scanned the
+    /// assemblies (Autofac's reflection cache lists a plugin's types inside <c>GetOrAdd</c>), and put in the initialization
+    /// list the scan ran every class of the project for any change to the plugin (Autofac.Specification.Test, 42.3 % to
+    /// 55.8 % in the 2026-10-12 A/B; owner's option a). A later class that reads what the fill stored in a field is found
+    /// through the map's <c>builtValues</c>. Inside a static constructor, which no class may claim, the scan stays
+    /// initialization.
+    /// </summary>
+    /// <param name="names">Names with <see cref="ScanPrefix"/>.</param>
+    private static void RecordScan(HashSet<string> names)
+    {
+        if (_typeInitializerDepth != 0)
+        {
+            RecordNames(names);
+            return;
+        }
+
+        lock (Gate)
+        {
+            BucketForHit().Outputs.UnionWith(names);
+        }
+    }
+
+    /// <summary>
+    /// Adds output names to the current bucket, or to the scope or initialization a type initializer or cache fill is
+    /// running in, and counts the plain ones as wrapped loads for <see cref="LoadsUnseen"/>.
+    /// </summary>
+    /// <param name="names">Names, plain or with <see cref="ScanPrefix"/> or <see cref="NameLoadPrefix"/>.</param>
+    private static void RecordNames(HashSet<string> names)
+    {
         lock (LoadGate)
         {
             // A scan loads nothing; a load by name added its plain names above.
@@ -516,10 +616,11 @@ public static class TestDettaTracker
                 AddNames(names, name.Name);
                 break;
             case AppDomain domain:
-                // AppDomain.GetAssemblies: code that enumerates the loaded assemblies may use any of them, as a plugin
-                // host finds a plugin's types. The names are marked as a scan: a scan is no load by path, which reads
-                // the assembly's declarations (a public API test), and repository code scans for its own serializers
-                // and converters while initializing (Newtonsoft.Json), which would make every change run every class.
+                // The domain a start runs an assembly in (AppDomain.ExecuteAssembly); scans of it go to OutputScanned
+                // since 2026-10-12. Kept as it was: code that runs an assembly in the domain may use any loaded one.
+                // The names are marked as a scan: a scan is no load by path, which reads the assembly's declarations
+                // (a public API test), and repository code scans for its own serializers and converters while
+                // initializing (Newtonsoft.Json), which would make every change run every class.
                 foreach (var assembly in domain.GetAssemblies())
                 {
                     foreach (var assemblyName in AssemblyNames(assembly))

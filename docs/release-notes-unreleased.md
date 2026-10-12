@@ -34,6 +34,12 @@ then emptied.
   projects counts as a reference to that project when other references also reach it, since NuGet then builds the
   project in place of the package. Changes to it now reach the projects that take it as a package.
 
+- **A plugin an earlier class loaded:** calls that enumerate loaded assemblies or an assembly's types
+  (`AppDomain.GetAssemblies`, `AssemblyLoadContext.Assemblies`, `Assembly.GetTypes`, `GetExportedTypes`, `DefinedTypes`,
+  `ExportedTypes`) are recorded in test code and in third-party code, so a class that inspects a plugin another class
+  loaded is selected when the plugin changes; before, only the class that loaded it was. A scan inside a cache fill
+  counts for the class that filled it.
+
 ### More precise: fewer tests run that a change cannot affect
 
 - **Test fixtures:** what a fixture's `Dispose` runs counts for the classes that use the fixture (xUnit class fixtures),
