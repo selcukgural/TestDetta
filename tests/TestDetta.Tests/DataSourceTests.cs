@@ -95,8 +95,10 @@ public sealed class DataSourceTests : IDisposable
             }
         }
 
-        // Shared data is not credited to one of its classes; the map leaves it to the fallback rules.
-        Assert.Contains(new CoveredMethod("Lib.Shared", "Build"), map.Ambient.Select(id => map.Methods[id]));
+        // Shared data is not credited to one of its classes: it has a bucket of its own that both use (since 2026-10-11).
+        Assert.DoesNotContain(new CoveredMethod("Lib.Shared", "Build"), map.Ambient.Select(id => map.Methods[id]));
+        Assert.Equal(["Lib.Tests.SharedATests", "Lib.Tests.SharedBTests"], map.DataSourceUsers!["[data-source]Lib.Tests.SharedData"].Order(StringComparer.Ordinal));
+        Assert.Contains(new CoveredMethod("Lib.Shared", "Build"), map.Fixtures["[data-source]Lib.Tests.SharedData"].Select(id => map.Methods[id]));
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
 

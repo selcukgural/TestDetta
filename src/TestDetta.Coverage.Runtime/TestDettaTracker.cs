@@ -1564,6 +1564,41 @@ public static class TestDettaTracker
     }
 
     /// <summary>
+    /// Makes the shared data source <paramref name="name"/> (<c>[data-source]</c> and the type declaring it) the current bucket: a test data
+    /// member several classes use, whose rows serve all of them and no other. The recorder names its users, so its code
+    /// counts for them rather than as code outside every test (GraphQL's <c>GraphQLSerializersTestData</c>, the
+    /// <c>[ClassData]</c> of 13 classes). A test that calls it itself keeps its own bucket.
+    /// </summary>
+    /// <param name="name">Bucket name, written by the instrumenter.</param>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static void EnterSharedDataSource(string name)
+    {
+        // Only while no test code runs: the framework discovering tests or building a theory's cases. A test that tests
+        // the extension itself calls it through the framework's own API (AutoFixture's AutoDataAttributeTest calls
+        // BuildFrom), where the stack shows the framework first; switching there credited the rest of that test to the
+        // attribute's users, which it is not among.
+        if (!NoTestCodeRuns()
+            || Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
+            && CalledFromRunningTest(current.Name, entered: null, current.InstanceType))
+        {
+            return;
+        }
+
+        Enter(Fixtures, name, isFixture: true, data: true);
+    }
+
+    /// <summary>
+    /// True when no test method or other test code is running; recorded with the suite's own parallelism, when the flow is
+    /// outside every test. A class instance being prepared does not count: entering a class's own data member marks one
+    /// (<see cref="EnterDataSource"/>), and a shared member the framework enumerates right after it must still get its
+    /// bucket, or its code would go to that class (DataSourceTests).
+    /// </summary>
+    private static bool NoTestCodeRuns() =>
+        ParallelFlows
+            ? BucketForHit() is var bucket && (ReferenceEquals(bucket, Startup) || bucket.IsFixture)
+            : Volatile.Read(ref _testCodeDepth) == 0;
+
+    /// <summary>
     /// Makes code outside every test the current bucket. Called at the start of a test data source
     /// that several test classes use: its rows serve all of them, so the map must not credit them to
     /// one, and code that ran outside every test is answered by the safe fallback rules instead.

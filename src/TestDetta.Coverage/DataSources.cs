@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Mono.Cecil;
+using TestDetta.Core;
 
 namespace TestDetta.Coverage;
 
@@ -40,14 +41,17 @@ internal static class DataSources
         "MethodDataSource", "InstanceMethodDataSource", "ClassDataSource");
 
     /// <summary>
-    /// Data source methods of <paramref name="module"/> and the test class each one serves: the runtime
-    /// name of the only concrete class that uses it, or null when several classes, an abstract base or
-    /// a generic class use it. The data then counts as code outside every test, which coverage does not
-    /// answer for.
+    /// Data source methods of <paramref name="module"/> and the bucket each one serves: the runtime name of the only concrete
+    /// class that uses it; for one several classes use, or an abstract base declares, a shared bucket
+    /// (<see cref="CoverageMap.DataSourcePrefix"/> and the member's declaring type) whose users go into <paramref name="sharedUsers"/>, the
+    /// classes naming it and every concrete class deriving from one that does; or null when a generic class is among them,
+    /// whose runtime names the map may spell otherwise. The data then counts as code outside every test, which coverage does
+    /// not answer for.
     /// </summary>
     /// <param name="module">Test module.</param>
     /// <param name="isTestClass">True for the module's test classes.</param>
-    public static Dictionary<MethodDefinition, string?> Find(ModuleDefinition module, Func<TypeDefinition, bool> isTestClass)
+    /// <param name="sharedUsers">Users of each shared bucket (runtime names); filled in.</param>
+    public static Dictionary<MethodDefinition, string?> Find(ModuleDefinition module, Func<TypeDefinition, bool> isTestClass, Dictionary<string, List<string>> sharedUsers)
     {
         var users = new Dictionary<MethodDefinition, HashSet<TypeDefinition>>();
         var bases = new HashSet<TypeDefinition>();
@@ -89,13 +93,14 @@ internal static class DataSources
             }
         }
 
+        var derived = Derived(module);
         var sources = new Dictionary<MethodDefinition, string?>();
         foreach (var (method, classes) in users)
         {
             var only = classes.Count == 1 ? classes.First() : null;
             var user = only is { IsAbstract: false, HasGenericParameters: false } && !bases.Contains(only)
                 ? only.FullName.Replace('/', '+')
-                : null;
+                : Shared(method, classes, derived, sharedUsers);
             sources[method] = user;
 
             // An iterator's body runs in its state machine, after the method has returned.
@@ -109,6 +114,102 @@ internal static class DataSources
         }
 
         return sources;
+    }
+
+    /// <summary>
+    /// The shared bucket of a data member several classes use, with its concrete users added to <paramref name="sharedUsers"/>;
+    /// null when a generic class is among them or none is concrete.
+    /// </summary>
+    /// <param name="method">The data member.</param>
+    /// <param name="owners">Test classes naming it in a data attribute.</param>
+    /// <param name="derived">Each type's direct subclasses in the module.</param>
+    /// <param name="sharedUsers">Users of each shared bucket; updated in place.</param>
+    private static string? Shared(MethodDefinition method, HashSet<TypeDefinition> owners, Dictionary<TypeDefinition, List<TypeDefinition>> derived, Dictionary<string, List<string>> sharedUsers)
+    {
+        var concrete = new SortedSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<TypeDefinition>(owners);
+        var seen = new HashSet<TypeDefinition>();
+        while (pending.TryPop(out var type))
+        {
+            if (!seen.Add(type))
+            {
+                continue;
+            }
+
+            if (type.HasGenericParameters)
+            {
+                return null;
+            }
+
+            // A static class (abstract and sealed, as an F# module compiles) holds tests of its own.
+            if (!type.IsAbstract || type.IsSealed)
+            {
+                concrete.Add(type.FullName.Replace('/', '+'));
+            }
+
+            foreach (var child in derived.GetValueOrDefault(type) ?? [])
+            {
+                pending.Push(child);
+            }
+        }
+
+        if (concrete.Count == 0)
+        {
+            return null;
+        }
+
+        // One bucket per type: a [ClassData] type's members, and the members of a type several classes share, serve the same
+        // users; an iterator's state machine belongs to the type around it. A base type's member in another module (the
+        // object constructor) is no code of the repository.
+        var declaring = method.DeclaringType;
+        while (declaring.IsNested && declaring.Name.StartsWith('<'))
+        {
+            declaring = declaring.DeclaringType;
+        }
+
+        if (declaring.Module != owners.First().Module)
+        {
+            return null;
+        }
+
+        var bucket = CoverageMap.DataSourcePrefix + declaring.FullName.Replace('/', '+');
+        if (!sharedUsers.TryGetValue(bucket, out var known))
+        {
+            sharedUsers[bucket] = known = [];
+        }
+
+        foreach (var user in concrete)
+        {
+            if (!known.Contains(user, StringComparer.Ordinal))
+            {
+                known.Add(user);
+            }
+        }
+
+        return bucket;
+    }
+
+    /// <summary>Each type's direct subclasses declared in <paramref name="module"/>.</summary>
+    /// <param name="module">Test module.</param>
+    private static Dictionary<TypeDefinition, List<TypeDefinition>> Derived(ModuleDefinition module)
+    {
+        var derived = new Dictionary<TypeDefinition, List<TypeDefinition>>();
+        foreach (var type in module.GetTypes())
+        {
+            if (type.BaseType is not { } baseType || baseType.Module != module || baseType.Resolve() is not { } resolved)
+            {
+                continue;
+            }
+
+            if (!derived.TryGetValue(resolved, out var children))
+            {
+                derived[resolved] = children = [];
+            }
+
+            children.Add(type);
+        }
+
+        return derived;
     }
 
     /// <summary>Adds the data sources named by <paramref name="attributes"/> with <paramref name="owner"/> as a user.</summary>

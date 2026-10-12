@@ -105,6 +105,44 @@ missed it. Since 2026-10-12 the constructor marker (`EnterFixtureInstance`) keep
 call stack shows the test's own code below it (`CalledFromRunningTest`, as for a shared data member): a fixture the
 framework builds still enters its own bucket, also when a framework builds it while preparing a test class.
 
+## Shared data sources (2026-10-11)
+
+A test data member (`[ClassData]`, `[MemberData]`, `[TestCaseSource]` and the like) that one class uses was already
+credited to that class; one that several classes use, or an abstract base declares, counted as code outside every test,
+so coverage did not answer for what it ran or the values it read (GraphQL's `GraphQLSerializersTestData`, the
+`[ClassData]` of 13 classes, enumerated while xUnit discovers tests and again while it formats the test names).
+
+`DataSources.Find` now gives such a member a bucket of its own, `[data-source]` and the type declaring it
+(`CoverageMap.DataSourcePrefix`; an iterator's state machine belongs to the type around it), entered through
+`TestDettaTracker.EnterSharedDataSource` with the guard `EnterAmbient` has (a test calling the member itself keeps its
+bucket). Its users go into the map (`dataSourceUsers`): the classes naming it in a data attribute and every concrete
+class deriving from one that does, found by the recorder in the test assembly, so a class two levels below the base that
+declares the data is among them although it never names that base. The selection reads them as a fixture's users
+(`CoverageSelection.ClassesUsing`). A member a generic class uses keeps the old rule (its runtime names may differ from
+the map's), and so does a map recorded before (no `dataSourceUsers`).
+
+## Test framework extensions the repository ships (2026-10-12)
+
+Some repositories ship extensions of a test framework and use them on their own tests: AutoFixture's
+`AutoFixture.NUnit4.AutoDataAttribute` builds a `Fixture` while NUnit builds the test cases, FsCheck's
+`FsCheck.Xunit.PropertyAttribute` reads its configuration and runs the properties through its own runner, and a test
+project may declare its own attributes (GraphQL's `TheoryExAttribute`). That code ran outside every test, and with it
+everything it called (AutoFixture's whole `Fixture`), so coverage could not answer for any of it. Found with the probe
+that writes the stack of every read outside the tests.
+
+`ExtensionAttributes.Find` reads the test assemblies before instrumenting and collects the attribute types of the
+repository (declared in a test module or another repository assembly; `System.*` and `Microsoft.CodeAnalysis.*` ones,
+which the compiler embeds, left out) that the tests put on test classes, test methods or their parameters, with their
+users: those classes and every concrete class deriving from one. Each such attribute type, the closures and state
+machines inside it too, gets the shared bucket of data sources (`[data-source]` and the type), so what it runs counts
+for its users. Its methods are not counted as third-party callbacks (run-once code) any more: the framework keeps what
+they build for those classes alone. The bucket is entered only while no test code runs: a test of the extension itself
+calls it through the framework's own API (AutoFixture's `AutoDataAttributeTest` calls `BuildFrom`), where the stack shows
+the framework first, and the first version, guarded by the stack alone, switched there and credited the rest of that test
+to the attribute's users (6 of 56 FsCheck mutants and 3 of 71 AutoFixture ones missed in its measurement). A static class
+counts as a user (an F# module compiles to an abstract sealed class: FsCheck's `Internals`, whose properties use
+`[<Property>]`, was left out and missed 2). An attribute a generic class uses keeps the old rule.
+
 ## Pools and caches in collections (2026-10-02)
 
 The same "built for one, reused by others" shape without a framework: a hand-rolled pool keeps

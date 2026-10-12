@@ -79,6 +79,12 @@ public sealed record CoverageMap(
     /// </summary>
     public const string SetUpScopePrefix = "[setup-scope]";
 
+    /// <summary>
+    /// Before a fixture name that stands for a test data member several classes use (<c>[ClassData]</c> or <c>[MemberData]</c>
+    /// of a shared type or an abstract base): its users are in <see cref="DataSourceUsers"/>, not found by name.
+    /// </summary>
+    public const string DataSourcePrefix = "[data-source]";
+
     /// <summary>Test project path relative to the repository root.</summary>
     public string TestProject => Header.TestProject;
 
@@ -287,6 +293,14 @@ public sealed record CoverageMap(
     /// measure how common that is; selection does not read it. Null for maps recorded before it was kept.
     /// </summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>>? LeakedReads { get; init; }
+
+    /// <summary>
+    /// The test classes (runtime names) that use each shared data source bucket (<see cref="DataSourcePrefix"/>), as the
+    /// recorder found them: the classes naming it in a data attribute, those deriving from an abstract one included. Its
+    /// code, run while the framework discovers tests, serves them alone. Null for maps recorded before (their shared data
+    /// counted as code outside every test).
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>>? DataSourceUsers { get; init; }
 
     /// <summary>
     /// Methods (indexes into <see cref="Methods"/>) whose users no recording at <see cref="Commit"/> could name: members that

@@ -64,7 +64,7 @@ internal sealed partial class CoverageSelection
             if (request.CoverageMaps.TryGetValue(test.Project.Path, out var map) && map.FailedClasses is not null)
             {
                 var project = test.Project.Path;
-                _maps[project] = new CoverageIndex(map, fixture => ClassesUsing(index, project, fixture));
+                _maps[project] = new CoverageIndex(map, fixture => ClassesUsing(index, project, fixture, map));
             }
         }
     }
@@ -78,8 +78,15 @@ internal sealed partial class CoverageSelection
     /// <param name="index">Indexed source code.</param>
     /// <param name="project">Normalized test project path.</param>
     /// <param name="fixture">Fixture name from the map, such as <c>App.Tests.ApiHost`1[App.Tests.BlogProfile]</c>.</param>
-    private static List<string> ClassesUsing(SourceIndex index, string project, string fixture)
+    /// <param name="map">The test project's map, which names the users of a shared data source (<see cref="CoverageMap.DataSourceUsers"/>).</param>
+    private static List<string> ClassesUsing(SourceIndex index, string project, string fixture, CoverageMap map)
     {
+        // The recorder named who uses a shared data member; none known leaves its code to the rules for code outside every test.
+        if (fixture.StartsWith(CoverageMap.DataSourcePrefix, StringComparison.Ordinal))
+        {
+            return map.DataSourceUsers?.GetValueOrDefault(fixture) is { } users ? [.. users] : [];
+        }
+
         var classes = new List<string>();
         if (fixture.StartsWith(CoverageMap.SetUpScopePrefix, StringComparison.Ordinal))
         {
@@ -169,7 +176,7 @@ internal sealed partial class CoverageSelection
 
         foreach (var (fixture, fixtureSeconds) in timings.FixtureSeconds)
         {
-            if (ClassesUsing(_index, project, fixture).Exists(selected.Contains))
+            if (ClassesUsing(_index, project, fixture, _maps[project].Map).Exists(selected.Contains))
             {
                 seconds += fixtureSeconds;
             }
