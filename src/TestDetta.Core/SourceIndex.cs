@@ -111,8 +111,8 @@ internal sealed record IndexedType(
     public IReadOnlyList<DeclarationSpan> Spans { get; init; } = [];
 
     /// <summary>
-    /// True for a C# record, class or struct whose members only carry data: positional parameters and auto-properties,
-    /// no method, constructor body, accessor body, field, event or nested type (in every partial part). Its metadata is
+    /// True for a C# record, class or struct without a base list whose members only carry data: positional parameters and
+    /// auto-properties, no method, constructor body, accessor body, field, event or nested type (in every partial part). Its metadata is
     /// what a change to it alters: code that uses it runs its constructor or accessors, which coverage sees, or reads its
     /// shape, which the recording sees when it tracks shape reads (docs/design/shape-reads.md). False elsewhere.
     /// </summary>

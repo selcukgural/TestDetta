@@ -253,13 +253,16 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     private sealed record ParsedFile(string Path, CompilationUnitSyntax Root);
 
     /// <summary>
-    /// True for a record, class or struct declaration whose members are only auto-properties (positional parameters
-    /// included); see <see cref="IndexedType.CarriesDataOnly"/>. A partial part with anything else makes the type false.
+    /// True for a record, class or struct declaration without a base list whose members are only auto-properties
+    /// (positional parameters included); see <see cref="IndexedType.CarriesDataOnly"/>. A partial part with anything else
+    /// makes the type false. A base type or interface rules it out: an attribute class's metadata (<c>[AttributeUsage]</c>)
+    /// acts where other types are read, which a shape read of those types does not name (Autofac's
+    /// <c>ValidatedNotNullAttribute</c> in the 2026-10-12 measurement).
     /// </summary>
     /// <param name="node">A type declaration.</param>
     private static bool CarriesDataOnly(MemberDeclarationSyntax node) =>
         node is RecordDeclarationSyntax or ClassDeclarationSyntax or StructDeclarationSyntax
-        && node is TypeDeclarationSyntax type
+        && node is TypeDeclarationSyntax { BaseList: null } type
         && type.Members.All(static m => m is PropertyDeclarationSyntax { ExpressionBody: null, AccessorList.Accessors: var accessors }
                                         && accessors.All(static a => a.Body is null && a.ExpressionBody is null));
 

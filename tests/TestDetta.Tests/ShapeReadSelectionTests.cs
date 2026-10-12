@@ -80,6 +80,18 @@ public sealed class ShapeReadSelectionTests : IDisposable
         Assert.True(Runs(Select(), "Lib.Tests.PingTests"));
     }
 
+    [Fact]
+    public void An_attribute_class_is_no_data_carrier()
+    {
+        // Its metadata acts where other types are read, which no shape read of it names.
+        _repo.Write("src/Lib/Detail.cs", "namespace Lib; public sealed record Detail(int Id, string Name) : System.Attribute;");
+        _repo.Commit("attribute");
+        WriteMap(tracksShapes: true, schemaRead: [CoverageMap.OutputShapePrefix + "Lib.Detail"], ambient: []);
+        _repo.Write("src/Lib/Detail.cs", "namespace Lib; [System.AttributeUsage(System.AttributeTargets.Class)] public sealed record Detail(int Id, string Name) : System.Attribute;");
+
+        Assert.True(Runs(Select(), "Lib.Tests.PingTests"));
+    }
+
     private static bool Runs(TestProjectSelection selection, string testClass) =>
         selection.Mode == TestRunMode.All || selection.TestClasses.Contains(testClass);
 
