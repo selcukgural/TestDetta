@@ -463,8 +463,8 @@ public static class TestDettaTracker
     /// Records that the current bucket read the shape of a type: called before a reflection or schema call of instrumented
     /// code, repository or third-party, with its first two arguments (the object first). A <see cref="Type"/>, a member (its
     /// declaring type) or a serializer's type metadata (its <c>Type</c>) among them stands for the type; each repository
-    /// type is recorded with <see cref="ShapePrefix"/>, with the repository types its properties and fields hold, two levels
-    /// down, since a schema lists them too.
+    /// type is recorded with <see cref="ShapePrefix"/>, with its repository base types and the repository types its
+    /// properties and fields hold, two levels down, since a schema lists them too.
     /// </summary>
     /// <param name="first">The call's first argument, or the object it is called on.</param>
     /// <param name="second">Its second argument, or null.</param>
@@ -547,6 +547,13 @@ public static class TestDettaTracker
             }
 
             names.Add(ShapePrefix + (type.FullName ?? type.Name));
+
+            // Inherited members are part of the shape a reader sees.
+            if (type.BaseType is { } baseType)
+            {
+                pending.Enqueue((baseType, depth));
+            }
+
             if (depth == 2)
             {
                 continue;
