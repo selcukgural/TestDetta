@@ -381,12 +381,79 @@ internal sealed partial class CoverageSelection
         // map are traced by name apart. Markdig.Signed compiles Markdig's files a second time and no test references it;
         // left unanswered, its copy's spread marked members test classes name, and ran 163 of 177 classes on every change
         // (docs/design/twin-owners.md).
+        // A type that only carries data changes its metadata alone: code that uses it runs its constructor or accessors,
+        // whose users were selected above, or reads its shape, which a map that tracks shape reads names. The name trace
+        // through the code that names it (endpoint registrations every host runs) is then not needed
+        // (docs/design/shape-reads.md).
+        var shapeAnswered = change.MetadataChanged && unresolved is null && typeUsersKnown
+                            && _index.FindType(change.TypeName) is { CarriesDataOnly: true }
+                            && SelectShapeReaders(change.TypeName, owner);
         var reason = unresolved
                      ?? (!typeUsersKnown ? "a member of its type ran outside any test"
-                         : change.MetadataChanged ? "its metadata changed"
+                         : change.MetadataChanged && !shapeAnswered ? "its metadata changed"
                          : null);
         return reason is null || Unanswered(change, reason);
     }
+
+    /// <summary>
+    /// Selects, in every affected test project with a map downstream of <paramref name="owner"/>, the classes that read
+    /// the shape of <paramref name="typeName"/> and the users of a fixture whose setup read it. False, having selected
+    /// nothing, when some map cannot say: it did not track shape reads, or read the shape outside every test or while
+    /// initializing what its tests share.
+    /// </summary>
+    /// <param name="typeName">Qualified name of a type that only carries data.</param>
+    /// <param name="owner">Project that compiles it.</param>
+    private bool SelectShapeReaders(string typeName, ProjectNode owner)
+    {
+        var shape = CoverageMap.OutputShapePrefix + typeName;
+        var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
+        var readerCount = 0;
+        foreach (var project in _graph.WithDependents([owner.Path]))
+        {
+            if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var index))
+            {
+                continue;
+            }
+
+            var map = index.Map;
+            if (_runsCompletely.Contains(project) || !map.TracksShapeReads || map.OutputUses is not { } uses
+                || uses.Ambient.Contains(shape) || uses.Initialization.Contains(shape))
+            {
+                LogShapeUnanswered(typeName, project);
+                return false;
+            }
+
+            var readers = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (testClass, used) in uses.Classes)
+            {
+                if (used.Contains(shape))
+                {
+                    readers.Add(testClass);
+                }
+            }
+
+            foreach (var (fixture, used) in uses.Fixtures)
+            {
+                if (used.Contains(shape))
+                {
+                    readers.UnionWith(ClassesUsing(_index, project, fixture, map));
+                }
+            }
+
+            answers.Add((project, readers));
+            readerCount += readers.Count;
+        }
+
+        SelectAll(answers, $"read the shape of {typeName}, whose metadata changed");
+        LogShapeAnswered(typeName, readerCount);
+        return true;
+    }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} only carries data: {Readers} class(es) read its shape; the name trace through code that names it is not needed")]
+    private partial void LogShapeAnswered(string typeName, int readers);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{TypeName} only carries data, but the map of {Project} cannot say who read its shape; traced by name")]
+    private partial void LogShapeUnanswered(string typeName, string project);
 
     /// <summary>
     /// Selects the test classes that ran a lambda or local function written in the reached member

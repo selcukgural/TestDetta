@@ -229,6 +229,11 @@ public static class CoverageMapStore
             json.WriteEndArray();
         }
 
+        if (map.TracksShapeReads)
+        {
+            json.WriteBoolean("tracksShapeReads"u8, true);
+        }
+
         if (map.OutputLoadsUnseen is { } loadsUnseen)
         {
             json.WriteStartArray("outputLoadsUnseen"u8);
@@ -416,6 +421,7 @@ public static class CoverageMapStore
                 FileReadsUnseen = root.TryGetProperty("fileReadsUnseen", out var unseen)
                     ? [.. unseen.EnumerateArray().Select(static a => a.GetString()!)]
                     : null,
+                TracksShapeReads = root.TryGetProperty("tracksShapeReads", out var shapes) && shapes.GetBoolean(),
                 OutputLoadsUnseen = root.TryGetProperty("outputLoadsUnseen", out var loadsUnseen)
                     ? [.. loadsUnseen.EnumerateArray().Select(static a => a.GetString()!)]
                     : null,

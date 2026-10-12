@@ -1,7 +1,7 @@
 # Shape reads: which classes read a type's shape
 
-Status: the recording half, 2026-10-12 (branch feat/shape-reads). The selection rule that would use it narrows, so the
-owner decides it after measurement (below).
+Status: recording on branch feat/shape-reads; the selection rule on feat/shape-rule, built for measurement with the
+owner's approval (2026-10-12). It narrows, so it merges only after the owner has seen the measurement.
 
 ## Problem
 
@@ -45,9 +45,16 @@ unrelated one record only `shape:Program` (the test factory reflects over the en
 - A cache across classes: a document generated once and served from a host that several classes share (a collection
   fixture, a static host) is read by the first class only. Per-class hosts (`IClassFixture`, AfterApply) read it per class.
 
-## Proposed rule (not decided)
+## Rule (feat/shape-rule, being measured)
 
-For changed metadata of a type whose members only carry data: the classes that ran its constructor or accessors, the
-classes that read its shape (`shape:`), and the users of a shared host or fixture one of them used, instead of the name
-trace through the code that names it. Measured before deciding: AfterApply (a clone, never the working copy), the shape
-mutants (#42: attribute-removed, unsealed) on the corpus, and the experiment.
+For changed metadata of a type that only carries data (`IndexedType.CarriesDataOnly`: positional parameters and
+auto-properties, nothing else in any part), `CoverageSelection.SelectShapeReaders` selects, besides the classes that ran
+its members, the classes that read its shape and the users of a fixture whose setup read it, and the change is not
+traced through the code that names it. It keeps the name trace when a downstream map did not track shape reads
+(`CoverageMap.TracksShapeReads`, written by the recorder) or saw the shape read outside every test or while initializing.
+Experiment: 2 of 3 classes (the one serializing the record and the one reading the OpenAPI document; the full run fails
+only the latter), where the name trace through `<Main>$` ran all 3. `ShapeReadSelectionTests`.
+
+Not yet covered: a document cached in a host several classes share through a collection fixture (only the first reader
+is recorded); a class fixture per class, as AfterApply's, is not affected. Measured before deciding: AfterApply (a clone,
+never the working copy), the shape mutants (#42: attribute-removed, unsealed) on the corpus, and the experiment.

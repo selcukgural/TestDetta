@@ -252,6 +252,17 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
     /// <param name="Root">Compilation unit.</param>
     private sealed record ParsedFile(string Path, CompilationUnitSyntax Root);
 
+    /// <summary>
+    /// True for a record, class or struct declaration whose members are only auto-properties (positional parameters
+    /// included); see <see cref="IndexedType.CarriesDataOnly"/>. A partial part with anything else makes the type false.
+    /// </summary>
+    /// <param name="node">A type declaration.</param>
+    private static bool CarriesDataOnly(MemberDeclarationSyntax node) =>
+        node is RecordDeclarationSyntax or ClassDeclarationSyntax or StructDeclarationSyntax
+        && node is TypeDeclarationSyntax type
+        && type.Members.All(static m => m is PropertyDeclarationSyntax { ExpressionBody: null, AccessorList.Accessors: var accessors }
+                                        && accessors.All(static a => a.Body is null && a.ExpressionBody is null));
+
     /// <summary>Indexes the declarations and top-level statements of one parse of a file.</summary>
     /// <param name="file">The parse.</param>
     /// <param name="owner">Project that compiles the file.</param>
@@ -279,6 +290,7 @@ internal sealed partial class SourceIndexBuilder(ILogger logger)
                     node.AttributeLists.Count > 0 || node is BaseTypeDeclarationSyntax { BaseList: not null })
                 {
                     Spans = owner.IsTestProject ? [Span(file, declaration.Node)] : [],
+                    CarriesDataOnly = CarriesDataOnly(node),
                 });
             }
 

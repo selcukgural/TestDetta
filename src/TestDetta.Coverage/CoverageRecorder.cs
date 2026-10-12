@@ -296,6 +296,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 DataSourceUsers = instrumentation.DataSourceUsers.Count > 0 ? instrumentation.DataSourceUsers : null,
                 LeakedReads = LeakedReads(resultsFiles, instrumentation.Fields),
                 OutputLoadsUnseen = LoadsUnseen(resultsFiles),
+                TracksShapeReads = true,
                 Timings = suiteParallelism ? null : map.Timings,
                 ExternalCallbacks = instrumentation.ExternalCallbacks,
                 NestedMethods = instrumentation.NestedMethods,

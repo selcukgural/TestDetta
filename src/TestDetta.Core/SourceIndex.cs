@@ -109,6 +109,14 @@ internal sealed record IndexedType(
     /// (docs/design/unrecorded-classes.md). Empty for other types.
     /// </summary>
     public IReadOnlyList<DeclarationSpan> Spans { get; init; } = [];
+
+    /// <summary>
+    /// True for a C# record, class or struct whose members only carry data: positional parameters and auto-properties,
+    /// no method, constructor body, accessor body, field, event or nested type (in every partial part). Its metadata is
+    /// what a change to it alters: code that uses it runs its constructor or accessors, which coverage sees, or reads its
+    /// shape, which the recording sees when it tracks shape reads (docs/design/shape-reads.md). False elsewhere.
+    /// </summary>
+    public bool CarriesDataOnly { get; init; }
 }
 
 /// <summary>The lines a type declaration covers in one file, attributes and braces included.</summary>
@@ -156,7 +164,11 @@ internal sealed class SourceIndex
         foreach (var type in types.Values)
         {
             _typesByName[type.TypeName] = _typesByName.TryGetValue(type.TypeName, out var existing)
-                ? existing with { MayBeFoundByReflection = existing.MayBeFoundByReflection || type.MayBeFoundByReflection }
+                ? existing with
+                {
+                    MayBeFoundByReflection = existing.MayBeFoundByReflection || type.MayBeFoundByReflection,
+                    CarriesDataOnly = existing.CarriesDataOnly && type.CarriesDataOnly,
+                }
                 : type;
         }
 
