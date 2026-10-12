@@ -349,13 +349,21 @@ public static class TestDettaTracker
 
         var bucket = BucketForHit();
         Mark(bucket.Bits, word, bit);
-        if (IsBetweenTests(bucket))
+        var between = IsBetweenTests(bucket);
+        if (between)
         {
             MarkBetween(word, bit);
             Mark(InitializationBits, word, bit);
         }
 
         Remember(id);
+        if (PlatformChannelDiag.Enabled)
+        {
+            PlatformChannelDiag.Note(id, ReferenceEquals(bucket, Startup) ? PlatformChannelDiag.Channel.Startup
+                : Current.Value is null ? PlatformChannelDiag.Channel.HostThread
+                : between ? PlatformChannelDiag.Channel.Between
+                : PlatformChannelDiag.Channel.InTest);
+        }
     }
 
     /// <summary>
@@ -1732,6 +1740,11 @@ public static class TestDettaTracker
     /// <param name="path">Results file.</param>
     internal static void WriteResults(string path)
     {
+        if (PlatformChannelDiag.Enabled)
+        {
+            PlatformChannelDiag.Write();
+        }
+
         lock (Gate)
         {
             // Close the time of the bucket still current; a later call (process exit after the
