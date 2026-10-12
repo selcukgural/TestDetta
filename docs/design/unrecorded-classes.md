@@ -137,6 +137,9 @@ rule 2 finds no orphan anchors and skips as before.
 ## Tests
 
 - `TrxReport`: skipped classes from TRX and NUnit XML.
+- A shard report cut off while being written (a test host killed mid-write, one of MSBuild's shards on
+  2026-10-12) counts as no report (`CoverageRecorder.ReadReport`): the skipped classes are unknown, and a failed
+  shard leaves every class untrusted, instead of the whole recording failing.
 - `CoverageMapStore`: the new fields round-trip; old maps read as null.
 - PDB anchors: a compiled class, a nested class, an async test method.
 - Selection: skipped class on the same and on another platform; renamed class matched to its

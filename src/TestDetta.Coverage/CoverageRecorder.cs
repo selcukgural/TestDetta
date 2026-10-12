@@ -838,7 +838,29 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
 
         TestReports.Collect(context.Mode, request.RepoRoot, reportName, reportDirectory);
-        return new ShardResult(exitCode, written, TrxReport.Read(reportDirectory));
+        return new ShardResult(exitCode, written, ReadReport(reportDirectory, writer));
+    }
+
+    /// <summary>
+    /// The shard's test report, read as no report when it is not well-formed XML: a test host that crashed or was killed
+    /// while writing it leaves it cut off (one of MSBuild's shards ended its TRX inside an attribute). Thrown, it failed the
+    /// whole recording; without a report the shard counts as one that wrote none, so a failed shard leaves every class
+    /// untrusted and the map unused for selection (<see cref="Untrusted"/>), and no class counts as known to be skipped
+    /// (<see cref="Skipped"/>).
+    /// </summary>
+    /// <param name="directory">The shard's report directory.</param>
+    /// <param name="output">The shard's output, which says the report was not read.</param>
+    internal static TrxOutcome? ReadReport(string directory, TextWriter output)
+    {
+        try
+        {
+            return TrxReport.Read(directory);
+        }
+        catch (System.Xml.XmlException exception)
+        {
+            output.WriteLine($"TestDetta could not read this run's test report ({exception.Message}); it counts as a run without one");
+            return null;
+        }
     }
 
     /// <summary>
