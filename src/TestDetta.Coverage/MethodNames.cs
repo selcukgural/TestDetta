@@ -9,6 +9,9 @@ namespace TestDetta.Coverage;
 /// </summary>
 internal static class MethodNames
 {
+    /// <summary>The compiled name of the method that holds a program's top-level statements.</summary>
+    private const string TopLevelStatements = "<Main>$";
+
     /// <summary>
     /// The source member a compiled method belongs to. Compiler-generated code is attributed to the
     /// member it came from: <c>&lt;Run&gt;d__3.MoveNext</c> (async/iterator), <c>&lt;&gt;c.&lt;Run&gt;b__0_0</c>
@@ -87,13 +90,24 @@ internal static class MethodNames
         return name;
     }
 
-    /// <summary>The member between angle brackets of a generated name (<c>&lt;Run&gt;b__0_0</c> gives <c>Run</c>), or null.</summary>
+    /// <summary>
+    /// The member between angle brackets of a generated name (<c>&lt;Run&gt;b__0_0</c> gives <c>Run</c>), or null. The
+    /// method of top-level statements, <c>&lt;Main&gt;$</c>, is that member itself, as the source index names it, and so is
+    /// <c>&lt;Main&gt;</c>, the entry point the compiler adds when they are async: both stay <c>&lt;Main&gt;$</c>. Read as
+    /// generated code they became <c>Main</c>, which no declaration has, so a class whose host ran the top-level statements
+    /// (registrations, <c>Produces&lt;T&gt;()</c>) but none of their lambdas never matched a change to them.
+    /// </summary>
     /// <param name="name">Type or method name.</param>
     private static string? GeneratedMemberName(string name)
     {
         if (!name.StartsWith('<'))
         {
             return null;
+        }
+
+        if (name is TopLevelStatements or "<Main>")
+        {
+            return TopLevelStatements;
         }
 
         // Names may nest, as in "<<Main>$>g__Local|0_0": match the bracket that closes the first one.
