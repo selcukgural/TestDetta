@@ -47,3 +47,7 @@ then emptied.
 - Evidence: a test class selected because it read a value the changed member helped build (a field another class
   filled) now says "read a value built by …, which changed" instead of "ran …", which it never did; the selection is
   the same.
+- Recording: calls that enumerate loaded assemblies or an assembly's types (`AppDomain.GetAssemblies`,
+  `AssemblyLoadContext.Assemblies`, `Assembly.GetTypes`, `GetExportedTypes`, `DefinedTypes`, `ExportedTypes`) are recorded
+  in test code and in third-party code, so a class that inspects a plugin an earlier class loaded is selected when the
+  plugin changes; before, only the class that loaded it was.

@@ -68,8 +68,6 @@ internal static class FileReadCalls
     /// Methods that start a process or load an assembly, by declaring type and name, every overload:
     /// their first two arguments (the object first, for an instance method) go to
     /// <see cref="TestDettaTracker.OutputUsed"/>, which finds the paths and names among them.
-    /// <c>AppDomain.GetAssemblies</c> is one too: code that enumerates the loaded assemblies may use any of
-    /// them, so the tracker names every one loaded at that moment (docs/design/loaded-outputs.md).
     /// </summary>
     private static readonly FrozenSet<string> Starters = FrozenSet.Create(
         StringComparer.Ordinal,
@@ -82,8 +80,24 @@ internal static class FileReadCalls
         "System.Runtime.Loader.AssemblyLoadContext::LoadFromAssemblyName",
         "System.Runtime.Loader.AssemblyLoadContext::LoadFromNativeImagePath",
         "System.AppDomain::ExecuteAssembly",
-        "System.AppDomain::ExecuteAssemblyByName",
-        "System.AppDomain::GetAssemblies");
+        "System.AppDomain::ExecuteAssemblyByName");
+
+    /// <summary>
+    /// Methods that enumerate the loaded assemblies or the types of one assembly, by declaring type and name: the object
+    /// they are called on goes to <see cref="TestDettaTracker.OutputScanned"/>, which names the assemblies it stands for
+    /// as scanned. Code that enumerates them may use any of them, as a plugin host finds a plugin's types, and an
+    /// assembly is loaded once per process: a class that finds a plugin an earlier class loaded and inspects its types
+    /// makes no load call the recording could see, but makes one of these (docs/design/loaded-outputs.md). They are
+    /// wrapped in third-party code too, where a plugin host or a scanning library makes the call.
+    /// </summary>
+    private static readonly FrozenSet<string> Scanners = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "System.AppDomain::GetAssemblies",
+        "System.Runtime.Loader.AssemblyLoadContext::get_Assemblies",
+        "System.Reflection.Assembly::GetTypes",
+        "System.Reflection.Assembly::GetExportedTypes",
+        "System.Reflection.Assembly::get_DefinedTypes",
+        "System.Reflection.Assembly::get_ExportedTypes");
 
     /// <summary>
     /// The part of <see cref="Starters"/> that loads an assembly by its name rather than by a path: reported through
@@ -98,23 +112,27 @@ internal static class FileReadCalls
 
     /// <summary>
     /// True when <paramref name="module"/> references a method whose calls <see cref="Wrap"/> reports as
-    /// a file read or a directory listing. Reads only the member reference table, no method body, so a
-    /// third-party assembly that reads no file costs almost nothing to check.
+    /// a file read, a directory listing or a scan of loaded assemblies. Reads only the member reference table, no
+    /// method body, so a third-party assembly that does neither costs almost nothing to check.
     /// </summary>
     /// <param name="module">Module to look at.</param>
     public static bool ReferencesReaders(ModuleDefinition module) =>
-        module.GetMemberReferences().OfType<MethodReference>().Any(static m => Directory(m) is not null);
+        module.GetMemberReferences().OfType<MethodReference>().Any(static m => Directory(m) is not null || IsScanner(m));
 
-    /// <summary>Wraps every file-reading, process-starting and assembly-loading call in the bodies of <paramref name="module"/>.</summary>
+    /// <summary>
+    /// Wraps every file-reading, process-starting, assembly-loading and assembly-scanning call in the bodies of
+    /// <paramref name="module"/>.
+    /// </summary>
     /// <param name="module">Module being instrumented.</param>
     /// <param name="files">References to the tracker's file probes in the module.</param>
     /// <param name="outputs">
     /// References to the tracker's output probes in the module; null to leave process starts and
     /// assembly loads alone, as in third-party code, where the test platform loading the test assembly would
-    /// look like a use of the test project's output.
+    /// look like a use of the test project's output. Scans (<see cref="Scanners"/>) are wrapped either way.
     /// </param>
+    /// <param name="scanned">Reference to <see cref="TestDettaTracker.OutputScanned"/> in the module.</param>
     /// <returns>The number of calls wrapped.</returns>
-    public static int Wrap(ModuleDefinition module, FileProbes files, OutputProbes? outputs)
+    public static int Wrap(ModuleDefinition module, FileProbes files, OutputProbes? outputs, MethodReference scanned)
     {
         TypeDefinition? holder = null;
         var wrappers = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
@@ -131,7 +149,8 @@ internal static class FileReadCalls
                 }
 
                 var starter = outputs is not null && IsStarter(target);
-                if (!starter && Directory(target) is null)
+                var scanner = !starter && IsScanner(target);
+                if (!starter && !scanner && Directory(target) is null)
                 {
                     continue;
                 }
@@ -140,8 +159,10 @@ internal static class FileReadCalls
                 if (!wrappers.TryGetValue(key, out var wrapper))
                 {
                     holder ??= AddHolder(module);
-                    var probe = starter && NameLoaders.Contains($"{target.DeclaringType.FullName}::{target.Name}") ? outputs!.LoadedByName : outputs?.Used;
-                    wrapper = starter
+                    var probe = scanner ? scanned
+                        : starter && NameLoaders.Contains($"{target.DeclaringType.FullName}::{target.Name}") ? outputs!.LoadedByName
+                        : outputs?.Used;
+                    wrapper = starter || scanner
                         ? Wrapper(module, holder, target, instruction.OpCode, probe!, wrappers.Count, arguments: 2)
                         : Wrapper(module, holder, target, instruction.OpCode, FileProbe(target, files), wrappers.Count, arguments: 1);
                     wrappers[key] = wrapper;
@@ -182,6 +203,13 @@ internal static class FileReadCalls
         && target.DeclaringType is not GenericInstanceType
         && Starters.Contains($"{target.DeclaringType.FullName}::{target.Name}");
 
+    /// <summary>True for a call that enumerates loaded assemblies or an assembly's types; see <see cref="Scanners"/>.</summary>
+    /// <param name="target">The called method.</param>
+    private static bool IsScanner(MethodReference target) =>
+        target is not GenericInstanceMethod
+        && target.DeclaringType is not GenericInstanceType
+        && Scanners.Contains($"{target.DeclaringType.FullName}::{target.Name}");
+
     /// <summary>Adds the internal static type that holds the wrappers.</summary>
     /// <param name="module">Module being instrumented.</param>
     private static TypeDefinition AddHolder(ModuleDefinition module)
@@ -199,7 +227,8 @@ internal static class FileReadCalls
     /// A static method with the arguments of <paramref name="target"/> (the object first, for an
     /// instance method) and its result (the new object, for a constructor) that reports the path
     /// argument through <paramref name="probe"/> and then makes the call as <paramref name="opCode"/> did.
-    /// A probe of two arguments gets the first two (boxed, null when there is no second).
+    /// A probe of objects gets as many of the first arguments as it takes (boxed, null where the call has fewer): two for a
+    /// start or load, the object called on for a scan.
     /// </summary>
     /// <param name="module">Module being instrumented.</param>
     /// <param name="holder">Type that holds the wrappers.</param>
@@ -207,7 +236,7 @@ internal static class FileReadCalls
     /// <param name="opCode">The original call instruction's opcode.</param>
     /// <param name="probe">Tracker method that takes the path.</param>
     /// <param name="number">A number that makes the wrapper's name unique.</param>
-    /// <param name="arguments">How many arguments <paramref name="probe"/> takes: the path, or the first two as objects.</param>
+    /// <param name="arguments">1 when <paramref name="probe"/> takes the path; otherwise it takes the first arguments as objects.</param>
     private static MethodDefinition Wrapper(ModuleDefinition module, TypeDefinition holder, MethodReference target, OpCode opCode, MethodReference probe, int number, int arguments)
     {
         var constructor = opCode.Code == Code.Newobj;
@@ -233,7 +262,7 @@ internal static class FileReadCalls
         }
         else
         {
-            for (var i = 0; i < arguments; i++)
+            for (var i = 0; i < probe.Parameters.Count; i++)
             {
                 if (i >= wrapper.Parameters.Count)
                 {

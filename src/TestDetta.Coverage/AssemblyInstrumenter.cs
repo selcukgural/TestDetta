@@ -130,8 +130,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
     /// <summary>
     /// Rewrites the third-party assemblies that call a file-read or directory method so that each such call
-    /// reports its path first, exactly as in repository code, and nothing else: no probes, no ids, no
-    /// process-start or assembly-load wrappers (docs/design/non-code-files.md). A snapshot library reading
+    /// reports its path first, exactly as in repository code, and the calls that scan loaded assemblies or an
+    /// assembly's types (a plugin host finding a plugin an earlier class loaded, docs/design/loaded-outputs.md), and
+    /// nothing else: no probes, no ids, no process-start or assembly-load wrappers (docs/design/non-code-files.md). A snapshot library reading
     /// <c>*.verified.txt</c>, or a configuration provider reading <c>appsettings.json</c>, then shows in the
     /// map under the class or fixture that ran it. An assembly that reads no file is only opened, not
     /// rewritten. One that cannot be rewritten (mixed-mode code, a write error) is put back as it was and
@@ -218,7 +219,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         FileReadCalls.Wrap(
             module,
             Files(tracker),
-            outputs: null);
+            outputs: null,
+            Probe(tracker, nameof(TestDettaTracker.OutputScanned)));
         module.Write(path);
     }
 
@@ -435,7 +437,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         FileReadCalls.Wrap(
             module,
             Files(tracker),
-            new OutputProbes(used, productCode ? Probe(tracker, nameof(TestDettaTracker.OutputLoadedByName)) : used));
+            new OutputProbes(used, productCode ? Probe(tracker, nameof(TestDettaTracker.OutputLoadedByName)) : used),
+            Probe(tracker, nameof(TestDettaTracker.OutputScanned)));
         module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
     }
 

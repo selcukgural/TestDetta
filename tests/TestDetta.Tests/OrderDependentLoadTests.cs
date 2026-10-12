@@ -1,3 +1,5 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.Logging.Abstractions;
 using TestDetta.Core;
 using TestDetta.Coverage;
@@ -9,8 +11,9 @@ namespace TestDetta.Tests;
 /// an earlier class loaded, without a call the recording sees, is not recorded as its user. Here <c>ALoaderTests</c> loads a
 /// plugin referenced only for build order, and <c>BShapeTests</c>, which runs after it, finds the loaded plugin through
 /// <c>AssemblyLoadContext.Assemblies</c> and checks the shape of its types without running any of their code. A new type
-/// that breaks the check fails <c>BShapeTests</c> in a full run, while the selection runs only <c>ALoaderTests</c>.
-/// Slow: builds, records and runs the tests.
+/// that breaks the check fails <c>BShapeTests</c> in a full run; the selection ran only <c>ALoaderTests</c> until scans
+/// of loaded assemblies and of an assembly's types were recorded (<c>TestDettaTracker.OutputScanned</c>), in the test's
+/// own code and in a third-party plugin host alike. Slow: builds and records.
 /// </summary>
 [Trait("Category", "Slow")]
 public sealed class OrderDependentLoadTests : IDisposable
@@ -20,13 +23,30 @@ public sealed class OrderDependentLoadTests : IDisposable
     public void Dispose() => _repo.Dispose();
 
     [Fact]
-    public void A_class_that_inspects_a_plugin_an_earlier_class_loaded_is_selected_when_the_plugin_changes()
+    public void A_class_that_inspects_a_plugin_an_earlier_class_loaded_is_selected_when_the_plugin_changes() =>
+        AssertInspectorSelected("""
+            var plugin = AssemblyLoadContext.Default.Assemblies.Single(static a => a.GetName().Name == "Plugin");
+            Assert.All(plugin.GetExportedTypes(), static t => Assert.True(t.IsSealed, t.FullName));
+            """, vendor: false);
+
+    [Fact]
+    public void A_class_that_inspects_it_through_a_third_party_host_is_selected_too() =>
+        AssertInspectorSelected("""
+            Assert.All(Vendor.PluginHost.TypesOf("Plugin"), static t => Assert.True(t.IsSealed, t.FullName));
+            """, vendor: true);
+
+    private void AssertInspectorSelected(string inspection, bool vendor)
     {
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
         _repo.Write("tools/Plugin/Plugin.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
         _repo.Write("tools/Plugin/Plugins.cs", """namespace Plugin; public sealed class Greeter { public string Name() => "greeter"; }""");
-        _repo.Write("tests/Host.Tests/Host.Tests.csproj", """
+        if (vendor)
+        {
+            WriteVendorHost(Path.Combine(_repo.Root, "lib", "Vendor.dll"));
+        }
+
+        _repo.Write("tests/Host.Tests/Host.Tests.csproj", $$"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
               <ItemGroup>
@@ -34,10 +54,11 @@ public sealed class OrderDependentLoadTests : IDisposable
                 <PackageReference Include="xunit" Version="2.9.3" />
                 <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
                 <ProjectReference Include="../../tools/Plugin/Plugin.csproj" ReferenceOutputAssembly="false" />
+                {{(vendor ? """<Reference Include="Vendor" HintPath="../../lib/Vendor.dll" />""" : "")}}
               </ItemGroup>
             </Project>
             """);
-        _repo.Write("tests/Host.Tests/Tests.cs", """
+        _repo.Write("tests/Host.Tests/Tests.cs", $$"""
             using System.Reflection;
             using System.Runtime.Loader;
             using Xunit;
@@ -66,8 +87,7 @@ public sealed class OrderDependentLoadTests : IDisposable
                 [Fact]
                 public void Every_plugin_type_is_sealed()
                 {
-                    var plugin = AssemblyLoadContext.Default.Assemblies.Single(static a => a.GetName().Name == "Plugin");
-                    Assert.All(plugin.GetExportedTypes(), static t => Assert.True(t.IsSealed, t.FullName));
+                    {{inspection}}
                 }
             }
             """);
@@ -81,6 +101,7 @@ public sealed class OrderDependentLoadTests : IDisposable
 
         Assert.True(passed, output.ToString());
         Assert.Contains("Plugin", map.OutputUses!.Classes["Host.Tests.ALoaderTests"]);
+        Assert.Contains(CoverageMap.OutputScanPrefix + "Plugin", map.OutputUses.Classes["Host.Tests.BShapeTests"]);
         Assert.True(map.KnowsLoadsOf(["Plugin"]));
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
@@ -91,7 +112,46 @@ public sealed class OrderDependentLoadTests : IDisposable
             """);
         var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();
 
-        Assert.Contains("Host.Tests.ALoaderTests", selection.TestClasses);
-        Assert.True(selection.Mode == TestRunMode.All || selection.TestClasses.Contains("Host.Tests.BShapeTests"), $"{selection.Mode}: {selection.Reason}");
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Host.Tests.ALoaderTests", "Host.Tests.BShapeTests"], selection.TestClasses.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Compiles a plugin host standing in for a package: it finds a loaded assembly among all loaded ones and lists its
+    /// exported types, the calls a third-party scanner makes.
+    /// </summary>
+    /// <param name="path">Where the library goes.</param>
+    private static void WriteVendorHost(string path)
+    {
+        // Against the reference pack, as a package is built: the test project compiles against it in turn.
+        var dotnetRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "..", "..", ".."));
+        var referencePack = Directory.GetDirectories(Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref"))
+            .Select(static d => Path.Combine(d, "ref", "net10.0", "System.Runtime.dll"))
+            .Where(File.Exists)
+            .Order(StringComparer.Ordinal)
+            .Last();
+        var compilation = CSharpCompilation.Create(
+            "Vendor",
+            [CSharpSyntaxTree.ParseText("""
+                namespace Vendor;
+                public static class PluginHost
+                {
+                    public static System.Type[] TypesOf(string name)
+                    {
+                        foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+                        {
+                            if (assembly.GetName().Name == name) { return assembly.GetExportedTypes(); }
+                        }
+
+                        return [];
+                    }
+                }
+                """)],
+            [MetadataReference.CreateFromFile(referencePack)],
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var pe = File.Create(path);
+        var emitted = compilation.Emit(pe);
+        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics));
     }
 }

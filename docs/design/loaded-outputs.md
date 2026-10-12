@@ -92,10 +92,18 @@ once-per-process shape does not apply. Plugins loaded into the process: NLog's e
 their code is a recorded loader), Autofac's `LoadContextScopeTests` (one class), Serilog's `TestDummies` (one
 recorded loader, four more classes ran its code; to look at).
 
-Candidate signal, which only adds users: wrap the calls that enumerate loaded assemblies or an assembly's types
-(`AssemblyLoadContext.Assemblies`/`All`, `Assembly.GetTypes`/`GetExportedTypes`/`DefinedTypes`/`ExportedTypes`) in
-repository and third-party code, recording the class as a scan user of the assembly the call names. The call happens
-in each class that inspects, so the order no longer decides. Not decided; measured first.
+**Signal (owner, 2026-10-12; branch feat/enumeration-scans, being measured).** The calls that enumerate loaded
+assemblies or one assembly's types (`AppDomain.GetAssemblies`, `AssemblyLoadContext.Assemblies`, `Assembly.GetTypes`,
+`GetExportedTypes`, `DefinedTypes`, `ExportedTypes`; `FileReadCalls.Scanners`) go to their own probe,
+`TestDettaTracker.OutputScanned`, with the object they are called on, in repository and in third-party code. Every
+assembly it stands for is recorded for the bucket as a scan (`scan:<name>`), which the rules for outputs found at run
+time count. The call happens in each class that inspects, so the order no longer decides; it only adds users.
+`AssemblyLoadContext.All` lists contexts, not assemblies: code that goes on to their `Assemblies` is seen there.
+A separate probe because the first argument of a load (`AssemblyLoadContext.LoadFromAssemblyPath`) is a context too,
+and a load is no scan of everything the context holds. `OrderDependentLoadTests` covers both: the inspection in the
+test's own code and through a third-party plugin host (a library compiled in the test); with the third-party calls
+left unwrapped the second fails. Still open: `Module.GetTypes`, a `Type` kept from an earlier class (a static cache of
+plugin types), and reflection over a type found by name (`Assembly.GetType(name)`).
 
 ## Measurement (2026-10-10/11, fresh recordings, one repository at a time on an idle machine)
 
