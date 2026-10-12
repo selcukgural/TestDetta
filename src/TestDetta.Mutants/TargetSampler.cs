@@ -98,6 +98,14 @@ internal sealed record ReplayedMutant(string Target, MutantKind Kind);
 /// </summary>
 internal static class TargetSampler
 {
+    /// <summary>
+    /// The member of a program's top-level statements, as the recording and the source index name it. They join the
+    /// sample only when <see cref="SampleRequest.TypePattern"/> names them (<c>--target 'Program.&lt;Main&gt;$'</c>), so the
+    /// samples of earlier runs stay as they were: a class whose host ran them but none of their lambdas was missed until
+    /// 2026-10-12, and no sampled mutant could show it.
+    /// </summary>
+    private const string TopLevelStatements = "<Main>$";
+
     /// <summary>Picks up to <see cref="SampleRequest.Count"/> targets.</summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root.</param>
@@ -105,11 +113,14 @@ internal static class TargetSampler
     /// <param name="request">How many and how.</param>
     public static List<SyntheticTarget> Sample(ProjectGraph graph, string repoRoot, IReadOnlySet<CoveredMethod> covered, SampleRequest request)
     {
-        var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue), request.Framework);
         MutantKind[] methodKinds = [.. request.Kinds.Where(static k => k != MutantKind.FieldValue).Order()];
         var pattern = request.TypePattern is { } glob
             ? new System.Text.RegularExpressions.Regex("^" + System.Text.RegularExpressions.Regex.Escape(glob).Replace(@"\*", ".*", StringComparison.Ordinal) + "$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)
             : null;
+        var topLevelName = $"{DeclarationWalker.TopLevelProgramType}.{TopLevelStatements}";
+        var topLevel = (pattern is not null && methodKinds.Contains(MutantKind.Throw) && pattern.IsMatch(topLevelName))
+                       || request.Replay?.Any(r => r.Target == topLevelName) == true;
+        var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue), request.Framework, topLevel);
         if (request.Replay is { } replay)
         {
             return Replayed(candidates, covered, replay);
@@ -137,8 +148,11 @@ internal static class TargetSampler
                 continue;
             }
 
-            // A field is covered when the constructor that sets it ran.
-            var kind = isField ? MutantKind.FieldValue : methodKinds[(int)(StableKey(member, request.Seed, "kind") % (ulong)methodKinds.Length)];
+            // A field is covered when the constructor that sets it ran. Top-level statements only throw: any other kind
+            // can end the program before it builds its host, which a test factory then waits for.
+            var kind = isField ? MutantKind.FieldValue
+                : member.MemberName == TopLevelStatements ? MutantKind.Throw
+                : methodKinds[(int)(StableKey(member, request.Seed, "kind") % (ulong)methodKinds.Length)];
             var isCovered = covered.Contains(isField ? new CoveredMethod(member.TypeName, ".cctor") : member)
                             || (isField && covered.Contains(new CoveredMethod(member.TypeName, ".ctor")));
             var target = new SyntheticTarget(member, edits, isCovered) { Kind = kind };
@@ -254,7 +268,8 @@ internal static class TargetSampler
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="withFields">True to add fields with a constant initial value.</param>
     /// <param name="framework">Target framework of the run, whose preprocessor symbols C# files are read with; null for none.</param>
-    private static Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot, bool withFields, string? framework)
+    /// <param name="withTopLevel">True to add the top-level statements of a program (<see cref="TopLevelStatements"/>).</param>
+    private static Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot, bool withFields, string? framework, bool withTopLevel)
     {
         var candidates = new Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?>();
         var testProjects = graph.Projects.Where(static p => p.IsTestProject).Select(static p => p.Path).ToHashSet(StringComparer.Ordinal);
@@ -281,6 +296,12 @@ internal static class TargetSampler
             }
 
             var root = DeclarationWalker.Parse(SourceText.From(text), SymbolsFor(graph, file, framework));
+            if (withTopLevel && root is CompilationUnitSyntax { Members: var members } && members.OfType<GlobalStatementSyntax>().FirstOrDefault() is { } first)
+            {
+                // An empty statement before the first one: the analysis sees the program changed, the build would not.
+                Merge(candidates, new CoveredMethod(DeclarationWalker.TopLevelProgramType, TopLevelStatements), [new SourceEdit(file, first.SpanStart, "; ")]);
+            }
+
             foreach (var declaration in DeclarationWalker.Collect(root).Values)
             {
                 if (withFields && FieldEdit(file, declaration) is { } field)
