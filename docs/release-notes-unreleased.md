@@ -20,38 +20,56 @@ then emptied.
 
 ## Changes
 
-- Recording: each shard of a parallel recording gets its own temporary directory, so fixtures that claim or clean fixed
-  names there no longer fail each other; NuGet's lock folder stays shared (`NUGET_SCRATCH`), so tests that restore
-  packages in two shards at once no longer fail on its HTTP cache.
-- Selection, more precise: F# modules with only compiler attributes (`AutoOpen`, `RequireQualifiedAccess`,
-  `CompilationRepresentation`); a project that compiles another's files again and no test references
-  (`Markdig.Signed`); Castle DynamicProxy interceptors, which run per call; reflection-found types in plugins the tests
-  load by path; assemblies a framework loads by name to find modules (Carter's module catalog), which no longer select
-  every class that loaded them; `File.Exists` on a build output, which is no read of it (NUnit's engine checks every
-  library of the dependency context whenever the runtime cannot resolve a name).
-- Analysis: a `PackageReference` to a package the repository itself makes (the id or assembly name of one of its
-  projects) counts as a reference to that project when some project's references also reach that project, since NuGet
-  then uses the project in place of the package. Changes to such a project now reach the projects that take it as a
-  package.
-- Recording: what a test fixture's `Dispose` runs counts for the classes that use the fixture, not as code outside
-  every test, so changes to code it reaches select those classes instead of being traced by name (xUnit class fixtures).
-- Selection, safer: the classes the map says ran a changed member of a type that may be found through reflection are
+### Safer: tests that were missed are selected
+
+- **Top-level statements.** The code of a program's top-level statements (`Program.cs` of a minimal API) is recorded
+  under the name the analysis gives it. A test class whose host ran it but none of its lambdas, such as one that only
+  reads the OpenAPI document, was not selected for a change named there (a response record behind `Produces<T>()`).
+- **A test that builds a fixture type itself** keeps what follows in its own class, and counts as a user of the
+  fixture, whose bucket also gets what follows: a fixture type that shares what its first instance builds (a server
+  cached per fixture type, FastEndpoints' `AppFixture`) no longer misses its users when such a test ran first.
+- **Types that may be found through reflection:** the classes the map says ran a changed member of such a type are
   always selected.
-- Recording: a test data member several classes use (`[ClassData]`, a shared `[MemberData]` source) and a test framework
-  extension the repository ships and puts on its own tests (AutoFixture's `[AutoData]`, FsCheck's `[Property]`) count
-  for the classes that use them, not as code outside every test. Maps record their users (`dataSourceUsers`); a map
-  from an earlier version has none and selects as before.
-- Recording: a test that builds a fixture type itself keeps what follows in its own class, instead of crediting it to
-  the fixture's users; a shard whose test report was cut off counts as one without a report instead of failing the
-  recording.
-- Evidence: a test class selected because it read a value the changed member helped build (a field another class
-  filled) now says "read a value built by …, which changed" instead of "ran …", which it never did; the selection is
-  the same.
-- Recording: calls that enumerate loaded assemblies or an assembly's types (`AppDomain.GetAssemblies`,
-  `AssemblyLoadContext.Assemblies`, `Assembly.GetTypes`, `GetExportedTypes`, `DefinedTypes`, `ExportedTypes`) are recorded
-  in test code and in third-party code, so a class that inspects a plugin an earlier class loaded is selected when the
-  plugin changes; before, only the class that loaded it was. A class that reads a value such a class built (types kept
-  in a static cache) counts as a user too.
-- Recording, safer: the code of a program's top-level statements (`Program.cs` of a minimal API) is recorded under the
-  name the analysis gives it. A test class whose host ran it but none of its lambdas, such as one that only reads the
-  OpenAPI document, was not selected for a change named there (a response record behind `Produces<T>()`).
+- **A package the repository makes itself:** a `PackageReference` to the id or assembly name of one of the repository's
+  projects counts as a reference to that project when other references also reach it, since NuGet then builds the
+  project in place of the package. Changes to it now reach the projects that take it as a package.
+
+- **A plugin an earlier class loaded:** calls that enumerate loaded assemblies or an assembly's types
+  (`AppDomain.GetAssemblies`, `AssemblyLoadContext.Assemblies`, `Assembly.GetTypes`, `GetExportedTypes`, `DefinedTypes`,
+  `ExportedTypes`) are recorded in test code and in third-party code, so a class that inspects a plugin another class
+  loaded is selected when the plugin changes; before, only the class that loaded it was. A scan inside a cache fill
+  counts for the class that filled it, and a class that reads a value such a class built (types kept in a static
+  cache) counts as a user too.
+
+- **Metadata read through reflection:** calls that read a type's shape (`Type.GetProperties`, `GetCustomAttributes`,
+  System.Text.Json's schema exporter and the like), in test code and in third-party code, are recorded for the
+  repository types they read, base types included. A change to a type's metadata (an attribute, a parameter) selects
+  the classes that read its shape: OData's routing reads the attributes of a base controller through the controllers
+  derived from it, and two classes doing so were missed.
+
+### More precise: fewer tests run that a change cannot affect
+
+- **Test fixtures:** what a fixture's `Dispose` runs counts for the classes that use the fixture (xUnit class fixtures),
+  not as code outside every test.
+- **Shared test data and the repository's own test extensions:** a data member several classes use (`[ClassData]`, a
+  shared `[MemberData]` source) and a test framework extension the repository ships and puts on its own tests
+  (AutoFixture's `[AutoData]`, FsCheck's `[Property]`) count for the classes that use them.
+- **F#, plugins, catalogs and proxies:** F# modules with only compiler attributes (`AutoOpen`, `RequireQualifiedAccess`,
+  `CompilationRepresentation`); a project that compiles another's files again and no test references (`Markdig.Signed`);
+  Castle DynamicProxy interceptors, which run per call; reflection-found types in plugins the tests load by path;
+  assemblies a framework loads by name to find modules (Carter's module catalog), which no longer select every class
+  that loaded them; `File.Exists` on a build output, which is no read of it (NUnit's engine checks every library of the
+  dependency context whenever the runtime cannot resolve a name).
+
+### Recording
+
+- Each shard of a parallel recording gets its own temporary directory, so fixtures that claim or clean fixed names
+  there no longer fail each other; NuGet's lock folder stays shared (`NUGET_SCRATCH`), so tests that restore packages in
+  two shards at once no longer fail on its HTTP cache.
+- A shard whose test report was cut off while it was written counts as one without a report (its classes are selected
+  whenever their project is affected) instead of failing the whole recording.
+
+### Evidence
+
+- A test class selected because it read a value the changed member helped build (a field another class filled) now
+  says "read a value built by …, which changed" instead of "ran …", which it never did; the selection is the same.

@@ -49,7 +49,8 @@ internal sealed record EvalOptions(EvalTarget Target, RunSettings Run, string Ou
                                  written to the reports; give the same number to compare two builds)
           --replay <file>        Evaluate the changes of an earlier synthetic.json (or its folder) again, the
                                  same members with the same kinds, instead of sampling
-          --mutant-kinds <list>  throw, return-default, flip-branch, field-value, or all (default: throw)
+          --mutant-kinds <list>  throw, return-default, flip-branch, field-value, or all (default: throw); the
+                                 shape kinds attribute-removed and unsealed, or shape for both, only when named
           --mutant-parallelism <n>  Run n synthetic mutants at once on the clone (default: 1); needs the
                                  schema, and falls back to 1 when parallel runs of the suite interfere
           --map-age <n>          Also select each synthetic change with maps recorded n first-parent commits

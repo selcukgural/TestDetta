@@ -98,6 +98,14 @@ internal sealed record ReplayedMutant(string Target, MutantKind Kind);
 /// </summary>
 internal static class TargetSampler
 {
+    /// <summary>
+    /// The member of a program's top-level statements, as the recording and the source index name it. They join the
+    /// sample only when <see cref="SampleRequest.TypePattern"/> names them (<c>--target 'Program.&lt;Main&gt;$'</c>), so the
+    /// samples of earlier runs stay as they were: a class whose host ran them but none of their lambdas was missed until
+    /// 2026-10-12, and no sampled mutant could show it.
+    /// </summary>
+    private const string TopLevelStatements = "<Main>$";
+
     /// <summary>Picks up to <see cref="SampleRequest.Count"/> targets.</summary>
     /// <param name="graph">Projects of the repository.</param>
     /// <param name="repoRoot">Repository root.</param>
@@ -105,15 +113,26 @@ internal static class TargetSampler
     /// <param name="request">How many and how.</param>
     public static List<SyntheticTarget> Sample(ProjectGraph graph, string repoRoot, IReadOnlySet<CoveredMethod> covered, SampleRequest request)
     {
-        var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue), request.Framework);
-        MutantKind[] methodKinds = [.. request.Kinds.Where(static k => k != MutantKind.FieldValue).Order()];
+        MutantKind[] methodKinds = [.. request.Kinds.Where(MutantKinds.IsMethodKind).Order()];
         var pattern = request.TypePattern is { } glob
             ? new System.Text.RegularExpressions.Regex("^" + System.Text.RegularExpressions.Regex.Escape(glob).Replace(@"\*", ".*", StringComparison.Ordinal) + "$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)
             : null;
+        var topLevelName = $"{DeclarationWalker.TopLevelProgramType}.{TopLevelStatements}";
+        var topLevel = (pattern is not null && methodKinds.Contains(MutantKind.Throw) && pattern.IsMatch(topLevelName))
+                       || request.Replay?.Any(r => r.Target == topLevelName) == true;
+        var candidates = Candidates(graph, repoRoot, request.Kinds.Contains(MutantKind.FieldValue), request.Framework, topLevel);
+
+        // Shape candidates are read only when a shape kind is asked for, so other samples stay exactly as they were.
+        HashSet<MutantKind> shapeKinds = request.Replay is { } replayed
+            ? [.. replayed.Select(static r => r.Kind).Where(MutantKinds.IsShape)]
+            : [.. request.Kinds.Where(MutantKinds.IsShape)];
+        var shapes = shapeKinds.Count == 0 ? [] : ShapeMutants.Candidates(TestedFiles(graph, repoRoot), graph, shapeKinds, request.Framework);
         if (request.Replay is { } replay)
         {
-            return Replayed(candidates, covered, replay);
+            return Replayed(candidates, shapes, covered, replay);
         }
+
+        var coveredTypes = shapes.Count == 0 ? [] : ShapeMutants.TypesOf(covered);
 
         var coveredPool = new List<SyntheticTarget>();
         var otherPool = new List<SyntheticTarget>();
@@ -137,11 +156,25 @@ internal static class TargetSampler
                 continue;
             }
 
-            // A field is covered when the constructor that sets it ran.
-            var kind = isField ? MutantKind.FieldValue : methodKinds[(int)(StableKey(member, request.Seed, "kind") % (ulong)methodKinds.Length)];
+            // A field is covered when the constructor that sets it ran. Top-level statements only throw: any other kind
+            // can end the program before it builds its host, which a test factory then waits for.
+            var kind = isField ? MutantKind.FieldValue
+                : member.MemberName == TopLevelStatements ? MutantKind.Throw
+                : methodKinds[(int)(StableKey(member, request.Seed, "kind") % (ulong)methodKinds.Length)];
             var isCovered = covered.Contains(isField ? new CoveredMethod(member.TypeName, ".cctor") : member)
                             || (isField && covered.Contains(new CoveredMethod(member.TypeName, ".ctor")));
             var target = new SyntheticTarget(member, edits, isCovered) { Kind = kind };
+            (target.Covered ? coveredPool : otherPool).Add(target);
+        }
+
+        foreach (var (member, shape) in shapes.OrderBy(static c => c.Key.TypeName, StringComparer.Ordinal).ThenBy(static c => c.Key.MemberName, StringComparer.Ordinal))
+        {
+            if (pattern is not null && !pattern.IsMatch(member.TypeName) && !pattern.IsMatch($"{member.TypeName}.{member.MemberName}"))
+            {
+                continue;
+            }
+
+            var target = new SyntheticTarget(member, shape.Edits, ShapeMutants.IsCovered(shape, member, covered, coveredTypes)) { Kind = shape.Kind };
             (target.Covered ? coveredPool : otherPool).Add(target);
         }
 
@@ -174,13 +207,17 @@ internal static class TargetSampler
     /// <see cref="MutantKind.FieldValue"/> and a method none of it, as when it was sampled; data files are the evaluator's.
     /// </summary>
     /// <param name="candidates">Every editable member.</param>
+    /// <param name="shapes">Every declaration a shape kind of the replay can change (<see cref="ShapeMutants"/>).</param>
     /// <param name="covered">Members that ran in some test, class, fixture or start-up.</param>
     /// <param name="replay">The earlier sample.</param>
     private static List<SyntheticTarget> Replayed(
         Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> candidates,
+        Dictionary<CoveredMethod, ShapeCandidate> shapes,
         IReadOnlySet<CoveredMethod> covered,
         IReadOnlyList<ReplayedMutant> replay)
     {
+        var shapesByName = shapes.ToDictionary(static s => $"{s.Key.TypeName}.{s.Key.MemberName}", static s => (s.Key, s.Value), StringComparer.Ordinal);
+        var coveredTypes = shapes.Count == 0 ? [] : ShapeMutants.TypesOf(covered);
         var byName = new Dictionary<string, (CoveredMethod Member, bool IsField, List<SourceEdit> Edits)>(StringComparer.Ordinal);
         foreach (var ((member, isField), edits) in candidates)
         {
@@ -193,6 +230,16 @@ internal static class TargetSampler
         var targets = new List<SyntheticTarget>(replay.Count);
         foreach (var (name, kind) in replay)
         {
+            if (MutantKinds.IsShape(kind))
+            {
+                if (shapesByName.TryGetValue(name, out var shape) && shape.Value.Kind == kind)
+                {
+                    targets.Add(new SyntheticTarget(shape.Key, shape.Value.Edits, ShapeMutants.IsCovered(shape.Value, shape.Key, covered, coveredTypes)) { Kind = kind });
+                }
+
+                continue;
+            }
+
             if (kind == MutantKind.EmptyFile || !byName.TryGetValue(name, out var found) || found.IsField != (kind == MutantKind.FieldValue))
             {
                 continue;
@@ -254,18 +301,12 @@ internal static class TargetSampler
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="withFields">True to add fields with a constant initial value.</param>
     /// <param name="framework">Target framework of the run, whose preprocessor symbols C# files are read with; null for none.</param>
-    private static Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot, bool withFields, string? framework)
+    /// <param name="withTopLevel">True to add the top-level statements of a program (<see cref="TopLevelStatements"/>).</param>
+    private static Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?> Candidates(ProjectGraph graph, string repoRoot, bool withFields, string? framework, bool withTopLevel)
     {
         var candidates = new Dictionary<(CoveredMethod Member, bool IsField), List<SourceEdit>?>();
-        var testProjects = graph.Projects.Where(static p => p.IsTestProject).Select(static p => p.Path).ToHashSet(StringComparer.Ordinal);
-        var tested = new Dictionary<string, bool>(StringComparer.Ordinal);
-        foreach (var file in SourceIndexBuilder.EnumerateSourceFiles(Paths.Normalize(repoRoot)))
+        foreach (var file in TestedFiles(graph, repoRoot))
         {
-            if (!graph.ResolveFile(file).Any(o => o.Role == FileRole.Source && IsTestedLibrary(graph, o.Project, testProjects, tested)))
-            {
-                continue;
-            }
-
             var text = File.ReadAllText(file);
             if (FSharpSource.IsSource(file))
             {
@@ -281,6 +322,12 @@ internal static class TargetSampler
             }
 
             var root = DeclarationWalker.Parse(SourceText.From(text), SymbolsFor(graph, file, framework));
+            if (withTopLevel && root is CompilationUnitSyntax { Members: var members } && members.OfType<GlobalStatementSyntax>().FirstOrDefault() is { } first)
+            {
+                // An empty statement before the first one: the analysis sees the program changed, the build would not.
+                Merge(candidates, new CoveredMethod(DeclarationWalker.TopLevelProgramType, TopLevelStatements), [new SourceEdit(file, first.SpanStart, "; ")]);
+            }
+
             foreach (var declaration in DeclarationWalker.Collect(root).Values)
             {
                 if (withFields && FieldEdit(file, declaration) is { } field)
@@ -300,6 +347,31 @@ internal static class TargetSampler
 
         return candidates;
     }
+
+    /// <summary>The source files of library code that some test project depends on, the files a sample can edit.</summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="repoRoot">Repository root.</param>
+    private static IEnumerable<string> TestedFiles(ProjectGraph graph, string repoRoot)
+    {
+        var testProjects = graph.Projects.Where(static p => p.IsTestProject).Select(static p => p.Path).ToHashSet(StringComparer.Ordinal);
+        var tested = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var file in SourceIndexBuilder.EnumerateSourceFiles(Paths.Normalize(repoRoot)))
+        {
+            if (graph.ResolveFile(file).Any(o => o.Role == FileRole.Source && IsTestedLibrary(graph, o.Project, testProjects, tested)))
+            {
+                yield return file;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The preprocessor symbols a C# file is compiled with for <paramref name="framework"/>; see <see cref="SymbolsFor"/>.
+    /// For <see cref="ShapeMutants"/>, which reads the same files.
+    /// </summary>
+    /// <param name="graph">Projects of the repository.</param>
+    /// <param name="file">Normalized file path.</param>
+    /// <param name="framework">Target framework of the run, or null.</param>
+    internal static IReadOnlyCollection<string> Symbols(ProjectGraph graph, string file, string? framework) => SymbolsFor(graph, file, framework);
 
     /// <summary>Adds one declaration's edits to its member's; a member with code that cannot be edited stays null.</summary>
     /// <param name="candidates">Members so far.</param>
@@ -465,7 +537,7 @@ internal static class TargetSampler
     /// null for fields, operators, indexers and finalizers, whose compiled names differ from source.
     /// </summary>
     /// <param name="declaration">A member declaration.</param>
-    private static CoveredMethod? MemberKey(Declaration declaration)
+    internal static CoveredMethod? MemberKey(Declaration declaration)
     {
         if (declaration.MemberName is not { } member
             || declaration.Node is not (MethodDeclarationSyntax or ConstructorDeclarationSyntax or PropertyDeclarationSyntax or EventDeclarationSyntax))

@@ -20,6 +20,20 @@ internal enum MutantKind
     /// not one of the member kinds, so <c>all</c> leaves it out.
     /// </summary>
     EmptyFile,
+
+    /// <summary>
+    /// A shape kind: one custom attribute of a type or member is removed, in source and from the compiled metadata. No
+    /// code changes, so only a test that reads the attribute through reflection can fail (docs/evaluation.md, "Shape
+    /// mutants"). Opt-in: neither the default nor <c>all</c> takes it, so the samples and stored outcomes of earlier
+    /// runs stay as they were.
+    /// </summary>
+    AttributeRemoved,
+
+    /// <summary>
+    /// A shape kind: a sealed class loses <c>sealed</c>, in source and in the compiled metadata. Only a test that checks
+    /// the type's shape through reflection can fail. Opt-in, as <see cref="AttributeRemoved"/>.
+    /// </summary>
+    Unsealed,
 }
 
 /// <summary>Names of <see cref="MutantKind"/> on the command line and in reports.</summary>
@@ -33,7 +47,20 @@ internal static class MutantKinds
         (MutantKind.FlipBranch, "flip-branch"),
         (MutantKind.FieldValue, "field-value"),
         (MutantKind.EmptyFile, "empty-file"),
+        (MutantKind.AttributeRemoved, "attribute-removed"),
+        (MutantKind.Unsealed, "unsealed"),
     ];
+
+    /// <summary>
+    /// True for a kind that changes a declaration's metadata rather than its code. Such a mutant cannot sit behind the
+    /// schema's run-time switch (metadata has no branch to guard), so it is always written in alone.
+    /// </summary>
+    /// <param name="kind">Mutant kind.</param>
+    public static bool IsShape(MutantKind kind) => kind is MutantKind.AttributeRemoved or MutantKind.Unsealed;
+
+    /// <summary>True for a kind a member's method takes: one of <c>all</c>, apart from <see cref="MutantKind.FieldValue"/>.</summary>
+    /// <param name="kind">Mutant kind.</param>
+    public static bool IsMethodKind(MutantKind kind) => kind is MutantKind.Throw or MutantKind.ReturnDefault or MutantKind.FlipBranch;
 
     /// <summary>The name of <paramref name="kind"/>.</summary>
     /// <param name="kind">Mutant kind.</param>
@@ -49,7 +76,10 @@ internal static class MutantKinds
         return match >= 0;
     }
 
-    /// <summary>Parses a comma-separated list such as <c>throw,field-value</c>; <c>all</c> means every kind.</summary>
+    /// <summary>
+    /// Parses a comma-separated list such as <c>throw,field-value</c>; <c>all</c> means every kind that changes code, and
+    /// <c>shape</c> both kinds that change metadata (<see cref="IsShape"/>), which <c>all</c> leaves out.
+    /// </summary>
     /// <param name="value">List from the command line or corpus.</param>
     /// <param name="kinds">Parsed kinds.</param>
     /// <param name="error">The first unknown name.</param>
@@ -61,14 +91,20 @@ internal static class MutantKinds
         {
             if (part == "all")
             {
-                kinds.UnionWith(Names.Select(static n => n.Kind).Where(static k => k != MutantKind.EmptyFile));
+                kinds.UnionWith(Names.Select(static n => n.Kind).Where(static k => k != MutantKind.EmptyFile && !IsShape(k)));
+                continue;
+            }
+
+            if (part == "shape")
+            {
+                kinds.UnionWith(Names.Select(static n => n.Kind).Where(IsShape));
                 continue;
             }
 
             var match = Array.FindIndex(Names, n => n.Kind != MutantKind.EmptyFile && string.Equals(n.Name, part, StringComparison.OrdinalIgnoreCase));
             if (match < 0)
             {
-                error = $"Unknown mutant kind '{part}'; use {string.Join(", ", Names.Select(static n => n.Name))} or all";
+                error = $"Unknown mutant kind '{part}'; use {string.Join(", ", Names.Where(static n => n.Kind != MutantKind.EmptyFile).Select(static n => n.Name))}, all or shape";
                 return false;
             }
 

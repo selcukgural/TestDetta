@@ -104,6 +104,12 @@ internal sealed partial class CoverageSelection
             return classes;
         }
 
+        // A class whose tests built the fixture type themselves uses it too (FastEndpoints' TestServerTests, FixtureA).
+        if (map.FixtureBuilders?.GetValueOrDefault(fixture) is { } builders)
+        {
+            classes.AddRange(builders);
+        }
+
         var names = FixtureNames(fixture);
         foreach (var type in index.Types)
         {

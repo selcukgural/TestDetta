@@ -183,6 +183,17 @@ public static class TestDettaTracker
     private static readonly long[] InitializationBits = new long[Words];
 
     /// <summary>
+    /// The fixture a test built itself (<c>new FixtureA()</c>), which the rest of that test's flow also counts for, the tasks
+    /// it starts included: FastEndpoints keeps one server per fixture type in a static cache, and whichever class first
+    /// awaits it boots the host, so with a test that builds the fixture running first the fixture's own setup ran none of
+    /// the host's start-up and its users were missed (2026-10-12). Null outside such a test; a new entry clears it.
+    /// </summary>
+    private static readonly AsyncLocal<Bucket?> TestBuiltFixture = new();
+
+    /// <summary>Fixture name to the classes whose tests built it themselves: users of the fixture as much as those it is injected into.</summary>
+    private static readonly Dictionary<string, HashSet<string>> FixtureBuilders = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Methods that ran inside an initialization scope whose result was stored into a tracked field
     /// (linked). Declared after <see cref="Words"/>, which static initialization order needs.
     /// </summary>
@@ -349,6 +360,11 @@ public static class TestDettaTracker
 
         var bucket = BucketForHit();
         Mark(bucket.Bits, word, bit);
+        if (TestBuiltFixture.Value is { } built && !ReferenceEquals(built, bucket))
+        {
+            Mark(built.Bits, word, bit);
+        }
+
         if (IsBetweenTests(bucket))
         {
             MarkBetween(word, bit);
@@ -424,7 +440,7 @@ public static class TestDettaTracker
 
         if (names.Count > 0)
         {
-            RecordNames(names);
+            RecordScan(names);
         }
     }
 
@@ -640,6 +656,29 @@ public static class TestDettaTracker
     }
 
     /// <summary>
+    /// Adds scanned names to the current bucket, also inside a cache fill: the class that filled the cache scanned the
+    /// assemblies (Autofac's reflection cache lists a plugin's types inside <c>GetOrAdd</c>), and put in the initialization
+    /// list the scan ran every class of the project for any change to the plugin (Autofac.Specification.Test, 42.3 % to
+    /// 55.8 % in the 2026-10-12 A/B; owner's option a). A later class that reads what the fill stored in a field is found
+    /// through the map's <c>builtValues</c>. Inside a static constructor, which no class may claim, the scan stays
+    /// initialization.
+    /// </summary>
+    /// <param name="names">Names with <see cref="ScanPrefix"/>.</param>
+    private static void RecordScan(HashSet<string> names)
+    {
+        if (_typeInitializerDepth != 0)
+        {
+            RecordNames(names);
+            return;
+        }
+
+        lock (Gate)
+        {
+            BucketForHit().Outputs.UnionWith(names);
+        }
+    }
+
+    /// <summary>
     /// Adds output names to the current bucket, or to the scope or initialization a type initializer or cache fill is
     /// running in, and counts the plain ones as wrapped loads for <see cref="LoadsUnseen"/>.
     /// </summary>
@@ -664,6 +703,7 @@ public static class TestDettaTracker
             if (_typeInitializerDepth == 0 && _cacheDepth == 0)
             {
                 BucketForHit().Outputs.UnionWith(names);
+                TestBuiltFixture.Value?.Outputs.UnionWith(names);
             }
             else if (_scopeCount > 0)
             {
@@ -899,6 +939,7 @@ public static class TestDettaTracker
             if (_typeInitializerDepth == 0 && _cacheDepth == 0)
             {
                 BucketForHit().Files.Add(full);
+                TestBuiltFixture.Value?.Files.Add(full);
             }
             else if (_scopeCount > 0)
             {
@@ -1842,6 +1883,21 @@ public static class TestDettaTracker
         if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
             && CalledFromRunningTest(current.Name, entered: null, current.InstanceType))
         {
+            // The test is a user of the fixture, and what its flow runs from here on serves the fixture's other users too:
+            // a fixture type may share what its first instance built (a cached server) with every later instance.
+            var fixture = FixtureBucket(FixtureName(instance.GetType()));
+            lock (Gate)
+            {
+                if (!FixtureBuilders.TryGetValue(fixture.Name, out var classes))
+                {
+                    classes = new HashSet<string>(StringComparer.Ordinal);
+                    FixtureBuilders[fixture.Name] = classes;
+                }
+
+                classes.Add(current.Name);
+            }
+
+            TestBuiltFixture.Value = fixture;
             return;
         }
 
@@ -1963,6 +2019,19 @@ public static class TestDettaTracker
                 WriteBuckets(json, "classes", Classes);
                 WriteBuckets(json, "fixtures", Fixtures);
                 WriteIds(json, "ambient", Startup.Bits);
+                json.WriteStartObject("fixtureBuilders");
+                foreach (var entry in FixtureBuilders)
+                {
+                    json.WriteStartArray(entry.Key);
+                    foreach (var testClass in entry.Value)
+                    {
+                        json.WriteStringValue(testClass);
+                    }
+
+                    json.WriteEndArray();
+                }
+
+                json.WriteEndObject();
                 WriteIds(json, "initialization", InitializationBits);
                 WriteIds(json, "linked", LinkedBits);
                 WriteIds(json, "unlinked", UnlinkedBits);
@@ -2037,6 +2106,22 @@ public static class TestDettaTracker
         public long ElapsedTicks { get; set; }
     }
 
+    /// <summary>The fixture bucket named <paramref name="name"/>, created when no hit reached it yet, without entering it.</summary>
+    /// <param name="name">Fixture name (<see cref="FixtureName"/>).</param>
+    private static Bucket FixtureBucket(string name)
+    {
+        lock (Gate)
+        {
+            if (!Fixtures.TryGetValue(name, out var bucket))
+            {
+                bucket = new Bucket(name, new long[Words], isFixture: true);
+                Fixtures[name] = bucket;
+            }
+
+            return bucket;
+        }
+    }
+
     /// <summary>Makes the bucket <paramref name="name"/> of <paramref name="buckets"/> current, for this flow and globally.</summary>
     /// <param name="buckets">Class or fixture buckets.</param>
     /// <param name="name">Bucket name.</param>
@@ -2044,6 +2129,7 @@ public static class TestDettaTracker
     /// <param name="data">True when entered for a test data member, which before the first test is discovery.</param>
     private static void Enter(Dictionary<string, Bucket> buckets, string name, bool isFixture, bool data = false)
     {
+        TestBuiltFixture.Value = null;
         // A cache fill or static constructor that threw left its depth up; a new test starts clean.
         _cacheDepth = 0;
         _typeInitializerDepth = 0;
