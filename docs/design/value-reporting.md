@@ -77,7 +77,9 @@ proof. The chain is shortest because the spread is a breadth-first search.
   or Skipped.
 - Evidence:
   - coverage: "ran `Type.Member`, which changed (map `<commit>`)", or for the constructor and
-    static-constructor rules "ran a member of `Type`, whose constructor changed";
+    static-constructor rules "ran a member of `Type`, whose constructor changed"; a class the map credits with the
+    member only through a value it read (`builtValues`: a field another class filled while the member ran) gets
+    "read a value built by `Type.Member`, which changed" instead (2026-10-12; the selection is the same);
   - name: the chain from `ImpactPropagation.Explain`, e.g. "`OrderServiceTests.Adds_tax` names
     Checkout ← `OrderService.Checkout` names Total ← … ← changed `PriceCalculator.Tax(decimal)`";
   - skipped: whether a map was asked.

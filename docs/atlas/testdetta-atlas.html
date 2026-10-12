@@ -1243,7 +1243,7 @@ const CH_MAP = {
       file: "src/TestDetta.Core/CoverageSelection.cs:320",
       input: "Harita: <code>\"classes\": { \"Calc.Tests.TaxTests\": [1] }</code>, <code>methods[1] = [\"Calc.Calculator\", \"Tax\"]</code>",
       output: "<code>true</code>; <code>TaxTests</code> seçildi, kanıt <code>ran Calc.Calculator.Tax, which changed (map 9f3c…)</code>",
-      purpose: "Ana yol: her soru \"sorun yok\" der, haritanın cevabı kesindir ve isim izleme burada durur. <code>AddTests</code> seçilmez.",
+      purpose: "Ana yol: her soru \"sorun yok\" der, haritanın cevabı kesindir ve isim izleme burada durur. <code>AddTests</code> seçilmez. Haritada <code>Tax</code>'a yalnızca <code>builtValues</code> ile bağlı bir sınıf (başka bir sınıfın <code>Tax</code> çalışırken doldurduğu bir alanı okumuş) aynı şekilde seçilir; kanıtı <code>read a value built by Calc.Calculator.Tax, which changed</code> olur, çünkü sınıf o kodu çalıştırmadı (<code>SelectMemberUsers</code>, 2026-10-12; Spectre'de 11 sınıfın 9'u <code>Calendar.GetWeekdays</code>'i \"çalıştırmış\" görünüyordu).",
     },
     {
       title: "Senaryo 2 · Yeni bir metot eklendi", nodes: ["start", "q1", "q2", "q3", "no"], edges: ["t0", "t1", "t2", "n3"],

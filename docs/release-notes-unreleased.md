@@ -44,3 +44,6 @@ then emptied.
 - Recording: a test that builds a fixture type itself keeps what follows in its own class, instead of crediting it to
   the fixture's users; a shard whose test report was cut off counts as one without a report instead of failing the
   recording.
+- Evidence: a test class selected because it read a value the changed member helped build (a field another class
+  filled) now says "read a value built by …, which changed" instead of "ran …", which it never did; the selection is
+  the same.

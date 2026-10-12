@@ -366,7 +366,7 @@ internal sealed partial class CoverageSelection
             // and the classes that ran them through a path no name shows were left out (Argu's CliParser, 4 of 11).
             if (change.Kind != SymbolChangeKind.Added)
             {
-                SelectAll(Answers(change, owner).Answers, $"ran {member}, which changed");
+                SelectMemberUsers(Answers(change, owner).Answers, change, "which changed");
             }
 
             return Unanswered(change, change.Kind == SymbolChangeKind.Added ? "added" : "its type may be found through reflection");
@@ -374,7 +374,7 @@ internal sealed partial class CoverageSelection
 
         var answerSet = Answers(change, owner);
         var (answers, unresolved) = answerSet;
-        SelectAll(answers, reached ? $"ran {member}, which names the changed code" : $"ran {member}, which changed");
+        SelectMemberUsers(answers, change, reached ? "which names the changed code" : "which changed");
         // Changed metadata is read through reflection without running the code: the classes that ran
         // it stay selected, and the change is traced through its type as well. An owner no affected test project with a
         // map depends on has nothing to answer for here: only its dependents can name its code, and the tests without a
@@ -687,6 +687,73 @@ internal sealed partial class CoverageSelection
                 selected.TryAdd(testClass, withMap);
             }
         }
+    }
+
+    /// <summary>
+    /// Adds the classes of every answer about the member <paramref name="change"/> to the selection, as
+    /// <see cref="SelectAll"/> does, with evidence that says how each one depends on it: it ran the member (itself or
+    /// through a fixture it uses), or it only read a value the member helped build (<see cref="CoverageMap.BuiltValues"/>),
+    /// such as a field another class filled. The classes selected are the same either way; only the text differs, so
+    /// the summary does not claim a class ran code the map never saw it run.
+    /// </summary>
+    /// <param name="answers">Classes per test project.</param>
+    /// <param name="change">The changed or reached member, or a changed type.</param>
+    /// <param name="why">What makes the member matter, after its name ("which changed").</param>
+    private void SelectMemberUsers(List<(string Project, IReadOnlySet<string> Classes)> answers, SymbolChange change, string why)
+    {
+        // A change to a type is answered by the classes that ran any of its members; the map keeps no reader view of a type.
+        if (change.MemberName is null)
+        {
+            SelectAll(answers, $"ran {change.TypeName}, {why}");
+            return;
+        }
+
+        var member = $"{change.TypeName}.{change.MemberName}";
+        var names = DeclarationWalker.CompiledNames(change.MemberName);
+        foreach (var (project, classes) in answers)
+        {
+            var map = _maps[project];
+            var ran = new HashSet<string>(StringComparer.Ordinal);
+            var read = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var testClass in classes)
+            {
+                (ReadsOnlyValuesBuiltBy(map, change.TypeName, names, testClass) ? read : ran).Add(testClass);
+            }
+
+            SelectAll([(project, ran)], $"ran {member}, {why}");
+            if (read.Count > 0)
+            {
+                SelectAll([(project, read)], $"read a value built by {member}, {why}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when every overload of the member that <paramref name="testClass"/> depends on in <paramref name="map"/> it
+    /// depends on only through a value the overload helped build, so it ran none of them.
+    /// </summary>
+    /// <param name="map">Coverage of one test project.</param>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="names">The member's compiled names.</param>
+    /// <param name="testClass">Runtime test class name.</param>
+    private static bool ReadsOnlyValuesBuiltBy(CoverageIndex map, string typeName, IReadOnlyList<string> names, string testClass)
+    {
+        var readsAny = false;
+        foreach (var name in names)
+        {
+            if (map.OnlyReadValueBuiltBy(typeName, name, testClass))
+            {
+                readsAny = true;
+                continue;
+            }
+
+            if (map.ClassesSeenRunning(typeName, name).Contains(testClass))
+            {
+                return false;
+            }
+        }
+
+        return readsAny;
     }
 
     /// <summary>The first 12 characters of a commit.</summary>
