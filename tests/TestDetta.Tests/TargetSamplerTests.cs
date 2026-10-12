@@ -207,4 +207,37 @@ public sealed class TargetSamplerTests : IDisposable
     }
 
     public void Dispose() => _repo.Dispose();
+
+    [Fact]
+    public void Top_level_statements_join_only_a_sample_that_targets_them_and_only_throw()
+    {
+        _repo.Write("src/App/App.csproj", """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>""");
+        _repo.Write("src/App/Program.cs", "using System;\nConsole.WriteLine(Lib.Log.Run());\nreturn 0;\n");
+        _repo.Write("tests/App.Tests/App.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" /><ProjectReference Include="../../src/App/App.csproj" /></ItemGroup>
+            </Project>
+            """);
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var kinds = new HashSet<MutantKind> { MutantKind.Throw, MutantKind.ReturnDefault, MutantKind.FlipBranch };
+
+        var plain = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), new SampleRequest(100, Seed: 3) { Kinds = kinds });
+        var targeted = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), new SampleRequest(100, Seed: 3) { Kinds = kinds, TypePattern = "Program.<Main>$" });
+
+        Assert.DoesNotContain(plain, static t => t.Member.MemberName == "<Main>$");
+        var program = Assert.Single(targeted);
+        Assert.Equal(new CoveredMethod("Program", "<Main>$"), program.Member);
+        Assert.Equal(MutantKind.Throw, program.Kind);
+
+        // The edit is an empty statement before the first one, which the analysis reads as a change to the program.
+        var edit = Assert.Single(program.Edits);
+        var text = File.ReadAllText(edit.Path);
+        var edited = text.Insert(edit.Position, edit.Text);
+        Assert.StartsWith("using System;\n; Console.WriteLine", edited, StringComparison.Ordinal);
+        var change = new CodeChangeDetector(NullLogger<CodeChangeDetector>.Instance).Detect("src/App/Program.cs", SourceText.From(text), SourceText.From(edited));
+        Assert.Contains(change.Symbols, static c => c is { TypeName: "Program", MemberName: null });
+
+        var replayed = TargetSampler.Sample(graph, _repo.Root, new HashSet<CoveredMethod>(), new SampleRequest(0, Seed: 0) { Replay = [new ReplayedMutant("Program.<Main>$", MutantKind.Throw)] });
+        Assert.Equal(new CoveredMethod("Program", "<Main>$"), Assert.Single(replayed).Member);
+    }
 }
