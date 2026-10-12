@@ -141,6 +141,14 @@ compiled: none failed a test, and TestDetta selected only the classes that faile
 The headroom report (`~/sift-corpus/notes/headroom.py`, fine-tune plan 2026-10-11) says where to aim: per repository,
 the selection share against the floor (the classes the map says ran the changed member).
 
+**Top-level statements (2026-10-12).** A program's top-level statements (`Program.cs` of a minimal API) are no member
+the sampler reads, so no sampled change ever reached them, and a miss there (the recording named them `Main`, the
+analysis `<Main>$`, #44) could not show. They join the sample only when the target names them,
+`--target 'Program.<Main>$'` (or `'Program*'`), so earlier samples stay as they were; the edit is an empty statement before
+the first one, which the analysis reads as a change to `Program`, and the mutant always throws, since any other kind can
+end the program before it builds its host and leave a test factory waiting. Every program of the repository is one
+candidate: the mutant throws in each `<Main>$` and in their lambdas.
+
 ## Seeds and replays (owner, 2026-10-11)
 
 Up to 2026-10-11 every corpus entry sampled with seed 1, so each round tried the same 100 changes per repository:

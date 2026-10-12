@@ -47,3 +47,6 @@ then emptied.
 - Evidence: a test class selected because it read a value the changed member helped build (a field another class
   filled) now says "read a value built by …, which changed" instead of "ran …", which it never did; the selection is
   the same.
+- Recording, safer: the code of a program's top-level statements (`Program.cs` of a minimal API) is recorded under the
+  name the analysis gives it. A test class whose host ran it but none of its lambdas, such as one that only reads the
+  OpenAPI document, was not selected for a change named there (a response record behind `Produces<T>()`).

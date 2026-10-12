@@ -225,7 +225,8 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 Cleanup();
                 TestReports.Collect(location.Mode, context.RepoRoot, reportName, results);
                 RemoveLeftovers(leftovers, label, project.Path);
-                outcome = TrxReport.Read(results);
+                outcome = ReadOutcome(results, reason => LogUnreadableReport(label, project.Path, reason));
+
                 reportProblem = TestRunCompleteness.ReportProblem(results);
                 if (exitCode == DotnetProcess.TimedOut)
                 {
@@ -353,6 +354,29 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
         process.WaitForExit();
         LogShell(label, process.ExitCode);
     }
+
+    /// <summary>
+    /// The outcome the reports in <paramref name="results"/> give, or null when there is none or one cannot be read: a
+    /// report cut off while it was written (MSBuild's suite, 2026-10-12) is no report, so the run counts as one that wrote
+    /// none (its failures unknown), as in the recorder (<c>CoverageRecorder.ReadReport</c>), instead of failing the evaluation.
+    /// </summary>
+    /// <param name="results">The run's report folder.</param>
+    /// <param name="unreadable">Told why a report could not be read.</param>
+    internal static TrxOutcome? ReadOutcome(string results, Action<string> unreadable)
+    {
+        try
+        {
+            return TrxReport.Read(results);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            unreadable(ex.Message);
+            return null;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Label} run of {Project}: its test report cannot be read ({Reason}); it counts as a run without one")]
+    private partial void LogUnreadableReport(string label, string project, string reason);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Label}: {Project} exited with {ExitCode}")]
     private partial void LogRun(string label, string project, int exitCode);

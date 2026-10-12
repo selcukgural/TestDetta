@@ -36,6 +36,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TestDetta.Tests" />
     <InternalsVisibleTo Include="TestDetta.Eval" />
+    <InternalsVisibleTo Include="TestDetta.Lab" />
   </ItemGroup>
 
 </Project>
