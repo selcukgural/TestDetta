@@ -220,7 +220,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module,
             Files(tracker),
             outputs: null,
-            Probe(tracker, nameof(TestDettaTracker.OutputScanned)));
+            Probe(tracker, nameof(TestDettaTracker.OutputScanned)),
+            Probe(tracker, nameof(TestDettaTracker.ShapeRead)));
         module.Write(path);
     }
 
@@ -329,6 +330,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         var tracker = module.ImportReference(typeof(TestDettaTracker));
         AddCoreLibraryReference(module, tables.CoreLibrary);
+
+        // Tells the tracker a type is the repository's when it records whose shape a reflection call read.
+        module.Types.Add(new TypeDefinition(
+            string.Empty,
+            TestDettaTracker.RepositoryMarker,
+            TypeAttributes.NotPublic | TypeAttributes.Abstract | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit,
+            module.TypeSystem.Object));
         var probes = new Probes(
             Probe(tracker, nameof(TestDettaTracker.Hit)),
             Probe(tracker, nameof(TestDettaTracker.EnterTestInstance)),
@@ -438,7 +446,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             module,
             Files(tracker),
             new OutputProbes(used, productCode ? Probe(tracker, nameof(TestDettaTracker.OutputLoadedByName)) : used),
-            Probe(tracker, nameof(TestDettaTracker.OutputScanned)));
+            Probe(tracker, nameof(TestDettaTracker.OutputScanned)),
+            Probe(tracker, nameof(TestDettaTracker.ShapeRead)));
         module.Write(path, new WriterParameters { WriteSymbols = hasSymbols });
     }
 

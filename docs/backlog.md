@@ -398,6 +398,14 @@ repositories a change touches; the full corpus runs at milestones.
 
 ## Next
 
+- ~~**Shape rule for data-only types**~~ (closed by the owner, 2026-10-12, branch feat/shape-rule kept): measured on
+  AfterApply with podman, it left the record change at 97 of 100 classes, as without it, since every host reads the
+  record's shape at start-up; the change failed none of the 981 tests. AfterApply's width stays a precision gap: what
+  reads the shape at start-up, and whether that can be told from a test depending on it, is open (docs/design/shape-reads.md).
+- **A timing test that fails under heavy load.** `ShadowRunTests.A_checkout_of_the_base_commit_that_runs_out_of_time_leaves_no_worktree_registered`
+  failed twice on 2026-10-12 at load averages of 20 and 50 and passed alone each time (3 of 3). Give it a margin that does
+  not depend on the machine's load.
+
 - ~~**A fixture whose server another class built first (FastEndpoints, 2026-10-12).**~~ Fixed the same day: a test
   that builds a fixture type is its user, and its flow counts for the fixture too (docs/design/between-tests-code.md). `TestServerTests` builds
   `FixtureA` itself (`Only_One_TestServer_Is_Created_Per_Fixture_Type`), and FastEndpoints.Testing keeps one test server

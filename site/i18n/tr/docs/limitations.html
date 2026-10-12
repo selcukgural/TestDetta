@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: b3f39b29d271 -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 65243078a908 -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -13,7 +13,7 @@
 
 <h2 id="map-format">Önceki bir sürümün kaydettiği haritalar</h2>
 <p>Bir harita, kendi sürümündeki kaydedicinin görebildiğini tutar. {{name}}'nin bir sürümü bir şeyi haritanın gösteremeyeceği biçimde farklı kaydettiğinde harita formatını yükseltir ve önceki formattaki haritalar yok sayılır: test projeleri, harita yokmuş gibi isimlerle seçilir; bu da haritalar yeniden kaydedilene kadar daha fazlasını seçer. Yükseltmeden sonra varsayılan branch'teki ilk kayıt yeni haritaları yazar; ondan önce koşan pull request'ler gerekenden fazlasını seçer.</p>
-<p>{{name}} 0.1.x'in kaydettiği haritalar format 2'dir ve sonraki sürümler onları yok sayar. Bir fixture türünü kendisi kuran bir test (<code>new StoreFixture()</code>) artık kodunun geri kalanını kendi sınıfında tutar; format 2 bir harita bu kodu fixture'ın kullanıcılarına yazıp testi kaçırabilirdi.</p>
+<p>{{name}} 0.1.x'in kaydettiği haritalar format 2'dir ve sonraki sürümler onları yok sayar. Bir fixture türünü kendisi kuran bir test (<code>new StoreFixture()</code>) artık kodunun geri kalanını kendi sınıfında tutar; format 2 bir harita bu kodu fixture'ın kullanıcılarına yazıp testi kaçırabilirdi. Kaydedici artık bir türün şeklini yansıma ya da JSON şeması üzerinden okuyan sınıfları da (özniteliklerini, özelliklerini ve taban türlerini) not eder; böylece bu üst veride bir değişiklik onları seçer. Format 2 bir haritada böyle bir kayıt yoktur.</p>
 
 <h2>Süreç başına bir kez çalışan kod</h2>
 <p>Önbellekler, lazy singleton'lar ve EF model oluşturma, test süreci başına bir kez çalışır ve onları tetikleyen ilk test sınıfına yazılır. Static constructor içinde ya da önbellek dolduran bir çağrıda (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>) çalışmış koddaki değişiklikler bunun yerine isimle izlenir. Bir alanda tutulan değer, örneğin lazy bir singleton (<code>_x ??= new X()</code>), alanı okuyan her test sınıfına yazılır.</p>

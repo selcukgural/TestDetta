@@ -363,6 +363,14 @@ internal sealed partial class CoverageSelection
             typeUsersKnown = typeWide.Known;
         }
 
+        // Changed metadata is read through reflection: the classes the map saw read the type's shape depend on it, inherited
+        // attributes included (OData's routing reads [ODataAttributeRouting] of ODataController through the controllers
+        // derived from it; two classes doing so were missed, 2026-10-12). They join whatever else answers the change.
+        if (change.MetadataChanged)
+        {
+            AddShapeReaders(change.TypeName, owner);
+        }
+
         var member = change.MemberName is null ? change.TypeName : $"{change.TypeName}.{change.MemberName}";
         if (!IsAnswerable(change, reached))
         {
@@ -392,6 +400,51 @@ internal sealed partial class CoverageSelection
                          : change.MetadataChanged ? "its metadata changed"
                          : null);
         return reason is null || Unanswered(change, reason);
+    }
+
+    /// <summary>
+    /// Selects, in every affected test project with a map downstream of <paramref name="owner"/>, the classes whose map
+    /// records reading the shape of <paramref name="typeName"/> (<see cref="CoverageMap.OutputShapePrefix"/>) and the users of
+    /// a fixture whose setup read it. Only adds classes: a read outside every test or while initializing leaves the rest to
+    /// the rules that answer the change otherwise (docs/design/shape-reads.md).
+    /// </summary>
+    /// <param name="typeName">Qualified name of the type whose metadata changed.</param>
+    /// <param name="owner">Project that compiles it.</param>
+    private void AddShapeReaders(string typeName, ProjectNode owner)
+    {
+        var shape = CoverageMap.OutputShapePrefix + typeName;
+        var answers = new List<(string Project, IReadOnlySet<string> Classes)>();
+        foreach (var project in _graph.WithDependents([owner.Path]))
+        {
+            if (!_affectedTests.Contains(project) || !_maps.TryGetValue(project, out var index) || index.Map.OutputUses is not { } uses)
+            {
+                continue;
+            }
+
+            var readers = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (testClass, used) in uses.Classes)
+            {
+                if (used.Contains(shape))
+                {
+                    readers.Add(testClass);
+                }
+            }
+
+            foreach (var (fixture, used) in uses.Fixtures)
+            {
+                if (used.Contains(shape))
+                {
+                    readers.UnionWith(ClassesUsing(_index, project, fixture, index.Map));
+                }
+            }
+
+            if (readers.Count > 0)
+            {
+                answers.Add((project, readers));
+            }
+        }
+
+        SelectAll(answers, $"read the shape of {typeName}, whose metadata changed");
     }
 
     /// <summary>

@@ -111,13 +111,54 @@ internal static class FileReadCalls
         "System.AppDomain::ExecuteAssemblyByName");
 
     /// <summary>
+    /// Methods that read the shape of a type or member (its members, attributes, the schema a serializer derives from it),
+    /// by declaring type and name, non-generic overloads: their first two arguments (the object first) go to
+    /// <see cref="TestDettaTracker.ShapeRead"/>, which records the repository types they stand for. A class that reads a
+    /// type's shape depends on it without running its code: an OpenAPI document lists a response record's properties, a
+    /// test checks an attribute (docs/design/shape-reads.md). Most such reading happens inside the shared framework, which
+    /// no rewrite reaches; these are the calls into it that repository and third-party code make.
+    /// </summary>
+    private static readonly FrozenSet<string> ShapeReaders = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "System.Type::GetProperties",
+        "System.Type::GetProperty",
+        "System.Type::GetFields",
+        "System.Type::GetField",
+        "System.Type::GetMembers",
+        "System.Type::GetMember",
+        "System.Type::GetMethods",
+        "System.Type::GetMethod",
+        "System.Type::GetConstructors",
+        "System.Type::GetConstructor",
+        "System.Type::GetInterfaces",
+        "System.Type::get_IsSealed",
+        "System.Type::get_IsAbstract",
+        "System.Reflection.MemberInfo::GetCustomAttributes",
+        "System.Reflection.MemberInfo::GetCustomAttributesData",
+        "System.Reflection.MemberInfo::IsDefined",
+        "System.Reflection.MemberInfo::get_CustomAttributes",
+        "System.Reflection.TypeInfo::get_DeclaredProperties",
+        "System.Reflection.TypeInfo::get_DeclaredFields",
+        "System.Reflection.TypeInfo::get_DeclaredMembers",
+        "System.Reflection.TypeInfo::get_DeclaredMethods",
+        "System.Reflection.TypeInfo::get_DeclaredConstructors",
+        "System.Reflection.CustomAttributeExtensions::GetCustomAttributes",
+        "System.Reflection.CustomAttributeExtensions::GetCustomAttribute",
+        "System.Reflection.CustomAttributeExtensions::IsDefined",
+        "System.Attribute::GetCustomAttributes",
+        "System.Attribute::GetCustomAttribute",
+        "System.Attribute::IsDefined",
+        "System.Text.Json.Schema.JsonSchemaExporter::GetJsonSchemaAsNode",
+        "System.Text.Json.JsonSerializerOptions::GetTypeInfo");
+
+    /// <summary>
     /// True when <paramref name="module"/> references a method whose calls <see cref="Wrap"/> reports as
     /// a file read, a directory listing or a scan of loaded assemblies. Reads only the member reference table, no
     /// method body, so a third-party assembly that does neither costs almost nothing to check.
     /// </summary>
     /// <param name="module">Module to look at.</param>
     public static bool ReferencesReaders(ModuleDefinition module) =>
-        module.GetMemberReferences().OfType<MethodReference>().Any(static m => Directory(m) is not null || IsScanner(m));
+        module.GetMemberReferences().OfType<MethodReference>().Any(static m => Directory(m) is not null || IsScanner(m) || IsShapeReader(m));
 
     /// <summary>
     /// Wraps every file-reading, process-starting, assembly-loading and assembly-scanning call in the bodies of
@@ -131,8 +172,9 @@ internal static class FileReadCalls
     /// look like a use of the test project's output. Scans (<see cref="Scanners"/>) are wrapped either way.
     /// </param>
     /// <param name="scanned">Reference to <see cref="TestDettaTracker.OutputScanned"/> in the module.</param>
+    /// <param name="shapes">Reference to <see cref="TestDettaTracker.ShapeRead"/> in the module (<see cref="ShapeReaders"/>).</param>
     /// <returns>The number of calls wrapped.</returns>
-    public static int Wrap(ModuleDefinition module, FileProbes files, OutputProbes? outputs, MethodReference scanned)
+    public static int Wrap(ModuleDefinition module, FileProbes files, OutputProbes? outputs, MethodReference scanned, MethodReference shapes)
     {
         TypeDefinition? holder = null;
         var wrappers = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
@@ -150,7 +192,8 @@ internal static class FileReadCalls
 
                 var starter = outputs is not null && IsStarter(target);
                 var scanner = !starter && IsScanner(target);
-                if (!starter && !scanner && Directory(target) is null)
+                var shape = !starter && !scanner && IsShapeReader(target);
+                if (!starter && !scanner && !shape && Directory(target) is null)
                 {
                     continue;
                 }
@@ -160,9 +203,10 @@ internal static class FileReadCalls
                 {
                     holder ??= AddHolder(module);
                     var probe = scanner ? scanned
+                        : shape ? shapes
                         : starter && NameLoaders.Contains($"{target.DeclaringType.FullName}::{target.Name}") ? outputs!.LoadedByName
                         : outputs?.Used;
-                    wrapper = starter || scanner
+                    wrapper = starter || scanner || shape
                         ? Wrapper(module, holder, target, instruction.OpCode, probe!, wrappers.Count, arguments: 2)
                         : Wrapper(module, holder, target, instruction.OpCode, FileProbe(target, files), wrappers.Count, arguments: 1);
                     wrappers[key] = wrapper;
@@ -209,6 +253,14 @@ internal static class FileReadCalls
         target is not GenericInstanceMethod
         && target.DeclaringType is not GenericInstanceType
         && Scanners.Contains($"{target.DeclaringType.FullName}::{target.Name}");
+
+    /// <summary>True for a non-generic call that reads a type's or member's shape; see <see cref="ShapeReaders"/>.</summary>
+    /// <param name="target">The called method.</param>
+    private static bool IsShapeReader(MethodReference target) =>
+        target is not GenericInstanceMethod
+        && !target.HasGenericParameters
+        && target.DeclaringType is not GenericInstanceType
+        && ShapeReaders.Contains($"{target.DeclaringType.FullName}::{target.Name}");
 
     /// <summary>Adds the internal static type that holds the wrappers.</summary>
     /// <param name="module">Module being instrumented.</param>
