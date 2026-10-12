@@ -99,9 +99,11 @@ entered back, so what the framework runs next between tests (the next class's in
 class. A test that disposes its fixture itself keeps the code in its own class. `DisposeAsync` is left as it was: its
 end, a `ValueTask` awaited once, cannot be seen. GraphQL, fresh recordings, seed 1: 45.5 % to 40.9 %, 0 of 53 missed.
 
-Left open: a test that constructs a fixture type itself (`new StoreFixture()` inside a test) enters the fixture's
-bucket through the constructor marker, which has no such guard, so the rest of that test counts for the fixture's
-users ([backlog](../backlog.md)).
+A test that constructs a fixture type itself (`new StoreFixture()` inside a test) entered the fixture's bucket through
+the constructor marker, so the rest of that test counted for the fixture's users and a change to code it ran afterwards
+missed it. Since 2026-10-12 the constructor marker (`EnterFixtureInstance`) keeps the running test's bucket when the
+call stack shows the test's own code below it (`CalledFromRunningTest`, as for a shared data member): a fixture the
+framework builds still enters its own bucket, also when a framework builds it while preparing a test class.
 
 ## Pools and caches in collections (2026-10-02)
 

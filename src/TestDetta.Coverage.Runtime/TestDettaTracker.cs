@@ -1588,10 +1588,21 @@ public static class TestDettaTracker
     /// <summary>
     /// Makes the fixture <paramref name="instance"/> the current bucket. Called at the start of fixture
     /// constructors and <c>InitializeAsync</c>, including those inherited from a base class, so the
-    /// runtime type names the concrete fixture.
+    /// runtime type names the concrete fixture. A test that builds a fixture type itself (<c>new StoreFixture()</c>)
+    /// keeps its own bucket, as for any entry point it calls: the rest of that test is its own code, and crediting it to
+    /// the fixture's users hid it from the test's class (backlog, 2026-10-11).
     /// </summary>
     /// <param name="instance">The fixture instance (<c>this</c>).</param>
-    public static void EnterFixtureInstance(object instance) => Enter(Fixtures, FixtureName(instance.GetType()), isFixture: true);
+    public static void EnterFixtureInstance(object instance)
+    {
+        if (Current.Value is { IsFixture: false } current && !ReferenceEquals(current, Startup)
+            && CalledFromRunningTest(current.Name, entered: null, current.InstanceType))
+        {
+            return;
+        }
+
+        Enter(Fixtures, FixtureName(instance.GetType()), isFixture: true);
+    }
 
     /// <summary>
     /// Makes the fixture <paramref name="instance"/> the current bucket while its <c>Dispose</c> runs outside every test, and
