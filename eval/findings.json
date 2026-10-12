@@ -31,6 +31,9 @@
     }
   ],
   "findings": [
+    { "id": "inherited-attribute-read-by-routing", "date": "2026-10-12", "repository": "aspnetcore-odata", "kind": "miss",
+      "summary": "A shape mutant removed [ODataAttributeRouting] from ODataController: OData's routing reads it through the controllers derived from it, and two of the 23 failing classes, which name neither, were not selected",
+      "fix": "Every metadata change also selects the classes the map saw read the type's shape (AddShapeReaders, on the shape-reads branch)" },
     { "id": "parsed-once-in-static-initializers", "date": "2026-09-30", "repository": "nodatime", "kind": "miss",
       "summary": "Patterns parsed once in static initialisers were credited to the first class only (TextCursor..ctor, 7 classes)",
       "fix": "Run-once rules: initialization scopes, linked builders (a5e1c69)" },

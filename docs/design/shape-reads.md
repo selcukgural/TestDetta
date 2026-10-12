@@ -38,6 +38,15 @@ rewrite reaches the shared framework. But the calls into it come from code the r
 Experiment: `OpenApiSchemaTests` records `shape:Contracts.ApplicationDetailResponse`; the class that serializes it and the
 unrelated one record only `shape:Program` (the test factory reflects over the entry point).
 
+## Every metadata change selects the shape readers (2026-10-12)
+
+A shape mutant on aspnetcore-odata removed `[ODataAttributeRouting]` from `ODataController`: 23 classes failed, and two
+were not selected, `AttributeRoutingConventionTests` and `ODataRoutingApplicationModelProviderTests`. OData's routing reads
+the attribute of the controllers derived from it (`inherit: true`); the two classes name neither. Both were recorded as
+reading `shape:...ODataController` (a read type's base types are part of its shape). For any change to a type's
+metadata, `CoverageSelection.AddShapeReaders` now adds the classes that read its shape and the users of a fixture whose
+setup did; it only adds classes, whatever else answers the change (`ShapeReaderSelectionTests`).
+
 ## Limits
 
 - Generic overloads (`GetCustomAttribute<T>`) are not wrapped yet.
