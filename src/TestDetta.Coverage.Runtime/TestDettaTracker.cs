@@ -424,7 +424,7 @@ public static class TestDettaTracker
 
         if (names.Count > 0)
         {
-            RecordNames(names);
+            RecordScan(names);
         }
     }
 
@@ -507,6 +507,29 @@ public static class TestDettaTracker
         }
 
         RecordNames(names);
+    }
+
+    /// <summary>
+    /// Adds scanned names to the current bucket, also inside a cache fill: the class that filled the cache scanned the
+    /// assemblies (Autofac's reflection cache lists a plugin's types inside <c>GetOrAdd</c>), and put in the initialization
+    /// list the scan ran every class of the project for any change to the plugin (Autofac.Specification.Test, 42.3 % to
+    /// 55.8 % in the 2026-10-12 A/B; owner's option a). A later class that reads what the fill stored in a field is found
+    /// through the map's <c>builtValues</c>. Inside a static constructor, which no class may claim, the scan stays
+    /// initialization.
+    /// </summary>
+    /// <param name="names">Names with <see cref="ScanPrefix"/>.</param>
+    private static void RecordScan(HashSet<string> names)
+    {
+        if (_typeInitializerDepth != 0)
+        {
+            RecordNames(names);
+            return;
+        }
+
+        lock (Gate)
+        {
+            BucketForHit().Outputs.UnionWith(names);
+        }
     }
 
     /// <summary>
