@@ -317,6 +317,21 @@ public sealed class UnrecordedClassTests : IDisposable
     }
 
     [Fact]
+    public void The_evaluation_reads_a_cut_off_report_as_none_too()
+    {
+        // The evaluation's own test runs met the same cut-off report in MSBuild's suite (2026-10-12) and failed the round.
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path.Combine(_directory, "run.trx"), """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Pla
+            """);
+        string? reason = null;
+
+        Assert.Null(TestDetta.Eval.TestExecutor.ReadOutcome(_directory, r => reason = r));
+        Assert.NotNull(reason);
+    }
+
+    [Fact]
     public void Class_locations_come_from_the_pdb_with_generated_code_counted_for_its_class()
     {
         Directory.CreateDirectory(_directory);
