@@ -393,8 +393,8 @@ public sealed partial class TestSelector
     /// Adds the classes that read a value code of a user built (<see cref="CoverageMap.BuiltValues"/>): an output loads once
     /// per process, and what a class found in it can outlive the class in a static field, such as a plugin host keeping
     /// the types it found, which a later class inspects without loading or scanning anything (docs/design/loaded-outputs.md).
-    /// The class reads a value some method built that a user ran; that method may have built it from the output, so the
-    /// reader is counted as a user too. Only adds classes.
+    /// The class reads a value some method built that a user ran and the class did not; that method may have built it
+    /// from the output, so the reader is counted as a user too. Only adds classes.
     /// </summary>
     /// <param name="map">The test project's map.</param>
     /// <param name="users">Users found so far, with their evidence; updated in place.</param>
@@ -427,8 +427,16 @@ public sealed partial class TestSelector
                 continue;
             }
 
+            // A builder the reader ran itself may have built the value in its own run (a shared helper that a static
+            // constructor of its own calls): that is no value inherited from a user.
+            var ranItself = map.Classes.GetValueOrDefault(testClass);
             foreach (var id in read)
             {
+                if (ranItself?.Contains(id) == true)
+                {
+                    continue;
+                }
+
                 if (builders.TryGetValue(id, out var user))
                 {
                     users[testClass] = $"read a value {map.Methods[id].TypeName}.{map.Methods[id].MemberName} built, which ran in {user}: it {use}";
