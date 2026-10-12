@@ -52,3 +52,6 @@ then emptied.
   in test code and in third-party code, so a class that inspects a plugin an earlier class loaded is selected when the
   plugin changes; before, only the class that loaded it was. A class that reads a value such a class built (types kept
   in a static cache) counts as a user too.
+- Recording, safer: the code of a program's top-level statements (`Program.cs` of a minimal API) is recorded under the
+  name the analysis gives it. A test class whose host ran it but none of its lambdas, such as one that only reads the
+  OpenAPI document, was not selected for a change named there (a response record behind `Produces<T>()`).

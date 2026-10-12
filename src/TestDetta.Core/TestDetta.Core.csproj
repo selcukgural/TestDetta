@@ -12,6 +12,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TestDetta.Tests" />
     <InternalsVisibleTo Include="TestDetta.Eval" />
+    <InternalsVisibleTo Include="TestDetta.Lab" />
     <InternalsVisibleTo Include="TestDetta.Coverage" />
     <InternalsVisibleTo Include="TestDetta.Cli" />
     <InternalsVisibleTo Include="TestDetta.Mutants" />

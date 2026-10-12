@@ -154,6 +154,13 @@
           "TestDetta.Mutants": "[1.0.0, )"
         }
       },
+      "testdetta.lab": {
+        "type": "Project",
+        "dependencies": {
+          "TestDetta": "[1.0.0, )",
+          "TestDetta.Core": "[1.0.0, )"
+        }
+      },
       "testdetta.mutants": {
         "type": "Project",
         "dependencies": {

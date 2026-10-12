@@ -33,6 +33,24 @@ public sealed class MethodNamesTests
         Assert.Contains(new CoveredMethod("TestDetta.Core.GitClient", ".ctor"), MappedMembersOf("TestDetta.Core.GitClient"));
     }
 
+    [Fact]
+    public void Top_level_statements_keep_the_name_the_source_index_gives_them()
+    {
+        // The evaluation tool's Program.cs is top-level statements: <Main>$, as SourceIndexBuilder names the member.
+        var eval = ModuleDefinition.ReadModule(typeof(TestDetta.Eval.EvalApp).Assembly.Location);
+        var program = eval.GetType("Program");
+        Assert.Contains(new CoveredMethod("Program", "<Main>$"), program.Methods.Where(static m => m.HasBody).Select(MethodNames.Map));
+
+        // Async top-level statements add an entry point named <Main> that awaits <Main>$; their lambdas map there too.
+        var type = new TypeDefinition("", "Program", TypeAttributes.Class, eval.TypeSystem.Object);
+        foreach (var name in (string[])["<Main>", "<<Main>$>b__0_0"])
+        {
+            type.Methods.Add(new MethodDefinition(name, MethodAttributes.Static, eval.TypeSystem.Void));
+        }
+
+        Assert.All(type.Methods.Select(MethodNames.Map), static m => Assert.Equal(new CoveredMethod("Program", "<Main>$"), m));
+    }
+
     private static HashSet<CoveredMethod> MappedMembersOf(string typeName) =>
         [.. Core.GetType(typeName).Methods.Where(m => m.HasBody).Select(MethodNames.Map)];
 }
