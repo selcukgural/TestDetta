@@ -9,6 +9,12 @@ internal sealed class CoverageIndex
     /// <summary>Test classes per (type, member) key.</summary>
     private readonly Dictionary<CoveredMethod, HashSet<string>> _classesByMember = [];
 
+    /// <summary>
+    /// Test classes per (type, member) key that <see cref="_classesByMember"/> holds only because they read a value the
+    /// member helped build (<see cref="CoverageMap.BuiltValues"/>), not because they or a fixture they use ran it.
+    /// </summary>
+    private readonly Dictionary<CoveredMethod, HashSet<string>> _builtValueReadersByMember = [];
+
     /// <summary>Test classes per type, over all its members and nested types.</summary>
     private readonly Dictionary<string, HashSet<string>> _classesByType = new(StringComparer.Ordinal);
 
@@ -120,6 +126,7 @@ internal sealed class CoverageIndex
         {
             foreach (var (testClass, ids) in built.Classes)
             {
+                AddBuiltValueReaders(map, ids, [testClass]);
                 AddUsers(map, ids, [testClass]);
             }
 
@@ -137,6 +144,7 @@ internal sealed class CoverageIndex
                     continue;
                 }
 
+                AddBuiltValueReaders(map, ids, users);
                 AddUsers(map, ids, users);
             }
 
@@ -218,6 +226,38 @@ internal sealed class CoverageIndex
         }
     }
 
+    /// <summary>
+    /// Notes the classes that depend on each method only through a value it helped build: those not yet among its users,
+    /// which hold the classes that ran it and the users of fixtures that ran it. Called before <see cref="AddUsers"/>
+    /// credits them, so the evidence can say "read a value built by" instead of "ran".
+    /// </summary>
+    /// <param name="map">Recorded map.</param>
+    /// <param name="ids">Methods that built a value the classes read.</param>
+    /// <param name="classes">Test classes that read it.</param>
+    private void AddBuiltValueReaders(CoverageMap map, IReadOnlyList<int> ids, IReadOnlyCollection<string> classes)
+    {
+        foreach (var id in ids)
+        {
+            var method = map.Methods[id];
+            var users = _classesByMember[method];
+            foreach (var testClass in classes)
+            {
+                if (users.Contains(testClass))
+                {
+                    continue;
+                }
+
+                if (!_builtValueReadersByMember.TryGetValue(method, out var readers))
+                {
+                    readers = new HashSet<string>(StringComparer.Ordinal);
+                    _builtValueReadersByMember[method] = readers;
+                }
+
+                readers.Add(testClass);
+            }
+        }
+    }
+
     /// <summary>Credits a nested method's classes to its member's nested view; other methods are left out.</summary>
     /// <param name="id">Method id.</param>
     /// <param name="method">Its member.</param>
@@ -269,6 +309,16 @@ internal sealed class CoverageIndex
     /// <param name="member">Simple member name, <c>.ctor</c> for constructors.</param>
     public bool RanDuringInitialization(string typeName, string member) =>
         _initialization.Contains(new CoveredMethod(typeName, member));
+
+    /// <summary>
+    /// True when <paramref name="testClass"/> is among the users of <paramref name="member"/> of <paramref name="typeName"/>
+    /// only because it read a value the member helped build: neither it nor a fixture it uses ran the member.
+    /// </summary>
+    /// <param name="typeName">Qualified type name.</param>
+    /// <param name="member">Simple member name.</param>
+    /// <param name="testClass">Runtime test class name.</param>
+    public bool OnlyReadValueBuiltBy(string typeName, string member, string testClass) =>
+        _builtValueReadersByMember.TryGetValue(new CoveredMethod(typeName, member), out var readers) && readers.Contains(testClass);
 
     /// <summary>True when the map lists <paramref name="member"/> of <paramref name="typeName"/> (run or not).</summary>
     /// <param name="typeName">Qualified type name.</param>

@@ -441,7 +441,10 @@ repositories a change touches; the full corpus runs at milestones.
   recorder reaches the language classes. Narrow it: reach by method instead of by type (hash only the
   members the recorder can call), or move what the recorder shares with selection (parsing helpers) out
   of the types selection changes. Check with a selection-only commit that the key stays the same.
-- **Job summary evidence for classes the name spread selects** (seen 2026-10-04 on Spectre.Console,
+- ~~**Job summary evidence for classes the name spread selects**~~ (done 2026-10-12: the other classes were not
+  the name spread's but the map's `builtValues`, classes that read a field filled while `GetWeekdays` ran; with the
+  map at 01027ef 9 of the 11 selected classes now say "read a value built by …" and only CalendarTests and TreeTests
+  "ran …"; the selection of 100 sampled changes is the same, `BuiltValueEvidenceTests`). (seen 2026-10-04 on Spectre.Console,
   a refactor of `Calendar.GetWeekdays`, map at 01027ef): 15 classes were selected, but the map
   records only CalendarTests and TreeTests running `GetWeekdays`. The debug log shows the name
   spread going through `Emoji._emojis` ("names Calendar", an emoji constant with the type's name),
