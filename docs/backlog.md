@@ -398,6 +398,15 @@ repositories a change touches; the full corpus runs at milestones.
 
 ## Next
 
+- **A fixture whose server another class built first (FastEndpoints, 2026-10-12).** `TestServerTests` builds
+  `FixtureA` itself (`Only_One_TestServer_Is_Created_Per_Fixture_Type`), and FastEndpoints.Testing keeps one test server
+  per fixture type in a static cache. With `parallelizeAssembly`, the class order differs between recordings: in one of
+  four, `TestServerTests` ran first, its own bucket got the host's start-up (1,017 methods, rightly since #36), and
+  `FixtureA`'s setup took the cached server and ran none of it. A change to that code then missed `FixtureATests`
+  (7 of 67 failing changes in the scan A/B's side B, a recording of the scan branch; main can record the same order).
+  The once-per-process shape of the Limitations page; `builtValues` does not see a value kept in a dictionary. Open:
+  a signal for a fixture that reads what a cache fill of another class stored.
+
 - **Test platform code in Newtonsoft.Json (measured 2026-10-12, not merged; owner).** VSTest's testhost serializes with
   the repository's own Newtonsoft.Json. A diagnostic (diag/platform-channels) split the platform's hits: before the
   first test 111,248 (99.5 % platform alone, 661 methods), on the host's threads during the tests 12.4 million (the
