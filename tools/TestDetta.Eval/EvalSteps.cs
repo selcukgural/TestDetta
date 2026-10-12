@@ -220,14 +220,17 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 
     /// <summary>
     /// The newest full recording at <paramref name="sha"/> in the recording cache, whatever recording code made it
-    /// (<see cref="RunSettings.AnyRecording"/>); incremental steps are left out. Null when there is none.
+    /// (<see cref="RunSettings.AnyRecording"/>); incremental steps are left out, and so are recordings whose maps are of
+    /// another format, which this TestDetta would not read and would evaluate as runs without maps. Null when there is none.
     /// </summary>
     /// <param name="cache">The recording cache of the repository.</param>
     /// <param name="sha">The commit.</param>
     internal static string? NewestRecording(string cache, string sha) =>
         Directory.Exists(cache)
             ? Directory.GetDirectories(cache, sha + "-*")
-                .Where(static d => !Path.GetFileName(d).Contains("-incremental-", StringComparison.Ordinal) && Directory.GetFiles(d, "*.json").Length > 0)
+                .Where(static d => !Path.GetFileName(d).Contains("-incremental-", StringComparison.Ordinal)
+                                   && Directory.GetFiles(d, "*.json") is { Length: > 0 } maps
+                                   && Array.TrueForAll(maps, static m => CoverageMapStore.FormatOf(m) == CoverageMapStore.Version))
                 .OrderByDescending(static d => Directory.GetLastWriteTimeUtc(d))
                 .FirstOrDefault()
             : null;
