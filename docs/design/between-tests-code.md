@@ -105,6 +105,16 @@ missed it. Since 2026-10-12 the constructor marker (`EnterFixtureInstance`) keep
 call stack shows the test's own code below it (`CalledFromRunningTest`, as for a shared data member): a fixture the
 framework builds still enters its own bucket, also when a framework builds it while preparing a test class.
 
+Keeping the test's bucket alone was not enough where a fixture type shares what any instance builds. FastEndpoints'
+`AppFixture` keeps one server per fixture type in a static cache of `Lazy<Task>`, booted by whichever instance awaits it
+first; `TestServerTests` builds `FixtureA` itself. When it ran first (class order differs between recordings under
+`parallelizeAssembly`, one of four), the host's start-up went to its bucket only, `FixtureA`'s own setup took the cached
+server, and a change to the start-up missed `FixtureATests` (7 of 67 failing changes). Since 2026-10-12 a test that builds
+a fixture type itself is recorded as a user of that fixture (`CoverageMap.FixtureBuilders`, which the selection adds to
+the fixture's users), and the rest of that test's flow, the tasks it starts included (`TestBuiltFixture`, an
+`AsyncLocal`), counts for the fixture as well as for the test's class. Either order now selects both classes
+(`TestBuiltFixtureTests`).
+
 ## Shared data sources (2026-10-11)
 
 A test data member (`[ClassData]`, `[MemberData]`, `[TestCaseSource]` and the like) that one class uses was already

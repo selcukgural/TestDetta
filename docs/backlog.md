@@ -398,7 +398,8 @@ repositories a change touches; the full corpus runs at milestones.
 
 ## Next
 
-- **A fixture whose server another class built first (FastEndpoints, 2026-10-12).** `TestServerTests` builds
+- ~~**A fixture whose server another class built first (FastEndpoints, 2026-10-12).**~~ Fixed the same day: a test
+  that builds a fixture type is its user, and its flow counts for the fixture too (docs/design/between-tests-code.md). `TestServerTests` builds
   `FixtureA` itself (`Only_One_TestServer_Is_Created_Per_Fixture_Type`), and FastEndpoints.Testing keeps one test server
   per fixture type in a static cache. With `parallelizeAssembly`, the class order differs between recordings: in one of
   four, `TestServerTests` ran first, its own bucket got the host's start-up (1,017 methods, rightly since #36), and

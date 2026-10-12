@@ -25,8 +25,9 @@ then emptied.
 - **Top-level statements.** The code of a program's top-level statements (`Program.cs` of a minimal API) is recorded
   under the name the analysis gives it. A test class whose host ran it but none of its lambdas, such as one that only
   reads the OpenAPI document, was not selected for a change named there (a response record behind `Produces<T>()`).
-- **A test that builds a fixture type itself** keeps what follows in its own class, instead of crediting it to the
-  fixture's users, who could be selected in its place.
+- **A test that builds a fixture type itself** keeps what follows in its own class, and counts as a user of the
+  fixture, whose bucket also gets what follows: a fixture type that shares what its first instance builds (a server
+  cached per fixture type, FastEndpoints' `AppFixture`) no longer misses its users when such a test ran first.
 - **Types that may be found through reflection:** the classes the map says ran a changed member of such a type are
   always selected.
 - **A package the repository makes itself:** a `PackageReference` to the id or assembly name of one of the repository's
