@@ -15,7 +15,8 @@ then emptied.
   are ignored with the warning "record the maps again", and their test projects are selected by names, as without a
   map, until the next recording on the default branch writes new ones. Pull requests that run before it select more.
   The new recorder tracks assembly loads and keeps a test's own code in its class when the test builds a fixture type
-  itself, where a format 2 map could credit that code to the fixture's users and miss the test (site: Limitations,
+  itself, where a format 2 map could credit that code to the fixture's users and miss the test, and it notes which
+  classes read a type's shape, which a format 2 map does not (site: Limitations,
   "Maps recorded by an earlier version").
 
 ## Changes
@@ -28,6 +29,11 @@ then emptied.
 - **A test that builds a fixture type itself** keeps what follows in its own class, and counts as a user of the
   fixture, whose bucket also gets what follows: a fixture type that shares what its first instance builds (a server
   cached per fixture type, FastEndpoints' `AppFixture`) no longer misses its users when such a test ran first.
+- **Classes that read a type's shape.** Reflection and System.Text.Json schema calls (`GetCustomAttributes`,
+  `GetProperties`, `JsonSchemaExporter.GetJsonSchemaAsNode` and the like) are recorded in test and third-party code,
+  with the read type's base types and the types its properties hold. A change to a type's metadata, such as an
+  attribute removed from a base controller, selects the classes that read its shape: OData's attribute routing tests
+  read `[ODataAttributeRouting]` through derived controllers they never name, and were missed.
 - **Types that may be found through reflection:** the classes the map says ran a changed member of such a type are
   always selected.
 - **A package the repository makes itself:** a `PackageReference` to the id or assembly name of one of the repository's
