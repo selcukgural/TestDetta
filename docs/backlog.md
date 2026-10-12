@@ -397,6 +397,15 @@ method-level selection (5) and the dotnet-tia comparison (2). Day-to-day checks 
 repositories a change touches; the full corpus runs at milestones.
 
 ## Next
+
+- **Test platform code in Newtonsoft.Json (measured 2026-10-12, not merged; owner).** VSTest's testhost serializes with
+  the repository's own Newtonsoft.Json. A diagnostic (diag/platform-channels) split the platform's hits: before the
+  first test 111,248 (99.5 % platform alone, 661 methods), on the host's threads during the tests 12.4 million (the
+  test framework's message code on the stack too), between tests 0. Keeping the first channel apart
+  (feat/platform-startup-code, docs/design/test-platform-code.md there) moved newtonsoft-json from 36.0 % to 35.7 %
+  (66 changes narrower by one class, 0 of 66 missed; carter, cliwrap, nodatime, serilog unchanged): too little for the
+  added code. The width comes from the second channel, whose hits go to the class running at the time; separating it
+  needs a rule for the test framework's frames and is open.
 - ~~**License service behind Cloud Run: forwarded headers not applied?**~~: done (2026-10-07). They were applied,
   but `UseHsts()` ran before `UseForwardedHeaders`, so it saw plain HTTP. Forwarded headers now come first; HSTS
   matches the site (1 year, subdomains). Checked on the deployed sandbox: HSTS sent, the per-address limit partitions
