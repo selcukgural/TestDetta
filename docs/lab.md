@@ -21,5 +21,15 @@ dotnet run --project tools/TestDetta.Lab -- ab <run A> <run B>
   sample has none, docs/evaluation.md "Seeds and replays"), mean shares, narrower and wider changes with the largest
   ones listed, and misses on either side.
 
-Next, when we need them: a `whatif --run` that runs the selected classes and the whole suite and names a miss, the
-shape mutants (feat/shape-mutants) as changes `whatif` applies, and a page that shows the same answers.
+## Ideas
+
+The product comes first (owner, 2026-10-12): ideas for the lab are noted here, with the date and what prompted them,
+and built when the owner asks.
+
+- 2026-10-12, the order-dependent load experiment: `whatif --run`, which runs the selected classes and the whole suite
+  and names a miss, the step done by hand to prove `BShapeTests` failed.
+- 2026-10-12, shape mutants (#42): `whatif --mutant <kind> <target>`, applying a mutant instead of a hand edit.
+- 2026-10-12: a page (artifact) that shows the same answers, `who` as a tree from a member to its buckets.
+- 2026-10-12, cliwrap's wider `TryKill` in the scan A/B: `ab --why`, the rule and evidence behind each share change, from
+  both runs' selections.
+- 2026-10-12: `who` for maps of an earlier format (read what format 2 had), so the recording cache stays explorable.
