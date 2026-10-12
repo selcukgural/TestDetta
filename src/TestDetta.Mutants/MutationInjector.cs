@@ -267,6 +267,10 @@ internal static class MutationInjector
 
         var byMember = targets.ToLookup(static t => t.Member);
         var fieldTargets = targets.Where(static t => t.Kind == MutantKind.FieldValue).ToList();
+
+        // A shape mutant changes metadata, which no run-time switch can guard: a schema leaves it out, and it is only
+        // ever written in alone (docs/evaluation.md, "Shape mutants").
+        var shapeTargets = guarded ? [] : targets.Where(static t => MutantKinds.IsShape(t.Kind)).ToList();
         var types = module.GetTypes().Where(static t => !MethodNames.IsCompilerInfrastructure(t)).ToList();
 
         // The switch is added first, so the guards can name it; it is removed again if nothing changed.
@@ -276,6 +280,14 @@ internal static class MutationInjector
         var changed = new Dictionary<int, int>();
         foreach (var type in types)
         {
+            foreach (var target in shapeTargets)
+            {
+                if (ShapeMutants.Apply(type, target))
+                {
+                    changed[target.Id] = changed.GetValueOrDefault(target.Id) + 1;
+                }
+            }
+
             foreach (var target in fieldTargets)
             {
                 var stores = ChangeFieldValue(type, target, emitters);
@@ -294,7 +306,7 @@ internal static class MutationInjector
 
                 foreach (var target in byMember[MethodNames.Map(method)])
                 {
-                    if (target.Kind == MutantKind.FieldValue)
+                    if (target.Kind == MutantKind.FieldValue || MutantKinds.IsShape(target.Kind))
                     {
                         continue;
                     }

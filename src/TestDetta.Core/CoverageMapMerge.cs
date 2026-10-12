@@ -85,6 +85,8 @@ public static class CoverageMapMerge
             FailedClasses = failed,
             Initialization = initialization,
             LinkedInitialization = Linked(previous, partial, initialization, remap),
+            // A carried class still built the fixtures it built when it was recorded.
+            FixtureBuilders = MergeBuilders(previous.FixtureBuilders, partial.FixtureBuilders),
             BuiltValues = built,
             FileReads = Reads(previous.FileReads, partial.FileReads, carried, partial),
             OutputUses = Reads(previous.OutputUses, partial.OutputUses, carried, partial),
@@ -425,5 +427,31 @@ public static class CoverageMapMerge
 
             return true;
         }
+    }
+
+    /// <summary>The fixture builders of both maps (<see cref="CoverageMap.FixtureBuilders"/>); null when neither has any.</summary>
+    /// <param name="previous">The previous map's.</param>
+    /// <param name="partial">The new recording's.</param>
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>>? MergeBuilders(
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? previous,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? partial)
+    {
+        if (previous is null)
+        {
+            return partial;
+        }
+
+        if (partial is null)
+        {
+            return previous;
+        }
+
+        var merged = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var fixture in previous.Keys.Union(partial.Keys, StringComparer.Ordinal))
+        {
+            merged[fixture] = [.. (previous.GetValueOrDefault(fixture) ?? []).Union(partial.GetValueOrDefault(fixture) ?? [], StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+        }
+
+        return merged;
     }
 }

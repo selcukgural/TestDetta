@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\src\TestDetta.Cli\TestDetta.Cli.csproj" />
     <ProjectReference Include="..\..\src\TestDetta.Coverage\TestDetta.Coverage.csproj" />
     <ProjectReference Include="..\..\tools\TestDetta.Eval\TestDetta.Eval.csproj" />
+    <ProjectReference Include="..\..\tools\TestDetta.Lab\TestDetta.Lab.csproj" />
     <ProjectReference Include="..\..\src\TestDetta.Mutants\TestDetta.Mutants.csproj" />
   </ItemGroup>
 
