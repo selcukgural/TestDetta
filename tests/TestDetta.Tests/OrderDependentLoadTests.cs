@@ -13,7 +13,8 @@ namespace TestDetta.Tests;
 /// <c>AssemblyLoadContext.Assemblies</c> and checks the shape of its types without running any of their code. A new type
 /// that breaks the check fails <c>BShapeTests</c> in a full run; the selection ran only <c>ALoaderTests</c> until scans
 /// of loaded assemblies and of an assembly's types were recorded (<c>TestDettaTracker.OutputScanned</c>), in the test's
-/// own code and in a third-party plugin host alike. Slow: builds and records.
+/// own code and in a third-party plugin host alike, and until a class reading a value a user built (types kept in a static
+/// cache) counted as a user too (<c>TestSelector.AddValueReaders</c>). Slow: builds and records.
 /// </summary>
 [Trait("Category", "Slow")]
 public sealed class OrderDependentLoadTests : IDisposable
@@ -35,7 +36,13 @@ public sealed class OrderDependentLoadTests : IDisposable
             Assert.All(Vendor.PluginHost.TypesOf("Plugin"), static t => Assert.True(t.IsSealed, t.FullName));
             """, vendor: true);
 
-    private void AssertInspectorSelected(string inspection, bool vendor)
+    [Fact]
+    public void A_class_that_inspects_types_an_earlier_class_kept_in_a_static_cache_is_selected_too() =>
+        AssertInspectorSelected("""
+            Assert.All(PluginCache.Types!, static t => Assert.True(t.IsSealed, t.FullName));
+            """, vendor: false, cache: true);
+
+    private void AssertInspectorSelected(string inspection, bool vendor, bool cache = false)
     {
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
@@ -74,11 +81,19 @@ public sealed class OrderDependentLoadTests : IDisposable
                     testCollections.OrderBy(static c => c.DisplayName, StringComparer.Ordinal);
             }
 
+            // A cache the first class fills and later classes read, as a plugin host keeps the types it found.
+            public static class PluginCache { public static Type[]? Types; }
+
             [Collection("1 loader")]
             public class ALoaderTests
             {
                 [Fact]
-                public void Loads() => Assert.NotNull(Assembly.LoadFrom(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../tools/Plugin/bin/Debug/net10.0/Plugin.dll"))).GetType("Plugin.Greeter"));
+                public void Loads()
+                {
+                    var plugin = Assembly.LoadFrom(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../tools/Plugin/bin/Debug/net10.0/Plugin.dll")));
+                    {{(cache ? "PluginCache.Types = plugin.GetExportedTypes();" : "")}}
+                    Assert.NotNull(plugin.GetType("Plugin.Greeter"));
+                }
             }
 
             [Collection("2 shape")]
@@ -101,7 +116,11 @@ public sealed class OrderDependentLoadTests : IDisposable
 
         Assert.True(passed, output.ToString());
         Assert.Contains("Plugin", map.OutputUses!.Classes["Host.Tests.ALoaderTests"]);
-        Assert.Contains(CoverageMap.OutputScanPrefix + "Plugin", map.OutputUses.Classes["Host.Tests.BShapeTests"]);
+        if (!cache)
+        {
+            Assert.Contains(CoverageMap.OutputScanPrefix + "Plugin", map.OutputUses.Classes["Host.Tests.BShapeTests"]);
+        }
+
         Assert.True(map.KnowsLoadsOf(["Plugin"]));
 
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);

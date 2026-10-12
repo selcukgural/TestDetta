@@ -50,4 +50,5 @@ then emptied.
 - Recording: calls that enumerate loaded assemblies or an assembly's types (`AppDomain.GetAssemblies`,
   `AssemblyLoadContext.Assemblies`, `Assembly.GetTypes`, `GetExportedTypes`, `DefinedTypes`, `ExportedTypes`) are recorded
   in test code and in third-party code, so a class that inspects a plugin an earlier class loaded is selected when the
-  plugin changes; before, only the class that loaded it was.
+  plugin changes; before, only the class that loaded it was. A class that reads a value such a class built (types kept
+  in a static cache) counts as a user too.

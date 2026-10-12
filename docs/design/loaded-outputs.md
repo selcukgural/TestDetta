@@ -102,8 +102,16 @@ time count. The call happens in each class that inspects, so the order no longer
 A separate probe because the first argument of a load (`AssemblyLoadContext.LoadFromAssemblyPath`) is a context too,
 and a load is no scan of everything the context holds. `OrderDependentLoadTests` covers both: the inspection in the
 test's own code and through a third-party plugin host (a library compiled in the test); with the third-party calls
-left unwrapped the second fails. Still open: `Module.GetTypes`, a `Type` kept from an earlier class (a static cache of
-plugin types), and reflection over a type found by name (`Assembly.GetType(name)`).
+left unwrapped the second fails. Still open: `Module.GetTypes` and reflection over a type found by name
+(`Assembly.GetType(name)`).
+
+**Values kept from an earlier class (2026-10-12).** A plugin host keeps the types it found in a static field; a later
+class reads the field and inspects the types, with no load or scan of its own (`OrderDependentLoadTests`, static
+cache: missed with the scan signal alone). The map already links the two: the reader's `builtValues` name the method
+that built the value, and that method ran in the class that loaded the plugin. `TestSelector.AddValueReaders` counts a
+class as a user of an output when it read a value built by a method a user ran. It only adds classes, needs no new
+recording, and acts only where the rules for loaded outputs act. It can add a reader of an unrelated value the user
+built (any static field it filled); measured with the scan signal.
 
 ## Measurement (2026-10-10/11, fresh recordings, one repository at a time on an idle machine)
 

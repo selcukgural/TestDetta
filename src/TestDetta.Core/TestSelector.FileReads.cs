@@ -376,6 +376,7 @@ public sealed partial class TestSelector
             }
         }
 
+        AddValueReaders(map, classes, $"{verb} {output}, which is affected (map {commit})");
         LogOutputUsers(path, output, classes.Count, whole ?? "-");
         if (whole is null && classes.Count == 0)
         {
@@ -386,6 +387,55 @@ public sealed partial class TestSelector
 
         static bool Uses(IReadOnlyList<string> used, string[] names) =>
             used.Any(u => names.Any(n => string.Equals(u, n, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// Adds the classes that read a value code of a user built (<see cref="CoverageMap.BuiltValues"/>): an output loads once
+    /// per process, and what a class found in it can outlive the class in a static field, such as a plugin host keeping
+    /// the types it found, which a later class inspects without loading or scanning anything (docs/design/loaded-outputs.md).
+    /// The class reads a value some method built that a user ran; that method may have built it from the output, so the
+    /// reader is counted as a user too. Only adds classes.
+    /// </summary>
+    /// <param name="map">The test project's map.</param>
+    /// <param name="users">Users found so far, with their evidence; updated in place.</param>
+    /// <param name="use">How the users used the output, for the evidence.</param>
+    private static void AddValueReaders(CoverageMap map, SortedDictionary<string, string> users, string use)
+    {
+        if (users.Count == 0 || map.BuiltValues is not { } built)
+        {
+            return;
+        }
+
+        var builders = new Dictionary<int, string>();
+        foreach (var user in users.Keys)
+        {
+            if (!map.Classes.TryGetValue(user, out var ran))
+            {
+                continue;
+            }
+
+            foreach (var id in ran)
+            {
+                builders.TryAdd(id, user);
+            }
+        }
+
+        foreach (var (testClass, read) in built.Classes)
+        {
+            if (users.ContainsKey(testClass))
+            {
+                continue;
+            }
+
+            foreach (var id in read)
+            {
+                if (builders.TryGetValue(id, out var user))
+                {
+                    users[testClass] = $"read a value {map.Methods[id].TypeName}.{map.Methods[id].MemberName} built, which ran in {user}: it {use}";
+                    break;
+                }
+            }
+        }
     }
 
     /// <summary>
