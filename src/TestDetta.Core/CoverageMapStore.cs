@@ -268,6 +268,23 @@ public static class CoverageMapStore
             json.WriteEndObject();
         }
 
+        if (map.FixtureBuilders is { } fixtureBuilders)
+        {
+            json.WriteStartObject("fixtureBuilders"u8);
+            foreach (var (fixture, classes) in fixtureBuilders.OrderBy(static f => f.Key, StringComparer.Ordinal))
+            {
+                json.WriteStartArray(fixture);
+                foreach (var testClass in classes)
+                {
+                    json.WriteStringValue(testClass);
+                }
+
+                json.WriteEndArray();
+            }
+
+            json.WriteEndObject();
+        }
+
         if (map.LeakedReads is { } leaked)
         {
             json.WriteStartObject("leakedReads"u8);
@@ -421,6 +438,12 @@ public static class CoverageMapStore
                     : null,
                 InstrumentedProjects = root.TryGetProperty("instrumentedProjects", out var instrumented)
                     ? [.. instrumented.EnumerateArray().Select(static p => p.GetString()!)]
+                    : null,
+                FixtureBuilders = root.TryGetProperty("fixtureBuilders", out var fixtureBuilders)
+                    ? fixtureBuilders.EnumerateObject().ToDictionary(
+                        static f => f.Name,
+                        static IReadOnlyList<string> (f) => [.. f.Value.EnumerateArray().Select(static c => c.GetString()!)],
+                        StringComparer.Ordinal)
                     : null,
                 DataSourceUsers = root.TryGetProperty("dataSourceUsers", out var dataUsers)
                     ? dataUsers.EnumerateObject().ToDictionary(

@@ -141,6 +141,14 @@ compiled: none failed a test, and TestDetta selected only the classes that faile
 The headroom report (`~/sift-corpus/notes/headroom.py`, fine-tune plan 2026-10-11) says where to aim: per repository,
 the selection share against the floor (the classes the map says ran the changed member).
 
+**Top-level statements (2026-10-12).** A program's top-level statements (`Program.cs` of a minimal API) are no member
+the sampler reads, so no sampled change ever reached them, and a miss there (the recording named them `Main`, the
+analysis `<Main>$`, #44) could not show. They join the sample only when the target names them,
+`--target 'Program.<Main>$'` (or `'Program*'`), so earlier samples stay as they were; the edit is an empty statement before
+the first one, which the analysis reads as a change to `Program`, and the mutant always throws, since any other kind can
+end the program before it builds its host and leave a test factory waiting. Every program of the repository is one
+candidate: the mutant throws in each `<Main>$` and in their lambdas.
+
 ## Seeds and replays (owner, 2026-10-11)
 
 Up to 2026-10-11 every corpus entry sampled with seed 1, so each round tried the same 100 changes per repository:
@@ -178,6 +186,32 @@ mutant of code no edit touched, a miss of the evaluation's own making (seen sinc
 with `-f`, #22). With a run framework, each C# file is now read with the symbols its project defines for it
 (`SampleRequest.Framework`), so the edit lands on the declaration the mutant changes: Alba 0 of 64 missed, the change
 selected 82.5 % of the classes and caught.
+
+## Shape mutants (2026-10-12)
+
+Every mutant kind changed code: a member throws, returns a default, takes the other branch, or a field starts with
+another value. A test that depends only on a type's shape, its types, attributes or modifiers read through reflection,
+fails on none of them, so the corpus could not show a miss of such a test. One exists: a class that finds a plugin an
+earlier class loaded and checks its exported types (`OrderDependentLoadTests`, docs/design/loaded-outputs.md). Two
+opt-in kinds change metadata instead:
+
+- `attribute-removed`: the first attribute of a type or member is taken out, in source (the attribute, or its whole
+  list when it is alone there) and from the compiled metadata. Left out: attributes the compiler stores as flags
+  (`Serializable`, `StructLayout`, …), which no metadata edit removes, attributes only the compiler, analyzers, the
+  debugger, trimming or coverage read (`ShapeMutants.Ignored`), attributes with a target (`[return: …]`), and
+  overloaded members, which the metadata names by name alone.
+- `unsealed`: a sealed class (or record class) loses `sealed` in every declaration of it and in the metadata; static
+  classes and structs are left out.
+
+Targets are named `Type.<sealed>`, `Type.[Name]` and `Type.Member[Name]`; replays take them back by these names. The
+source edit is the change itself (the edited files are only parsed by TestDetta), and TestDetta sees it as one:
+removing a member's attribute is a modified member with changed metadata, removing a type's attribute or `sealed` a
+modified type declaration (`ShapeMutantTests`). A shape mutant cannot sit behind the schema's run-time switch, since
+metadata has no branch to guard: the schema leaves it out, and each one is written in alone, in parallel runs into the
+worker's own copy of the clone. Neither the default (`throw`) nor `all` takes them, so the samples and stored outcomes
+of earlier runs stay as they were; `--mutant-kinds shape` asks for both. C# only: F# and Visual Basic declarations are
+not sampled for them. `~/sift-corpus/run-shape-pilot.sh` runs a first pilot on repositories likely to read attributes
+through reflection.
 
 ## F#: Argu (2026-10-06)
 
