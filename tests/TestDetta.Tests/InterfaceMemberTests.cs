@@ -31,7 +31,9 @@ public sealed class InterfaceMemberTests : IDisposable
               <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
             </Project>
             """);
-        _repo.Write("src/App/Result.cs", "namespace App; public sealed record Result(int Value);");
+        // A method keeps the record from only carrying data, whose metadata changes the shape rule answers without the
+        // name trace this test is about (docs/design/shape-reads.md).
+        _repo.Write("src/App/Result.cs", "namespace App; public sealed record Result(int Value) { public int Twice() => Value * 2; }");
         _repo.Write("src/App/Service.cs", $$"""
             namespace App;
             public interface IService { Result Create(int value); }
