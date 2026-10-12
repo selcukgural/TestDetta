@@ -42,7 +42,7 @@ that inspects a compiled-against output through `typeof(T).Assembly` (an archite
 nothing a call shows, so only coverage selects it and a body change it would catch can be missed; and product code
 that loads an output by name and hands it to such a test is counted as a catalog (docs/design/loaded-outputs.md).
 
-## Next, a possible miss: a test that constructs a fixture type itself (found 2026-10-11)
+## ~~Next, a possible miss: a test that constructs a fixture type itself~~ (found 2026-10-11, fixed 2026-10-12)
 
 The fixture marker at the start of a fixture's constructor makes the fixture the current bucket wherever the
 constructor runs. A test that creates a fixture type itself (`using (new StoreFixture()) { ... }`) then credits the

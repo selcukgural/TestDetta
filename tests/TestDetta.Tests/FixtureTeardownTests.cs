@@ -50,6 +50,8 @@ public sealed class FixtureTeardownTests : IDisposable
             public class UserTests(StoreFixture store) : IClassFixture<StoreFixture> { [Fact] public void Uses() => Assert.Equal(2, store.Two); }
             // Disposes its fixture inside the test, where the code is the test's own.
             public class SelfTests(StoreFixture store) : IClassFixture<StoreFixture> { [Fact] public void Disposes() => store.Dispose(); }
+            // Builds a fixture type itself: its constructor's and teardown's code are the test's own.
+            public class BuildTests { [Fact] public void Builds() { using (new StoreFixture()) { } } }
             public class PlainTests { [Fact] public void Two() => Assert.Equal(2, Math2.Two()); }
             """);
         _repo.Commit("base");
@@ -66,5 +68,11 @@ public sealed class FixtureTeardownTests : IDisposable
         Assert.Contains(run, map.Fixtures["App.Tests.StoreFixture"].Select(id => map.Methods[id]));
         Assert.Contains(run, map.Classes["App.Tests.SelfTests"].Select(id => map.Methods[id]));
         Assert.DoesNotContain(run, map.Classes.GetValueOrDefault("App.Tests.PlainTests", []).Select(id => map.Methods[id]));
+
+        // The framework built the fixture for its users; the test built one for itself.
+        var two = new CoveredMethod("App.Math2", "Two");
+        Assert.Contains(two, map.Fixtures["App.Tests.StoreFixture"].Select(id => map.Methods[id]));
+        Assert.Contains(two, map.Classes["App.Tests.BuildTests"].Select(id => map.Methods[id]));
+        Assert.Contains(run, map.Classes["App.Tests.BuildTests"].Select(id => map.Methods[id]));
     }
 }
