@@ -1,3 +1,4 @@
+using TestDetta.Core;
 using TestDetta.Eval;
 
 namespace TestDetta.Tests;
@@ -105,16 +106,17 @@ public sealed class EvalReportsTests : IDisposable
     }
 
     [Fact]
-    public void Any_recording_takes_the_newest_full_recording_at_the_commit()
+    public void Any_recording_takes_the_newest_full_recording_at_the_commit_in_this_map_format()
     {
         var cache = Path.Combine(_directory, "maps");
-        foreach (var (name, minutes) in (ReadOnlySpan<(string, int)>)[("abc-old", -20), ("abc-new", -10), ("abc-incremental-def", 0), ("abd-other", 0), ("abc-empty", 5)])
+        foreach (var (name, minutes) in (ReadOnlySpan<(string, int)>)[("abc-old", -20), ("abc-new", -10), ("abc-incremental-def", 0), ("abd-other", 0), ("abc-empty", 5), ("abc-format2", 10)])
         {
             var folder = Path.Combine(cache, name);
             Directory.CreateDirectory(folder);
             if (name != "abc-empty")
             {
-                File.WriteAllText(Path.Combine(folder, "T.json"), "{}");
+                var format = name == "abc-format2" ? 2 : CoverageMapStore.Version;
+                File.WriteAllText(Path.Combine(folder, "T.json"), $$"""{"version":{{format}},"testProject":"T.csproj"}""");
             }
 
             Directory.SetLastWriteTimeUtc(folder, DateTime.UtcNow.AddMinutes(minutes));

@@ -112,7 +112,8 @@ Mutant runs answer "does it miss?" and take hours; why a repository selects wide
 
 1. **Precision triage** (`--explain --any-recording`): every sampled change's selection and evidence, from the
    cached maps at the commit (the newest recording there, also from an older recorder: maps without newer data only
-   select more). Minutes per repository. `--summarize` then writes `precision.md`: mean and median share, how many
+   select more; not from one of another map format, which this TestDetta would not read and would judge as runs
+   without maps, so after a format change the first triage records again). Minutes per repository. `--summarize` then writes `precision.md`: mean and median share, how many
    changes run a whole test project, and the rules (evidence with names, paths and numbers taken out) that select
    the most classes, per repository and across them. `~/sift-corpus/run-triage.sh` runs it on the repositories whose
    last full run selected 50% or more.

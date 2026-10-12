@@ -11,9 +11,12 @@ then emptied.
   project between it and the test projects target that framework. The same change still selects its tests in a run
   without `-f`. A CI job that runs one framework can therefore skip tests only another framework's build could fail:
   run every framework somewhere, for example nightly (site: Limitations, "Target frameworks").
-- **Maps need recording again after upgrading.** Recording now tracks assembly loads. A map recorded by an earlier
-  version runs a test project completely for a changed project it references with `ReferenceOutputAssembly="false"`,
-  until the map is recorded again (site: What runs everything).
+- **Maps need recording again after upgrading.** Maps are now of format 3; maps of format 2, which 0.1.x recorded,
+  are ignored with the warning "record the maps again", and their test projects are selected by names, as without a
+  map, until the next recording on the default branch writes new ones. Pull requests that run before it select more.
+  The new recorder tracks assembly loads and keeps a test's own code in its class when the test builds a fixture type
+  itself, where a format 2 map could credit that code to the fixture's users and miss the test (site: Limitations,
+  "Maps recorded by an earlier version").
 
 ## Changes
 

@@ -76,12 +76,12 @@ foreach (var project in SelectTestProjects(graph, root, projects))
     {
       title: "Harita dosyası yazılır", nodes: ["rec", "maps"], edges: ["write"],
       who: "<code>CoverageMapStore.Write(path, map)</code>",
-      file: "src/TestDetta.Core/CoverageMapStore.cs:27",
+      file: "src/TestDetta.Core/CoverageMapStore.cs:29",
       input: "<code>PathFor(repoRoot, csproj)</code> → <code>&lt;kök&gt;/.testdetta/coverage/Calc.Tests.json</code>, ve <code>CoverageMap</code>",
-      output: "Format sürümü 2 olan sıkıştırılmamış JSON (üretilmiş kaynaklar içinde gzip+base64)",
+      output: "Format sürümü 3 olan sıkıştırılmamış JSON (üretilmiş kaynaklar içinde gzip+base64). Başka formattaki bir harita okunmaz (0.1.x'in yazdığı format 2 dahil): <code>AnalysisPipeline.ReadMap</code> \"record the maps again\" uyarısıyla onu atlar, proje haritasız, isimlerle seçilir. Format 3 (2026-10-12): fixture türünü kendisi kuran bir testin kodu kendi sınıfında kalır; format 2 harita bunu ayırt edemez",
       purpose: "Haritayı bir commit'e bağlı, sonradan okunabilir bir dosya olarak saklamak. <code>.testdetta/</code> git'e girmez.",
       body: C(`
-{ "version": 2, "testProject": "tests/Calc.Tests/Calc.Tests.csproj", "commit": "9f3c…",
+{ "version": 3, "testProject": "tests/Calc.Tests/Calc.Tests.csproj", "commit": "9f3c…",
   "methods": [["Calc.Calculator","Add"], ["Calc.Calculator","Tax"]],
   "classes": { "Calc.Tests.AddTests": [0], "Calc.Tests.TaxTests": [1] },
   "fixtures": {}, "ambient": [], "initialization": [],
@@ -368,7 +368,7 @@ public static void Hit(int id)
     {
       title: "Güven bilgileri ve harita yazılır", nodes: ["merge", "map"], edges: ["out"],
       who: "<code>Record</code> metodunun sonu, ardından <code>CoverageMapStore.Write</code>",
-      file: "src/TestDetta.Coverage/CoverageRecorder.cs, src/TestDetta.Core/CoverageMapStore.cs:27",
+      file: "src/TestDetta.Coverage/CoverageRecorder.cs, src/TestDetta.Core/CoverageMapStore.cs:29",
       input: "TRX raporları, sınıf konumları, üretilmiş kaynaklar",
       output: "<code>FailedClasses</code>, <code>SkippedClasses</code>, <code>Platform</code>, <code>Framework</code>, <code>ClassLocations</code>, <code>Generated</code>, <code>InstrumentedProjects</code> eklenmiş harita dosyası",
       purpose: "Haritaya güvenilemeyecek yerleri işaretlemek: kayıtta başarısız olan sınıf her proje etkilendiğinde koşar; atlanan sınıf başka platformda seçilir. <code>InstrumentedProjects</code> (2026-10-07, <code>CoverageRecorder.InstrumentedProjects</code>): enstrümante edilen dll'lerin projeleri, depo köküne göre, sıralı; seçim bunu B2 kuralında okur (Bölüm 4). Testler geçip hiç sınıf kaydedilmediyse (<code>ThrowIfNoClassRecorded</code>) harita yazılmaz, proje \"not recorded\" olur.",

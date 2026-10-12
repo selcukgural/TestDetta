@@ -10,10 +10,12 @@ public static class CoverageMapStore
 
     /// <summary>
     /// Format of the maps written. 2 (2026-10-05): generated code is stored as its source instead of
-    /// the names each generated type mentions. A map of another format is not read: one recorded
-    /// before lacks what the selection now needs to see generated callers.
+    /// the names each generated type mentions. 3 (2026-10-12): the same fields, recorded by a recorder that
+    /// keeps a test's own code in its class when the test builds a fixture type itself; a map of format 2 could
+    /// credit what followed to the fixture's users and miss that test, and nothing in the map tells the two apart.
+    /// A map of another format is not read, and its project is selected without coverage until it is recorded again.
     /// </summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>Path of the map for <paramref name="testProjectPath"/>.</summary>
     /// <param name="repoRoot">Repository root.</param>
@@ -298,6 +300,30 @@ public static class CoverageMapStore
         }
 
         json.WriteEndObject();
+    }
+
+    /// <summary>
+    /// The format of the map at <paramref name="path"/>, read from its first property without parsing the rest (maps of
+    /// large suites run to megabytes); null when the file is not a map that starts with its format.
+    /// </summary>
+    /// <param name="path">Map file.</param>
+    public static int? FormatOf(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            Span<byte> start = stackalloc byte[64];
+            var reader = new Utf8JsonReader(start[..stream.ReadAtLeast(start, start.Length, throwOnEndOfStream: false)], isFinalBlock: false, default);
+            return reader.Read() && reader.TokenType == JsonTokenType.StartObject
+                   && reader.Read() && reader.ValueTextEquals("version"u8)
+                   && reader.Read() && reader.TryGetInt32(out var version)
+                ? version
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Reads the map at <paramref name="path"/>; null when the file does not exist.</summary>
