@@ -77,6 +77,26 @@ assemblies, the later class is not recorded. That class depends on the earlier o
 process, the order-dependent shape of docs/design/order-dependent-state.md. Scans in repository code are covered by
 the `GetAssemblies` wrapper; `AssemblyLoadContext.Assemblies` and `AssemblyLoadContext.All` are not wrapped yet.
 
+**Reproduced (2026-10-12, `OrderDependentLoadTests`, red on research/order-dependent-loads).** `ALoaderTests` loads a
+plugin referenced only for build order (`Assembly.LoadFrom`, wrapped); `BShapeTests` runs after it, finds the plugin
+through `AssemblyLoadContext.Default.Assemblies` and checks that its exported types are sealed, running none of their
+code. Adding an unsealed type selects only `ALoaderTests` ("read a changed file"), and a full run fails `BShapeTests`.
+The miss needs a test that depends on the output's shape (its types, attributes), not on its code: a class that runs
+the output's code is in its coverage. The mutants of the evaluation change behaviour only, so the corpus cannot show
+this kind of miss; its 0 misses say nothing here.
+
+Census of the corpus (headroom run of 2026-10-12, 46 of 59 repositories so far): the rules that narrow to loaders
+act with at least one class in 34 test projects of 16 repositories. Most are Roslyn analyzer and generator tests and
+public API tests that read the output as a file (`MetadataReference`, Cecil), which every class does anew, so the
+once-per-process shape does not apply. Plugins loaded into the process: NLog's extensions (every class that ran
+their code is a recorded loader), Autofac's `LoadContextScopeTests` (one class), Serilog's `TestDummies` (one
+recorded loader, four more classes ran its code; to look at).
+
+Candidate signal, which only adds users: wrap the calls that enumerate loaded assemblies or an assembly's types
+(`AssemblyLoadContext.Assemblies`/`All`, `Assembly.GetTypes`/`GetExportedTypes`/`DefinedTypes`/`ExportedTypes`) in
+repository and third-party code, recording the class as a scan user of the assembly the call names. The call happens
+in each class that inspects, so the order no longer decides. Not decided; measured first.
+
 ## Measurement (2026-10-10/11, fresh recordings, one repository at a time on an idle machine)
 
 | Repository | Before | Step 5 | Step 5b | Missed |
