@@ -11,8 +11,9 @@
   those tests changes (a new test class for the tool gets the trait too). `Category=Slow` tests run on a pull request only when it
   changes the recorder (`src/TestDetta.Coverage*`), the mutants, the evaluation tool, the build settings or a Slow test; run them
   locally before pushing anything else that could reach them.
-- The evaluation tool draws a new sample seed each run unless `--seed` is given; compare two builds with the same
-  `--seed`, repeat a run with its reported seed or `--replay <synthetic.json>` (docs/evaluation.md, "Seeds and replays").
+- The evaluation tool draws a new sample seed each run unless `--seed` is given; compare two builds on one sample
+  (side A with `--seed`, side B with `--replay` of side A's round, since a different map can move a seed's picks),
+  repeat a run with its reported seed or `--replay <synthetic.json>` (docs/evaluation.md, "Seeds and replays").
 - The SDK is pinned to 10.0 in `global.json`; the machine's 11.0 preview SDK is broken.
 - The atlas (`docs/atlas/`, Turkish, interactive) documents every flow at code level; a change to a flow,
   class, signature or rule it describes updates it in the same change (`node docs/atlas/build.mjs`, see its README).

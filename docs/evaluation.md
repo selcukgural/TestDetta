@@ -152,8 +152,13 @@ pattern outside them (AfterApply's architecture tests, which load each layer by 
   ("Sample seed 418230 (drawn); --seed 418230 repeats this sample"), so any run can be repeated. A new seed means
   new changes, which the outcome cache does not know: every one runs the whole suite, hours instead of minutes for
   a large repository, so discovery runs belong to the night.
-- **Comparisons give one seed.** Two builds of TestDetta compared on a repository (a fix against main) run with the
-  same `--seed`, or the difference comes from the sample. The rounds measured before 2026-10-11 used `--seed 1`.
+- **Comparisons give one sample.** Two builds of TestDetta compared on a repository (a fix against main) judge the
+  same changes, or the difference comes from the sample. One side samples with a `--seed`, and the other replays that
+  side's sample (`--replay <side A's round>`). The same seed alone is not enough: the sampler takes most members from
+  those the map says some test ran, so when the two builds record different maps one pick can move. In FsCheck,
+  1 of 100 mutants differed between main and the test-extension branch on 2026-10-12, and the replay gave the same
+  100. Side B then reuses side A's stored test outcomes and costs only its recording and selection.
+  `~/sift-corpus/run-ab.sh` runs both sides this way. The rounds measured before 2026-10-11 used `--seed 1`.
 - **Replays take the exact changes.** `--replay <synthetic.json or its folder>` evaluates again the changes of an
   earlier run, the same members with the same kinds and the same data files, in their order; a corpus run takes
   `--replay <earlier round>` and reads `<round>/<name>/synthetic.json` per repository. A seed reproduces a sample only
