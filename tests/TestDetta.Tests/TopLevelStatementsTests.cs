@@ -86,6 +86,9 @@ public sealed class TopLevelStatementsTests : IDisposable
         Assert.Contains(new CoveredMethod("Program", "<Main>$"), program);
         Assert.DoesNotContain(new CoveredMethod("Program", "Main"), program);
 
+        // The OpenAPI document reads the record's shape through the schema exporter, without running its code.
+        Assert.Contains("shape:Contracts.DetailResponse", map.OutputUses!.Classes["Api.Tests.OpenApiSchemaTests"]);
+
         CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
         _repo.Write("src/Contracts/Responses.cs", "namespace Contracts; public sealed record DetailResponse(int Id, string Name, string? Note = null);");
         var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();

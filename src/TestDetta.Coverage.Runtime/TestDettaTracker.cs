@@ -444,6 +444,129 @@ public static class TestDettaTracker
         }
     }
 
+    /// <summary>Name of the type the instrumenter adds to every repository module, so a type's assembly tells whose it is.</summary>
+    public const string RepositoryMarker = "<TestDettaRepository>";
+
+    /// <summary>
+    /// Before a type's full name in the output uses: the bucket read the type's shape (its members, attributes, the schema
+    /// a serializer derives from it) through reflection, without running its code (docs/design/shape-reads.md).
+    /// </summary>
+    public const string ShapePrefix = "shape:";
+
+    /// <summary>The shape names a type stands for (itself and the repository types its members use), computed once per type.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, string[]> ShapeNames = new();
+
+    /// <summary>Whether an assembly is the repository's (it carries <see cref="RepositoryMarker"/>), looked up once per assembly.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, bool> RepositoryAssemblies = new();
+
+    /// <summary>
+    /// Records that the current bucket read the shape of a type: called before a reflection or schema call of instrumented
+    /// code, repository or third-party, with its first two arguments (the object first). A <see cref="Type"/>, a member (its
+    /// declaring type) or a serializer's type metadata (its <c>Type</c>) among them stands for the type; each repository
+    /// type is recorded with <see cref="ShapePrefix"/>, with the repository types its properties and fields hold, two levels
+    /// down, since a schema lists them too.
+    /// </summary>
+    /// <param name="first">The call's first argument, or the object it is called on.</param>
+    /// <param name="second">Its second argument, or null.</param>
+    public static void ShapeRead(object? first, object? second)
+    {
+        try
+        {
+            HashSet<string>? names = null;
+            foreach (var argument in (ReadOnlySpan<object?>)[first, second])
+            {
+                if (ShapeType(argument) is not { } type)
+                {
+                    continue;
+                }
+
+                var shape = ShapeNames.GetOrAdd(type, static t => [.. ShapesOf(t)]);
+                if (shape.Length > 0)
+                {
+                    (names ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(shape);
+                }
+            }
+
+            if (names is not null)
+            {
+                RecordNames(names);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or ArgumentException or System.Reflection.TargetInvocationException or TypeLoadException or IOException)
+        {
+            // A type that cannot be read (a missing dependency): the call itself reports the problem.
+        }
+    }
+
+    /// <summary>The type an argument of a shape read stands for, or null.</summary>
+    /// <param name="argument">The argument.</param>
+    private static Type? ShapeType(object? argument) => argument switch
+    {
+        Type type => type,
+        System.Reflection.MemberInfo member => member.DeclaringType,
+        // System.Text.Json's JsonTypeInfo, read by name: the tracker also runs where System.Text.Json is not referenced.
+        not null when argument.GetType().FullName?.StartsWith("System.Text.Json.Serialization.Metadata.JsonTypeInfo", StringComparison.Ordinal) == true
+            => argument.GetType().GetProperty("Type")?.GetValue(argument) as Type,
+        _ => null,
+    };
+
+    /// <summary>The shape names of a type: its own when it is the repository's, then those of the types its members hold.</summary>
+    /// <param name="root">The type read.</param>
+    private static List<string> ShapesOf(Type root)
+    {
+        var names = new List<string>();
+        var seen = new HashSet<Type>();
+        var pending = new Queue<(Type Type, int Depth)>();
+        pending.Enqueue((root, 0));
+        while (pending.Count > 0)
+        {
+            var (type, depth) = pending.Dequeue();
+            if (type.IsArray || type.IsByRef || type.IsPointer)
+            {
+                type = type.GetElementType()!;
+            }
+
+            if (!seen.Add(type))
+            {
+                continue;
+            }
+
+            if (type.IsGenericType)
+            {
+                foreach (var argument in type.GetGenericArguments())
+                {
+                    pending.Enqueue((argument, depth));
+                }
+
+                type = type.GetGenericTypeDefinition();
+            }
+
+            if (type.IsGenericParameter || !RepositoryAssemblies.GetOrAdd(type.Assembly, static a => a.GetType(RepositoryMarker, throwOnError: false) is not null))
+            {
+                continue;
+            }
+
+            names.Add(ShapePrefix + (type.FullName ?? type.Name));
+            if (depth == 2)
+            {
+                continue;
+            }
+
+            const System.Reflection.BindingFlags members = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly;
+            foreach (var property in type.GetProperties(members))
+            {
+                pending.Enqueue((property.PropertyType, depth + 1));
+            }
+
+            foreach (var field in type.GetFields(members))
+            {
+                pending.Enqueue((field.FieldType, depth + 1));
+            }
+        }
+
+        return names;
+    }
+
     /// <summary>Adds the scanned names the receiver of a scan stands for; see <see cref="OutputScanned"/>.</summary>
     /// <param name="names">Names found so far.</param>
     /// <param name="receiver">The object the scan was called on.</param>
@@ -557,10 +680,11 @@ public static class TestDettaTracker
     {
         lock (LoadGate)
         {
-            // A scan loads nothing; a load by name added its plain names above.
+            // A scan or a shape read loads nothing; a load by name added its plain names above.
             foreach (var name in names)
             {
-                if (!name.StartsWith(ScanPrefix, StringComparison.Ordinal) && !name.StartsWith(NameLoadPrefix, StringComparison.Ordinal))
+                if (!name.StartsWith(ScanPrefix, StringComparison.Ordinal) && !name.StartsWith(NameLoadPrefix, StringComparison.Ordinal)
+                    && !name.StartsWith(ShapePrefix, StringComparison.Ordinal))
                 {
                     WrappedNames.Add(name);
                 }
