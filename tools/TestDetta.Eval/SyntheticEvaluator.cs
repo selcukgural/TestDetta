@@ -597,7 +597,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
     {
         var schema = MutationInjector.InjectSchema(
             assemblies,
-            [.. targets.Where(static t => t.Target.Kind != MutantKind.EmptyFile).Select(static t => new SchemaTarget(t.Id, t.Target.Member, t.Target.Kind))],
+            [.. targets.Where(static t => t.Target.Kind != MutantKind.EmptyFile && !MutantKinds.IsShape(t.Target.Kind)).Select(static t => new SchemaTarget(t.Id, t.Target.Member, t.Target.Kind))],
             Path.Combine(workspace.MapCache, "..", "schema-backup"));
         var check = workspace.Executor.RunAll(testProjects, "baseline-schema");
         var same = check.Complete && testProjects.All(p =>
@@ -738,6 +738,13 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
             };
         }
 
+        // A shape mutant changes metadata, which the schema's switch cannot guard: it is written in alone, into the
+        // assemblies of the worker's copy of the clone, over whatever schema they hold (docs/evaluation.md, "Shape mutants").
+        if (MutantKinds.IsShape(target.Kind))
+        {
+            return ApplyShape(target, context, index, executor);
+        }
+
         if (context.Schema is { } schema)
         {
             var entry = schema.Entries.GetValueOrDefault(index);
@@ -751,6 +758,30 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
 
         var mutation = MutationInjector.Inject(context.Assemblies, target.Member, Path.Combine(workspace.MapCache, "..", "mutant-backup"), target.Kind);
         var directories = mutation.Backups.Keys.Select(static f => Path.GetDirectoryName(f)!).ToHashSet(StringComparer.Ordinal);
+        return new ActiveMutant(mutation.MutatedMethods, directories, environment: null, mutation);
+    }
+
+    /// <summary>
+    /// Writes a shape mutant into the worker's copies of the repository's assemblies, with backups of its own so workers
+    /// running at once do not share them. The output directories it reports are the clone's, as the schema's are, since
+    /// the test projects it reaches are found by those.
+    /// </summary>
+    /// <param name="target">A shape mutant.</param>
+    /// <param name="context">What the mutants of the commit share.</param>
+    /// <param name="index">1-based position in the sample.</param>
+    /// <param name="executor">The worker's executor, whose root is its copy of the clone (the clone itself for one worker).</param>
+    private ActiveMutant ApplyShape(SyntheticTarget target, MutantContext context, int index, TestExecutor executor)
+    {
+        // One worker runs in the clone itself, whose outputs may lie outside it; a worker's copy holds every output.
+        var inClone = string.Equals(executor.Root, workspace.RepoRoot, StringComparison.Ordinal);
+        var assemblies = inClone
+            ? context.Assemblies
+            : [.. context.Assemblies.Select(a => Path.GetFullPath(Path.Combine(executor.Root, Path.GetRelativePath(workspace.RepoRoot, a))))];
+        var backups = Path.Combine(workspace.MapCache, "..", $"shape-backup-{index}");
+        var mutation = MutationInjector.Inject(assemblies, target.Member, backups, target.Kind);
+        var directories = mutation.Backups.Keys
+            .Select(f => Path.GetDirectoryName(inClone ? f : Path.GetFullPath(Path.Combine(workspace.RepoRoot, Path.GetRelativePath(executor.Root, f))))!)
+            .ToHashSet(StringComparer.Ordinal);
         return new ActiveMutant(mutation.MutatedMethods, directories, environment: null, mutation);
     }
 
