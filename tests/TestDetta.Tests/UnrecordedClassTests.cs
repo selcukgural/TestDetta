@@ -301,6 +301,22 @@ public sealed class UnrecordedClassTests : IDisposable
     }
 
     [Fact]
+    public void A_report_cut_off_while_being_written_counts_as_no_report()
+    {
+        // A test host killed while writing its TRX ends it inside an attribute (one of MSBuild's shards).
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path.Combine(_directory, "run.trx"), """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <TestDefinitions>
+                <UnitTest id="1"><TestMethod className="App.OrderTests" name="Pla
+            """);
+        var output = new StringWriter();
+
+        Assert.Null(CoverageRecorder.ReadReport(_directory, output));
+        Assert.Contains("could not read this run's test report", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Class_locations_come_from_the_pdb_with_generated_code_counted_for_its_class()
     {
         Directory.CreateDirectory(_directory);
