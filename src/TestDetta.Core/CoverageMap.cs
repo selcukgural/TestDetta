@@ -185,6 +185,14 @@ public sealed record CoverageMap(
     public IReadOnlyList<string>? OutputLoadsUnseen { get; init; }
 
     /// <summary>
+    /// Methods (indexes into <see cref="Methods"/>) that ran before the tests for the test platform alone (VSTest's
+    /// testhost serializing with the repository's own Newtonsoft.Json): the ones no test or fixture ran are also in
+    /// <see cref="CoverageHits.Ambient"/>; the others count only for the classes that ran them (docs/design/test-platform-code.md).
+    /// Null for a map recorded before.
+    /// </summary>
+    public IReadOnlyList<int>? TestPlatformCode { get; init; }
+
+    /// <summary>
     /// Before a name in <see cref="OutputUses"/>: the bucket enumerated the loaded assemblies (<c>AppDomain.GetAssemblies</c>)
     /// while that assembly was loaded, rather than loading it; the tracker's <c>TestDettaTracker.ScanPrefix</c>. A map
     /// recorded before 2026-10-11 has scans as plain names.

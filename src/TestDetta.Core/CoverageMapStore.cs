@@ -229,6 +229,17 @@ public static class CoverageMapStore
             json.WriteEndArray();
         }
 
+        if (map.TestPlatformCode is { } platformCode)
+        {
+            json.WriteStartArray("testPlatformCode"u8);
+            foreach (var id in platformCode)
+            {
+                json.WriteNumberValue(id);
+            }
+
+            json.WriteEndArray();
+        }
+
         if (map.OutputLoadsUnseen is { } loadsUnseen)
         {
             json.WriteStartArray("outputLoadsUnseen"u8);
@@ -415,6 +426,9 @@ public static class CoverageMapStore
                 Platform = root.TryGetProperty("platform", out var platform) ? platform.GetString() : null,
                 FileReadsUnseen = root.TryGetProperty("fileReadsUnseen", out var unseen)
                     ? [.. unseen.EnumerateArray().Select(static a => a.GetString()!)]
+                    : null,
+                TestPlatformCode = root.TryGetProperty("testPlatformCode", out var platformCode)
+                    ? [.. platformCode.EnumerateArray().Select(static id => id.GetInt32())]
                     : null,
                 OutputLoadsUnseen = root.TryGetProperty("outputLoadsUnseen", out var loadsUnseen)
                     ? [.. loadsUnseen.EnumerateArray().Select(static a => a.GetString()!)]

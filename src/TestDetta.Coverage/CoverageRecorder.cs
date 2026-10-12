@@ -1170,6 +1170,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var merged = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var mergedFixtures = new Dictionary<string, SortedSet<int>>(StringComparer.Ordinal);
         var ambientIds = new SortedSet<int>();
+        var platformIds = new SortedSet<int>();
         var classSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var fixtureSeconds = new Dictionary<string, double>(StringComparer.Ordinal);
         var startupSeconds = new List<double>();
@@ -1220,6 +1221,14 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
                 }
             }
 
+            if (root.TryGetProperty("platform", out var platform))
+            {
+                foreach (var id in platform.EnumerateArray())
+                {
+                    platformIds.Add(id.GetInt32());
+                }
+            }
+
             // A fixture set up in several shards cost its time in each, so times add up.
             AddSeconds(root, "classSeconds", classSeconds);
             AddSeconds(root, "fixtureSeconds", fixtureSeconds);
@@ -1241,6 +1250,18 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         var classes = Freeze(merged);
         var fixtures = Freeze(mergedFixtures);
+
+        // What the test platform alone ran before the tests: a method a test or fixture also ran is answered by them; one
+        // no test ran stays outside every test, as before, since every run of the project runs it (docs/design/test-platform-code.md).
+        var ranInTests = new HashSet<int>(classes.Values.SelectMany(static ids => ids).Concat(fixtures.Values.SelectMany(static ids => ids)));
+        foreach (var id in platformIds)
+        {
+            if (!ranInTests.Contains(id))
+            {
+                ambientIds.Add(id);
+            }
+        }
+
         int[] ambient = [.. ambientIds];
 
         var git = new GitClient(loggerFactory.CreateLogger<GitClient>());
@@ -1259,6 +1280,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             new CoverageTimings(classSeconds, fixtureSeconds, startupSeconds.Count == 0 ? 0 : startupSeconds.Average()))
         {
             Initialization = [.. initialization],
+            TestPlatformCode = [.. platformIds],
             // Linked in some process and unlinked in none: one path the probes do not see is enough to stay run-once.
             LinkedInitialization = [.. initialization.Where(id => linked.Contains(id) && !unlinked.Contains(id))],
             BuiltValues = new CoverageHits(Freeze(builtClasses), Freeze(builtFixtures), [.. builtAmbient]),

@@ -85,6 +85,9 @@ public static class CoverageMapMerge
             FailedClasses = failed,
             Initialization = initialization,
             LinkedInitialization = Linked(previous, partial, initialization, remap),
+            // A carried class may have been the one test that also ran platform code; what is outside the tests is in
+            // the ambient list either way, so the list (informational) is kept only for the new recording.
+            TestPlatformCode = partial.TestPlatformCode,
             BuiltValues = built,
             FileReads = Reads(previous.FileReads, partial.FileReads, carried, partial),
             OutputUses = Reads(previous.OutputUses, partial.OutputUses, carried, partial),

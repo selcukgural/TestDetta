@@ -183,6 +183,19 @@ public static class TestDettaTracker
     private static readonly long[] InitializationBits = new long[Words];
 
     /// <summary>
+    /// Methods that ran outside every test only for the test platform: the start-up bucket's hits whose stack, past the
+    /// method's own assembly and the base class library, holds nothing but the test platform (VSTest's testhost
+    /// serializing its messages with the repository's own Newtonsoft.Json, 2026-10-12: 99.5 % of Newtonsoft's start-up
+    /// hits). Kept apart from <see cref="Startup"/>, which would make every such method code outside every test; the
+    /// recorder puts back the ones no test ran (docs/design/test-platform-code.md).
+    /// </summary>
+    private static readonly long[] PlatformBits = new long[Words];
+
+    /// <summary>True while this thread walks its stack for <see cref="RunsForTestPlatformOnly"/>, which must not recurse.</summary>
+    [ThreadStatic]
+    private static bool _walkingForPlatform;
+
+    /// <summary>
     /// Methods that ran inside an initialization scope whose result was stored into a tracked field
     /// (linked). Declared after <see cref="Words"/>, which static initialization order needs.
     /// </summary>
@@ -348,6 +361,15 @@ public static class TestDettaTracker
         }
 
         var bucket = BucketForHit();
+
+        // A start-up hit the test platform alone made goes apart; once a method is outside the tests, it is no longer asked.
+        if (ReferenceEquals(bucket, Startup) && !IsMarked(Startup.Bits, word, bit) && RunsForTestPlatformOnly())
+        {
+            Mark(PlatformBits, word, bit);
+            Remember(id);
+            return;
+        }
+
         Mark(bucket.Bits, word, bit);
         if (IsBetweenTests(bucket))
         {
@@ -1001,6 +1023,94 @@ public static class TestDettaTracker
         {
             _constructions![--_constructionCount].Spilled = null;
         }
+    }
+
+    /// <summary>True when the bit of a method is set in <paramref name="bits"/>.</summary>
+    /// <param name="bits">A bucket's bits.</param>
+    /// <param name="word">Word index.</param>
+    /// <param name="bit">Bit in the word.</param>
+    private static bool IsMarked(long[] bits, int word, long bit) =>
+        (uint)word < (uint)bits.Length && (Volatile.Read(ref bits[word]) & bit) != 0;
+
+    /// <summary>
+    /// True when the instrumented method that called <see cref="Hit"/> runs for the test platform alone: past its own
+    /// assembly and the base class library, the first caller is the test platform (<c>Microsoft.TestPlatform.*</c>,
+    /// <c>Microsoft.VisualStudio.TestPlatform.*</c>, <c>testhost</c>), and so is every caller below it. Any other code on
+    /// the stack (another repository assembly, a test framework, a test) keeps the hit outside every test. One stack walk
+    /// per start-up hit of a method not yet outside the tests.
+    /// </summary>
+    private static bool RunsForTestPlatformOnly()
+    {
+        return Classify();
+    }
+
+    /// <summary>
+    /// <see cref="RunsForTestPlatformOnly"/> for the method that calls this, as if it were an instrumented method calling
+    /// <see cref="Hit"/>: the tests check the classification with a caller in an assembly named like the test platform's.
+    /// </summary>
+    internal static bool RunsForTestPlatformOnlyForTests() => Classify();
+
+    /// <summary>The stack walk of <see cref="RunsForTestPlatformOnly"/>; its two callers stand for the tracker frames above the method.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static bool Classify()
+    {
+        if (_walkingForPlatform)
+        {
+            return false;
+        }
+
+        _walkingForPlatform = true;
+        try
+        {
+            string? hitAssembly = null;
+            var sawPlatform = false;
+            // Frames of the tracker are skipped below, so how many of them sit above the method does not matter.
+            foreach (var frame in new StackTrace(1, fNeedFileInfo: false).GetFrames() ?? [])
+            {
+                var assembly = frame.GetMethod()?.DeclaringType?.Assembly;
+                if (assembly is null || assembly == typeof(TestDettaTracker).Assembly)
+                {
+                    continue;
+                }
+
+                var name = assembly.GetName().Name ?? string.Empty;
+                if (hitAssembly is null)
+                {
+                    hitAssembly = name;
+                    continue;
+                }
+
+                if (name == hitAssembly || IsBaseLibrary(name))
+                {
+                    continue;
+                }
+
+                if (!IsTestPlatform(name))
+                {
+                    return false;
+                }
+
+                sawPlatform = true;
+            }
+
+            return sawPlatform;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or System.Security.SecurityException)
+        {
+            return false;
+        }
+        finally
+        {
+            _walkingForPlatform = false;
+        }
+
+        static bool IsBaseLibrary(string name) =>
+            name.StartsWith("System", StringComparison.Ordinal) || name is "mscorlib" or "netstandard" or "Microsoft.Win32.Primitives";
+
+        static bool IsTestPlatform(string name) =>
+            name.StartsWith("Microsoft.TestPlatform", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("Microsoft.VisualStudio.TestPlatform", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("testhost", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Sets one bit of a bit set, cheaply when it is already set.</summary>
@@ -1754,6 +1864,7 @@ public static class TestDettaTracker
                 WriteBuckets(json, "classes", Classes);
                 WriteBuckets(json, "fixtures", Fixtures);
                 WriteIds(json, "ambient", Startup.Bits);
+                WriteIds(json, "platform", PlatformBits);
                 WriteIds(json, "initialization", InitializationBits);
                 WriteIds(json, "linked", LinkedBits);
                 WriteIds(json, "unlinked", UnlinkedBits);
