@@ -875,7 +875,8 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <see cref="SocketPathLimit"/> bytes; when the system's directory leaves no room for the longest (a diagnostics
     /// socket), the folder goes under the real path of <c>/tmp</c> instead. NuGet keeps the locks that make processes
     /// take turns writing its shared HTTP cache under the temporary directory too (<c>NuGetScratch/lock</c>), so the
-    /// shards keep the one they would share without folders of their own (<see cref="NuGetScratch"/>).
+    /// shards keep the one they would share without folders of their own (<see cref="NuGetScratch"/>). The testing
+    /// platform's sockets, longer than the diagnostics one, stay in the system's directory (<see cref="TestingPlatformPipes"/>).
     /// </summary>
     /// <param name="environment">The shard's environment, which receives the variables.</param>
     private static string ShardTemporary(Dictionary<string, string> environment)
@@ -883,6 +884,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         var name = $"td{Guid.NewGuid():N}"[..8];
         var system = Path.GetTempPath();
         NuGetScratch.KeepShared(environment);
+        TestingPlatformPipes.KeepShared(environment);
         var root = OperatingSystem.IsWindows() || system.Length + name.Length + 1 + LongestSocketName <= SocketPathLimit ? system : RealPath("/tmp");
         var temporary = Path.Combine(root, name);
         Directory.CreateDirectory(temporary);
