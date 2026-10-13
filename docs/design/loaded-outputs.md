@@ -105,6 +105,16 @@ test's own code and through a third-party plugin host (a library compiled in the
 left unwrapped the second fails. Still open: `Module.GetTypes`, a `Type` kept from an earlier class (a static cache of
 plugin types), and reflection over a type found by name (`Assembly.GetType(name)`).
 
+**The static cache, tried and parked (2026-10-13; PR #52, branch feat/value-builder-outputs).** Two attempts gave the
+loads and scans seen while a static field's value was built to the classes that later read that field. #52 widened
+NLog from 30 % to 90 % in the cost A/B. The second attempt credits only test classes and fixtures and leaves shape
+reads out; it held everywhere else but still took NLog from 30.4 % to 45.4 %, 0 missed on both sides. `ExtensionTests`
+loads `Manually-Loaded-Extension` and registers its types in NLog's global configuration item factory; 39 more
+classes read that factory only to look up other targets by name, so every NLog change selected them through the
+extension project. The recording cannot tell a reader that inspects the cached plugin types from one that uses a
+registry which merely holds them. The next attempt would credit a reader only when it touches a type of the loaded
+assembly itself; until then the gap stays on the Limitations page. No missed test in the corpus traces back to it.
+
 ## Measurement (2026-10-10/11, fresh recordings, one repository at a time on an idle machine)
 
 | Repository | Before | Step 5 | Step 5b | Missed |
