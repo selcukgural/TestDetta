@@ -39,7 +39,6 @@ then emptied.
 - **A package the repository makes itself:** a `PackageReference` to the id or assembly name of one of the repository's
   projects counts as a reference to that project when other references also reach it, since NuGet then builds the
   project in place of the package. Changes to it now reach the projects that take it as a package.
-
 - **A plugin an earlier class loaded:** calls that enumerate loaded assemblies or an assembly's types
   (`AppDomain.GetAssemblies`, `AssemblyLoadContext.Assemblies`, `Assembly.GetTypes`, `GetExportedTypes`, `DefinedTypes`,
   `ExportedTypes`) are recorded in test code and in third-party code, so a class that inspects a plugin another class
