@@ -45,8 +45,8 @@ then emptied.
   `ExportedTypes`) are recorded in test code and in third-party code, so a class that inspects a plugin another class
   loaded is selected when the plugin changes; before, only the class that loaded it was. A scan inside a cache fill
   counts for the class that filled it. Still not seen: a class that only looks at `Type` objects an earlier class kept in
-  a static field, without loading, scanning or reading their attributes itself (site: Limitations, "Code that runs once
-  per process").
+  a static field, without loading, scanning or reading their attributes itself, and one that finds plugin types only
+  through `Module.GetTypes` or `Assembly.GetType(name)` (site: Limitations, "Code that runs once per process").
 
 ### More precise: fewer tests run that a change cannot affect
 
