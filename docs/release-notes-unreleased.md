@@ -64,6 +64,9 @@ then emptied.
 
 ### Recording
 
+- Recording is much faster for tests that store into the same field from several threads millions of times: the
+  tracker no longer takes a lock to note a builder it already knows. Orleans' cache soak tests went from more than 45
+  minutes to 13, so `Orleans.Core.Tests` can be recorded within the time limit instead of running in full on every change.
 - Each shard of a parallel recording gets its own temporary directory, so fixtures that claim or clean fixed names
   there no longer fail each other; NuGet's lock folder stays shared (`NUGET_SCRATCH`), so tests that restore packages in
   two shards at once no longer fail on its HTTP cache.

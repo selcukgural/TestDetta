@@ -1013,7 +1013,7 @@ public static class TestDettaTracker
             }
         }
 
-        leaked.TryAdd(field, 0);
+        AddOnce(leaked, field);
     }
 
     /// <summary>
@@ -1171,7 +1171,7 @@ public static class TestDettaTracker
         for (var i = end - 1; i >= stop; i--)
         {
             var id = recent[(int)(i & (RecentSize - 1))];
-            builders.TryAdd(id, 0);
+            AddOnce(builders, id);
             if (id == method)
             {
                 break;
@@ -1250,6 +1250,23 @@ public static class TestDettaTracker
         if (_constructionCount > 0)
         {
             _constructions![--_constructionCount].Spilled = null;
+        }
+    }
+
+    /// <summary>
+    /// Adds <paramref name="key"/> to a concurrent set unless it is there. <c>TryAdd</c> takes a lock even for a key the
+    /// set holds, and the probes add the same few keys over and over: Orleans' cache soak test stores a field 4 million
+    /// times from four threads (a call on the value a field holds counts as a store), each store adding the methods run
+    /// since the last one, and contending for that lock kept the test running past the 30-minute recording limit. The
+    /// lookup takes no lock, so only a new key pays for one.
+    /// </summary>
+    /// <param name="set">The set.</param>
+    /// <param name="key">The key.</param>
+    private static void AddOnce(System.Collections.Concurrent.ConcurrentDictionary<int, byte> set, int key)
+    {
+        if (!set.ContainsKey(key))
+        {
+            set.TryAdd(key, 0);
         }
     }
 
@@ -1353,7 +1370,7 @@ public static class TestDettaTracker
         {
             var builders = Builders.GetOrAdd(field, static _ => new());
             AddScopeContents(in _scopes![_scopeCount - 1], builders);
-            builders.TryAdd(method, 0);
+            AddOnce(builders, method);
             GiveUses(in _scopes[_scopeCount - 1], field);
         }
 
@@ -1411,7 +1428,7 @@ public static class TestDettaTracker
                 var builders = Builders.GetOrAdd(field, static _ => new());
                 foreach (var id in contents.Keys)
                 {
-                    builders.TryAdd(id, 0);
+                    AddOnce(builders, id);
                 }
             }
         }
@@ -1566,7 +1583,7 @@ public static class TestDettaTracker
             {
                 for (var bits = spilled[word]; bits != 0; bits &= bits - 1)
                 {
-                    builders.TryAdd((word << 6) + LowestBit(bits), 0);
+                    AddOnce(builders, (word << 6) + LowestBit(bits));
                 }
             }
         }
@@ -1578,7 +1595,7 @@ public static class TestDettaTracker
 
         for (var i = Math.Max(scope.Start, scope.SpilledTo); i < _recentCount; i++)
         {
-            builders.TryAdd(recent[(int)(i & (RecentSize - 1))], 0);
+            AddOnce(builders, recent[(int)(i & (RecentSize - 1))]);
         }
     }
 
