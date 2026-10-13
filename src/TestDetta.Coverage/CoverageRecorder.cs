@@ -1312,6 +1312,9 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
             AddFieldUses(root, uses, fieldReads, _classes, _fixtures, _ambient);
 
+            // Values plain test code built: their readers among the tests and fixtures only (TestDettaTracker.GiveRecentUses).
+            AddFieldUses(root, uses, fieldReads, _classes, _fixtures, ambient: null, "testBuiltFields");
+
             Seen = true;
             foreach (var (name, buckets) in (ReadOnlySpan<(string, Dictionary<string, HashSet<string>>)>)[("classes", _classes), ("fixtures", _fixtures)])
             {
@@ -1562,10 +1565,11 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <param name="fieldReads">Its tracked fields.</param>
     /// <param name="classes">Uses per test class; updated in place.</param>
     /// <param name="fixtures">Uses per fixture; updated in place.</param>
-    /// <param name="ambient">Uses outside every test; updated in place.</param>
-    private static void AddFieldUses(JsonElement root, JsonElement uses, FieldReads fieldReads, Dictionary<string, HashSet<string>> classes, Dictionary<string, HashSet<string>> fixtures, HashSet<string> ambient)
+    /// <param name="ambient">Uses outside every test; updated in place; null to credit none there.</param>
+    /// <param name="key">Property of <paramref name="uses"/> with the uses by field.</param>
+    private static void AddFieldUses(JsonElement root, JsonElement uses, FieldReads fieldReads, Dictionary<string, HashSet<string>> classes, Dictionary<string, HashSet<string>> fixtures, HashSet<string>? ambient, string key = "fields")
     {
-        if (!uses.TryGetProperty("fields", out var element))
+        if (!uses.TryGetProperty(key, out var element))
         {
             return;
         }
@@ -1599,7 +1603,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             }
         }
 
-        ambient.UnionWith(Used(root.GetProperty("ambient")) ?? []);
+        ambient?.UnionWith(Used(root.GetProperty("ambient")) ?? []);
 
         // What the fields a bucket read, directly or through the values built from them, were built with; null for none.
         HashSet<string>? Used(JsonElement ids)

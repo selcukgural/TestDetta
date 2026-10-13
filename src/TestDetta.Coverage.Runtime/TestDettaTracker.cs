@@ -86,8 +86,8 @@ public static class TestDettaTracker
     private const int RecentUsesSize = 16;
 
     /// <summary>
-    /// The last <see cref="RecentUsesSize"/> output uses of plain code on this thread (loads, scans and shape reads outside
-    /// a static constructor or cache fill), as a ring of their ring positions in <see cref="_recent"/> and names: a value
+    /// The last <see cref="RecentUsesSize"/> loads and scans of plain code on this thread (outside a static constructor or
+    /// cache fill), as a ring of their ring positions in <see cref="_recent"/> and names: a value
     /// stored into a tracked field while one of them ran was built from the output, as a plugin host keeps the types it
     /// found in a static field, and its readers use the output too (docs/design/loaded-outputs.md, value builders).
     /// </summary>
@@ -275,6 +275,14 @@ public static class TestDettaTracker
 
     /// <summary>Per tracked field, the outputs used inside the scopes whose result was stored into it; see <see cref="FieldFiles"/>.</summary>
     private static readonly Dictionary<int, HashSet<string>> FieldOutputs = [];
+
+    /// <summary>
+    /// Per tracked field, the outputs plain code used while building a value stored into it (<see cref="GiveRecentUses"/>).
+    /// Kept apart from <see cref="FieldOutputs"/> because only the test classes and fixtures that read the field are
+    /// credited with them: plain code built the value inside some test, and a read outside every test (NLog flushing its
+    /// configuration at shutdown) would put the output among the uses that run the whole project. Guarded by <see cref="Gate"/>.
+    /// </summary>
+    private static readonly Dictionary<int, HashSet<string>> TestBuiltFieldOutputs = [];
 
     /// <summary>Extensions dropped from a used name, so a file, an assembly and a project compare by name.</summary>
     private static readonly string[] OutputExtensions = [".dll", ".exe", ".csproj", ".fsproj", ".vbproj"];
@@ -704,21 +712,37 @@ public static class TestDettaTracker
     }
 
     /// <summary>
-    /// Remembers output names plain code of this thread used just now, for <see cref="Stored"/>. Uses inside a static
+    /// Remembers the loads and scans plain code of this thread made just now, for <see cref="Stored"/>. Uses inside a static
     /// constructor or cache fill are not remembered: their scope hands them to the fields its result went into
     /// (<see cref="GiveUses"/>), or a scan there stays with the class that filled the cache (<see cref="RecordScan"/>).
+    /// Shape reads are not either: a reflection cache built from many types (NLog's configuration factory) would hand
+    /// each type's shape to nearly every class, which no miss has asked for.
     /// </summary>
     /// <param name="names">Names the bucket used.</param>
     private static void RememberUses(HashSet<string> names)
     {
+        HashSet<string>? kept = null;
+        foreach (var name in names)
+        {
+            if (!name.StartsWith(ShapePrefix, StringComparison.Ordinal))
+            {
+                (kept ??= new HashSet<string>(StringComparer.Ordinal)).Add(name);
+            }
+        }
+
+        if (kept is null)
+        {
+            return;
+        }
+
         var uses = _recentUses ??= new (long, HashSet<string>)[RecentUsesSize];
-        uses[_recentUsesCount++ & (RecentUsesSize - 1)] = (_recentCount, names);
+        uses[_recentUsesCount++ & (RecentUsesSize - 1)] = (_recentCount, kept);
     }
 
     /// <summary>
-    /// Gives the output uses of plain code remembered since ring position <paramref name="start"/> to tracked field
+    /// Gives the loads and scans of plain code remembered since ring position <paramref name="start"/> to tracked field
     /// <paramref name="field"/>, whose value was just stored: the value was built while the output was loaded or scanned,
-    /// so every reader of the field uses it (<see cref="FieldOutputs"/>). A builder that loaded nothing gives nothing, so
+    /// so the test classes and fixtures reading the field use it (<see cref="TestBuiltFieldOutputs"/>). A builder that loaded nothing gives nothing, so
     /// a value built once by shared code (a logger's null event) does not tie its readers to an output.
     /// </summary>
     /// <param name="field">Field index assigned by the instrumenter.</param>
@@ -733,9 +757,9 @@ public static class TestDettaTracker
 
         lock (Gate)
         {
-            if (!FieldOutputs.TryGetValue(field, out var given))
+            if (!TestBuiltFieldOutputs.TryGetValue(field, out var given))
             {
-                FieldOutputs[field] = given = new HashSet<string>(StringComparer.Ordinal);
+                TestBuiltFieldOutputs[field] = given = new HashSet<string>(StringComparer.Ordinal);
             }
 
             var count = Math.Min(_recentUsesCount, RecentUsesSize);
@@ -2402,6 +2426,7 @@ public static class TestDettaTracker
         WriteNames(json, "ambient", Startup.Outputs);
         WriteNames(json, "initialization", InitializationOutputs);
         WriteFieldUses(json, FieldOutputs);
+        WriteFieldUses(json, TestBuiltFieldOutputs, "testBuiltFields");
         json.WriteEndObject();
 
         static void WriteNames(ResultsJsonWriter json, string name, HashSet<string> names)
@@ -2423,9 +2448,10 @@ public static class TestDettaTracker
     /// </summary>
     /// <param name="json">Writer positioned inside <c>fileReads</c> or <c>outputUses</c>.</param>
     /// <param name="byField">Paths or names by field index.</param>
-    private static void WriteFieldUses(ResultsJsonWriter json, Dictionary<int, HashSet<string>> byField)
+    /// <param name="name">Property name: <c>fields</c>, or <c>testBuiltFields</c> for <see cref="TestBuiltFieldOutputs"/>.</param>
+    private static void WriteFieldUses(ResultsJsonWriter json, Dictionary<int, HashSet<string>> byField, string name = "fields")
     {
-        json.WriteStartObject("fields");
+        json.WriteStartObject(name);
         foreach (var entry in byField.OrderBy(static e => e.Key))
         {
             json.WriteStartArray(entry.Key.ToString(System.Globalization.CultureInfo.InvariantCulture));
