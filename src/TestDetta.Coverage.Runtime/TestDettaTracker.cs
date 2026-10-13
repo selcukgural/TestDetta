@@ -78,6 +78,26 @@ public static class TestDettaTracker
     [ThreadStatic]
     private static int _lastStoreMethod;
 
+    /// <summary>Ring position where building the value of the last store on this thread began; see <see cref="Stored"/>.</summary>
+    [ThreadStatic]
+    private static long _lastStoreStart;
+
+    /// <summary>Output uses remembered per thread for <see cref="Stored"/>; a power of two.</summary>
+    private const int RecentUsesSize = 16;
+
+    /// <summary>
+    /// The last <see cref="RecentUsesSize"/> output uses of plain code on this thread (loads, scans and shape reads outside
+    /// a static constructor or cache fill), as a ring of their ring positions in <see cref="_recent"/> and names: a value
+    /// stored into a tracked field while one of them ran was built from the output, as a plugin host keeps the types it
+    /// found in a static field, and its readers use the output too (docs/design/loaded-outputs.md, value builders).
+    /// </summary>
+    [ThreadStatic]
+    private static (long Position, HashSet<string> Names)[]? _recentUses;
+
+    /// <summary>Output uses remembered on this thread so far; the next slot of <see cref="_recentUses"/>.</summary>
+    [ThreadStatic]
+    private static int _recentUsesCount;
+
     /// <summary>One initialization scope on a thread: a cache fill, a static constructor, a third-party callback.</summary>
     private struct Scope
     {
@@ -676,6 +696,60 @@ public static class TestDettaTracker
         {
             BucketForHit().Outputs.UnionWith(names);
         }
+
+        if (_cacheDepth == 0)
+        {
+            RememberUses(names);
+        }
+    }
+
+    /// <summary>
+    /// Remembers output names plain code of this thread used just now, for <see cref="Stored"/>. Uses inside a static
+    /// constructor or cache fill are not remembered: their scope hands them to the fields its result went into
+    /// (<see cref="GiveUses"/>), or a scan there stays with the class that filled the cache (<see cref="RecordScan"/>).
+    /// </summary>
+    /// <param name="names">Names the bucket used.</param>
+    private static void RememberUses(HashSet<string> names)
+    {
+        var uses = _recentUses ??= new (long, HashSet<string>)[RecentUsesSize];
+        uses[_recentUsesCount++ & (RecentUsesSize - 1)] = (_recentCount, names);
+    }
+
+    /// <summary>
+    /// Gives the output uses of plain code remembered since ring position <paramref name="start"/> to tracked field
+    /// <paramref name="field"/>, whose value was just stored: the value was built while the output was loaded or scanned,
+    /// so every reader of the field uses it (<see cref="FieldOutputs"/>). A builder that loaded nothing gives nothing, so
+    /// a value built once by shared code (a logger's null event) does not tie its readers to an output.
+    /// </summary>
+    /// <param name="field">Field index assigned by the instrumenter.</param>
+    /// <param name="start">Ring position where building the value began.</param>
+    private static void GiveRecentUses(int field, long start)
+    {
+        // Most stores come after no use at all, or long after the last one: the newest use decides without a lock.
+        if (_recentUses is not { } uses || _recentUsesCount == 0 || uses[(_recentUsesCount - 1) & (RecentUsesSize - 1)].Position < start)
+        {
+            return;
+        }
+
+        lock (Gate)
+        {
+            if (!FieldOutputs.TryGetValue(field, out var given))
+            {
+                FieldOutputs[field] = given = new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var count = Math.Min(_recentUsesCount, RecentUsesSize);
+            for (var i = 1; i <= count; i++)
+            {
+                var (position, names) = uses[(_recentUsesCount - i) & (RecentUsesSize - 1)];
+                if (position < start)
+                {
+                    break;
+                }
+
+                given.UnionWith(names);
+            }
+        }
     }
 
     /// <summary>
@@ -704,6 +778,7 @@ public static class TestDettaTracker
             {
                 BucketForHit().Outputs.UnionWith(names);
                 TestBuiltFixture.Value?.Outputs.UnionWith(names);
+                RememberUses(names);
             }
             else if (_scopeCount > 0)
             {
@@ -1167,6 +1242,9 @@ public static class TestDettaTracker
             stop = _lastStore;
         }
 
+        // Where building began: the method's entry, or, when the walk stops at its previous store first, where
+        // building began for that store, since the output uses before it went into this value as well.
+        var start = _lastStoreMethod == method && stop == _lastStore ? _lastStoreStart : stop;
         var builders = Builders.GetOrAdd(field, static _ => new());
         for (var i = end - 1; i >= stop; i--)
         {
@@ -1174,12 +1252,15 @@ public static class TestDettaTracker
             builders.TryAdd(id, 0);
             if (id == method)
             {
+                start = i;
                 break;
             }
         }
 
+        GiveRecentUses(field, start);
         _lastStore = end;
         _lastStoreMethod = method;
+        _lastStoreStart = start;
 
         // A static constructor storing its own fields hands its result to their readers, all of it,
         // once it ends (ExitTypeInitializer): the walk above stops where the ring ends, the scope does
