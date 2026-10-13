@@ -52,7 +52,13 @@ internal static class FindingsReport
     /// <summary>The ledger.</summary>
     /// <param name="Batches">Batches in date order.</param>
     /// <param name="Findings">Findings in date order.</param>
-    internal sealed record Ledger(IReadOnlyList<Batch> Batches, IReadOnlyList<Finding> Findings);
+    internal sealed record Ledger(IReadOnlyList<Batch> Batches, IReadOnlyList<Finding> Findings)
+    {
+        /// <summary>
+        /// Repositories that left the corpus; the batches and findings that name them stay, as what they revealed then.
+        /// </summary>
+        public IReadOnlyList<string> Retired { get; init; } = [];
+    }
 
     /// <summary>The ledger next to the corpus file (<c>findings.json</c> in its folder); null when there is none.</summary>
     /// <param name="corpusPath">Path of the corpus file.</param>
@@ -96,7 +102,10 @@ internal static class FindingsReport
             })
             .OrderBy(static f => f.Date, StringComparer.Ordinal)
             .ToList();
-        return new Ledger(batches, findings);
+        return new Ledger(batches, findings)
+        {
+            Retired = root.TryGetProperty("retired", out var retired) ? [.. retired.EnumerateArray().Select(static r => r.GetProperty("repository").GetString()!)] : [],
+        };
     }
 
     /// <summary>The report.</summary>

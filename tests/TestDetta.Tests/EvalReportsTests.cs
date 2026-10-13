@@ -59,6 +59,8 @@ public sealed class EvalReportsTests : IDisposable
 
         var ledger = FindingsReport.Read(Path.Combine(root, "eval", "findings.json"));
         var corpus = Corpus.Load(Path.Combine(root, "eval", "corpus.json")).Repositories.Select(static r => r.Name).ToHashSet(StringComparer.Ordinal);
+        Assert.All(ledger.Retired, r => Assert.DoesNotContain(r, corpus));
+        corpus.UnionWith(ledger.Retired);
 
         Assert.NotEmpty(ledger.Findings);
         Assert.All(ledger.Findings, f => Assert.Contains(f.Kind, FindingsReport.Kinds));

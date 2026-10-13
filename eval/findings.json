@@ -7,7 +7,12 @@
 // selection far wider than needed; evaluation, an artefact of the evaluator). The same class in another repository
 // goes into seenAgain. A class that only a new TestDetta feature's first measurement could expose names the feature
 // ("feature"), and is counted apart; a batch lists the repositories that could not be evaluated yet ("notEvaluated").
+// A repository that leaves eval/corpus.json goes into "retired" with the reason; its batches and findings stay.
 {
+  "retired": [
+    { "repository": "orleans", "date": "2026-10-13",
+      "reason": "Owner's decision: each round cost hours (19 changes, every one running the whole distributed suite) and kept needing recording work of its own; 0 missed in the changes judged. Its two recording findings were fixed (#56, the tracker's builder lookup)." }
+  ],
   "batches": [
     {
       "date": "2026-09-30",
