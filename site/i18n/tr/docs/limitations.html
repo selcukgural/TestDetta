@@ -1,4 +1,4 @@
-<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 65243078a908 -->
+<!-- title: Sınırlamalar; layout: docs; description: {{name}} neleri destekler ve nerelerde daha fazla test çalıştırmaya geri döner.; source: 66e9ef6c2f72 -->
 <h1>Sınırlamalar</h1>
 <p class="lead">{{name}} bir şeyi göremediği yerde daha fazlasını seçer. Bu sayfa o yerleri listeler; böylece bir seçimin gerekenden ne zaman daha geniş olduğunu ve elle yazılmış bir kalıbın bir testi gizleyebildiği birkaç durumu bilirsiniz.</p>
 
@@ -17,6 +17,7 @@
 
 <h2>Süreç başına bir kez çalışan kod</h2>
 <p>Önbellekler, lazy singleton'lar ve EF model oluşturma, test süreci başına bir kez çalışır ve onları tetikleyen ilk test sınıfına yazılır. Static constructor içinde ya da önbellek dolduran bir çağrıda (<code>ConcurrentDictionary.GetOrAdd</code>, <code>Lazy&lt;T&gt;.Value</code>, <code>LazyInitializer</code>, <code>ConditionalWeakTable</code>, <code>IMemoryCache.GetOrCreate</code>) çalışmış koddaki değişiklikler bunun yerine isimle izlenir. Bir alanda tutulan değer, örneğin lazy bir singleton (<code>_x ??= new X()</code>), alanı okuyan her test sınıfına yazılır.</p>
+<p>Test sürecine yüklenen bir eklenti, sürecin sonuna kadar yüklü kalır. Eklentiyi daha önceki bir sınıf yüklemiş olsa bile, türlerini tarayan bir sınıf (<code>Assembly.GetTypes</code> ve benzerleri) eklenti değişince, bir türün özniteliklerini ya da özelliklerini okuyan bir sınıf da o üst veri değişince seçilir. Önceki bir sınıfın statik bir alanda tuttuğu <code>Type</code> nesnelerine yalnızca bakan bir sınıf ise seçilmez; örneğin bulunan eklenti türlerini sayan ya da adlarını kontrol eden, ama kendisi yüklemeyen, taramayan ve özniteliklerini okumayan bir sınıf. Eklentiye bir tür eklenmesi ya da çıkarılması onu seçmeyebilir.</p>
 <div class="callout"><p><code>TryGetValue</code> ile kontrol edilen bir <code>Dictionary</code> gibi elle yazılmış bir önbellek, kullanıcılarını yine de gizleyebilir. Varsayılan branch'te tüm test paketini çalıştırmaya devam edin; kayıt bunu zaten yapar.</p></div>
 
 <h2>Bir test sınıfının sonrakine bıraktığı durum</h2>
