@@ -95,7 +95,8 @@ The round comparison (`comparison.md`) also says when two rounds were judged by 
 showed: a **miss**, a **narrowing** that could have left a failing class out and was found before it did, a
 **recording** failure, an **analysis** hang, a **precision** problem (a selection far wider than needed), or an
 **evaluation** artefact. A class is a rule TestDetta got wrong or lacked, not a repository: the same class found
-again elsewhere goes into `seenAgain`. `--summarize` writes `findings.md` from it.
+again elsewhere goes into `seenAgain`. `--summarize` writes `findings.md` from it. A repository that leaves the corpus
+goes into `retired` with the date and reason; the batches and findings that name it stay (Orleans, 2026-10-13).
 
 The number to watch is **product classes per evaluated new repository, batch by batch** (batches are the dates
 repositories joined `eval/corpus.json`; repositories that could not be evaluated yet do not count). If new
