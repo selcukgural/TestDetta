@@ -67,6 +67,9 @@ then emptied.
 - Each shard of a parallel recording gets its own temporary directory, so fixtures that claim or clean fixed names
   there no longer fail each other; NuGet's lock folder stays shared (`NUGET_SCRATCH`), so tests that restore packages in
   two shards at once no longer fail on its HTTP cache.
+  Microsoft.Testing.Platform's sockets stay in the system's temporary directory (`TESTINGPLATFORM_PIPE_DIRECTORY`):
+  on macOS a shard's own folder made their path one byte too long, so with the hang or crash dump extension every shard
+  ended at start and the project was recorded again in one process, slowly or not within the limit (Orleans).
 - A shard whose test report was cut off while it was written counts as one without a report (its classes are selected
   whenever their project is affected) instead of failing the whole recording.
 

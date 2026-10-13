@@ -433,7 +433,8 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
 
     /// <summary>
     /// A worker over a copy: with several, each gets its own temporary directory, since many suites write fixed names
-    /// there, and keeps NuGet's shared locks (<see cref="NuGetScratch"/>).
+    /// there, and keeps NuGet's shared locks (<see cref="NuGetScratch"/>) and the testing platform's sockets in the system's
+    /// temporary directory (<see cref="TestingPlatformPipes"/>).
     /// </summary>
     /// <param name="workspace">The work folder.</param>
     /// <param name="copy">The worker's copy.</param>
@@ -451,6 +452,7 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
             variables["TMP"] = temporary;
             variables["TEMP"] = temporary;
             NuGetScratch.KeepShared(variables);
+            TestingPlatformPipes.KeepShared(variables);
         }
 
         return new AuditWorker(copy, backups, variables);
