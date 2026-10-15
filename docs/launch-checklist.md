@@ -48,6 +48,11 @@ GitHub release created, the site and README pinned to it.
 failing mutants, 0 missed): `TestDetta/action` at `6ceba36` with tags `v0.1.3` and `v0`, GitHub release created, the
 site and README pinned to it. The tags moved there from `a46fb19` the same day: the action README's example still named
 v0.1.0, so `6ceba36` changes only that, and the release workflow now writes the tag's version into it.
+0.2.0 (2026-10-15, map format 3 with assembly loads, fixture-built tests and shape reads; non-code files run their
+readers; the team's test configuration kept in every run; console tables; release check of 53 repositories, 3,071
+failing changes, 5 missed in three known gaps, listed on Limitations): `TestDetta/action` at `c7ada8b` with tags
+`v0.2.0` and `v0`, GitHub release created, the site and README pinned to it. The weekly recording on this repository's
+CI is off until the tests that record inside a recording pass (#71).
 
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
