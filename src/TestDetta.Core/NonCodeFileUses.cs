@@ -158,8 +158,12 @@ internal sealed class NonCodeFileUses(string repoRoot)
     }
 
     /// <summary>
-    /// The patterns of an item's <c>Include</c> or <c>Update</c>, as normalized full paths; one that
-    /// uses a property, an item or metadata TestDetta cannot resolve becomes <c>**</c> under the root.
+    /// The patterns of an item's <c>Include</c> or <c>Update</c>, as normalized full paths. A property, an item or
+    /// metadata TestDetta cannot resolve becomes <c>**</c>, which matches any part of a path, and the text around it
+    /// stays: <c>$(ArtifactsPath)/bin/$(MSBuildProjectName).dll.sigstore.json</c> can only match a file of that name
+    /// under a <c>bin</c> folder, while <c>$(Readme)</c> alone matches every file. A pattern that starts with one is
+    /// matched from the root, since the value may be any absolute path. Its value could hold a list (<c>a;b</c>) whose
+    /// first entries stand alone, but such a property is then the whole of the item's value, not a path prefix.
     /// </summary>
     /// <param name="directory">Directory of the MSBuild file, which relative patterns start from.</param>
     /// <param name="value">The attribute's value.</param>
@@ -171,12 +175,69 @@ internal sealed class NonCodeFileUses(string repoRoot)
             var pattern = part.Replace("$(MSBuildThisFileDirectory)", directory + "/", StringComparison.OrdinalIgnoreCase)
                 .Replace("$(MSBuildProjectDirectory)", directory, StringComparison.OrdinalIgnoreCase)
                 .Replace('\\', '/');
-            patterns.Add(pattern.Contains("$(", StringComparison.Ordinal) || pattern.Contains("@(", StringComparison.Ordinal) || pattern.Contains("%(", StringComparison.Ordinal)
-                ? "/**"
-                : Paths.Normalize(Path.IsPathRooted(pattern) ? pattern : Path.Combine(directory, pattern)));
+            if (Unresolved(pattern) is not { } wildcarded)
+            {
+                patterns.Add(Paths.Normalize(Path.IsPathRooted(pattern) ? pattern : Path.Combine(directory, pattern)));
+                continue;
+            }
+
+            // A leading unresolved part may be any absolute path; otherwise the literal start says where it begins.
+            patterns.Add(wildcarded.StartsWith("**", StringComparison.Ordinal)
+                ? "/" + wildcarded
+                : Paths.Normalize(Path.IsPathRooted(wildcarded) ? wildcarded : Path.Combine(directory, wildcarded)));
         }
 
         return patterns;
+    }
+
+    /// <summary>
+    /// <paramref name="pattern"/> with every <c>$(…)</c>, <c>@(…)</c> and <c>%(…)</c> it contains replaced by
+    /// <c>**</c>, parentheses balanced (<c>$(Configuration.ToLower())</c>); null when it contains none.
+    /// </summary>
+    /// <param name="pattern">One entry of an item's value, with '/' separators.</param>
+    private static string? Unresolved(string pattern)
+    {
+        if (pattern.IndexOf("$(", StringComparison.Ordinal) < 0 && pattern.IndexOf("@(", StringComparison.Ordinal) < 0
+            && pattern.IndexOf("%(", StringComparison.Ordinal) < 0)
+        {
+            return null;
+        }
+
+        var result = new System.Text.StringBuilder(pattern.Length);
+        for (var i = 0; i < pattern.Length; i++)
+        {
+            if (pattern[i] is not ('$' or '@' or '%') || i + 1 >= pattern.Length || pattern[i + 1] != '(')
+            {
+                result.Append(pattern[i]);
+                continue;
+            }
+
+            var depth = 0;
+            var end = i + 1;
+            for (; end < pattern.Length; end++)
+            {
+                depth += pattern[end] switch { '(' => 1, ')' => -1, _ => 0 };
+                if (depth == 0)
+                {
+                    break;
+                }
+            }
+
+            // An unclosed reference may hide anything after it.
+            if (end >= pattern.Length)
+            {
+                return "**";
+            }
+
+            if (result.Length < 2 || result[^1] != '*' || result[^2] != '*')
+            {
+                result.Append("**");
+            }
+
+            i = end;
+        }
+
+        return result.ToString();
     }
 
     /// <summary>The MSBuild files under <paramref name="root"/>, outside build outputs and tool folders.</summary>

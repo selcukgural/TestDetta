@@ -44,8 +44,11 @@ nothing in `T` today. `FindFileReaders` only looks at files that no project owns
 - The XML of the project file and every repository file it imports is scanned (the graph already reads
   it). An item element of a type that is not known to be inert (`None`, the reference and package items)
   whose `Include`/`Update` can match the file, any target that names the file, or any target that uses
-  `@(None)` makes the file a build input of that project. A pattern with a property TestDetta cannot
-  resolve counts as a match.
+  `@(None)` makes the file a build input of that project. A property, item or metadata TestDetta cannot
+  resolve matches any part of a path (`**`), and the text around it must match: `$(ArtifactsPath)/bin/…/
+  $(MSBuildProjectName).dll.sigstore.json` matches only such files, `$(Readme)` alone every file (2026-10-15;
+  before, any such pattern matched every file, and OpenTelemetry's signature target made each pull request's
+  `CHANGELOG.md` run every test project).
 
 A file is **inert in project `P`** when `P` was evaluated, the file is an `Inert` item of `P` and of no
 `Built` kind, and the scan finds no use. Anything else is a build input, as today.
