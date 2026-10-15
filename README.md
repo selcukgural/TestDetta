@@ -123,14 +123,14 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: TestDetta/action@6ceba36f3d129a2969f2490a3c87759c33e1e8d8 # v0.1.3
+        uses: TestDetta/action@c7ada8b277e726de2971a2f979f3781e8a0b9f45 # v0.2.0
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: TestDetta/action@6ceba36f3d129a2969f2490a3c87759c33e1e8d8 # v0.1.3
+        uses: TestDetta/action@c7ada8b277e726de2971a2f979f3781e8a0b9f45 # v0.2.0
         with:
           mode: test
           dotnet-test-args: --logger trx
