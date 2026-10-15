@@ -10,8 +10,8 @@
       },
       "FSharp.Core": {
         "type": "Transitive",
-        "resolved": "10.1.401",
-        "contentHash": "/lvOK51KD8IangBYkfDVna3/HrE/r4VUnX3dI01KDspctoYXmind3POeoYkqWKeXHwiKlf6Hc9TxwSnoSCWcjw=="
+        "resolved": "10.1.402",
+        "contentHash": "kfttzFL9uArPkhlhvoH99RZOOFpJnxOAZkGLqgfG+Wnc4FO2L+HnwradMgX1ubMjzhajuNzPTTcW1Yk8D1rGEg=="
       },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "Transitive",
@@ -29,18 +29,18 @@
       "testdetta.core": {
         "type": "Project",
         "dependencies": {
-          "FSharp.Compiler.Service": "[43.12.401, )",
+          "FSharp.Compiler.Service": "[43.12.402, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
           "Microsoft.CodeAnalysis.VisualBasic": "[5.9.0, )"
         }
       },
       "FSharp.Compiler.Service": {
         "type": "CentralTransitive",
-        "requested": "[43.12.401, )",
-        "resolved": "43.12.401",
-        "contentHash": "pw8xfO19iFIxBhwtBTud/71bqCJJr/MKdbDrNjtv8x5eov0ArF0xwhVZIVAMMDz3mnoRP/cfvBshga21GjNwWg==",
+        "requested": "[43.12.402, )",
+        "resolved": "43.12.402",
+        "contentHash": "YRF/K6q535x1LL6JzjEI5cEnPkrpDe+WN/p+X6egKHXaS9J+SQGqMMV9mcznBDQdU+lfvCLLPmvPfVGmgsn7Lw==",
         "dependencies": {
-          "FSharp.Core": "[10.1.401]"
+          "FSharp.Core": "[10.1.402]"
         }
       },
       "Microsoft.CodeAnalysis.CSharp": {
