@@ -417,6 +417,12 @@ repositories a change touches; the full corpus runs at milestones.
   property as a job-level environment variable, which MSBuild reads as a property. Fix: carry the team's properties into
   every build and evaluation TestDetta starts, with a test that fails without it; say so on "Your test configuration"
   (both languages) and in the release notes.
+- **The corpus never changes a test project (MimeKit fork trial, 2026-10-15).** Mutants change product members only, but
+  most real pull requests change tests as well. Replaying MimeKit's last 10 commits in shadow mode ran all 197 classes on
+  8 of them (the corpus measured 13% on MimeKit): the test host's read of the test project's own output counted as a
+  use outside its tests. Fixed for that rule; to catch the next one, add replays of real commits (product and test
+  changes together, from each corpus repository's history) to the evaluation, with the selection share reported next to
+  the mutant share.
 
 - ~~**A fixture whose server another class built first (FastEndpoints, 2026-10-12).**~~ Fixed the same day: a test
   that builds a fixture type is its user, and its flow counts for the fixture too (docs/design/between-tests-code.md). `TestServerTests` builds

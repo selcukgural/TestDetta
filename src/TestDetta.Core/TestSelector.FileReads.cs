@@ -332,8 +332,13 @@ public sealed partial class TestSelector
 
             foreach (var project in changed)
             {
+                // The test host and its framework read a test project's own output outside every test to discover and
+                // run them (NUnit's adapter, the dependency context and its deps.json; MimeKit, 2026-10-15). That read
+                // inspects nothing a change could fail, and the project's own changes are answered by its own coverage,
+                // so it does not run the project completely; a class that loads the output itself still runs.
+                var uses = Paths.Comparer.Equals(project.Path, path) ? recorded with { Ambient = [] } : recorded;
                 string[] names = [project.AssemblyName, Path.GetFileNameWithoutExtension(project.Path)];
-                AddUsersOf(path, testProject, map, recorded, Path.GetFileName(project.Path), names, "loaded the output of", readers);
+                AddUsersOf(path, testProject, map, uses, Path.GetFileName(project.Path), names, "loaded the output of", readers);
             }
         }
     }
