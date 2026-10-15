@@ -428,6 +428,16 @@ repositories a change touches; the full corpus runs at milestones.
   by name; "is affected and nothing names it, so it may be created through reflection" then runs a test project whose
   map does not know it completely (OTLP's FuzzTests on 2 of 10 replays, about 10 s each). Read interceptor attributes in
   generated code as references from the intercepted call sites.
+- **Non-code build inputs from the build itself, not from a scan of the XML (fork trials, 2026-10-15).** The scan of the
+  repository's MSBuild files cannot tell what items declared inside targets hold. After #78 and #81, OpenTelemetry's
+  `CHANGELOG.md` entries (4 of 10 replays) still run every test project: its targets hold
+  `@(DependenciesWithExposedExperimentalFeatures->'…')` (built from `@(_ResolvedProjectReferencePaths->'%(Filename)')`),
+  `@(SigstoreBundle)` and `FileWrites Include="$(AssemblyOriginatorKeyFile)"`, each a reference alone, so each matches
+  every file. Swashbuckle's `_PackageNames Include="$(PackageId)"` (a pack target) widens its `package-lock.json`
+  changes the same way. Proposal to design: the recording already builds each test project; capture a binary log
+  there and record which repository files any item or task input held during the build, as the map's build inputs, and
+  answer from those, keeping the scan for maps without them. Item references without a transform (`@(X)`) could also
+  resolve to `X`'s patterns in the scan.
 
 - ~~**A fixture whose server another class built first (FastEndpoints, 2026-10-12).**~~ Fixed the same day: a test
   that builds a fixture type is its user, and its flow counts for the fixture too (docs/design/between-tests-code.md). `TestServerTests` builds
