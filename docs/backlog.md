@@ -405,6 +405,18 @@ repositories a change touches; the full corpus runs at milestones.
 - **A timing test that fails under heavy load.** `ShadowRunTests.A_checkout_of_the_base_commit_that_runs_out_of_time_leaves_no_worktree_registered`
   failed twice on 2026-10-12 at load averages of 20 and 50 and passed alone each time (3 of 3). Give it a margin that does
   not depend on the machine's load.
+- **The team's MSBuild properties do not reach recording (MimeKit fork trial, 2026-10-15).** `td record -- <args>` and
+  the action's `dotnet-test-args` in record mode keep the team's `--filter` and `--settings`, but drop `-p:`, `/p:`,
+  `-property:` and `--property:`: the recording build is `build <project> -c <configuration>` (`CoverageRecorder`,
+  and `BuildGeneratedCodeReader` the same way), while audit already carries them (`AuditOutputPaths`). MimeKit's Linux
+  CI builds with `-property:MonoRuntime=true`, which defines `MONO` and selects the linux-x64 SQLite runtime; with the
+  property in `dotnet-test-args`, `CmsSignerTests` still failed while recording in 3 of 10 records (its `#if MONO` branch
+  ignores an EC curve Linux cannot load) and the map followed a build the team never runs. In shadow mode the team's own
+  `dotnet test` gets the property and TestDetta's analysis does not. Not checked yet: whether the MSBuild evaluation
+  (preprocessor symbols, project graph) takes them in test, shadow and audit modes. Workaround in the trial: the
+  property as a job-level environment variable, which MSBuild reads as a property. Fix: carry the team's properties into
+  every build and evaluation TestDetta starts, with a test that fails without it; say so on "Your test configuration"
+  (both languages) and in the release notes.
 
 - ~~**A fixture whose server another class built first (FastEndpoints, 2026-10-12).**~~ Fixed the same day: a test
   that builds a fixture type is its user, and its flow counts for the fixture too (docs/design/between-tests-code.md). `TestServerTests` builds
