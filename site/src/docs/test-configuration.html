@@ -27,6 +27,7 @@
 <pre><code>td test --base origin/main -- --filter "Category!=Integration" --settings ci.runsettings
 td record -- --filter "Category!=Integration" --settings ci.runsettings</code></pre>
 <p>In GitHub Actions, the <code>dotnet-test-args</code> input does this in every mode, record mode included. Options a recording controls itself (<code>-c</code>, <code>-f</code>, <code>--no-build</code>, loggers, the results directory and report options) keep {{name}}'s values while recording; everything else runs as you give it.</p>
+<p>A <code>-f &lt;tfm&gt;</code> among the arguments of <code>td test</code> also narrows the selection: the run loads only that framework's builds, so a change compiled only for other frameworks (code under an <code>#if</code> that framework leaves out) selects nothing in it. If your test projects target several frameworks, run every framework somewhere, for example in a nightly full run; see <a href="/docs/limitations/#target-frameworks">Limitations</a>.</p>
 
 <h2 id="cannot">When a filter cannot be combined</h2>
 <p>Some filters cannot be joined with a class filter: an xUnit v3 query filter (<code>--filter-query</code>) or class filter of your own, and a TUnit tree-node filter. {{name}} then runs the whole test project under your filter: it runs more, never what your filter leaves out. The job summary says so for that project.</p>

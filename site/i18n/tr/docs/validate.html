@@ -1,6 +1,6 @@
-<!-- title: Kendi deponuzda doğrulayın; layout: docs; description: {{name}}'ya güvenmeden önce, değişikliklerinizin bozduğu her testi seçtiğini kendi kodunuzda kontrol edin.; source: e0d1b42e3747 -->
+<!-- title: Kendi deponuzda doğrulayın; layout: docs; description: {{name}}'ya güvenmeden önce, değişikliklerinizin bozduğu her testi seçtiğini kendi kodunuzda kontrol edin.; source: 37d81ac620a6 -->
 <h1>Kendi deponuzda doğrulayın</h1>
-<p class="lead">Değerlendirmemiz açık kaynak kütüphaneler üzerinde çalışır. Sizin kodunuzun kendine özgü kalıpları vardır; bu yüzden neyin çalışacağına karar vermesine izin vermeden önce {{name}}'yı kendi kodunuzda kontrol edin. Bu, birkaç haftalık olağan pull request akışı sürer ve ekibiniz için hiçbir şeyi değiştirmez. GitHub Action'ın <a href="/docs/github-actions/#shadow">shadow mode</a>'u ve <a href="/docs/github-actions/#audit">audit</a>'i bu kontrolleri sizin için yapar ve lisans gerektirmez; aşağıdaki adımlar bunları <code>td affected</code> ile elle yapar.</p>
+<p class="lead">Değerlendirmemiz açık kaynak kütüphaneler üzerinde çalışır. Sizin kodunuzun kendine özgü kalıpları vardır; bu yüzden neyin çalışacağına karar vermesine izin vermeden önce {{name}}'yı kendi kodunuzda kontrol edin. Bu, birkaç haftalık olağan pull request akışı sürer ve ekibiniz için hiçbir şeyi değiştirmez. GitHub Action'ın <a href="/docs/github-actions/#shadow">shadow mode</a>'u ve <a href="/docs/github-actions/#audit">audit</a>'i bu kontrolleri sizin için yapar ve lisans gerektirmez; aşağıdaki adımlar bunları, lisansı okuyan <code>td affected</code> ile elle yapar. Özel bir depoda bu adımlar bir lisans gerektirir: lisans olmadan her test projesi <code>All</code> olarak çıkar ve karşılaştırma hiçbir şey kanıtlamaz. Bir <a href="/trial/">ücretsiz deneme</a> yeterlidir.</p>
 
 <h2 id="idea">Fikir</h2>
 <p>Kapı olarak tüm test paketini çalıştırmaya devam edin. Yanında da {{name}}'ya neyi seçmiş olacağını sorun. Tam koşuda başarısız olan her test sınıfı o seçimin içinde olmalıdır. Biri içinde değilse bu bir kaçırmadır ve bunu duymak isteriz.</p>
@@ -8,7 +8,7 @@
 <h2 id="steps">Adımlar</h2>
 <ol>
   <li><strong>Varsayılan branch'te haritaları kaydedin.</strong> GitHub Actions'ta <code>record</code> adımını <a href="/docs/github-actions/">workflow</a> örneğinden alıp ekleyin; başka yerlerde varsayılan branch'e yapılan her commit'te <code>td record</code> çalıştırın ve haritaları saklayın (<a href="/docs/other-ci/">Diğer CI sistemleri</a>).</li>
-  <li><strong>Her pull request'te seçimi kaydedin.</strong> Test adımınızı değiştirmeden:
+  <li><strong>Her pull request'te seçimi kaydedin.</strong> Test adımınızı değiştirmeden ve özel bir depoda lisans <code>TESTDETTA_LICENSE</code> içindeyken:
 <pre><code>td affected --format json &gt; selection.json</code></pre></li>
   <li><strong>Tüm test paketini bugün yaptığınız gibi çalıştırın</strong>; başarısızlıkların okunabilmesi için bir TRX raporuyla:
 <pre><code>dotnet test --logger trx --results-directory TestResults</code></pre></li>
@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Tam test adımını <code>td test</code> ile ya da action'ın <code>test</code> moduyla değiştirin. Varsayılan branch'te kayda devam edin: kayıt orada tüm testleri çalıştırır; böylece bir seçimin gizleyebileceği her şey sürümden önce yine yakalanır.</p>
 
 <h2 id="how-we-test">Biz nasıl test ediyoruz</h2>
-<p>Aynı kontrol {{corpusRepositories}} açık kaynak depo üzerinde büyük ölçekte çalışır: üyeler tek tek değiştirilir ve başarısız olan her test sınıfının seçilmiş olması gerekir. Katı kuralla değerlendirilen son turda (seçimin dışında bir çökme ya da takılma kaçırma sayılır), bir testi bozan {{corpusFailingChanges}} değişiklikten {{corpusMissed}} tanesi kaçırıldı, her biri <a href="/docs/limitations/">bilinen bir sınırlama</a>: bir kez ya da başka bir thread'de çalışan kodun başka bir sınıfa yazılması (üç) ve çıktısı okunamayan bir source generator (iki). Önceki turlardaki gerçek kaçırmalar, düzeltme olmadan başarısız olan bir testle düzeltildi. <a href="/docs/examples/#corpus">Rakamlarla korpus</a>.</p>
+<p>Aynı kontrol {{corpusRepositories}} açık kaynak depo üzerinde büyük ölçekte çalışır: üyeler tek tek değiştirilir ve başarısız olan her test sınıfının seçilmiş olması gerekir. Katı kuralla değerlendirilen son turda (seçimin dışında bir çökme ya da takılma kaçırma sayılır), bir testi bozan {{corpusFailingChanges}} değişiklikten {{corpusMissed}} tanesi kaçırıldı, her biri <a href="/docs/limitations/">bilinen bir sınırlama</a>: bir kez ya da başka bir thread'de çalışan kodun başka bir sınıfın hanesine yazılması (üç) ve çıktısı okunmamış bir source generator (iki). Önceki turlardaki gerçek kaçırmalar, düzeltme olmadan başarısız olan bir testle düzeltildi. <a href="/docs/examples/#corpus">Rakamlarla korpus</a>.</p>
 
 <h2 id="related">İlgili sayfalar</h2>
 <ul>

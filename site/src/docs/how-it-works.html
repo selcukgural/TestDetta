@@ -39,6 +39,7 @@
 
 <h3>Without a map</h3>
 <p>The first pull requests after setting up, or ones far behind, find no map within reach. {{name}} then selects by name only, which is safe but selects more, and says so in its log. Selection becomes precise once <code>td record</code> has run on the default branch.</p>
+<p>A map must be recorded on a commit your branch starts from: one recorded on a commit of the branch itself is not an ancestor of the merge base and is not used. Maps of an earlier format, such as those {{name}} 0.1.x recorded, are ignored with the warning "record the maps again" until the default branch records again; see <a href="/docs/limitations/#map-format">Limitations</a>.</p>
 
 <h2>Seeing why</h2>
 <p><code>td affected</code> and <code>td test --dry-run</code> print every affected test project with the reason it runs filtered, completely or not at all; <code>td affected --format json</code> adds the decision for each test class. <code>-v</code> writes every decision to stderr, for example why a project was affected or which change a class ran.</p>

@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 893e895b0946 -->
+<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 3626f99c081d -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -10,8 +10,8 @@
         <a class="button button-ghost button-large" href="/docs/how-it-works/">Nasıl karar verir</a>
       </div>
       <ul class="trust-points">
-        <li>Açık depolar için ücretsiz</li>
-        <li>{{trialDays}} günlük deneme, kart gerekmez</li>
+        <li>GitHub Actions ve GitLab CI üzerindeki açık depolar için ücretsiz</li>
+        <li><a href="/trial/">{{trialDays}} günlük ücretsiz deneme, kart gerekmez</a></li>
         <li>CI'ınızın içinde çalışır</li>
       </ul>
     </div>
@@ -22,7 +22,7 @@
         <span class="badge-ok">Başarılı</span>
       </div>
       <div class="check-body">
-        <p class="check-saving"><strong data-count>%93</strong> daha az kaydedilmiş test süresi</p>
+        <p class="check-saving"><strong data-count>%93</strong> daha kısa kayıtlı test süresi</p>
         <div class="bars">
           <div class="bar-row">
             <span class="bar-label">Tüm testler</span>
@@ -68,9 +68,9 @@
       <div><strong data-count>{{corpusRepositories}}</strong><span>depo; her birinin kendi framework'leri ve derleme tuhaflıkları var</span></div>
       <div><strong data-count>{{corpusFailingChanges}}</strong><span>en az bir testi bozan değişiklik</span></div>
       <div><strong data-count>{{corpusMedianShare}}</strong><span>medyan depoda değişiklik başına çalışan test sınıfı oranı</span></div>
-      <div><strong data-count>{{corpusMissed}}</strong><span>kaçırma (son tur), her biri <a href="/docs/limitations/">bilinen bir sınırlama</a>: bir kez ya da başka bir thread'de çalışan kodun başka bir sınıfa yazılması ve çıktısı okunamayan bir source generator; önceki gerçek kaçırmalar, düzeltme olmadan başarısız olan bir testle düzeltildi</span></div>
+      <div><strong data-count>{{corpusMissed}}</strong><span>kaçırma (son tur), her biri <a href="/docs/limitations/">bilinen bir sınırlama</a>: bir kez ya da başka bir thread'de çalışan kodun başka bir sınıfa sayılması ve çıktısı okunamayan bir source generator; önceki gerçek kaçırmalar, düzeltme olmadan başarısız olan bir testle düzeltildi</span></div>
     </div>
-    <p class="band-note" data-reveal>Değerlendirmenin son turu, 2026-10-07 ile 2026-10-08 arası, katı kuralla değerlendirildi: seçimin dışında çöken ya da takılan bir test çalıştırması, değişiklik olmadan yapılan aynı çalıştırma bunun değişiklikten kaynaklanmadığını göstermedikçe bir kaçırma sayılır.</p>
+    <p class="band-note" data-reveal>Değerlendirmenin 0.2.0 sürüm turu, 2026-10-13 ile 2026-10-15 arası, katı kuralla değerlendirildi: seçimin dışında çöken ya da takılan bir test çalıştırması, değişiklik olmadan yapılan aynı çalıştırma bunun değişiklikten kaynaklanmadığını göstermedikçe bir kaçırma sayılır.</p>
     <figure class="dist" data-reveal>
 <svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
 <title id="dist-title">Değişiklik başına çalıştırılan test sınıflarının oranı, depo başına bir çubuk</title>
@@ -167,7 +167,7 @@
           <li><span class="step-name">Semboller</span><span class="step-result">1 üye değişti: <code>WarnIfConfigFileEnvVarDiffers</code></span></li>
           <li><span class="step-name">Kapsam haritası</span><span class="step-result">Onu <code>main</code> üzerinde 8 test sınıfı çalıştırdı</span></li>
           <li><span class="step-name">İsimler</span><span class="step-result">İzlenecek yeni kod yok</span></li>
-          <li><span class="step-name">Geri dönüşler</span><span class="step-result">Gerek kalmadı</span></li>
+          <li><span class="step-name">Yedek kurallar</span><span class="step-result">Gerek kalmadı</span></li>
         </ol>
       </div>
       <div class="trace-col trace-tests">
@@ -226,7 +226,7 @@
           <span class="gha-event">pull request'te</span>
           <h3>Değişikliğin etkilediklerini çalıştırın</h3>
           <p>Merge base'den önceki 50 commit içindeki en yeni harita geri yüklenir, yalnızca etkilenen test sınıfları çalışır ve job summary her birinin neden çalıştığını söyler.</p>
-          <p class="gha-summary"><span class="badge-ok">Başarılı</span> 274 sınıftan 8'i · %93 daha az kaydedilmiş test süresi</p>
+          <p class="gha-summary"><span class="badge-ok">Başarılı</span> 274 sınıftan 8'i · kayıtlı test süresi %93 daha kısa</p>
         </li>
       </ol>
       <figure class="editor">
@@ -266,11 +266,11 @@ jobs:
 
 <section class="cta">
   <div class="wrap center">
-    <h2>Açık depolar için ücretsiz. Özel depolar için {{trialDays}} gün ücretsiz.</h2>
+    <h2>GitHub Actions ve GitLab CI üzerindeki açık depolar için ücretsiz. Özel depolar için {{trialDays}} günlük ücretsiz deneme.</h2>
     <p>Ardından aktif committer başına aylık {{currency}}{{priceMonthly}}. Deneme için kart gerekmez.</p>
     <div class="hero-actions">
       <a class="button button-large button-light" href="/pricing/">Fiyatları görün</a>
-      <a class="button button-large button-outline-light" href="/docs/">Dokümantasyonu okuyun</a>
+      <a class="button button-large button-outline-light" href="/trial/">Ücretsiz denemeyi başlat</a>
     </div>
   </div>
 </section>

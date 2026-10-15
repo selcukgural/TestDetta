@@ -1,11 +1,11 @@
-<!-- title: Kazanılan süre; layout: docs; description: {{name}} her koşuda kazandırdığı test süresini nasıl raporlar ve hiçbir veri göndermeden haftalar boyunca bunu nasıl toplarsınız.; source: a36fb70af02d -->
+<!-- title: Kazanılan süre; layout: docs; description: {{name}} her koşuda kazandırdığı test süresini nasıl raporlar ve hiçbir veri göndermeden haftalar boyunca bunu nasıl toplarsınız.; source: a4e6c38a872e -->
 <h1>Kazanılan süre</h1>
 <p class="lead">Her koşu ne kadar test süresi kazandırdığını söyler. Rakamlar CI'ınızda kalır; bu yüzden bir aylık toplamı almak, güvenmek zorunda olduğunuz bir dashboard değil, birkaç satırlık bir script'tir.</p>
 
 <h2 id="per-run">Her koşuda</h2>
-<p>Bir kapsam haritası, her test sınıfının ne kadar sürdüğünü kaydeder. {{name}} herhangi bir şey çalıştırmadan önce tüm test paketinin ve seçtiği sınıfların kayıtlı sürelerini toplar:</p>
+<p>Bir kapsam haritası, her test sınıfının ne kadar sürdüğünü kaydeder. {{name}} herhangi bir şey çalıştırmadan önce tüm test paketinin ve seçtiği sınıfların kayıtlı sürelerini toplar. GitHub job summary'si ve <code>--summary-file</code>'ın diğer CI sistemleri için yazdığı Markdown şunu söyler:</p>
 <pre><code>Recorded test time: 22.4 s of 5 m 59 s (93% saved); 7 test project(s) without timings are not counted.</code></pre>
-<p>Aynı satır GitHub job summary'sinde ve <code>--summary-file</code>'ın diğer CI sistemleri için yazdığı Markdown'da da bulunur. Yalnızca test süresini sayar. Derleme ve restore her iki durumda da yapılır; tamamen atlanan test projeleri bunun istisnasıdır: onlar hiç derlenmez, bu da satırın gösterdiğinden daha fazla kazanç demektir.</p>
+<p>Konsol aynı rakamları bir çubukla yazar: <code>Recorded test time 22.4 s instead of 5 m 59 s</code>, ardından <code>93% saved</code>. Bu rakamlar yalnızca test süresini sayar. Derleme ve restore her iki durumda da yapılır; tamamen atlanan test projeleri bunun istisnasıdır: onlar hiç derlenmez, bu da satırın gösterdiğinden daha fazla kazanç demektir.</p>
 <p>Süre bilgisi olmayan projeler, örneğin henüz onlar için bir harita kaydedilmediğinden, her iki rakamın da dışında bırakılır ve satır bunların kaç tane olduğunu söyler; JSON bunları <code>projectsWithoutTimings</code> içinde sayar.</p>
 
 <h2 id="json">JSON'da</h2>

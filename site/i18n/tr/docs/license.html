@@ -1,4 +1,4 @@
-<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: 6914de869032 -->
+<!-- title: Lisans; layout: docs; description: {{name}} lisansını CI'a iletin, neyi kapsadığını kontrol edin ve nasıl yenilendiğini öğrenin.; source: ff823417fc7f -->
 <h1>Lisans</h1>
 <p class="lead">Açık depolar {{name}}'yı ücretsiz kullanır. Özel depolar CI'a bir lisans dizesi iletir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: geçerli bir lisans olmadan, tıpkı {{name}}'dan önceki gibi tüm testler çalışır.</p>
 
@@ -18,6 +18,7 @@
   <li><code>~/.testdetta/license</code>: <code>td license install</code> ve otomatik yenileme tarafından yazılır;</li>
   <li>depodaki <code>.testdetta/license</code>.</li>
 </ol>
+<p>Birden fazla lisans bulunduğunda koşuyu kapsayan ilki geçerli olur; böylece bir secret'ta unutulmuş eski bir lisans, yanına kurulmuş yenilenmiş bir lisansı gölgelemez.</p>
 <p>Önerilen yol bir secret değişkendir. GitHub Actions'ta onu action'ın <code>license</code> girdisi üzerinden iletin:</p>
 <pre><code>- uses: {{actionRef}}
   with:
@@ -35,8 +36,8 @@
 <p>Lisans önce kontrol edilir, ardından <code>~/.testdetta/license</code> dosyasına yazılır.</p>
 
 <h2>Otomatik yenileme</h2>
-<p>Bir lisans, yenilendiği adresi kendi içinde taşır. {{name}} makine başına günde en fazla bir kez güncel sürümü indirir ve <code>~/.testdetta/license</code> içinde tutar; böylece yenilemeler ve eklenen koltuklar secret'larınıza dokunmadan gelir. İstek, lisansı bir header içinde gönderir ve deponuzdan hiçbir şey göndermez. Analizle aynı anda çalışır, zaman aşımı 6 saniyedir ve her hata yok sayılır. Geçebilecek bir hata (yanıt yok, zaman aşımı, sunucu hatası) bir saat sonra yeniden denenir; böylece engellenmiş bir ağ saatte en fazla birkaç saniyeye mal olur ve bu süre çoğunlukla analizin arkasında kalır. Servise ulaşılamayan yerlerde <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın. <code>HTTPS_PROXY</code> dikkate alınır. Son denemenin zamanı <code>~/.testdetta/license-refresh</code> içinde tutulur; bu yüzden boş bir ana dizinle başlayan CI runner'larında yenileme job başına bir kez çalışır.</p>
-<p>Bir aboneliğin lisansı en fazla 40 gün ileriyi kapsar ve yalnızca bu yolla yenilenir: abonelik sürdükçe her yenileme yine 40 gün ileriyi kapsayan bir lisans verir, bu yüzden yenileme yapabilen bir CI bunu fark etmez. Lisans servisine ulaşamayan bir kopya en geç 40 gün sonra sona erer ve son 14 günde uyarı verir. Lisans servisine erişemeyen bir ağ için <a href="/pricing/">Yıllık planı</a> seçin: lisans dosyası tüm dönem boyunca geçerlidir ve <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlarsınız.</p>
+<p>Deneme ve abonelik lisansları, yenilendikleri adresi kendi içlerinde taşır. {{name}} makine başına günde en fazla bir kez güncel sürümü indirir ve <code>~/.testdetta/license</code> içinde tutar; böylece yenilemeler ve eklenen koltuklar secret'larınıza dokunmadan gelir. İstek, lisansı bir header içinde gönderir ve deponuzdan hiçbir şey göndermez. Analizle aynı anda çalışır, zaman aşımı 6 saniyedir ve her hata yok sayılır. Geçebilecek bir hata (yanıt yok, zaman aşımı, sunucu hatası) bir saat sonra yeniden denenir; böylece engellenmiş bir ağ saatte en fazla birkaç saniyeye mal olur ve bu süre çoğunlukla analizin arkasında kalır. Servise ulaşılamayan yerlerde <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın. <code>HTTPS_PROXY</code> dikkate alınır. Son denemenin zamanı <code>~/.testdetta/license-refresh</code> içinde tutulur; bu yüzden boş bir ana dizinle başlayan CI runner'larında yenileme job başına bir kez çalışır.</p>
+<p>Bir aboneliğin lisansı ödenmiş dönemin sonundan 15 gün sonrasına kadar, en fazla 40 gün ileriyi kapsar ve yalnızca bu yolla yenilenir: abonelik sürdükçe her yenileme yine en fazla 40 gün ileriyi kapsayan bir lisans verir. Bu 15 gün, süre dolumu uyarılarının başladığı 14 günden uzundur; bu yüzden yenileme yapabilen bir CI hiç uyarı görmez. Lisans servisine ulaşamayan bir kopya en geç 40 gün sonra sona erer ve son 14 günde uyarı verir. Lisans servisine erişemeyen bir ağ için <a href="/pricing/">Çevrimdışı ve kurumsal (yıllık) planı</a> seçin: lisans dosyası tüm dönem boyunca geçerlidir ve bir yenileme adresi taşımaz; bu yüzden {{name}} onun için lisans servisini hiç çağırmaz ve kapatılacak bir şey kalmaz.</p>
 
 <h2>Bir lisansın kapsadığı depolar</h2>
 <p>Bir lisans, kapsadığı depoları adlandırır, örneğin <code>github.com/acme/*</code> (<code>acme</code>'nin tüm depoları) ya da <code>github.com/acme/app</code> (tek bir depo). Ödeme sırasında ya da deneme formunda yazdığınız bu biçime çevrilir: bir URL ya da SSH remote'u ana makine ve yola dönüşür, tek başına bir kuruluş (<code>github.com/acme</code>) tüm depolarını kapsar. {{name}} bunları deponun <code>origin</code> remote'uyla eşleştirir. Remote URL'sine gömülü kimlik bilgileri (Jenkins'te yaygındır) eşleştirmeden önce çıkarılır ve hiçbir zaman loglanmaz.</p>
@@ -49,4 +50,4 @@
 <p>Bir lisansın koltukları, kapsadığı tüm depoların aktif committer'larını birlikte kapsar. Hiçbir kimlik bilgisi makinelerinizden çıkmadığı için {{name}} yalnızca içinde çalıştığı depoyu sayabilir; bu yüzden sayımı ve uyarıları her seferinde tek bir depoya bakar. Koltukları bu depoların tamamındaki herkes için satın alın.</p>
 <p>Lisansın koltuk sayısının %20'sine kadar aşım (en az bir kişi) sorun değildir. Bunun üzerinde {{name}} 30 gün boyunca seçim yapmaya devam eder ve her özette uyarı verir; böylece koltuk eklemek için zaman olur. Ancak bu sürenin sonunda sayı hâlâ aşımdaysa, lisans yokmuş gibi tüm testler çalışır. Bkz. <a href="/pricing/">Fiyatlandırma</a>.</p>
 
-<div class="callout"><p>Asla kırmızı derleme yok: süresi dolmuş, bulunamayan ya da eşleşmeyen bir lisans, {{name}}'nın tüm testleri çalıştırmasına ve nedenini söylemesine yol açar. Job'u başarısız kılmaz.</p></div>
+<div class="callout"><p>Derleme asla kırmızıya dönmez: süresi dolmuş, bulunamayan ya da eşleşmeyen bir lisans, {{name}}'nın tüm testleri çalıştırmasına ve nedenini söylemesine yol açar. Job'u başarısız kılmaz.</p></div>

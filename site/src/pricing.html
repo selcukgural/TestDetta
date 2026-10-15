@@ -1,10 +1,10 @@
-<!-- title: Pricing; description: Free for public repositories, {{trialDays}} days free for private ones, then priced per active committer. -->
+<!-- title: Pricing; description: Free for public repositories on GitHub Actions and GitLab CI, a {{trialDays}}-day free trial for private ones, then priced per active committer. -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
       <span class="eyebrow">Pricing</span>
       <h1>Pay for the people who commit, not for CI minutes.</h1>
-      <p class="lead">One price per active committer: anyone who authored a commit in the last 30 days. Bots don't count, and neither do people who left.</p>
+      <p class="lead">One price per active committer: anyone who authored a commit in the last 30 days. Bots don't count, and people who stop committing drop out after 30 days.</p>
     </div>
   </div>
 </section>
@@ -26,7 +26,7 @@
       <div class="plan plan-featured">
         <h2>Team</h2>
         <p class="price">{{currency}}{{priceMonthly}}<small> / active committer / month</small></p>
-        <p class="price-note">Or {{currency}}{{priceYearly}} per committer per month, billed yearly. Prices exclude VAT and sales tax, which are added at checkout where they apply. Start with {{trialDays}} days free, no card required.</p>
+        <p class="price-note">Or {{currency}}{{priceYearly}} per committer per month, billed yearly. Prices exclude VAT and sales tax, which are added at checkout where they apply. Start with a {{trialDays}}-day free trial, no card required.</p>
         <ul>
           <li>Private repositories on any CI</li>
           <li>Coverage maps, drift bridge and job summaries</li>
@@ -47,7 +47,7 @@
         <ul>
           <li>Yearly license file, no calls home</li>
           <li>Invoice and purchase order</li>
-          <li>Organisation-wide yearly true-up</li>
+          <li>Organization-wide yearly true-up</li>
         </ul>
         <a class="button button-ghost" href="mailto:{{supportEmail}}">Contact us</a>
       </div>
@@ -71,14 +71,14 @@
         <label><span>Developer cost per hour ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
       </div>
       <div class="calc-results" aria-live="polite">
-        <div class="calc-hero"><output name="hours">88 h</output><span>of waiting for test results saved per month</span></div>
+        <div class="calc-hero"><output name="hours">82 h</output><span>of waiting for test results saved per month</span></div>
         <dl>
-          <div><dt>Test minutes saved per run</dt><dd><output name="perRun">8.4 min</output></dd></div>
-          <div><dt>Runner minutes saved per month</dt><dd><output name="ciMinutes">5,292</output></dd></div>
-          <div><dt>Runner cost saved per month</dt><dd><output name="ciCost">$32</output></dd></div>
-          <div><dt>Developer time saved per month</dt><dd><output name="devCost">$5,292</output></dd></div>
+          <div><dt>Test minutes saved per run</dt><dd><output name="perRun">7.8 min</output></dd></div>
+          <div><dt>Runner minutes saved per month</dt><dd><output name="ciMinutes">4,914</output></dd></div>
+          <div><dt>Runner cost saved per month</dt><dd><output name="ciCost">$29</output></dd></div>
+          <div><dt>Developer time saved per month</dt><dd><output name="devCost">$4,914</output></dd></div>
           <div><dt>{{name}} per month</dt><dd><output name="cost">$150</output></dd></div>
-          <div class="calc-net"><dt>Net saving per month</dt><dd><output name="net">$5,174</output></dd></div>
+          <div class="calc-net"><dt>Net saving per month</dt><dd><output name="net">$4,793</output></dd></div>
         </dl>
         <p class="calc-note">21 working days a month. Only test time is counted: builds run either way.</p>
       </div>
@@ -101,7 +101,7 @@
     </details>
     <details>
       <summary>What happens when the license expires?</summary>
-      <p>While you pay, it does not: {{name}} fetches the current license every day. If you cancel, the license runs to the end of the period you paid for, plus 7 days. Warnings start 14 days before the end date; after it every test runs again, exactly as before you installed {{name}}. Builds keep passing or failing on their own merits.</p>
+      <p>While you pay, it does not: {{name}} fetches the current license every day. If you cancel, the license runs to the end of the period you paid for, plus 15 days. Warnings start 14 days before the end date; after it every test runs again, exactly as before you installed {{name}}. Builds keep passing or failing on their own merits.</p>
     </details>
     <details>
       <summary>Does {{name}} send our code anywhere?</summary>

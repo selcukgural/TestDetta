@@ -39,6 +39,7 @@
     <tr><td>Test projects on .NET Framework 3.5 to 4.6.1</td><td>Not supported: current test platforms need .NET Framework 4.6.2</td></tr>
   </tbody>
 </table>
+<p>For a test project that targets several frameworks, <code>td record</code> runs its tests for one framework: the one <code>-f</code> names, or else the first in <code>TargetFrameworks</code> that runs on the machine (.NET Framework only on Windows). Without <code>-f</code>, it also reads the generated code and build inputs of the project's other frameworks, which that build produces too, so a change is compared with each framework's own build. What a change selects then depends on the frameworks your tests run for; see <a href="/docs/limitations/#target-frameworks">Limitations</a>.</p>
 
 <h2 id="languages">Languages</h2>
 <table>

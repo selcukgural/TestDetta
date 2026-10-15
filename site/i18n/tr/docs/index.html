@@ -1,4 +1,4 @@
-<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: e57f80d1f0c3 -->
+<!-- title: Başlarken; layout: docs; description: {{name}}'yı CI'a kurun ve yalnızca bir değişikliğin etkileyebileceği .NET testlerini çalıştırın.; source: 65383b3da687 -->
 <h1>Başlarken</h1>
 <p class="lead">{{name}} branch'inizi base'iyle karşılaştırır, hangi test projelerinin ve hangi test sınıflarının değişikliği gözlemleyebileceğini belirler ve yalnızca onları çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil; göremedikleri <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -13,34 +13,62 @@
 <h2>Hızlı başlangıç</h2>
 
 <h3>GitHub Actions</h3>
-<p>GitHub Action, sabitlediği {{name}} paketini nuget.org'dan indirir ve çalıştırmadan önce SHA-512'sini kontrol eder; kurmanız gereken bir şey yok. Workflow'unuza iki adım ekleyin: biri varsayılan branch'inize yapılan push'larda bir kapsam haritası kaydeder, diğeri pull request'lerde yalnızca etkilenen testleri çalıştırır.</p>
-<pre><code>- if: github.event_name == 'push'
-  uses: {{actionRef}}
-  with:
-    mode: record
+<p>GitHub Action, sabitlediği {{name}} paketini nuget.org'dan indirir ve çalıştırmadan önce SHA-512'sini kontrol eder; kurmanız gereken bir şey yok. Bu workflow'u ekleyin, örneğin <code>.github/workflows/tests.yml</code> olarak: varsayılan branch'inize yapılan push'larda bir kapsam haritası kaydeder, pull request'lerde yalnızca etkilenen testleri çalıştırır.</p>
+<pre><code>on:
+  push:
+    branches: [main]
+  pull_request:
 
-- if: github.event_name == 'pull_request'
-  uses: {{actionRef}}
-  with:
-    mode: test</code></pre>
-<p>Workflow'un tamamı, gerektirdiği izinler ve tüm girdiler <a href="/docs/github-actions/">GitHub Actions</a> sayfasında.</p>
+permissions:
+  contents: read
+  actions: read # lets pull requests find the newest coverage map in the Actions cache
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7 # pin to a commit SHA
+        with:
+          fetch-depth: 0 # TestDetta compares with the merge base
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6 # pin to a commit SHA
+        with:
+          global-json-file: global.json # without a global.json: dotnet-version: 10.0.x
+
+      - if: github.event_name == 'push'
+        uses: {{actionRef}}
+        with:
+          mode: record
+
+      - if: github.event_name == 'pull_request'
+        uses: {{actionRef}}
+        with:
+          mode: test
+          license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
+<p>Önce workflow'u merge edin: varsayılan branch'e yapılan ilk push ilk haritayı kaydeder. O zamana kadar ve merge base'i ilk haritadan eski olan pull request'lerde <code>mode: test</code> yalnızca isimlere göre seçer; bu güvenlidir ama daha fazlasını seçer. Böyle bir pull request, varsayılan branch'i merge ettiğinde ya da onun üzerine rebase edildiğinde isabetli hale gelir. İzinler, tüm girdiler ve diğer modlar <a href="/docs/github-actions/">GitHub Actions</a> sayfasında.</p>
 
 <h3>Diğer CI sistemleri</h3>
 <p>GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi kurulumlar aynı iki komutu çalıştırır; commit başına kapsam haritalarını içeren bir klasör (<code>--maps-dir</code>) paylaşılan bir diskte ya da nesne depolamada tutulur. {{name}}'yı bir .NET aracı olarak kurun:</p>
-<pre><code>dotnet tool install --global {{packageId}}</code></pre>
+<pre><code>dotnet tool install --global {{packageId}} --version {{toolVersion}}</code></pre>
 <p>Her sistem için pipeline'lar <a href="/docs/other-ci/">Diğer CI sistemleri</a> sayfasında.</p>
+
+<h3>Özel depolar</h3>
+<p>Özel depolar bir lisans gerektirir: <a href="/trial/">{{trialDays}} günlük ücretsiz denemeyi</a> başlatın, lisansı <code>TESTDETTA_LICENSE</code> secret'ı olarak saklayın ve Action'ın <code>license</code> girdisine verin (diğer CI sistemlerinde <code>TESTDETTA_LICENSE</code> değişkenini tanımlayın). GitHub Actions ve GitLab CI'daki açık depolar lisansa ihtiyaç duymaz; Jenkins, Azure DevOps ve Bitbucket bir deponun açık olup olmadığını bildirmez, bu yüzden oralarda her depo lisans gerektirir. Geçerli bir lisans olmadan tüm testler çalışır ve bu yüzden hiçbir şey başarısız olmaz. Bkz. <a href="/docs/license/">Lisans</a>.</p>
 
 <h2>İlk komutlar</h2>
 <p>Bunları deponuzun içinde herhangi bir yerden çalıştırın. <code>--base</code> varsayılan olarak <code>origin/main</code>'dir.</p>
-<pre><code># What does my branch affect, and why?
+<pre><code># Branch'lerinizin başladığı commit olan main üzerinde: tüm testleri kapsam ölçümüyle
+# çalıştırır ve her test projesi için .testdetta/coverage altına bir harita yazar.
+# Feature branch'inizin bir commit'inde kaydedilen harita kullanılmaz.
+td record
+
+# Branch'im neleri etkiliyor, neden?
 td affected --base origin/main
 
-# Run only the affected tests (add --dry-run to print the dotnet test commands)
-td test --base origin/main
-
-# Run every test with coverage and write one map per test project to .testdetta/coverage
-td record</code></pre>
-<p>Kapsam haritası olmadan da <code>td test</code> çalışır: yalnızca isimlere göre karar verir; bu güvenlidir ama daha fazlasını seçer. <code>td record</code> branch'inizin base'inde çalıştıktan sonra seçim isabetli hale gelir.</p>
+# Yalnızca etkilenen testleri çalıştırır (dotnet test komutlarını yazdırmak için --dry-run ekleyin)
+td test --base origin/main</code></pre>
+<p>Kapsam haritası olmadan da <code>td test</code> çalışır: yalnızca isimlere göre karar verir; bu güvenlidir ama daha fazlasını seçer. <code>td record</code> branch'inizin base'inde ya da ondan en fazla 50 commit önce çalıştıktan sonra seçim isabetli hale gelir. {{name}} 0.1.x'in kaydettiği haritalar daha eski bir biçimdedir ve siz yeniden kaydedene kadar "record the maps again" uyarısıyla yok sayılır; bkz. <a href="/docs/limitations/#map-format">Sınırlamalar</a>.</p>
 <div class="callout"><p><code>.testdetta/</code> klasörünü <code>.gitignore</code> dosyanıza ekleyin. Bu klasör kapsam haritalarını ve önbellekleri tutar; commit edilecek hiçbir şey içermez.</p></div>
 
 <h2>Komutlar</h2>
@@ -50,7 +78,7 @@ td record</code></pre>
     <tr><td><code>td affected [--format text|json|paths|commands] [--tests-only] [--build]</code></td><td>Bir değişikliğin neleri etkilediğini ve nedenini yazdırır. <code>--tests-only</code> yalnızca etkilenen test projelerini listeler; <code>--build</code>, değişen bir source generator'ı kullanan test projelerini, ürettiği kodu karşılaştırmak için derler.</td></tr>
     <tr><td><code>td test [--dry-run] [--summary-file &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Yalnızca etkilenen testleri çalıştırır. <code>--summary-file</code> bir Markdown özeti ekler, örneğin <code>$GITHUB_STEP_SUMMARY</code> dosyasına. <code>--</code> sonrasındaki argümanlar her <code>dotnet test</code> çağrısına iletilir, örneğin <code>-- -c Release</code>.</td></tr>
     <tr><td><code>td test --shadow [--shadow-no-classify] [--shadow-report &lt;path&gt;] [-- &lt;dotnet test args&gt;]</code></td><td>Shadow mode: kendi <code>dotnet test</code> argümanlarınızın çalıştırdığı her testi çalıştırır ve seçimin neleri dışarıda bırakacağını raporlar; dışarıda bırakacağı her başarısız sınıfı, bir kaçırmayı kararsız ya da önceden var olan bir başarısızlıktan ayırmak için yeniden çalıştırır. Lisans gerektirmez; çıkış kodu tam çalıştırmanınkidir. Testing platform projeleri önce derlenmeli ve <code>--no-build</code> verilmelidir. Bkz. <a href="/docs/cli/#shadow"><code>--shadow</code></a>.</td></tr>
-    <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build]</code></td><td>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> altına bir harita yazar. <code>--parallel</code> her projenin test sınıflarını n test sürecine dağıtır; <code>--no-build</code> aynı yapılandırmayla yapılmış önceki bir derlemenin çıktısını kaydeder.</td></tr>
+    <tr><td><code>td record [--project &lt;csproj&gt;]... [-c &lt;configuration&gt;] [-f &lt;tfm&gt;] [--parallel &lt;n&gt;] [--no-build] [-- &lt;dotnet test args&gt;]</code></td><td>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> altına bir harita yazar. <code>--parallel</code> her projenin test sınıflarını n test sürecine dağıtır; <code>--no-build</code> aynı yapılandırmayla yapılmış önceki bir derlemenin çıktısını kaydeder. <code>--</code> sonrasındaki argümanlar (filtreniz, ayarlarınız) kayıt sırasında korunur; bkz. <a href="/docs/test-configuration/">Test yapılandırmanız</a>.</td></tr>
     <tr><td><code>td audit [--target-broken &lt;n&gt;] [--max-mutants &lt;n&gt;] [--budget &lt;time&gt;] [--parallel &lt;n&gt;] [--member &lt;Type.Member&gt;]... [-- &lt;dotnet test args&gt;]</code></td><td>Seçimi kendi kodunuzda kontrol eder: çalışma ağacının bir kopyasında üyeleri birer birer bozar, her değişikliği görebilen her testi çalıştırır ve seçimin dışarıda bıraktığı her başarısız sınıfı raporlar. Lisans gerektirmez. Bkz. <a href="/docs/cli/#audit"><code>td audit</code></a>.</td></tr>
     <tr><td><code>td license status</code></td><td>Lisansı kontrol eder ve neyi kapsadığını gösterir.</td></tr>
     <tr><td><code>td license install &lt;license|file&gt;</code></td><td>Hiçbir CI secret'ının tutamayacağı makineler için lisansı <code>~/.testdetta/license</code> dosyasına kaydeder.</td></tr>
@@ -64,8 +92,9 @@ td record</code></pre>
     <tr><td><code>--base &lt;ref&gt;</code></td><td>Karşılaştırılacak git ref'i. Varsayılan: <code>origin/main</code>.</td></tr>
     <tr><td><code>--repo &lt;path&gt;</code></td><td>Depo içindeki herhangi bir yol. Varsayılan: geçerli dizin.</td></tr>
     <tr><td><code>--max-map-age &lt;n&gt;</code></td><td>Merge base'den en fazla n commit önce kaydedilmiş kapsam haritalarını kullanır ve aradaki değişiklikleri köprüler. Varsayılan: 50; 0 yalnızca tam eşleşen haritaları kullanır. Bkz. <a href="/docs/how-it-works/">Nasıl karar verir</a>.</td></tr>
-    <tr><td><code>--maps-dir &lt;dir&gt;</code></td><td>Depo dışında, commit başına bir klasör olarak tutulan kapsam haritaları: <code>record</code> oraya kaydeder, <code>affected</code> ve <code>test</code> ise <code>--max-map-age</code> sınırı içindeki en yenisini geri yükler. GitHub Actions dışındaki CI sistemleri için.</td></tr>
+    <tr><td><code>--maps-dir &lt;dir&gt;</code></td><td>Depo dışında, commit başına bir klasör olarak tutulan kapsam haritaları: <code>record</code> oraya kaydeder, <code>affected</code>, <code>test</code> ve <code>audit</code> ise <code>--max-map-age</code> sınırı içindeki en yenisini geri yükler. GitHub Actions dışındaki CI sistemleri için.</td></tr>
     <tr><td><code>--drift-fallback &lt;all|name&gt;</code></td><td>Daha eski bir haritadan bu yana yapılan değişiklikler bir derleme dosyası, yapılandırma ya da global using içerdiğinde: etkilenen test projelerini tamamen çalıştırır (<code>all</code>, varsayılan) ya da isimlere göre karar verir (<code>name</code>).</td></tr>
+    <tr><td><code>--non-code-files &lt;readers|project&gt;</code></td><td>Bir proje klasöründe kod olmayan değişen bir dosyanın (<code>README.md</code>, bir JSON dosyası) neyi çalıştıracağı: <code>readers</code> (varsayılan), derleme dosyayı kullanmıyorsa yalnızca kapsam haritasının onu okuduğunu gördüğü test sınıflarını çalıştırır; <code>project</code> dosyanın projesini ve ona bağlı her projeyi tamamen çalıştırır. Bkz. <a href="/docs/cli/#non-code-files"><code>--non-code-files</code></a>.</td></tr>
     <tr><td><code>-v</code>, <code>--verbose</code></td><td>Debug loglarını stderr'e yazar: kullanıcının sorgulayabileceği her karar, gerekçesiyle birlikte.</td></tr>
     <tr><td><code>--log-level &lt;level&gt;</code></td><td><code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (varsayılan), <code>error</code> ya da <code>none</code>.</td></tr>
     <tr><td><code>--color &lt;when&gt;</code></td><td><code>auto</code> (varsayılan: terminal ya da GitHub Actions logu; <code>NO_COLOR</code> kapatır), <code>always</code> ya da <code>never</code>. JSON hiçbir zaman renklenmez.</td></tr>

@@ -23,10 +23,18 @@
 </ul>
 
 <h2>Installing</h2>
-<pre><code>dotnet tool install --global {{packageId}}</code></pre>
+<pre><code>dotnet tool install --global {{packageId}} --version {{toolVersion}}
+export PATH="$PATH:$HOME/.dotnet/tools"</code></pre>
+<p>{{name}} runs on the .NET 10 SDK; your tests also need the SDK and runtimes they use today. Pin the version, as the GitHub Action pins its package. A global tool lands in <code>~/.dotnet/tools</code>, which hosted runners and the .NET SDK container images do not put on <code>PATH</code>, so every example below adds it. Installing a version that is already there does nothing, so persistent agents can run the same lines.</p>
 
 <h2>GitLab CI</h2>
-<pre><code>variables:
+<pre><code>default:
+  image: mcr.microsoft.com/dotnet/sdk:10.0   # td runs on .NET 10; use an image that also has your tests' runtimes
+  before_script:
+    - dotnet tool install --global {{packageId}} --version {{toolVersion}}
+    - export PATH="$PATH:$HOME/.dotnet/tools"
+
+variables:
   GIT_DEPTH: "0"                    # full history
   TESTDETTA_MAPS: /srv/testdetta-maps/$CI_PROJECT_PATH   # a disk the runners share; or sync with object storage
 
@@ -67,26 +75,48 @@ affected-tests:
     }
     stage('Record coverage') {
       when { branch 'main' }
-      steps { sh 'td record --maps-dir "$TESTDETTA_MAPS"' }
+      steps {
+        sh '''
+          dotnet tool install --global {{packageId}} --version {{toolVersion}}
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          td record --maps-dir "$TESTDETTA_MAPS"
+        '''
+      }
     }
     stage('Affected tests') {
       when { changeRequest() }
       steps {
-        sh 'git fetch --no-tags origin "+refs/heads/$CHANGE_TARGET:refs/remotes/origin/$CHANGE_TARGET"'
-        sh 'td test --base "origin/$CHANGE_TARGET" --maps-dir "$TESTDETTA_MAPS"'
+        withCredentials([gitUsernamePassword(credentialsId: 'git-credentials')]) {   // the credential your checkout uses
+          sh 'git fetch --no-tags origin "+refs/heads/$CHANGE_TARGET:refs/remotes/origin/$CHANGE_TARGET"'
+        }
+        sh '''
+          dotnet tool install --global {{packageId}} --version {{toolVersion}}
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          td test --base "origin/$CHANGE_TARGET" --maps-dir "$TESTDETTA_MAPS"
+        '''
       }
     }
   }
 }</code></pre>
-<p>Jenkins often clones with credentials in the remote URL. {{name}} strips them before matching the license scope and never logs them. If the remote does not name the repository the license covers (a local mirror, for example), set <code>TESTDETTA_LICENSE_SCOPE</code>, such as <code>git.acme.corp/scm/pay/app</code>.</p>
+<p>The agent needs the .NET 10 SDK. The checkout's credentials are not kept for later steps, so on a private repository the <code>git fetch</code> runs inside <code>withCredentials</code> with the <code>gitUsernamePassword</code> binding of the Git plugin; name the credential your checkout uses. When the remote URL carries credentials, as some Jenkins setups do, {{name}} strips them before matching the license scope and never logs them. If the remote does not name the repository the license covers (a local mirror, for example), set <code>TESTDETTA_LICENSE_SCOPE</code>, such as <code>git.acme.corp/scm/pay/app</code>.</p>
 
 <h2>Azure DevOps Pipelines</h2>
 <pre><code>trigger: [main]
 pr: [main]
 
+variables:
+  TESTDETTA_MAPS: /srv/testdetta-maps/$(Build.Repository.Name)   # a share the agents mount; or sync with object storage
+
 steps:
   - checkout: self
     fetchDepth: 0
+    persistCredentials: true            # lets the git fetch below reach a private repository
+  - task: UseDotNet@2
+    inputs:
+      version: 10.0.x                   # td runs on .NET 10; add the SDK your tests use, as in your own pipeline
+  - script: |
+      dotnet tool install --global {{packageId}} --version {{toolVersion}}
+      echo "##vso[task.prependpath]$HOME/.dotnet/tools"
   - script: td record --maps-dir "$(TESTDETTA_MAPS)"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     env:
@@ -102,7 +132,9 @@ steps:
 <p><code>TESTDETTA_MAPS</code> points to a share on self-hosted agents. On Microsoft-hosted agents, sync it with Azure Blob storage (see <a href="#object-storage">Object storage</a>).</p>
 
 <h2>Bitbucket Pipelines</h2>
-<pre><code>clone:
+<pre><code>image: mcr.microsoft.com/dotnet/sdk:10.0   # td runs on .NET 10; use an image that also has your tests' runtimes
+
+clone:
   depth: full
 
 pipelines:
@@ -110,16 +142,20 @@ pipelines:
     main:
       - step:
           script:
+            - dotnet tool install --global {{packageId}} --version {{toolVersion}}
+            - export PATH="$PATH:$HOME/.dotnet/tools"
             - td record --maps-dir maps
             - ./sync-maps.sh upload maps        # see "Object storage"
   pull-requests:
     '**':
       - step:
           script:
+            - dotnet tool install --global {{packageId}} --version {{toolVersion}}
+            - export PATH="$PATH:$HOME/.dotnet/tools"
             - git fetch --no-tags origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - td test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps</code></pre>
-<p>Set <code>TESTDETTA_LICENSE</code> as a secured repository variable.</p>
+<p>Set <code>TESTDETTA_LICENSE</code> as a secured repository variable. <code>sync-maps.sh</code> needs its storage tool, such as the AWS CLI, in the step's image.</p>
 
 <h2 id="object-storage">Object storage instead of a shared disk</h2>
 <p>On hosted runners there is no shared disk. Upload the new folder after recording. Before testing, download only the folders that can be used: the merge base and up to 50 first-parent commits before it. Download them newest first, and stop at the first one that exists. An example for S3; any tool with <code>cp</code> and <code>ls</code> works the same way:</p>
@@ -141,7 +177,8 @@ case "$1" in
 esac</code></pre>
 
 <h2>When there is no map</h2>
-<p>The first pull requests after setting up, or ones far behind, find no map within reach. {{name}} then selects by name only, which is safe but selects more, and says so in its log. Selection becomes precise once <code>td record</code> has run on the default branch.</p>
+<p>The first pull requests after setting up, or ones far behind, find no map within reach. {{name}} then selects by name only, which is safe but selects more, and says so in its log. Selection becomes precise once <code>td record</code> has run on the default branch. Set up the record job first: its first run on the default branch writes the first map, and pull or merge requests whose merge base is older than that map select by name until they merge or rebase onto the target branch.</p>
+<p>Maps of an earlier format, such as those {{name}} 0.1.x recorded, are ignored with the warning "record the maps again" until the default branch records again; see <a href="/docs/limitations/#map-format">Limitations</a>.</p>
 
 <h2 id="related">Related pages</h2>
 <ul>

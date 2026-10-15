@@ -1,4 +1,4 @@
-<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 10b65109aa7a -->
+<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 6a5d0ae76c58 -->
 <h1>Nasıl karar verir</h1>
 <p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediğini bildiği her şeyde daha fazlasını çalıştırmaya geri döner; hiç göremediği birkaç kalıp <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -39,6 +39,7 @@
 
 <h3>Harita olmadan</h3>
 <p>Kurulumdan sonraki ilk pull request'ler ya da çok geride kalanlar, erişilebilir mesafede bir harita bulamaz. {{name}} bu durumda yalnızca isimlere göre seçer; bu güvenlidir ama daha fazlasını seçer ve bunu logunda belirtir. <code>td record</code> varsayılan branch'te çalıştıktan sonra seçim isabetli hale gelir.</p>
+<p>Bir harita, branch'inizin başladığı bir commit'te kaydedilmiş olmalıdır: branch'in kendi commit'lerinden birinde kaydedilen harita merge base'in atası değildir ve kullanılmaz. Daha eski bir biçimdeki haritalar, örneğin {{name}} 0.1.x'in kaydettikleri, varsayılan branch yeniden kaydedene kadar "record the maps again" uyarısıyla yok sayılır; bkz. <a href="/docs/limitations/#map-format">Sınırlamalar</a>.</p>
 
 <h2>Nedenini görmek</h2>
 <p><code>td affected</code> ve <code>td test --dry-run</code>, etkilenen her test projesini filtreli mi, tamamen mi yoksa hiç mi çalışacağının gerekçesiyle birlikte yazdırır; <code>td affected --format json</code> her test sınıfı için verilen kararı da ekler. <code>-v</code> her kararı stderr'e yazar; örneğin bir projenin neden etkilendiğini ya da bir sınıfın hangi değişikliği çalıştırdığını.</p>
