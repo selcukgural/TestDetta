@@ -8,7 +8,7 @@ it cannot see are listed under [Limitations](#limitations).
 
 ```
 $ td test --base origin/main
-TestDetta 0.1.3 · 1 changed file · 2 affected test projects
+TestDetta 0.2.0 · 1 changed file · 2 affected test projects
 Tests to run
 ┌──────────────────┬──────────┬─────────┬───────┬──────────────────────────────────────────────────────────┐
 │ Test project     │ Run      │ Classes │ Saved │ Why                                                      │
