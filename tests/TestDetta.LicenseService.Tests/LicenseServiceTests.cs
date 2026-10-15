@@ -170,7 +170,8 @@ public sealed class LicenseServiceTests : IAsyncLifetime
         Assert.Equal(["github.com/acme/*", "git.acme.corp/*"], claims.Scopes);
         // An annual license keeps 30 days of slack after its term for the new file to arrive.
         Assert.Equal(new DateTimeOffset(2027, 10, 31, 0, 0, 0, TimeSpan.Zero), claims.ValidUntil);
-        Assert.Equal(new Uri("https://license.example/v1/licenses/L-1"), claims.Refresh);
+        // An annual (offline) license is renewed by a new file; TestDetta never calls home for it.
+        Assert.Null(claims.Refresh);
     }
 
     [Fact]
