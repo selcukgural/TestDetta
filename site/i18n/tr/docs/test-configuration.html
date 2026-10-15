@@ -1,4 +1,4 @@
-<!-- title: Test yapılandırmanız; layout: docs; description: {{name}} test filtrelerinizi, run settings dosyanızı ve test platformu argümanlarınızı başlattığı her koşuda nasıl korur ve haritaları bunlarla nasıl kaydeder.; source: 94e12882c15a -->
+<!-- title: Test yapılandırmanız; layout: docs; description: {{name}} test filtrelerinizi, run settings dosyanızı ve test platformu argümanlarınızı başlattığı her koşuda nasıl korur ve haritaları bunlarla nasıl kaydeder.; source: 76faf9c6c4c2 -->
 <h1>Test yapılandırmanız</h1>
 <p class="lead">{{name}} test koşularınızı daraltır. Hiçbir zaman genişletmez ya da değiştirmez: yapılandırmanızın dışladığı bir test dışlı kalır, kapsam haritaları da sizin ayarlarınızla kaydedilir.</p>
 
@@ -27,12 +27,13 @@
 <pre><code>td test --base origin/main -- --filter "Category!=Integration" --settings ci.runsettings
 td record -- --filter "Category!=Integration" --settings ci.runsettings</code></pre>
 <p>GitHub Actions'ta bunu <code>dotnet-test-args</code> girdisi record modu da dahil her modda yapar. Kaydın kendisinin denetlediği seçenekler (<code>-c</code>, <code>-f</code>, <code>--no-build</code>, logger'lar, sonuç klasörü ve rapor seçenekleri) kayıt sırasında {{name}}'nın değerleriyle kalır; geri kalan her şey verdiğiniz gibi koşar.</p>
+<p><code>td test</code> argümanları arasındaki bir <code>-f &lt;tfm&gt;</code> seçimi de daraltır: koşu yalnızca o framework'ün derlemelerini yükler, bu yüzden yalnızca başka framework'ler için derlenen bir değişiklik (o framework'ün dışarıda bıraktığı bir <code>#if</code> altındaki kod) o koşuda hiçbir şey seçmez. Test projeleriniz birden fazla framework'ü hedefliyorsa her framework'ü bir yerde koşturun, örneğin gecelik tam bir koşuda; bkz. <a href="/docs/limitations/#target-frameworks">Sınırlamalar</a>.</p>
 
 <h2 id="cannot">Bir filtre birleştirilemediğinde</h2>
-<p>Bazı filtreler bir sınıf filtresiyle birleştirilemez: sizin bir xUnit v3 sorgu filtreniz (<code>--filter-query</code>) ya da sınıf filtreniz ve bir TUnit tree-node filtresi. {{name}} o zaman test projesinin tamamını sizin filtrenizle koşturur: daha fazlasını koşturur, filtrenizin dışarıda bıraktığını asla. İş özeti bunu o proje için belirtir.</p>
+<p>Bazı filtreler bir sınıf filtresiyle birleştirilemez: sizin bir xUnit v3 sorgu filtreniz (<code>--filter-query</code>) ya da sınıf filtreniz ve bir TUnit tree-node filtresi. {{name}} o zaman test projesinin tamamını sizin filtrenizle koşturur: daha fazlasını koşturur, filtrenizin dışarıda bıraktığını asla. Job summary bunu o proje için belirtir.</p>
 
 <h2 id="check">Nelerin korunduğunu kontrol edin</h2>
-<p>Testler koşmadan önce konsol, kendi yapılandırması korunan her test projesini adıyla yazar; örneğin <code>tests/Shop.Tests/Shop.Tests.csproj: your test case filter Category!=Integration, run settings tests/ci.runsettings kept in every run</code>. İş özeti de aynısını listeler, <code>-v</code> ise her koşunun tam <code>dotnet test</code> komutunu yazar.</p>
+<p>Testler koşmadan önce konsol, kendi yapılandırması korunan her test projesini adıyla yazar; örneğin <code>tests/Shop.Tests/Shop.Tests.csproj: your test case filter Category!=Integration, run settings tests/ci.runsettings kept in every run</code>. Job summary de aynısını listeler, <code>-v</code> ise her koşunun tam <code>dotnet test</code> komutunu yazar.</p>
 <div class="callout"><p>Derlemeniz ya da CI'nız test argümanlarını burada sayılmayan bir yolla veriyorsa (bir Arcade özelliği, <code>dotnet test</code>'in etrafında bir betik), bunları <code>dotnet-test-args</code> ile ya da <code>--</code> sonrasında verin; böylece {{name}} koşularınızın gerçekte ne yaptığını görür.</p></div>
 
 <h2 id="related">İlgili sayfalar</h2>

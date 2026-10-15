@@ -1,4 +1,4 @@
-<!-- title: Diğer CI sistemleri; layout: docs; description: {{name}}'yı GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi CI'da bir kapsam haritaları klasörüyle çalıştırın.; source: 6022371af2df -->
+<!-- title: Diğer CI sistemleri; layout: docs; description: {{name}}'yı GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi CI'da bir kapsam haritaları klasörüyle çalıştırın.; source: 034ecf32c5b5 -->
 <h1>Diğer CI sistemleri</h1>
 <p class="lead">{{name}}, .NET ve git çalıştıran her CI'da çalışır. GitHub Actions dışında iki komut ve bir klasör işi görür.</p>
 
@@ -23,10 +23,18 @@
 </ul>
 
 <h2>Kurulum</h2>
-<pre><code>dotnet tool install --global {{packageId}}</code></pre>
+<pre><code>dotnet tool install --global {{packageId}} --version {{toolVersion}}
+export PATH="$PATH:$HOME/.dotnet/tools"</code></pre>
+<p>{{name}} .NET 10 SDK üzerinde çalışır; testlerinizin de bugün kullandıkları SDK ve runtime'lara ihtiyacı vardır. GitHub Action'ın paketini sabitlediği gibi sürümü sabitleyin. Global bir araç <code>~/.dotnet/tools</code> altına kurulur; barındırılan (hosted) runner'lar ve .NET SDK container imajları bu klasörü <code>PATH</code>'e eklemez, bu yüzden aşağıdaki her örnek onu ekler. Zaten kurulu olan bir sürümü kurmak hiçbir şey yapmaz; kalıcı agent'lar da aynı satırları çalıştırabilir.</p>
 
 <h2>GitLab CI</h2>
-<pre><code>variables:
+<pre><code>default:
+  image: mcr.microsoft.com/dotnet/sdk:10.0   # td runs on .NET 10; use an image that also has your tests' runtimes
+  before_script:
+    - dotnet tool install --global {{packageId}} --version {{toolVersion}}
+    - export PATH="$PATH:$HOME/.dotnet/tools"
+
+variables:
   GIT_DEPTH: "0"                    # full history
   TESTDETTA_MAPS: /srv/testdetta-maps/$CI_PROJECT_PATH   # a disk the runners share; or sync with object storage
 
@@ -67,26 +75,48 @@ affected-tests:
     }
     stage('Record coverage') {
       when { branch 'main' }
-      steps { sh 'td record --maps-dir "$TESTDETTA_MAPS"' }
+      steps {
+        sh '''
+          dotnet tool install --global {{packageId}} --version {{toolVersion}}
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          td record --maps-dir "$TESTDETTA_MAPS"
+        '''
+      }
     }
     stage('Affected tests') {
       when { changeRequest() }
       steps {
-        sh 'git fetch --no-tags origin "+refs/heads/$CHANGE_TARGET:refs/remotes/origin/$CHANGE_TARGET"'
-        sh 'td test --base "origin/$CHANGE_TARGET" --maps-dir "$TESTDETTA_MAPS"'
+        withCredentials([gitUsernamePassword(credentialsId: 'git-credentials')]) {   // the credential your checkout uses
+          sh 'git fetch --no-tags origin "+refs/heads/$CHANGE_TARGET:refs/remotes/origin/$CHANGE_TARGET"'
+        }
+        sh '''
+          dotnet tool install --global {{packageId}} --version {{toolVersion}}
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          td test --base "origin/$CHANGE_TARGET" --maps-dir "$TESTDETTA_MAPS"
+        '''
       }
     }
   }
 }</code></pre>
-<p>Jenkins çoğu zaman remote URL'sinde kimlik bilgileriyle clone yapar. {{name}} bunları lisans kapsamını eşleştirmeden önce çıkarır ve hiçbir zaman loglamaz. Remote, lisansın kapsadığı depoyu adlandırmıyorsa (örneğin yerel bir mirror), <code>TESTDETTA_LICENSE_SCOPE</code> ayarlayın, örneğin <code>git.acme.corp/scm/pay/app</code>.</p>
+<p>Agent'ta .NET 10 SDK bulunmalıdır. Checkout'un kimlik bilgileri sonraki adımlar için saklanmaz; bu yüzden özel bir depoda <code>git fetch</code>, Git eklentisinin <code>gitUsernamePassword</code> bağlamasıyla <code>withCredentials</code> içinde çalışır; checkout'unuzun kullandığı kimlik bilgisini belirtin. Remote URL'si kimlik bilgileri taşıyorsa, bazı Jenkins kurulumlarında olduğu gibi, {{name}} bunları lisans kapsamını eşleştirmeden önce çıkarır ve hiçbir zaman loglamaz. Remote, lisansın kapsadığı depoyu adlandırmıyorsa (örneğin yerel bir mirror), <code>TESTDETTA_LICENSE_SCOPE</code> ayarlayın, örneğin <code>git.acme.corp/scm/pay/app</code>.</p>
 
 <h2>Azure DevOps Pipelines</h2>
 <pre><code>trigger: [main]
 pr: [main]
 
+variables:
+  TESTDETTA_MAPS: /srv/testdetta-maps/$(Build.Repository.Name)   # a share the agents mount; or sync with object storage
+
 steps:
   - checkout: self
     fetchDepth: 0
+    persistCredentials: true            # lets the git fetch below reach a private repository
+  - task: UseDotNet@2
+    inputs:
+      version: 10.0.x                   # td runs on .NET 10; add the SDK your tests use, as in your own pipeline
+  - script: |
+      dotnet tool install --global {{packageId}} --version {{toolVersion}}
+      echo "##vso[task.prependpath]$HOME/.dotnet/tools"
   - script: td record --maps-dir "$(TESTDETTA_MAPS)"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     env:
@@ -102,7 +132,9 @@ steps:
 <p><code>TESTDETTA_MAPS</code>, self-hosted agent'larda bir paylaşıma işaret eder. Microsoft-hosted agent'larda onu Azure Blob depolamayla senkronize edin (bkz. <a href="#object-storage">Nesne depolama</a>).</p>
 
 <h2>Bitbucket Pipelines</h2>
-<pre><code>clone:
+<pre><code>image: mcr.microsoft.com/dotnet/sdk:10.0   # td runs on .NET 10; use an image that also has your tests' runtimes
+
+clone:
   depth: full
 
 pipelines:
@@ -110,16 +142,20 @@ pipelines:
     main:
       - step:
           script:
+            - dotnet tool install --global {{packageId}} --version {{toolVersion}}
+            - export PATH="$PATH:$HOME/.dotnet/tools"
             - td record --maps-dir maps
             - ./sync-maps.sh upload maps        # see "Object storage"
   pull-requests:
     '**':
       - step:
           script:
+            - dotnet tool install --global {{packageId}} --version {{toolVersion}}
+            - export PATH="$PATH:$HOME/.dotnet/tools"
             - git fetch --no-tags origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - td test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps</code></pre>
-<p><code>TESTDETTA_LICENSE</code> değişkenini secured bir depo değişkeni olarak tanımlayın.</p>
+<p><code>TESTDETTA_LICENSE</code> değişkenini secured bir depo değişkeni olarak tanımlayın. <code>sync-maps.sh</code>, adımın imajında kendi depolama aracına, örneğin AWS CLI'a ihtiyaç duyar.</p>
 
 <h2 id="object-storage">Paylaşılan disk yerine nesne depolama</h2>
 <p>Barındırılan (hosted) runner'larda paylaşılan bir disk yoktur. Kayıttan sonra yeni klasörü yükleyin. Test etmeden önce yalnızca kullanılabilecek klasörleri indirin: merge base ve ondan önceki en fazla 50 first-parent commit. Onları en yeniden başlayarak indirin ve mevcut olan ilkinde durun. S3 için bir örnek; <code>cp</code> ve <code>ls</code> komutları olan her araç aynı şekilde çalışır:</p>
@@ -141,7 +177,8 @@ case "$1" in
 esac</code></pre>
 
 <h2>Harita olmadığında</h2>
-<p>Kurulumdan sonraki ilk pull request'ler ya da çok geride kalanlar, erişilebilir mesafede bir harita bulamaz. {{name}} bu durumda yalnızca isimlere göre seçer; bu güvenlidir ama daha fazlasını seçer ve bunu logunda belirtir. <code>td record</code> varsayılan branch'te çalıştıktan sonra seçim isabetli hale gelir.</p>
+<p>Kurulumdan sonraki ilk pull request'ler ya da çok geride kalanlar, erişilebilir mesafede bir harita bulamaz. {{name}} bu durumda yalnızca isimlere göre seçer; bu güvenlidir ama daha fazlasını seçer ve bunu logunda belirtir. <code>td record</code> varsayılan branch'te çalıştıktan sonra seçim isabetli hale gelir. Önce kayıt job'unu kurun: varsayılan branch'teki ilk çalışması ilk haritayı yazar; merge base'i bu haritadan eski olan pull ya da merge request'ler, hedef branch'i merge edene ya da onun üzerine rebase edilene kadar isimlere göre seçer.</p>
+<p>Daha eski bir biçimdeki haritalar, örneğin {{name}} 0.1.x'in kaydettikleri, varsayılan branch yeniden kaydedene kadar "record the maps again" uyarısıyla yok sayılır; bkz. <a href="/docs/limitations/#map-format">Sınırlamalar</a>.</p>
 
 <h2 id="related">İlgili sayfalar</h2>
 <ul>

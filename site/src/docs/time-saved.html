@@ -3,9 +3,9 @@
 <p class="lead">Every run says how much test time it saved. The numbers stay in your CI, so adding them up over a month is a few lines of script, not a dashboard you have to trust.</p>
 
 <h2 id="per-run">On every run</h2>
-<p>A coverage map records how long each test class took. Before running anything, {{name}} adds up the recorded time of the whole suite and of the classes it selected:</p>
+<p>A coverage map records how long each test class took. Before running anything, {{name}} adds up the recorded time of the whole suite and of the classes it selected. The GitHub job summary, and the Markdown that <code>--summary-file</code> writes for other CI systems, say:</p>
 <pre><code>Recorded test time: 22.4 s of 5 m 59 s (93% saved); 7 test project(s) without timings are not counted.</code></pre>
-<p>The same line is in the GitHub job summary, and in the Markdown that <code>--summary-file</code> writes for other CI systems. It counts test time only. Building and restoring happen either way, except for test projects that are skipped entirely: those are not built at all, which saves more than the line shows.</p>
+<p>The console prints the same numbers with a bar: <code>Recorded test time 22.4 s instead of 5 m 59 s</code>, then <code>93% saved</code>. They count test time only. Building and restoring happen either way, except for test projects that are skipped entirely: those are not built at all, which saves more than the line shows.</p>
 <p>Projects without timings, for example because no map was recorded for them yet, are left out of both numbers, and the line says how many; the JSON counts them in <code>projectsWithoutTimings</code>.</p>
 
 <h2 id="json">In JSON</h2>

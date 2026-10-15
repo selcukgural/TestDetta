@@ -23,16 +23,14 @@ jobs:
 
       - uses: actions/setup-dotnet@v6 # pin to a commit SHA
         with:
-          global-json-file: global.json
+          global-json-file: global.json # without a global.json: dotnet-version: 10.0.x
 
-      # Also the full test run of main. Leave out projects that cannot run here, such as
-      # integration tests that need a database; they are then decided by name on pull requests.
+      # Also the full test run of main; to leave out projects that cannot run here,
+      # see "Recording only part of the suite" below.
       - if: github.event_name == 'push'
         uses: {{actionRef}}
         with:
           mode: record
-          projects: |
-            tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
         uses: {{actionRef}}
@@ -51,6 +49,7 @@ jobs:
   <li>Without any map, <code>mode: test</code> still works, deciding by name only.</li>
 </ul>
 <p>When tests fail while recording, the map is still saved before the job fails, so pull requests keep a map to work with.</p>
+<p>Merge the workflow before relying on it: the first push to the default branch records the first map. Pull requests whose merge base is older than the first map find none and select by name until they merge or rebase onto the default branch. After upgrading from {{name}} 0.1.x, its maps are of an older format and are ignored with the warning "record the maps again" until the default branch records again; pull requests that run before that select more (see <a href="/docs/limitations/#map-format">Limitations</a>).</p>
 
 <h2>Permissions</h2>
 <table>
@@ -133,7 +132,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6 # pin to a commit SHA
         with:
-          global-json-file: global.json
+          global-json-file: global.json # without a global.json: dotnet-version: 10.0.x
 
       - uses: {{actionRef}}
         with:

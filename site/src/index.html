@@ -10,8 +10,8 @@
         <a class="button button-ghost button-large" href="/docs/how-it-works/">How it decides</a>
       </div>
       <ul class="trust-points">
-        <li>Free for public repositories</li>
-        <li>{{trialDays}}-day trial, no card</li>
+        <li>Free for public repositories on GitHub Actions and GitLab CI</li>
+        <li><a href="/trial/">{{trialDays}}-day free trial, no card</a></li>
         <li>Runs inside your CI</li>
       </ul>
     </div>
@@ -70,7 +70,7 @@
       <div><strong data-count>{{corpusMedianShare}}</strong><span>of its test classes ran per change in the median repository</span></div>
       <div><strong data-count>{{corpusMissed}}</strong><span>misses in the latest round, each a <a href="/docs/limitations/">known limitation</a>: code that runs once or on another thread credited to another class, and a source generator whose output was not read; earlier real misses were fixed with a test that fails without the fix</span></div>
     </div>
-    <p class="band-note" data-reveal>Latest round of the evaluation, 2026-10-07 to 2026-10-08, judged strictly: a test run that crashes or hangs outside the selection counts as a miss unless the same run without the change shows it is not the change's.</p>
+    <p class="band-note" data-reveal>The 0.2.0 release round of the evaluation, 2026-10-13 to 2026-10-15, judged strictly: a test run that crashes or hangs outside the selection counts as a miss unless the same run without the change shows it is not the change's.</p>
     <figure class="dist" data-reveal>
 <svg class="dist-chart" viewBox="0 0 720 180" role="img" aria-labelledby="dist-title dist-desc">
 <title id="dist-title">Share of test classes run per change, one bar per repository</title>
@@ -266,11 +266,11 @@ jobs:
 
 <section class="cta">
   <div class="wrap center">
-    <h2>Free for public repositories. {{trialDays}} days free for private ones.</h2>
+    <h2>Free for public repositories on GitHub Actions and GitLab CI. A {{trialDays}}-day free trial for private ones.</h2>
     <p>Then {{currency}}{{priceMonthly}} per active committer per month. No card for the trial.</p>
     <div class="hero-actions">
       <a class="button button-large button-light" href="/pricing/">See pricing</a>
-      <a class="button button-large button-outline-light" href="/docs/">Read the docs</a>
+      <a class="button button-large button-outline-light" href="/trial/">Start a free trial</a>
     </div>
   </div>
 </section>

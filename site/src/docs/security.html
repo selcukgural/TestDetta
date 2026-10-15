@@ -1,6 +1,6 @@
 <!-- title: Security and data; layout: docs; description: What {{name}} stores, where it keeps it, and the one network call it makes. -->
 <h1>Security and data</h1>
-<p class="lead">{{name}} runs in your CI and on your machines. Your source code, coverage maps and test results never leave them. This page lists everything it stores and every network call it makes.</p>
+<p class="lead">{{name}} runs in your CI and on your machines. Your source code and test results never leave them; coverage maps leave them only for your CI's cache storage. This page lists everything it stores and every network call it makes.</p>
 
 <h2 id="stays">What stays in your CI</h2>
 <ul>
@@ -8,6 +8,7 @@
   <li>Coverage maps: which test class ran which method, and how long each class took. They name your types, methods and test classes, so treat them like build artifacts.</li>
   <li>Test runs and their results.</li>
   <li>The count of active committers. Author emails are read from git history to count them, on your machine; no names or emails are sent anywhere.</li>
+  <li><code>td record</code> instruments assemblies in the test project's build output while it runs: your repository's, and third-party ones there that read files. It backs up the originals in a temporary <code>testdetta-record-*</code> folder first and puts them back at the end, also when the recording fails. It also copies its runtime into the build output and lists it in the test project's <code>deps.json</code>, both undone at the end, and the test process sets a startup hook (<code>DOTNET_STARTUP_HOOKS</code>) for the .NET processes the tests start, so that each reports which test started it.</li>
   <li><code>td audit</code> rewrites assemblies only in its own copy of the working tree; your sources and build output are only read, and the copy is deleted at the end.</li>
 </ul>
 
@@ -19,9 +20,11 @@
     <tr><td><code>.testdetta/cache/</code></td><td>A cache of the evaluated project graph</td></tr>
     <tr><td><code>.testdetta/license.json</code></td><td>Optional: extra bot accounts to leave out of the committer count</td></tr>
     <tr><td><code>~/.testdetta/license</code></td><td>A license installed with <code>td license install</code>, or renewed automatically</td></tr>
+    <tr><td><code>.testdetta/license</code></td><td>Optional: a license kept in the repository</td></tr>
     <tr><td><code>~/.testdetta/license-refresh</code></td><td>When the last renewal was attempted</td></tr>
     <tr><td><code>--maps-dir</code> folder</td><td>Maps of earlier commits, one folder per commit, kept where you choose</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td><code>td audit</code>'s report (or <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> is shadow mode's</td></tr>
+    <tr><td><code>testdetta-record-*</code> in the temporary folder</td><td>While <code>td record</code> runs: the original assemblies of the test project's build output, put back and deleted at the end</td></tr>
     <tr><td><code>td-audit-*</code> under <code>--work-dir</code> (<code>/tmp</code>)</td><td>While <code>td audit</code> runs: a copy of the working tree, readable only by your user, where code is broken on purpose and tested. Deleted at the end, or by the next audit after a crash</td></tr>
     <tr><td><code>testdetta-shadow-*</code> in the temporary folder</td><td>While <code>td test --shadow</code> runs: copies of the test reports, the reruns' results and a checkout of the base commit (a git worktree). Deleted at the end, also after Ctrl+C or a cancelled job. Your results directory and your own reports are left as they are; the TRX reports shadow mode asks for itself are deleted once read</td></tr>
   </tbody>
@@ -29,12 +32,13 @@
 <p>On GitHub Actions, maps are stored in your repository's Actions cache. <code>.testdetta/coverage/</code> and <code>.testdetta/cache/</code> are generated; keep them out of version control.</p>
 
 <h2 id="network">The one network call</h2>
-<p>With a subscription license, {{name}} asks the license service for a renewed license at most once a day per machine (once per job on CI runners that start with an empty home directory), so that renewals reach CI without anyone updating a secret.</p>
+<p>With a trial or subscription license, {{name}} asks the license service for a renewed license at most once a day per machine (once per job on CI runners that start with an empty home directory), so that renewals reach CI without anyone updating a secret.</p>
 <ul>
-  <li>It sends the license itself, nothing else: no repository name, code, paths or counts.</li>
+  <li>It sends the license itself, in a header, and nothing else: no repository name, code, paths or counts.</li>
   <li>It runs next to the analysis and waits at most 6 seconds. A failure that may pass is tried again after an hour; if the service cannot be reached, the current license keeps working.</li>
   <li><code>HTTPS_PROXY</code> is honoured.</li>
-  <li><code>TESTDETTA_LICENSE_REFRESH=off</code> turns it off. Offline and enterprise licenses never call home.</li>
+  <li><code>TESTDETTA_LICENSE_REFRESH=off</code> turns it off; the license in hand keeps working until it runs out.</li>
+  <li>An annual (offline &amp; enterprise) license carries no renewal address, so {{name}} never calls home for it.</li>
 </ul>
 <p>A run without a license makes no call, and public repositories need none. Neither do shadow mode (<code>td test --shadow</code>) and the audit (<code>td audit</code>), which read no license at all. What uses the network in such a job is not {{name}}'s own: the GitHub Action downloads the {{name}} package from nuget.org, checked against the SHA-512 it pins, and lists and restores the coverage maps in your Actions cache; your builds restore packages as usual, shadow mode's rerun on the base commit restores that commit's packages like any build, and the audit's builds and test runs in its copy restore packages the same way.</p>
 
@@ -42,7 +46,8 @@
 <p>A license is a signed string, verified on your machine with a public key built into {{name}}. It names the repositories it covers, matched against the <code>origin</code> remote with any credentials removed first. A license problem never fails a build: every test runs instead, as before {{name}}. <a href="/docs/license/">More about licenses</a>.</p>
 
 <h2 id="us">What we keep</h2>
-<p>For a subscription: the licensee name, the repositories it covers, the number of seats and its period. The payment and the email address it is sent to are handled by {{seller}}, our merchant of record. See the <a href="/legal/privacy/">privacy policy</a>.</p>
+<p>For a subscription: the licensee name, the repositories it covers, the number of seats and its period. The payment is handled by {{seller}}, our merchant of record. The license service receives the email address from {{seller}} and passes it to our email provider for the one message that carries the license, without storing it.</p>
+<p>For a trial: the email address, until 7 days after the trial ends, for the one reminder; a keyed hash of the address and the organizations you named, for 13 months, to allow one trial per address and organization in 12 months; and the trial's license record (its licensee name, which names your organization, and the repository patterns), kept like any license record. See the <a href="/legal/privacy/">privacy policy</a>.</p>
 
 <h2 id="report">Reporting a vulnerability</h2>
 <p>Email <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>. Please give us time to fix it before you publish.</p>

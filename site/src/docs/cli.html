@@ -23,7 +23,7 @@ td affected --base HEAD~3      # the last three commits and anything uncommitted
 <pre><code>td affected --repo ../shop</code></pre>
 
 <h3 id="verbose"><code>-v</code>, <code>--verbose</code> and <code>--log-level &lt;level&gt;</code></h3>
-<p>Logs go to stderr, so stdout stays machine readable. <code>-v</code> turns on debug logs, which explain every decision: why a project is affected, which member a test class ran, which name a trace followed. <code>--log-level</code> picks any of <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (default), <code>error</code> or <code>none</code>; <code>trace</code> adds raw git output.</p>
+<p>Logs go to stderr, so stdout stays machine readable. <code>-v</code> turns on debug logs, which explain every decision: why a project is affected, which member a test class ran, which name a trace followed. <code>--log-level</code> picks any of <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (default), <code>error</code>, <code>critical</code> or <code>none</code>; <code>trace</code> adds raw git output.</p>
 <pre><code>td affected -v 2&gt; testdetta-debug.log
 td test --log-level information</code></pre>
 
@@ -117,7 +117,7 @@ td test -- --no-restore
 td test -- --filter "Category!=Integration"</code></pre>
 
 <h2 id="record"><code>td record</code></h2>
-<p>Runs every test with coverage and writes one map per test project to <code>.testdetta/coverage</code> (or <code>--maps-dir</code>). Run it on your default branch; it is also that branch's full test run. Exit code <code>3</code> when tests fail; the maps are still written, and the failing classes are always selected later.</p>
+<p>Runs every test with coverage and writes one map per test project to <code>.testdetta/coverage</code> (or <code>--maps-dir</code>). Run it on your default branch; it is also that branch's full test run. Exit code <code>3</code> when tests fail; the maps are still written, and the failing classes run whenever their project is affected.</p>
 
 <h3 id="configuration"><code>-c</code>, <code>--configuration &lt;name&gt;</code></h3>
 <p>Build configuration. Default: <code>Debug</code>.</p>
@@ -180,9 +180,13 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
   <tbody>
     <tr><td><code>TESTDETTA_LICENSE</code></td><td>The license string, from a CI secret.</td></tr>
     <tr><td><code>TESTDETTA_LICENSE_FILE</code></td><td>A file holding the license string.</td></tr>
-    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>Turns off the daily license refresh, for networks that cannot reach the license service.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>Turns off the daily license refresh of trial and subscription licenses, for networks that cannot reach the license service. An annual license makes no such call.</td></tr>
     <tr><td><code>TESTDETTA_LICENSE_SCOPE</code></td><td>The repository the license must cover, when the <code>origin</code> remote does not name it (a local mirror, for example).</td></tr>
     <tr><td><code>HTTPS_PROXY</code></td><td>Proxy for the license refresh.</td></tr>
+    <tr><td><code>TESTDETTA_THEME</code></td><td>The colour theme for every run: <code>default</code>, <code>colorblind</code> or <code>mono</code>. <code>--theme</code> takes precedence. See <a href="#color"><code>--theme</code></a>.</td></tr>
+    <tr><td><code>NO_COLOR</code></td><td>Any value turns colour off under <code>--color auto</code>.</td></tr>
+    <tr><td><code>FORCE_COLOR</code></td><td>Under <code>--color auto</code>, any value but <code>0</code> turns colour on, also when the output goes to a file or a pipe; <code>0</code> turns it off. <code>NO_COLOR</code> wins over it.</td></tr>
+    <tr><td><code>TESTDETTA_MSBUILD</code></td><td>The full MSBuild executable that builds legacy (non-SDK) projects, when the one {{name}} finds is not the one to use. See <a href="/docs/compatibility/">Compatibility</a>.</td></tr>
   </tbody>
 </table>
 
@@ -191,7 +195,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
   <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Success, including "no tests needed".</td></tr>
-    <tr><td><code>1</code></td><td>The analysis failed: git, the file system or a project file; for <code>audit</code> also when it could not run or was cancelled; for <code>test --shadow</code> when it was cancelled before the tests ran; for <code>license install</code> when the license is not valid.</td></tr>
+    <tr><td><code>1</code></td><td>The analysis failed: git, the file system or a project file; for <code>record</code> also when no test project could be recorded; for <code>audit</code> also when it could not run or was cancelled; for <code>test --shadow</code> when it was cancelled before the tests ran; for <code>license install</code> when the license is not valid.</td></tr>
     <tr><td><code>2</code></td><td>Invalid command line.</td></tr>
     <tr><td><code>3</code></td><td>Tests failed (<code>test</code>, the full run of <code>test --shadow</code>, and <code>record</code>); a miss (<code>audit</code>).</td></tr>
   </tbody>

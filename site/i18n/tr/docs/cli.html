@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 7ceb9c3af37d -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 2e9499212a13 -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -23,7 +23,7 @@ td affected --base HEAD~3      # the last three commits and anything uncommitted
 <pre><code>td affected --repo ../shop</code></pre>
 
 <h3 id="verbose"><code>-v</code>, <code>--verbose</code> ve <code>--log-level &lt;level&gt;</code></h3>
-<p>Loglar stderr'e gider, böylece stdout makine tarafından okunabilir kalır. <code>-v</code> her kararı açıklayan debug loglarını açar: bir projenin neden etkilendiğini, bir test sınıfının hangi üyeyi çalıştırdığını, bir izlemenin hangi ismi takip ettiğini. <code>--log-level</code> şunlardan birini seçer: <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (varsayılan), <code>error</code> ya da <code>none</code>; <code>trace</code> ham git çıktısını da ekler.</p>
+<p>Loglar stderr'e gider, böylece stdout makine tarafından okunabilir kalır. <code>-v</code> her kararı açıklayan debug loglarını açar: bir projenin neden etkilendiğini, bir test sınıfının hangi üyeyi çalıştırdığını, bir izlemenin hangi ismi takip ettiğini. <code>--log-level</code> şunlardan birini seçer: <code>trace</code>, <code>debug</code>, <code>information</code>, <code>warning</code> (varsayılan), <code>error</code>, <code>critical</code> ya da <code>none</code>; <code>trace</code> ham git çıktısını da ekler.</p>
 <pre><code>td affected -v 2&gt; testdetta-debug.log
 td test --log-level information</code></pre>
 
@@ -117,7 +117,7 @@ td test -- --no-restore
 td test -- --filter "Category!=Integration"</code></pre>
 
 <h2 id="record"><code>td record</code></h2>
-<p>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> (ya da <code>--maps-dir</code>) altına bir harita yazar. Bunu varsayılan branch'inizde çalıştırın; bu aynı zamanda o branch'in tam test koşusudur. Testler başarısız olduğunda çıkış kodu <code>3</code>'tür; haritalar yine de yazılır ve başarısız sınıflar daha sonra her zaman seçilir.</p>
+<p>Tüm testleri kapsam ölçümüyle çalıştırır ve her test projesi için <code>.testdetta/coverage</code> (ya da <code>--maps-dir</code>) altına bir harita yazar. Bunu varsayılan branch'inizde çalıştırın; bu aynı zamanda o branch'in tam test koşusudur. Testler başarısız olduğunda çıkış kodu <code>3</code>'tür; haritalar yine de yazılır ve başarısız sınıflar, projeleri etkilendiğinde her seferinde çalışır.</p>
 
 <h3 id="configuration"><code>-c</code>, <code>--configuration &lt;name&gt;</code></h3>
 <p>Derleme yapılandırması. Varsayılan: <code>Debug</code>.</p>
@@ -149,7 +149,7 @@ td record -c Release --no-build</code></pre>
 <pre><code>On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2 inconclusive, 0 stopped (worst case, counting them as misses: 95% upper bound 5.9%, n = 105); target of 100 reached.
 graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 stopped are counted as misses</code></pre>
 <p>İkinci satır, çalıştırmanın shadow mode'dan çıkışın (graduation) istediği kanıt olup olmadığını söyler: testleri bozan en az 100 değişiklik, hiç kaçırma yok ve gösterildiği haliyle en kötü durum sınırı en fazla %3,0. Değilse, çalıştırmanın karşılamadığı her koşulu belirtir ("not yet: 87 changes broke tests, 100 needed", "no: 1 missed"). <code>--member</code> ile yapılan bir çalıştırma hiçbir zaman sayılmaz ve <code>--target-broken</code> ölçütü değiştirmez.</p>
-<p>Rapor (<code>.testdetta/testdetta-audit.json</code> ve <code>--summary-file</code> ile iş özeti) her değişikliği ve sonucunu listeler. Bir kaçırma için sınıfı, onu dışarıda bırakan karar zincirini ({{name}}'nın neyin değiştiğini gördüğünü, test projesi ve sınıf için nasıl ve neden karar verildiğini, haritanın commit'ini), aynı kararı görmek için elle yapılacak düzenlemeyi ve o değişikliği tek başına tekrarlayan komutu verir. Bir kaçırma olduğunda çıkış kodu <code>3</code>'tür.</p>
+<p>Rapor (<code>.testdetta/testdetta-audit.json</code> ve <code>--summary-file</code> ile job summary) her değişikliği ve sonucunu listeler. Bir kaçırma için sınıfı, onu dışarıda bırakan karar zincirini ({{name}}'nın neyin değiştiğini gördüğünü, test projesi ve sınıf için nasıl ve neden karar verildiğini, haritanın commit'ini), aynı kararı görmek için elle yapılacak düzenlemeyi ve o değişikliği tek başına tekrarlayan komutu verir. Bir kaçırma olduğunda çıkış kodu <code>3</code>'tür.</p>
 <pre><code>td audit --summary-file "$GITHUB_STEP_SUMMARY" -- -c Release</code></pre>
 
 <h3 id="target-broken"><code>--target-broken &lt;n&gt;</code></h3>
@@ -180,9 +180,13 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
   <tbody>
     <tr><td><code>TESTDETTA_LICENSE</code></td><td>Bir CI secret'ından gelen lisans dizesi.</td></tr>
     <tr><td><code>TESTDETTA_LICENSE_FILE</code></td><td>Lisans dizesini içeren bir dosya.</td></tr>
-    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>Lisans servisine erişemeyen ağlar için günlük lisans yenilemesini kapatır.</td></tr>
+    <tr><td><code>TESTDETTA_LICENSE_REFRESH=off</code></td><td>Lisans servisine erişemeyen ağlar için deneme ve abonelik lisanslarının günlük yenilemesini kapatır. Yıllık bir lisans böyle bir çağrı yapmaz.</td></tr>
     <tr><td><code>TESTDETTA_LICENSE_SCOPE</code></td><td><code>origin</code> remote'u depoyu adlandırmadığında (örneğin yerel bir mirror) lisansın kapsaması gereken depo.</td></tr>
     <tr><td><code>HTTPS_PROXY</code></td><td>Lisans yenilemesi için proxy.</td></tr>
+    <tr><td><code>TESTDETTA_THEME</code></td><td>Her çalıştırma için renk teması: <code>default</code>, <code>colorblind</code> ya da <code>mono</code>. <code>--theme</code> önceliklidir. Bkz. <a href="#color"><code>--theme</code></a>.</td></tr>
+    <tr><td><code>NO_COLOR</code></td><td><code>--color auto</code> ile herhangi bir değer rengi kapatır.</td></tr>
+    <tr><td><code>FORCE_COLOR</code></td><td><code>--color auto</code> ile <code>0</code> dışındaki her değer, çıktı bir dosyaya ya da pipe'a gitse de rengi açar; <code>0</code> kapatır. <code>NO_COLOR</code> ondan önce gelir.</td></tr>
+    <tr><td><code>TESTDETTA_MSBUILD</code></td><td>Legacy (SDK olmayan) projeleri derleyecek tam MSBuild çalıştırılabilir dosyası; {{name}}'nın kendi bulduğunun yerine başka birini kullanmak istediğinizde. Bkz. <a href="/docs/compatibility/">Uyumluluk</a>.</td></tr>
   </tbody>
 </table>
 
@@ -191,7 +195,7 @@ graduation evidence: no: worst case 5.9% &gt; 3.0% because 2 inconclusive and 0 
   <thead><tr><th>Kod</th><th>Anlamı</th></tr></thead>
   <tbody>
     <tr><td><code>0</code></td><td>Başarılı; "test gerekmiyor" durumu dahil.</td></tr>
-    <tr><td><code>1</code></td><td>Analiz başarısız oldu: git, dosya sistemi ya da bir proje dosyası; <code>audit</code> için ayrıca çalışamadığında ya da iptal edildiğinde; <code>test --shadow</code> için testler çalışmadan önce iptal edildiğinde; <code>license install</code> için lisans geçerli olmadığında.</td></tr>
+    <tr><td><code>1</code></td><td>Analiz başarısız oldu: git, dosya sistemi ya da bir proje dosyası; <code>record</code> için ayrıca hiçbir test projesi kaydedilemediğinde; <code>audit</code> için ayrıca çalışamadığında ya da iptal edildiğinde; <code>test --shadow</code> için testler çalışmadan önce iptal edildiğinde; <code>license install</code> için lisans geçerli olmadığında.</td></tr>
     <tr><td><code>2</code></td><td>Geçersiz komut satırı.</td></tr>
     <tr><td><code>3</code></td><td>Testler başarısız oldu (<code>test</code>, <code>test --shadow</code>'un tam çalıştırması ve <code>record</code>); bir kaçırma (<code>audit</code>).</td></tr>
   </tbody>

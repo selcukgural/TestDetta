@@ -1,10 +1,10 @@
-<!-- title: Fiyatlandırma; description: Açık depolar için ücretsiz, özel depolar için {{trialDays}} gün ücretsiz, ardından aktif committer başına fiyatlandırma.; source: 0c9fd8f769e4 -->
+<!-- title: Fiyatlandırma; description: GitHub Actions ve GitLab CI üzerindeki açık depolar için ücretsiz, özel depolar için {{trialDays}} günlük ücretsiz deneme, ardından aktif committer başına fiyatlandırma.; source: 9090c1105f99 -->
 <section class="hero">
   <div class="wrap center">
     <div class="section-head">
       <span class="eyebrow">Fiyatlandırma</span>
       <h1>CI dakikaları için değil, commit atan kişiler için ödeyin.</h1>
-      <p class="lead">Aktif committer başına tek fiyat: son 30 günde bir commit'in yazarı olan herkes. Botlar sayılmaz, ayrılan kişiler de.</p>
+      <p class="lead">Aktif committer başına tek fiyat: son 30 günde bir commit'in yazarı olan herkes. Botlar sayılmaz; commit atmayı bırakan kişiler de 30 gün sonra sayımdan düşer.</p>
     </div>
   </div>
 </section>
@@ -26,7 +26,7 @@
       <div class="plan plan-featured">
         <h2>Ekip</h2>
         <p class="price">{{currency}}{{priceMonthly}}<small> / aktif committer / ay</small></p>
-        <p class="price-note">Ya da yıllık faturalandırmayla committer başına aylık {{currency}}{{priceYearly}}. Fiyatlara KDV ve satış vergisi dahil değildir; geçerli olduğu yerlerde ödeme sırasında eklenir. {{trialDays}} gün ücretsiz başlayın, kart gerekmez.</p>
+        <p class="price-note">Ya da yıllık faturalandırmayla committer başına aylık {{currency}}{{priceYearly}}. Fiyatlara KDV ve satış vergisi dahil değildir; geçerli olduğu yerlerde ödeme sırasında eklenir. {{trialDays}} günlük ücretsiz denemeyle başlayın, kart gerekmez.</p>
         <ul>
           <li>Herhangi bir CI üzerinde özel depolar</li>
           <li>Kapsam haritaları, drift bridge ve job summary'ler</li>
@@ -71,14 +71,14 @@
         <label><span>Geliştiricinin saatlik maliyeti ({{currency}})</span><input type="number" name="hourly" min="0" step="1" value="60" inputmode="numeric"></label>
       </div>
       <div class="calc-results" aria-live="polite">
-        <div class="calc-hero"><output name="hours">88 sa.</output><span>test sonuçlarını bekleme süresi her ay kazanılır</span></div>
+        <div class="calc-hero"><output name="hours">82 sa.</output><span>her ay test sonuçlarını beklemekten kazanılan süre</span></div>
         <dl>
-          <div><dt>Koşu başına kazanılan test dakikası</dt><dd><output name="perRun">8,4 dk.</output></dd></div>
-          <div><dt>Aylık kazanılan runner dakikası</dt><dd><output name="ciMinutes">5.292</output></dd></div>
-          <div><dt>Aylık runner maliyeti tasarrufu</dt><dd><output name="ciCost">$32</output></dd></div>
-          <div><dt>Aylık kazanılan geliştirici zamanı</dt><dd><output name="devCost">$5.292</output></dd></div>
+          <div><dt>Koşu başına kazanılan test dakikası</dt><dd><output name="perRun">7,8 dk.</output></dd></div>
+          <div><dt>Aylık kazanılan runner dakikası</dt><dd><output name="ciMinutes">4.914</output></dd></div>
+          <div><dt>Aylık runner maliyeti tasarrufu</dt><dd><output name="ciCost">$29</output></dd></div>
+          <div><dt>Aylık kazanılan geliştirici zamanı</dt><dd><output name="devCost">$4.914</output></dd></div>
           <div><dt>Aylık {{name}} maliyeti</dt><dd><output name="cost">$150</output></dd></div>
-          <div class="calc-net"><dt>Aylık net tasarruf</dt><dd><output name="net">$5.174</output></dd></div>
+          <div class="calc-net"><dt>Aylık net tasarruf</dt><dd><output name="net">$4.793</output></dd></div>
         </dl>
         <p class="calc-note">Ayda 21 iş günü. Yalnızca test süresi sayılır: derlemeler her iki durumda da çalışır.</p>
       </div>
@@ -101,7 +101,7 @@
     </details>
     <details>
       <summary>Lisansın süresi dolunca ne olur?</summary>
-      <p>Ödeme yaptığınız sürece dolmaz: {{name}} güncel lisansı her gün alır. Aboneliği iptal ederseniz lisans, ödediğiniz dönemin sonundan 7 gün sonrasına kadar çalışır. Uyarılar bitiş tarihinden 14 gün önce başlar; bu tarihten sonra, tıpkı {{name}}'yı kurmadan önceki gibi tüm testler yeniden çalışır. Derlemeler kendi durumlarına göre başarılı ya da başarısız olmaya devam eder.</p>
+      <p>Ödeme yaptığınız sürece dolmaz: {{name}} güncel lisansı her gün alır. Aboneliği iptal ederseniz lisans, ödediğiniz dönemin sonundan 15 gün sonrasına kadar çalışır. Uyarılar bitiş tarihinden 14 gün önce başlar; bu tarihten sonra, tıpkı {{name}}'yı kurmadan önceki gibi tüm testler yeniden çalışır. Derlemeler kendi durumlarına göre başarılı ya da başarısız olmaya devam eder.</p>
     </details>
     <details>
       <summary>{{name}} kodumuzu herhangi bir yere gönderiyor mu?</summary>
