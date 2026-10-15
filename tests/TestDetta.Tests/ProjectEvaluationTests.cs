@@ -394,6 +394,33 @@ public sealed class ProjectEvaluationTests : IDisposable
 
     [Fact]
     [Trait("Category", "Slow")]
+    public void Msbuild_reports_a_file_embedded_in_the_pdb_as_built()
+    {
+        // OpenTelemetry's src/Directory.Build.targets embeds the generated assembly info; a file listed here is a build input.
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
+        _repo.Write("src/Lib/Lib.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <EmbeddedFiles Include="$(GeneratedAssemblyInfoFile)" />
+                <EmbeddedFiles Include="notes.md" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("src/Lib/A.cs", "class A { }");
+        foreach (var file in (string[])["README.md", "notes.md"])
+        {
+            _repo.Write("src/Lib/" + file, "text");
+        }
+
+        var lib = Full("src/Lib/Lib.csproj");
+        var evaluated = new MsBuildProjectEvaluator(NullLoggerFactory.Instance, diskCache: false).Evaluate(Paths.Normalize(_repo.Root), [lib]);
+
+        Assert.Equal([Full("src/Lib/README.md")], evaluated![lib].InertItems!.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    [Trait("Category", "Slow")]
     public void The_razor_sdk_builds_scoped_css_and_collocated_scripts_from_none_items()
     {
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");

@@ -43,7 +43,7 @@ internal sealed class NonCodeFileUses(string repoRoot)
         "ApplicationDefinition", "XamlAppDef", "Protobuf", "TypeScriptCompile", "ContentWithTargetPath", "EditorConfigFiles",
         "GlobalAnalyzerConfigFiles", "RazorComponent", "RazorGenerate", "AvaloniaResource", "AvaloniaXaml", "MauiImage", "MauiFont",
         "MauiAsset", "MauiXaml", "MauiCss", "MauiSplashScreen", "MauiIcon", "AndroidResource", "AndroidAsset", "BundleResource",
-        "ImageAsset", "InterfaceDefinition");
+        "ImageAsset", "InterfaceDefinition", "EmbeddedFiles");
 
     /// <summary>The scan of the repository's MSBuild files, made on first use.</summary>
     private readonly Lazy<Scan> _scan = new(() => ScanRepository(repoRoot));

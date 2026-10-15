@@ -423,6 +423,11 @@ repositories a change touches; the full corpus runs at milestones.
   use outside its tests. Fixed for that rule; to catch the next one, add replays of real commits (product and test
   changes together, from each corpus repository's history) to the evaluation, with the selection share reported next to
   the mutant share.
+- **Source-generated interceptors count as found through reflection (OpenTelemetry fork trial, 2026-10-15).** The
+  configuration binder's generator emits `BindingExtensions`, which call sites reach through `[InterceptsLocation]`, not
+  by name; "is affected and nothing names it, so it may be created through reflection" then runs a test project whose
+  map does not know it completely (OTLP's FuzzTests on 2 of 10 replays, about 10 s each). Read interceptor attributes in
+  generated code as references from the intercepted call sites.
 
 - ~~**A fixture whose server another class built first (FastEndpoints, 2026-10-12).**~~ Fixed the same day: a test
   that builds a fixture type is its user, and its flow counts for the fixture too (docs/design/between-tests-code.md). `TestServerTests` builds

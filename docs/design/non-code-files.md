@@ -40,7 +40,7 @@ nothing in `T` today. `FindFileReaders` only looks at files that no project owns
   `CopyToOutputDirectory` (kind `Inert`), and which are items of a build type (kind `Built`): `Compile`,
   `EmbeddedResource`, `Content`, `AdditionalFiles`, `None` with a copy, and the item types the SDKs and
   common workloads process (`Resource`, `Page`, `ApplicationDefinition`, `Protobuf`, `TypeScriptCompile`,
-  the `Maui*`, `Android*` and `Bundle*` items, `EditorConfigFiles`).
+  the `Maui*`, `Android*` and `Bundle*` items, `EditorConfigFiles`, `EmbeddedFiles`).
 - The XML of the project file and every repository file it imports is scanned (the graph already reads
   it). An item element of a type that is not known to be inert (`None`, the reference and package items)
   whose `Include`/`Update` can match the file, any target that names the file, or any target that uses
@@ -160,7 +160,11 @@ class of the projects they touch; narrowing that is the separate incremental-rec
   `ScopedCssElements.razor.css`): in a Razor SDK project, `None` items ending in `.css`, `.js`, `.mjs`,
   `.scss` or `.less` are built (scoped CSS and collocated JS modules become static web assets in the
   SDK's targets), and so are `app.config` and `web.config` in any project (the common targets find
-  `app.config` among the `None` items and ship it as the assembly's `.config`).
+  `app.config` among the `None` items and ship it as the assembly's `.config`). Version 10 (2026-10-15,
+  OpenTelemetry's fork replay): `EmbeddedFiles`, the files the compiler embeds in the PDB, are built, and the
+  scan leaves that item type to the evaluation. Its `src/Directory.Build.targets` has `<EmbeddedFiles
+  Include="$(GeneratedAssemblyInfoFile)" />`, a property the scan cannot resolve, which counted as matching
+  every file: each pull request's `CHANGELOG.md` entry ran every test project completely (4 of 10 replays).
 - **MSBuild scan** (`NonCodeFileUses`): every `.csproj`/`.fsproj`/`.vbproj`/`.props`/`.targets`/
   `.projitems`/`.proj` under the repository outside `bin`, `obj` and tool folders, read once per analysis
   and only when an inert candidate exists. Uses: a value in a file's XML that names it, after removing
