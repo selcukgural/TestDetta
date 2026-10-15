@@ -258,6 +258,52 @@ public sealed class NonCodeFileSelectionTests : IDisposable
     }
 
     [Fact]
+    public void A_pattern_whose_literal_parts_cannot_match_the_file_is_no_build_input()
+    {
+        // OpenTelemetry, 2026-10-15: a target in build/Common.prod.props collects signature files from the artifacts folder;
+        // the whole pattern counted as matching every file, so each pull request's CHANGELOG.md ran every test project.
+        _repo.Write("build/Common.props", """
+            <Project>
+              <Target Name="IncludeSigningSignaturesInPackages">
+                <ItemGroup>
+                  <SigstoreBundle Include="$(ArtifactsPath)\bin\$(MSBuildProjectName)\$(Configuration.ToLower())_*\$(MSBuildProjectName).dll.sigstore.json" />
+                </ItemGroup>
+              </Target>
+            </Project>
+            """);
+        _repo.Commit("signatures");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.DocsTests"], selection.TestClasses);
+    }
+
+    [Theory]
+    [InlineData("$(DocsDirectory)/*.md")]
+    [InlineData("$(MSBuildThisFileDirectory)$(Docs)/**/*.md")]
+    [InlineData("$(Readme)")]
+    [InlineData("@(Docs->'%(FullPath)')")]
+    public void A_pattern_with_a_property_that_can_match_the_file_is_a_build_input(string include)
+    {
+        _repo.Write("src/Lib/Lib.csproj", $"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup><Templates Include="{include}" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Commit("templates");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("the Templates items of src/Lib/Lib.csproj can include it", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Pack_metadata_and_comments_do_not_make_a_file_a_build_input()
     {
         _repo.Write("src/Lib/Lib.csproj", """
