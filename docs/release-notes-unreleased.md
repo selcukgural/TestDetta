@@ -14,3 +14,7 @@ then emptied. Last emptied for 0.2.0 (2026-10-15).
   `deps.json`) outside every test, and the loaded-output rule took that as a use to inspect: on MimeKit's own recent
   commits, 8 of 10 ran all 197 classes. That read is now left out for the test project itself; its changes are answered
   by its own coverage, and a class that loads its own output still runs.
+- **A `CHANGELOG.md` entry no longer runs every test project when an `EmbeddedFiles` item uses a property.** The scan
+  of the repository's MSBuild files counted `<EmbeddedFiles Include="$(GeneratedAssemblyInfoFile)" />` (OpenTelemetry's
+  `src/Directory.Build.targets`) as matching every file. MSBuild's evaluation now reports the files embedded in the PDB,
+  which stay build inputs, and the scan leaves that item type to it. Cached project evaluations are made again once.

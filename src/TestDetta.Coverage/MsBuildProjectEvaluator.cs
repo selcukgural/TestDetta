@@ -20,7 +20,7 @@ namespace TestDetta.Coverage;
 public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
 {
     /// <summary>Version of the injected target and the output format; part of the cache key.</summary>
-    private const int EvaluatorVersion = 9;
+    private const int EvaluatorVersion = 10;
 
     /// <summary>Longest an evaluation may take; a large repository takes seconds.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(10);
@@ -67,6 +67,8 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
               <_TestDettaBuilt Include="@(Compile->'%(FullPath)');@(EmbeddedResource->'%(FullPath)');@(Content->'%(FullPath)');@(AdditionalFiles->'%(FullPath)')" />
               <_TestDettaBuilt Include="@(Resource->'%(FullPath)');@(Page->'%(FullPath)');@(ApplicationDefinition->'%(FullPath)');@(XamlAppDef->'%(FullPath)')" />
               <_TestDettaBuilt Include="@(Protobuf->'%(FullPath)');@(TypeScriptCompile->'%(FullPath)');@(ContentWithTargetPath->'%(FullPath)');@(EditorConfigFiles->'%(FullPath)');@(GlobalAnalyzerConfigFiles->'%(FullPath)')" />
+              <!-- Files the compiler embeds in the PDB (OpenTelemetry embeds its generated assembly info). -->
+              <_TestDettaBuilt Include="@(EmbeddedFiles->'%(FullPath)')" />
               <_TestDettaBuilt Include="@(RazorComponent->'%(FullPath)');@(RazorGenerate->'%(FullPath)');@(AvaloniaResource->'%(FullPath)');@(AvaloniaXaml->'%(FullPath)')" />
               <_TestDettaBuilt Include="@(MauiImage->'%(FullPath)');@(MauiFont->'%(FullPath)');@(MauiAsset->'%(FullPath)');@(MauiXaml->'%(FullPath)');@(MauiCss->'%(FullPath)');@(MauiSplashScreen->'%(FullPath)');@(MauiIcon->'%(FullPath)')" />
               <_TestDettaBuilt Include="@(AndroidResource->'%(FullPath)');@(AndroidAsset->'%(FullPath)');@(BundleResource->'%(FullPath)');@(ImageAsset->'%(FullPath)');@(InterfaceDefinition->'%(FullPath)')" />

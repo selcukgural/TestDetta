@@ -237,6 +237,27 @@ public sealed class NonCodeFileSelectionTests : IDisposable
     }
 
     [Fact]
+    public void A_property_in_an_embedded_files_pattern_does_not_make_every_file_a_build_input()
+    {
+        // OpenTelemetry, 2026-10-15: EmbeddedFiles Include="$(GeneratedAssemblyInfoFile)" in src/Directory.Build.targets
+        // counted as matching every file, so each pull request's CHANGELOG.md entry ran every test project completely.
+        // MSBuild's evaluation reports the files EmbeddedFiles holds, as it does for Compile or Content.
+        _repo.Write("src/Directory.Build.targets", """
+            <Project>
+              <ItemGroup><EmbeddedFiles Include="$(GeneratedAssemblyInfoFile)" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Commit("embedded files");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.DocsTests"], selection.TestClasses);
+    }
+
+    [Fact]
     public void Pack_metadata_and_comments_do_not_make_a_file_a_build_input()
     {
         _repo.Write("src/Lib/Lib.csproj", """
