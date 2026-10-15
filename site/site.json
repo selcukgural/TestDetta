@@ -19,14 +19,14 @@
   "checkoutOpen": "true",
   "actionRef": "TestDetta/action@6ceba36f3d129a2969f2490a3c87759c33e1e8d8 # v0.1.3",
   "packageId": "TestDetta",
-  "corpusRepositories": "43",
-  "corpusFailingChanges": "2,561",
-  "corpusMissed": "1",
+  "corpusRepositories": "53",
+  "corpusFailingChanges": "3,071",
+  "corpusMissed": "5",
   "legalUpdated": "2026-10-08",
-  "corpusMedianShare": "31%",
+  "corpusMedianShare": "35%",
   "trialEndpoint": "https://license.testdetta.com/v1/trials",
   "trialsOpen": "true",
-  "corpusUpperBound": "0.19%",
+  "corpusUpperBound": "0.35%",
   "corpusQuarterOrLess": "20",
-  "corpusInconclusive": "2"
+  "corpusInconclusive": "1"
 }

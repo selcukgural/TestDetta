@@ -21,7 +21,7 @@
 <div class="callout"><p>A cache written by hand, such as a <code>Dictionary</code> checked with <code>TryGetValue</code>, or a static flag that makes a check run once (<code>if (s_done == 0) { SelfTest(); s_done = 1; }</code>), can still hide its users: the code counts for the class that happened to run first. In the corpus this hid two changes (NSec's algorithm self-tests). Keep running the full suite on the default branch; recording does that.</p></div>
 
 <h2>State one test class leaves for the next</h2>
-<p>A test class can behave differently depending on what an earlier class in the same process left behind, such as a global configuration it set and never reset. The map records the path the class took in the recorded order, so a change to the code it would run alone or in another order may not select it. The full run in the same order does not fail it either. In the corpus this hid one change in {{corpusFailingChanges}} (NLog's <code>LogManagerTests</code>). Tests that reset shared state in their setup avoid it.</p>
+<p>A test class can behave differently depending on what an earlier class in the same process left behind, such as a global configuration it set and never reset. The map records the path the class took in the recorded order, so a change to the code it would run alone or in another order may not select it. The full run in the same order does not fail it either. In an earlier corpus round this hid one change (NLog's <code>LogManagerTests</code>). Tests that reset shared state in their setup avoid it.</p>
 
 <h2>Code a test runs on other threads</h2>
 <p>Code that runs for a test on a thread its async flow does not reach, such as an in-process test server handling the test's HTTP request, is credited to the test class that started last. When test classes overlap, or the framework prepares the next class before the current one ends, that code can count for another class, and a change to it may not select the class whose request ran it. In the corpus this hid one change (an ASP.NET validation filter behind a TUnit test's request in ManagedCode.Communication).</p>
@@ -61,6 +61,7 @@
 
 <h2>Source generators</h2>
 <p>Code written by source generators is not in the source tree. <code>td record</code> reads it from the PDBs of the recorded assemblies (portable or embedded) and keeps the names it mentions in the map, so name tracing sees generated callers. Assemblies built without a portable PDB give nothing.</p>
+<p>When the generated code of a test project cannot be read, neither when the map was recorded nor now, a change to the generator is taken to change nothing there, and the project's tests are not selected for it. In the corpus this hid two changes (Mediator's source generator, read as empty for two of its three test projects).</p>
 
 <h2>F#</h2>
 <p>F# code is analysed like C#, and so is Visual Basic. F# signature files (<code>.fsi</code>) are not: a change to one runs everything that depends on its project. A change to an <code>inline</code> function is traced by name to its callers, because the compiler copies its body into them and a coverage map credits them instead.</p>

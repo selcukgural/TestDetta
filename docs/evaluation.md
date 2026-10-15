@@ -232,6 +232,29 @@ so the recorder credited the rest of the tests' code to `EnvVarTests`. Fixed in 
 attributes are compiler attributes; a running class nested in the entry point's class keeps its frames).
 Argu was "not informative" before (F# not analysed); it is now sampled like every other repository.
 
+## Release round (2026-10-13 → 2026-10-15)
+
+*`runs-release-1013`, main 7aa8a2d, seed 1, fresh recordings. The machine restarted after 20 repositories on 10-13; the
+rest ran on 10-15 from 03:00 (`run-release-round2.sh`). The owner stopped it after efcore so the machine was free again:
+akka-net, lucenenet, abp and msbuild were not run, and meziantou-analyzer gave no verdict (its test projects failed
+to restore on a new NuGet advisory, NU1902 as an error). These are the numbers on the site since 0.2.0.*
+
+**Headline: 5 missed of 3071 failing mutants on 53 repositories (95% upper bound 0.35%), 1 inconclusive.
+Median share per repository 35%; whole affected test projects 91%.**
+
+- **NSec, two:** `Blake2b.SelfTest` and `ChaCha20Poly1305.SelfTest` run behind a hand-written static flag
+  (`if (s_selfTest == 0) { SelfTest(); Interlocked.Exchange(ref s_selfTest, 1); }`), so they count for whichever class
+  constructs the algorithm first. Eight cached recordings of the same commit disagree on it: earlier rounds caught
+  these mutants by the order of the classes, not by a rule.
+- **ManagedCode.Communication, one:** a validation filter the in-process test server runs for a TUnit test's request,
+  on a thread the test's async flow does not reach, counted for another class.
+- **Mediator, two, a regression:** the maps hold no generated code for `Mediator.Tests` and `Mediator.MemAllocationTests`
+  since 2026-10-07 (22 files before), and since 9b79fee (2026-10-10) "none recorded, none read now" counts as "the
+  generator changes nothing", so field-value mutants of `CompilationAnalyzer` missed `MemAllocationTests`; the final
+  round of 10-07 caught them. To fix after 0.2.0: an empty read where a generator runs is unknown, not unchanged.
+- Owner's decision (2026-10-15): release 0.2.0 with these on the Limitations page instead of another fix-and-rerun
+  cycle; full rounds that hold the machine for days are not a release gate any more.
+
 ## Final round (2026-10-07 → 2026-10-08)
 
 *Judged strictly (see "How mutants are judged"): `runs-final-1007` under the rules of 2026-10-07, then
