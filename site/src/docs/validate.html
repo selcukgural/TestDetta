@@ -23,7 +23,7 @@ jq -r '.tests[] | select(.mode == "Filtered") | .classes[]' selection.json  # cl
 <p>Replace the full test step with <code>td test</code>, or the action's <code>test</code> mode. Keep recording on the default branch: it runs every test there, so anything a selection could ever hide is still caught before release.</p>
 
 <h2 id="how-we-test">How we test it</h2>
-<p>The same check runs at scale on {{corpusRepositories}} open-source repositories: members are changed one at a time and every test class that fails must have been selected. Out of {{corpusFailingChanges}} changes that broke a test in the latest round, judged strictly (a crash or hang outside the selection counts as a miss), {{corpusMissed}} was missed: a test class that depended on what an earlier class left behind, a <a href="/docs/limitations/">known limitation</a>. Every real miss in earlier rounds was fixed with a test that fails without the fix. <a href="/docs/examples/#corpus">The corpus in numbers</a>.</p>
+<p>The same check runs at scale on {{corpusRepositories}} open-source repositories: members are changed one at a time and every test class that fails must have been selected. Out of {{corpusFailingChanges}} changes that broke a test in the latest round, judged strictly (a crash or hang outside the selection counts as a miss), {{corpusMissed}} were missed, each a <a href="/docs/limitations/">known limitation</a>: code that runs once or on another thread credited to another class (three), and a source generator whose output was not read (two). Real misses in earlier rounds were fixed with a test that fails without the fix. <a href="/docs/examples/#corpus">The corpus in numbers</a>.</p>
 
 <h2 id="related">Related pages</h2>
 <ul>

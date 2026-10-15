@@ -19,6 +19,22 @@ then emptied.
   classes read a type's shape, which a format 2 map does not (site: Limitations,
   "Maps recorded by an earlier version").
 
+## Known gaps
+
+The evaluation before this release (53 open-source repositories, 3,071 changes that broke a test) found five whose
+failing tests were not selected, in three repositories:
+
+- **A static flag that makes a check run once** (`if (s_done == 0) { SelfTest(); s_done = 1; }`): the check counts
+  for the class that ran first, so a change to it may not select the others. NSec's algorithm self-tests, two changes.
+- **Code a test runs on a thread its async flow does not reach**, such as an in-process test server handling the
+  test's request, counts for the class that started last, which can be another one. One change in
+  ManagedCode.Communication (TUnit).
+- **Generated code that cannot be read**: when a test project's generated code reads as empty both in its map and
+  now, a change to the source generator is taken to change nothing there. Mediator's generator, two changes.
+
+All three are on the site's Limitations page and will be fixed in a later version. Running the full suite on the
+default branch, which recording does, still catches them.
+
 ## Changes
 
 ### Safer: tests that were missed are selected

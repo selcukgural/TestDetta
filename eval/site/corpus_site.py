@@ -22,7 +22,7 @@ import statistics
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LANGUAGES = ["", "tr", "de", "ja", "es"]
+LANGUAGES = ["", "tr"]
 
 # Corpus tags as the table shows them; tags about size are not shown.
 TAG_LABELS = {
@@ -40,8 +40,6 @@ TAG_LABELS = {
 # overrides site.json there); Japanese writes them as English does.
 LOCAL_FORMATS = {
     "tr": {"thousands": ".", "decimal": ",", "percent": "%{}"},
-    "de": {"thousands": ".", "decimal": ",", "percent": "{} %"},
-    "es": {"thousands": "", "decimal": ",", "percent": "{} %"},
 }
 
 # The hard-case tiles of the examples page, by position in the English page, and the tag each one counts.
