@@ -1,13 +1,14 @@
 name: CI
 
 # The repository is private and Actions minutes are limited (about 3,000 a month): every push gets
-# only the quick job; the coverage map is recorded once a week or by hand.
+# only the quick job; the coverage map is recorded by hand.
+# The weekly recording (Mondays 02:00) is off: the tests that record or start their own test runs
+# fail under the outer recorder (12 of 949 in October 2026), so each run spent about 70 minutes on a
+# known failure. Restore `schedule: - cron: '0 2 * * 1'` once those tests pass under recording.
 on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: '0 2 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -44,7 +45,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Weekly or by hand, main gets a coverage map; recording is also a full test run (Slow tests
+      # By hand, main gets a coverage map; recording is also a full test run (Slow tests
       # included), one test at a time, so it takes several times the plain run. Four processes gained
       # little: the slow tests build real projects and compete for the same cores. Maps a few commits
       # old are used through the drift bridge.
@@ -58,7 +59,7 @@ jobs:
       # The evaluation tool's tests (Category=Eval) and the tests that build and record real projects
       # (Category=Slow, 28 of a pull request's 30 minutes) run on a pull request only when it changes
       # what they test: the tool, the corpus, the recorder and its runtime, the mutants, the build
-      # settings, or one of those tests. The weekly recording runs them all; locally they run before a push.
+      # settings, or one of those tests. The recording runs them all; locally they run before a push.
       - name: Choose the tests to leave out
         id: eval
         if: github.event_name == 'pull_request'
@@ -100,9 +101,9 @@ jobs:
           dotnet-test-args: ${{ steps.eval.outputs.args }}
 
   # The pass/fail signal within three minutes on every push. The Slow tests build and run real
-  # projects; they run in the weekly recording above and before every push locally. It runs under a
+  # projects; they run in the recording above and before every push locally. It runs under a
   # Turkish locale (dotted and dotless i, comma decimals), where culture-sensitive code breaks first:
-  # customers run TestDetta on any locale, and the weekly job keeps the runner's default one covered.
+  # customers run TestDetta on any locale, and the recording job keeps the runner's default one covered.
   quick:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
