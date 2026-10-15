@@ -18,6 +18,7 @@ public sealed class NonCodeFileSelectionTests : IDisposable
         _repo.Write("src/Lib/Calc.cs", "namespace Lib; public class Calc { public int Tax() => 2; }");
         _repo.Write("src/Lib/README.md", "readme");
         _repo.Write("src/Lib/seed.json", "{}");
+        _repo.Write("src/Lib/schema.yaml", "a: 1");
         // A source generator the test project runs in its compiler.
         _repo.Write("src/Gen/Gen.csproj", """<Project Sdk="Microsoft.NET.Sdk" />""");
         _repo.Write("src/Gen/Generator.cs", "namespace Gen; public class Generator { public int Run() => 1; }");
@@ -223,12 +224,12 @@ public sealed class NonCodeFileSelectionTests : IDisposable
     {
         _repo.Write("src/Lib/Lib.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <ItemGroup><Templates Include="**/*.md" /></ItemGroup>
+              <ItemGroup><Templates Include="**/*.yaml" /></ItemGroup>
             </Project>
             """);
         _repo.Commit("templates");
         WriteMaps();
-        _repo.Write("src/Lib/README.md", "changed");
+        _repo.Write("src/Lib/schema.yaml", "a: 2");
 
         var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
 
@@ -282,10 +283,10 @@ public sealed class NonCodeFileSelectionTests : IDisposable
     }
 
     [Theory]
-    [InlineData("$(DocsDirectory)/*.md")]
-    [InlineData("$(MSBuildThisFileDirectory)$(Docs)/**/*.md")]
-    [InlineData("$(Readme)")]
-    [InlineData("@(Docs->'%(FullPath)')")]
+    [InlineData("$(SchemaDirectory)/*.yaml")]
+    [InlineData("$(MSBuildThisFileDirectory)$(Schemas)/**/*.yaml")]
+    [InlineData("$(Schema)")]
+    [InlineData("@(Schemas->'%(FullPath)')")]
     public void A_pattern_with_a_property_that_can_match_the_file_is_a_build_input(string include)
     {
         _repo.Write("src/Lib/Lib.csproj", $"""
@@ -295,12 +296,81 @@ public sealed class NonCodeFileSelectionTests : IDisposable
             """);
         _repo.Commit("templates");
         WriteMaps();
-        _repo.Write("src/Lib/README.md", "changed");
+        _repo.Write("src/Lib/schema.yaml", "a: 2");
 
         var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
 
         Assert.Equal(TestRunMode.All, selection.Mode);
         Assert.Contains("the Templates items of src/Lib/Lib.csproj can include it", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_documentation_file_is_no_build_input_on_a_guess()
+    {
+        // OpenTelemetry, 2026-10-15: items its targets build from other items or a property alone matched every file, so
+        // each pull request's CHANGELOG.md entry ran every test project. The test that reads the file still runs.
+        _repo.Write("build/Common.props", """
+            <Project>
+              <Target Name="Sign">
+                <ItemGroup>
+                  <SigstoreBundleWithTfm Include="@(SigstoreBundle)" />
+                  <FileWrites Include="$(AssemblyOriginatorKeyFile)" />
+                </ItemGroup>
+              </Target>
+              <Target Name="Walk" Inputs="@(None)" Outputs="x" />
+            </Project>
+            """);
+        _repo.Commit("targets");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var analysis = Analyze();
+        var selection = analysis.Tests.Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.DocsTests"], selection.TestClasses);
+        Assert.Equal([new NotBuildInputFile("src/Lib/README.md", "a documentation file")], analysis.NotBuildInputs);
+    }
+
+    [Fact]
+    public void A_target_that_names_a_documentation_file_still_makes_it_a_build_input()
+    {
+        _repo.Write("build/Common.props", """
+            <Project>
+              <Target Name="Notes"><ReadLinesFromFile File="$(MSBuildProjectDirectory)/README.md" /></Target>
+            </Project>
+            """);
+        _repo.Commit("notes");
+        WriteMaps();
+        _repo.Write("src/Lib/README.md", "changed");
+
+        var selection = Select().Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.Equal(TestRunMode.All, selection.Mode);
+        Assert.Contains("build/Common.props names it", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(new string[0], TestRunMode.All)]
+    [InlineData(new[] { "src/Lib/*.yaml" }, TestRunMode.Skipped)]
+    [InlineData(new[] { "**/*.yaml" }, TestRunMode.Skipped)]
+    [InlineData(new[] { "src/Other/*.yaml" }, TestRunMode.All)]
+    public void The_teams_not_build_inputs_skip_the_guesses_for_the_files_they_name(string[] patterns, TestRunMode mode)
+    {
+        _repo.Write("src/Lib/Lib.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup><Schemas Include="$(SchemaDirectory)/*.yaml" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Commit("schemas");
+        WriteMaps();
+        _repo.Write("src/Lib/schema.yaml", "a: 2");
+
+        var analysis = Analyze(notBuildInputs: patterns);
+        var selection = analysis.Tests.Single(static s => s.Project.Path.EndsWith("Lib.Tests.csproj", StringComparison.Ordinal));
+
+        Assert.True(selection.Mode == mode, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(mode == TestRunMode.Skipped ? 1 : 0, analysis.NotBuildInputs.Count);
     }
 
     [Fact]
@@ -358,8 +428,12 @@ public sealed class NonCodeFileSelectionTests : IDisposable
         Assert.Equal(["Seed.Tests.SeedTests"], selection.TestClasses);
     }
 
-    private IReadOnlyList<TestProjectSelection> Select(NonCodeFileRule rule = NonCodeFileRule.Readers) =>
-        new AnalysisPipeline(NullLoggerFactory.Instance, new Evaluations(Root)).Run(_repo.Root, "main", new AnalysisOptions { NonCodeFiles = rule }).Tests;
+    private IReadOnlyList<TestProjectSelection> Select(NonCodeFileRule rule = NonCodeFileRule.Readers, IReadOnlyList<string>? notBuildInputs = null) =>
+        Analyze(rule, notBuildInputs).Tests;
+
+    private AnalysisResult Analyze(NonCodeFileRule rule = NonCodeFileRule.Readers, IReadOnlyList<string>? notBuildInputs = null) =>
+        new AnalysisPipeline(NullLoggerFactory.Instance, new Evaluations(Root))
+            .Run(_repo.Root, "main", new AnalysisOptions { NonCodeFiles = rule, NotBuildInputs = notBuildInputs ?? [] });
 
     /// <summary>The repository root as git reports it, which is how the pipeline keys projects.</summary>
     private string Root => new GitClient(NullLogger<GitClient>.Instance).TopLevel(_repo.Root);
@@ -420,7 +494,7 @@ public sealed class NonCodeFileSelectionTests : IDisposable
             string[] libTestsReferences = WithHelpers ? ["src/Lib/Lib.csproj", "src/Gen/Gen.csproj", "tests/Helpers/Helpers.csproj"] : ["src/Lib/Lib.csproj", "src/Gen/Gen.csproj"];
             var evaluations = new Dictionary<string, EvaluatedProject>(Paths.Comparer)
             {
-                [Full("src/Lib/Lib.csproj")] = Project(false, [], ["src/Lib/Calc.cs", "src/Lib/README.md", "src/Lib/seed.json"], ["src/Lib/README.md"]),
+                [Full("src/Lib/Lib.csproj")] = Project(false, [], ["src/Lib/Calc.cs", "src/Lib/README.md", "src/Lib/seed.json", "src/Lib/schema.yaml"], ["src/Lib/README.md", "src/Lib/schema.yaml"]),
                 [Full("src/Gen/Gen.csproj")] = Project(false, [], ["src/Gen/Generator.cs", "src/Gen/README.md"], ["src/Gen/README.md"]),
                 [Full("tests/Lib.Tests/Lib.Tests.csproj")] = Project(true, libTestsReferences, ["tests/Lib.Tests/Tests.cs"], []) with
                 {

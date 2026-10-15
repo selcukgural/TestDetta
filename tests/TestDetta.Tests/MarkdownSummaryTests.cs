@@ -40,6 +40,22 @@ public sealed class MarkdownSummaryTests
     }
 
     [Fact]
+    public void Files_not_taken_as_build_inputs_are_named_in_code_spans()
+    {
+        var project = new ProjectNode("/repo/tests/A.Tests/A.Tests.csproj", "/repo/tests/A.Tests", true, []);
+        var selection = new TestProjectSelection(project, TestRunMode.Skipped, [], "the change does not reach this project");
+        var analysis = new AnalysisResult("/repo", ["src/A/CHANGELOG.md"], null!, null!, new TestPlan([selection], null, 0))
+        {
+            NotBuildInputs = [new NotBuildInputFile("src/A/CHANGELOG.md", "a documentation file"), new NotBuildInputFile("@org [x](y).yaml", "named by --not-build-inputs *.yaml")],
+        };
+
+        var writer = new StringWriter();
+        MarkdownSummary.Write(new SummaryInput(analysis, "origin/main", null), writer);
+
+        Assert.Contains("Not taken as build inputs unless MSBuild builds them or a target names them: `src/A/CHANGELOG.md` (a documentation file), `@org [x](y).yaml`", writer.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Selected_classes_show_their_evidence_and_skipped_ones_are_counted()
     {
         var project = new ProjectNode("/repo/tests/A.Tests/A.Tests.csproj", "/repo/tests/A.Tests", true, []);

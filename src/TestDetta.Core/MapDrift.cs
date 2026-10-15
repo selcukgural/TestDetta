@@ -36,6 +36,13 @@ public sealed record AnalysisOptions
     public NonCodeFileRule NonCodeFiles { get; init; } = DefaultNonCodeFiles;
 
     /// <summary>
+    /// Repository-relative patterns (MSBuild wildcards) of non-code files the team says its build does not use
+    /// (<c>--not-build-inputs</c>): like documentation files, only an exact sign makes them build inputs, never the
+    /// scan's guesses (docs/design/non-code-files.md, "Documentation files").
+    /// </summary>
+    public IReadOnlyList<string> NotBuildInputs { get; init; } = [];
+
+    /// <summary>
     /// Reads what source generators write now, to compare with the maps when a change reaches a
     /// generator in the repository; null keeps every project using a changed generator running completely.
     /// </summary>

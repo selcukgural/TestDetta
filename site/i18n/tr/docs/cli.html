@@ -1,4 +1,4 @@
-<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 2e9499212a13 -->
+<!-- title: CLI referansı; layout: docs; description: Tüm {{name}} komutları, seçenekleri ve ortam değişkenleri, örnekleriyle.; source: 5ac751bf4bcc -->
 <h1>CLI referansı</h1>
 <p class="lead">Her komut, seçenek ve ortam değişkeni; ne yaptığı, varsayılanı ve bir örnekle. Kısa sürüm için <code>td --help</code> çalıştırın.</p>
 
@@ -43,6 +43,10 @@ td affected --color never &gt; affected.txt</code></pre>
 <h3 id="non-code-files"><code>--non-code-files &lt;readers|project&gt;</code></h3>
 <p>Bir proje klasöründe kod olmayan değişen bir dosyanın neyi çalıştıracağı; örneğin <code>README.md</code>, <code>CHANGELOG.md</code> ya da bir JSON dosyası. <code>readers</code> (varsayılan), derleme dosyayı derlemiyor, gömmüyor, kopyalamıyor ve bir araca vermiyorsa yalnızca kapsam haritasının onu okuduğunu gördüğü test sınıflarını çalıştırır; derlemenin kullandığı bir dosya ve haritası testlerinin okuduğu her dosyaya kefil olamayan bir test projesi yine tamamen çalışır. <code>project</code>, dosya ne olursa olsun dosyanın projesini ve ona bağlı her projeyi tamamen çalıştırır. Varsayılanın neye dayandığını <a href="/docs/what-runs-everything/#non-code">Neler her şeyi çalıştırır</a> sayfası anlatır.</p>
 <pre><code>td test --non-code-files project</code></pre>
+
+<h3 id="not-build-inputs"><code>--not-build-inputs &lt;patterns&gt;</code></h3>
+<p>Derlemenizin kullanmadığı kod olmayan dosyalar; depoya göre göreli, <code>;</code> ile ayrılmış desenler olarak verilir ve seçenek birden çok kez kullanılabilir. Doküman dosyaları (<code>README</code>, <code>CHANGELOG</code>, <code>LICENSE</code>, <code>CONTRIBUTING</code>, <code>SECURITY</code>, <code>CODE_OF_CONDUCT</code>, <code>CLAUDE.md</code>, <code>AGENTS.md</code> ve benzerleri) gibi, bunlar da yalnızca MSBuild onları derliyor, gömüyor ya da kopyalıyorsa veya MSBuild dosyalarınızdaki bir target adlarını açıkça yazıyorsa derleme girdisi sayılır; bir öğe deseninin onları içerebilmesi yetmez. Birini okuyan bir test yine çalışır ve çıktı bu kurala giren değişmiş dosyaları listeler. Kuralı <a href="/docs/what-runs-everything/#documentation">Neler her şeyi çalıştırır</a> sayfası anlatır.</p>
+<pre><code>td test --not-build-inputs "docs/**;samples/**/*.json"</code></pre>
 
 <h3 id="maps-dir"><code>--maps-dir &lt;dir&gt;</code></h3>
 <p>Kapsam haritalarını depo dışında, commit başına bir klasör olarak tutar. <code>record</code> haritaları <code>&lt;dir&gt;/&lt;commit&gt;/</code> altına kaydeder; <code>affected</code> ve <code>test</code> ise <code>--max-map-age</code> sınırı içindeki en yenisini geri yükler. GitHub Actions dışındaki CI sistemlerinde, paylaşılan bir disk ya da senkronize edilen nesne depolamayla kullanın. Varsayılan: haritalar depoda <code>.testdetta/coverage</code> içinde durur.</p>

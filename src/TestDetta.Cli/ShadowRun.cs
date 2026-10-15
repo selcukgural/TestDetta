@@ -1461,6 +1461,11 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             selecting.Add($"--non-code-files {(options.Analysis.NonCodeFiles == NonCodeFileRule.Readers ? "readers" : "project")}");
         }
 
+        if (options.Analysis.NotBuildInputs.Count > 0)
+        {
+            selecting.Add($"--not-build-inputs {Quoted(string.Join(';', options.Analysis.NotBuildInputs))}");
+        }
+
         if (options.Analysis.MapsDir is { } mapsDir)
         {
             selecting.Add($"--maps-dir {Quoted(mapsDir)}");

@@ -248,6 +248,11 @@ internal static class TextReport
             writer.WriteLine(style.Paint(Role.Muted, $"{report.Result.CosmeticFiles.Count} C# file(s) with only whitespace or comment changes (ignored)."));
         }
 
+        if (ResultWriter.NotBuildInputsLine(report.NotBuildInputs, static f => f) is { } notBuilt)
+        {
+            writer.WriteLine(style.Paint(Role.Muted, notBuilt));
+        }
+
         if (report.Result.UnmappedFiles.Count > 0)
         {
             // With maps that recorded file reads, a file outside every project runs the tests that read it.

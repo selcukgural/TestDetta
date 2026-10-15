@@ -15,7 +15,8 @@ namespace TestDetta.Core;
 /// be computed: a mention in another project's file costs only a broader run.
 /// </summary>
 /// <param name="repoRoot">Normalized repository root.</param>
-internal sealed class NonCodeFileUses(string repoRoot)
+/// <param name="notBuilt">Files whose build use only an exact sign shows (<see cref="NotBuildInputs"/>); the guesses skip them.</param>
+internal sealed class NonCodeFileUses(string repoRoot, NotBuildInputs notBuilt)
 {
     /// <summary>Extensions of the MSBuild files scanned.</summary>
     private static readonly FrozenSet<string> MsBuildExtensions =
@@ -76,6 +77,13 @@ internal sealed class NonCodeFileUses(string repoRoot)
         if (scan.Mentions.FirstOrDefault(m => m.Names(file, name)) is { File: { } mentioning })
         {
             return $"{Relative(mentioning)} names it";
+        }
+
+        // What follows are guesses: a pattern that could include the file, a target that walks every None item. For
+        // documentation and the team's own list only the exact signs above count (docs/design/non-code-files.md).
+        if (notBuilt.Reason(file) is not null)
+        {
+            return null;
         }
 
         if (scan.Items.FirstOrDefault(i => i.Matches(file)) is { } item)

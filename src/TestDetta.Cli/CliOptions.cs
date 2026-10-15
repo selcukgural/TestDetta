@@ -39,6 +39,9 @@ internal sealed record AnalysisSettings(string BaseRef, string RepoPath, LogLeve
     /// <summary>What a changed non-code file inside a project folder runs (docs/design/non-code-files.md).</summary>
     public TestDetta.Core.NonCodeFileRule NonCodeFiles { get; init; } = TestDetta.Core.AnalysisOptions.DefaultNonCodeFiles;
 
+    /// <summary>The team's <c>--not-build-inputs</c> patterns, in the order given; see <see cref="TestDetta.Core.AnalysisOptions.NotBuildInputs"/>.</summary>
+    public IReadOnlyList<string> NotBuildInputs { get; init; } = [];
+
     /// <summary>Folder of per-commit coverage maps outside the repository (<see cref="MapDirectory"/>); null when unused.</summary>
     public string? MapsDir { get; init; }
 }
@@ -358,6 +361,10 @@ internal sealed record CliOptions(
                                only the test classes the map saw read it, when the build neither compiles,
                                embeds, copies nor hands it to a tool; project runs its project and every
                                project depending on it completely
+          --not-build-inputs <patterns>  Non-code files your build does not use, as repository-relative
+                               patterns separated by ';' (docs/**;*.yaml); repeatable. Like documentation
+                               (README, CHANGELOG, LICENSE, …), they count as build inputs only when MSBuild
+                               builds, embeds or copies them or a target names them, never on a guess
 
         td affected:
           --tests-only         Only list affected test projects
@@ -577,7 +584,7 @@ internal sealed record CliOptions(
                 error = "td audit compares every change with HEAD; --base does not apply";
                 return false;
 
-            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--color" or "--theme":
+            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--not-build-inputs" or "--color" or "--theme":
             case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record or CliCommand.Audit:
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
@@ -601,7 +608,7 @@ internal sealed record CliOptions(
         }
 
         var value = args[++i];
-        if (options.Command == CliCommand.Audit && arg is not ("--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--maps-dir" or "--color" or "--theme"))
+        if (options.Command == CliCommand.Audit && arg is not ("--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--not-build-inputs" or "--maps-dir" or "--color" or "--theme"))
         {
             return TryParseAuditOption(arg, value, ref options, out error);
         }
@@ -664,6 +671,18 @@ internal sealed record CliOptions(
                 {
                     Analysis = options.Analysis with { NonCodeFiles = value == "readers" ? TestDetta.Core.NonCodeFileRule.Readers : TestDetta.Core.NonCodeFileRule.Project },
                 };
+                return true;
+
+            case "--not-build-inputs":
+                // Repeatable, and each value may list several patterns separated by ';' (an action input is one string).
+                var patterns = value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (patterns.Length == 0)
+                {
+                    error = "--not-build-inputs needs one or more file patterns, separated by ';'";
+                    return false;
+                }
+
+                options = options with { Analysis = options.Analysis with { NotBuildInputs = [.. options.Analysis.NotBuildInputs, .. patterns] } };
                 return true;
 
             case "--max-map-age":

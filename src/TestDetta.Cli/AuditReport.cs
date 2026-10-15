@@ -83,6 +83,11 @@ internal static class AuditReport
             result.Add($"--non-code-files {(options.Analysis.NonCodeFiles == TestDetta.Core.NonCodeFileRule.Readers ? "readers" : "project")}");
         }
 
+        if (options.Analysis.NotBuildInputs.Count > 0)
+        {
+            result.Add($"--not-build-inputs {Quoted(string.Join(';', options.Analysis.NotBuildInputs))}");
+        }
+
         if (options.Analysis.MapsDir is { } mapsDir)
         {
             result.Add($"--maps-dir {Quoted(mapsDir)}");

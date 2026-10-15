@@ -117,6 +117,7 @@ internal static partial class CliApp
                 License = analysis.License,
                 LicenseEnforced = analysis.LicenseEnforced,
                 UnmappedFilesRead = analysis.UnmappedFilesRead,
+                NotBuildInputs = analysis.NotBuildInputs,
                 Style = outStyle,
             },
             stdout);
@@ -176,6 +177,7 @@ internal static partial class CliApp
                 MaxMapAge = options.Analysis.MaxMapAge,
                 DriftFallback = options.Analysis.DriftFallback,
                 NonCodeFiles = options.Analysis.NonCodeFiles,
+                NotBuildInputs = options.Analysis.NotBuildInputs,
                 Framework = options.Command == CliCommand.Test ? options.Test.Framework : null,
                 Cancellation = cancel,
                 // td test builds anyway before it runs tests; td affected only when asked.
@@ -467,7 +469,7 @@ internal static partial class CliApp
                 var license = LicenseGate.Check(root, loggerFactory, host.Environment, host.Home);
                 var licensed = license.AllowsSelection || !TestDetta.Core.Licensing.LicenseKeys.Enforced;
                 steps = new IncrementalRecording(loggerFactory, evaluator)
-                    .Plan(new IncrementalContext(root, graph, options.Record, options.Analysis.MaxMapAge, licensed) { NonCodeFiles = options.Analysis.NonCodeFiles }, testProjects, now);
+                    .Plan(new IncrementalContext(root, graph, options.Record, options.Analysis.MaxMapAge, licensed) { NonCodeFiles = options.Analysis.NonCodeFiles, NotBuildInputs = options.Analysis.NotBuildInputs }, testProjects, now);
             }
             else
             {

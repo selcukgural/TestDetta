@@ -111,6 +111,29 @@ ways TestDetta does not observe.
 - A build step in an SDK or package target that processes `None` items with a default glob of its own
   type is seen only if the type is in the known list. An unknown type defined outside the repository is
   the one residual case; the CLI docs name it and `project` avoids it.
+- Documentation files and the team's `--not-build-inputs` skip the scan's guesses (next section): a target
+  that takes such a file in through a pattern without naming it is not seen.
+
+## Documentation files (2026-10-15, owner's decision)
+
+Replaying OpenTelemetry's own commits in shadow mode, each pull request's `CHANGELOG.md` entry ran every test
+project: its targets build items from other items or from a property alone (`@(DependenciesWithExposedExperimentalFeatures->'…')`,
+`@(SigstoreBundle)`, `<FileWrites Include="$(AssemblyOriginatorKeyFile)" />`), which the scan of the XML cannot
+resolve, so each counted as matching every file. #78 and #81 narrowed two shapes; more remain, and the real
+answer, the files the build's items actually held (from a binary log taken while recording), is a backlog item.
+
+Until then (`NotBuildInputs`, `NonCodeFileUses.BuildUse`): documentation, by its well-known name (`README`,
+`CHANGELOG`, `CHANGES`, `HISTORY`, `RELEASENOTES`, `LICENSE`, `NOTICE`, `THIRD-PARTY-NOTICES`, `CONTRIBUTING`,
+`SECURITY`, `CODE_OF_CONDUCT`, `CODEOWNERS`, `SUPPORT`, `AUTHORS`, `CLAUDE`, `AGENTS`, with no extension or
+`.md`, `.txt`, `.rst`, `.adoc`), and the repository-relative patterns the team gives with `--not-build-inputs`
+(action input `not-build-inputs`, `;`-separated, repeatable) skip the scan's guesses: an item pattern that could
+include the file and a target that walks every `None` item. Exact signs still count: MSBuild's evaluation building,
+embedding or copying the file, a target or project file naming it, and a test reading it at run time (the map's
+file reads, which the readers rule answers). `AnalysisResult.NotBuildInputs` lists the changed files the rule
+covered, with the reason; the console notes, the JSON (`notBuildInputs`) and the Markdown summary show them.
+
+It is a deliberate step away from "select more when unsure", kept narrow: names that are documentation in
+practically every repository, and files the team vouches for. A test that reads a changelog still runs.
 
 ## Measurement
 

@@ -2,6 +2,11 @@ using Microsoft.Extensions.Logging;
 
 namespace TestDetta.Core;
 
+/// <summary>A changed non-code file the scan's guesses did not make a build input, and why.</summary>
+/// <param name="File">Repository-relative path.</param>
+/// <param name="Reason">"a documentation file", or the team's <c>--not-build-inputs</c> pattern that matched.</param>
+public sealed record NotBuildInputFile(string File, string Reason);
+
 /// <summary>Everything one analysis produced.</summary>
 /// <param name="RepoRoot">Repository root directory.</param>
 /// <param name="ChangedFiles">Changed paths relative to <paramref name="RepoRoot"/>.</param>
@@ -26,6 +31,13 @@ public sealed record AnalysisResult(
     /// (docs/design/runtime-file-reads.md); null when no map recorded reads, so nothing is known.
     /// </summary>
     public IReadOnlyList<string>? UnmappedFilesRead { get; init; }
+
+    /// <summary>
+    /// Changed non-code files for which the scan of the MSBuild files did not guess a build use: documentation, or
+    /// the team's <c>--not-build-inputs</c>; only MSBuild's evaluation or a target naming them made them build inputs.
+    /// Empty under the project rule, which runs a project for any of its non-code files.
+    /// </summary>
+    public IReadOnlyList<NotBuildInputFile> NotBuildInputs { get; init; } = [];
 
     /// <summary>The license check of this run (docs/design/licensing.md); null when it was not checked.</summary>
     public Licensing.LicenseStatus? License { get; init; }
@@ -109,13 +121,44 @@ public sealed partial class AnalysisPipeline(ILoggerFactory loggerFactory, IProj
 
         options.Cancellation.ThrowIfCancellationRequested();
         var tests = new TestSelector(loggerFactory.CreateLogger<TestSelector>(), new CodeChangeDetector(loggerFactory.CreateLogger<CodeChangeDetector>()))
-            .Select(new TestSelectionRequest(graph, root, changed, impact, maps) { Drifts = drifts, DriftFallback = options.DriftFallback, NonCodeFiles = options.NonCodeFiles, GeneratedCode = options.GeneratedCode, Framework = options.Framework });
+            .Select(new TestSelectionRequest(graph, root, changed, impact, maps)
+            {
+                Drifts = drifts,
+                DriftFallback = options.DriftFallback,
+                NonCodeFiles = options.NonCodeFiles,
+                NotBuildInputs = options.NotBuildInputs,
+                GeneratedCode = options.GeneratedCode,
+                Framework = options.Framework,
+            });
 
         return new AnalysisResult(root, changed, graph, impact, Plan(graph, tests, maps))
         {
             Drifts = drifts,
             UnmappedFilesRead = TestSelector.FilesRead(impact.UnmappedFiles, maps),
+            NotBuildInputs = options.NonCodeFiles == NonCodeFileRule.Readers ? NotBuildInputFiles(root, changed, options.NotBuildInputs) : [],
         };
+    }
+
+    /// <summary>
+    /// The changed non-code files that only an exact sign makes build inputs (<see cref="NotBuildInputs"/>), each with
+    /// why, so reports can say the scan's guesses did not count for them.
+    /// </summary>
+    /// <param name="root">Normalized repository root.</param>
+    /// <param name="changed">Changed paths relative to <paramref name="root"/>.</param>
+    /// <param name="patterns">The team's <c>--not-build-inputs</c> patterns.</param>
+    private static List<NotBuildInputFile> NotBuildInputFiles(string root, IReadOnlyList<string> changed, IReadOnlyList<string> patterns)
+    {
+        var rule = new NotBuildInputs(root, patterns);
+        var files = new List<NotBuildInputFile>();
+        foreach (var file in changed)
+        {
+            if (!SourceLanguage.IsSource(file) && rule.Reason(Paths.Normalize(Path.Combine(root, file))) is { } reason)
+            {
+                files.Add(new NotBuildInputFile(file, reason));
+            }
+        }
+
+        return files;
     }
 
     /// <summary>The root namespace of the first project that compiles a file, by repository-relative path; empty for none.</summary>
