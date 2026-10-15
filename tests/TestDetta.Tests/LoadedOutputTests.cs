@@ -33,6 +33,7 @@ public sealed class LoadedOutputTests : IDisposable
             public class OtherTests { [Fact] public void Nothing() { } }
             public class PublicApiTests { [Fact] public void Matches() => System.Reflection.Assembly.LoadFrom("Lib.dll").GetExportedTypes(); }
             """);
+        _repo.Write("tests/Lib.Tests/Helper.cs", "namespace Lib.Tests; public static class Helper { public static int Value() => 1; }");
         _repo.Write(".gitignore", ".testdetta/\n");
         _repo.Commit("base");
     }
@@ -72,6 +73,44 @@ public sealed class LoadedOutputTests : IDisposable
 
         Assert.Equal(TestRunMode.All, selection.Mode);
         Assert.Contains("loaded the output of Lib.csproj outside its tests", selection.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_test_hosts_read_of_a_changed_test_projects_own_output_does_not_run_it_whole()
+    {
+        // MimeKit, 2026-10-15: NUnit's adapter and the dependency context read UnitTests.dll and its deps.json outside
+        // every test, so every pull request that also changed a test ran all 197 classes.
+        WriteMap(Uses([], ambient: ["Lib.Tests", "Lib.Tests.deps.json"]));
+        _repo.Replace("tests/Lib.Tests/Tests.cs", "public void Nothing() { }", "public void Nothing() { _ = 1; }");
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.OtherTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void A_class_that_loads_its_own_test_projects_output_still_runs_for_a_change_to_it()
+    {
+        WriteMap(Uses(new() { ["Lib.Tests.PublicApiTests"] = ["Lib.Tests"] }, ambient: ["Lib.Tests"]));
+        _repo.Replace("tests/Lib.Tests/Tests.cs", "public void Nothing() { }", "public void Nothing() { _ = 1; }");
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.OtherTests", "Lib.Tests.PublicApiTests"], selection.TestClasses);
+    }
+
+    [Fact]
+    public void A_changed_helper_in_the_test_project_runs_the_classes_that_ran_it()
+    {
+        WriteMap(Uses([], ambient: ["Lib.Tests"]), helperRanIn: "Lib.Tests.OtherTests");
+        _repo.Replace("tests/Lib.Tests/Helper.cs", "=> 1", "=> 2");
+
+        var selection = Select();
+
+        Assert.True(selection.Mode == TestRunMode.Filtered, $"{selection.Mode}: {selection.Reason}");
+        Assert.Equal(["Lib.Tests.OtherTests"], selection.TestClasses);
     }
 
     [Fact]
@@ -157,18 +196,18 @@ public sealed class LoadedOutputTests : IDisposable
     private TestProjectSelection Select() =>
         new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main", new AnalysisOptions()).Tests.Single(static t => t.Project.IsTestProject);
 
-    private void WriteMap(FileReads uses, string? keysConstructorRanIn = null)
+    private void WriteMap(FileReads uses, string? keysConstructorRanIn = null, string? helperRanIn = null)
     {
         var head = new GitClient(NullLogger<GitClient>.Instance).Head(_repo.Root);
         var classes = new Dictionary<string, IReadOnlyList<int>>
         {
             ["Lib.Tests.CalcTests"] = [0],
-            ["Lib.Tests.OtherTests"] = [],
+            ["Lib.Tests.OtherTests"] = helperRanIn == "Lib.Tests.OtherTests" ? [2] : [],
             ["Lib.Tests.PublicApiTests"] = keysConstructorRanIn == "Lib.Tests.PublicApiTests" ? [1] : [],
         };
         var map = new CoverageMap(
             new CoverageMapHeader("tests/Lib.Tests/Lib.Tests.csproj", head, DateTimeOffset.UtcNow),
-            [new CoveredMethod("Lib.Calc", "Tax"), new CoveredMethod("Lib.Keys", ".cctor")],
+            [new CoveredMethod("Lib.Calc", "Tax"), new CoveredMethod("Lib.Keys", ".cctor"), new CoveredMethod("Lib.Tests.Helper", "Value")],
             new CoverageHits(classes, new Dictionary<string, IReadOnlyList<int>>(), []),
             null)
         {

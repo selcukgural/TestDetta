@@ -251,7 +251,13 @@ Two changes, both approved by the owner:
   the outputs above. A map without `outputUses` changes nothing (maps from before 2026-10-06 never
   answered this). Such a test may inspect anything in the assembly, and the project's own coverage cannot
   say which of its changes it sees; the rule stays narrow because only code in the repository that loads
-  by path is recorded (a test framework loading the test assembly is not instrumented).
+  by path is recorded. Third-party code has its file reads wrapped, though, and the test host reads the
+  test project's own output outside every test (NUnit's adapter reads `UnitTests.dll`, the dependency
+  context its `deps.json`): on MimeKit's own commits (fork replay, 2026-10-15) every pull request that also
+  changed a test ran all 197 classes. A use of a test project's own output outside its tests is therefore
+  left out when that test project changed: it inspects nothing a change could fail, and the project's own
+  changes are answered by its own coverage (it is instrumented like any other project). A class that loads
+  the output itself, and a use while initializing or in a fixture's setup, still select as above.
 - **A field or property initializer is part of the constructor it compiles into**
   (`SourceLanguage.Initializer`, `CodeChangeDetector.Compare`): adding, removing or changing a static
   initializer adds a `.cctor` change of its type, an instance one a `.ctor` change; an attribute change
