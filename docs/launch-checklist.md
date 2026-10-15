@@ -57,6 +57,10 @@ CI is off until the tests that record inside a recording pass (#71).
 on forks: the test host's read of a test project's own output, #77, and `EmbeddedFiles` patterns with a property, #78;
 no map format change): `TestDetta/action` at `79251cd` with tags `v0.2.1` and `v0`, GitHub release created, the site
 and README pinned to it.
+0.2.2 (2026-10-15, documentation files count as build inputs only on an exact sign, the new `--not-build-inputs`
+option and `not-build-inputs` input, #83; an unresolved reference in an item pattern stands for a part of a path,
+#81; no map format change): `TestDetta/action` at `a2f55a8` with tags `v0.2.2` and `v0`, GitHub release created, the
+site and README pinned to it.
 
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
