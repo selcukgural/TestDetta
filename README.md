@@ -88,7 +88,9 @@ only the test classes the map saw read it, when the build neither compiles, embe
 to a tool (`--non-code-files readers`, the default). Recording sees the reads of your code and of the
 libraries your tests use (a snapshot library reading its `.verified` files). A file the build uses, or a
 test project whose map was recorded before reads of libraries were, still runs completely, and so does
-everything under `--non-code-files project`. See [docs/design/non-code-files.md](docs/design/non-code-files.md)
+everything under `--non-code-files project`. Documentation files (`README`, `CHANGELOG`, `LICENSE`, …) and
+the files you name with `--not-build-inputs` count as build inputs only when MSBuild builds, embeds or copies
+them or a target names them, not on a guess from an item pattern. See [docs/design/non-code-files.md](docs/design/non-code-files.md)
 for what the rule relies on and what it cannot see.
 
 ## GitHub Actions
@@ -153,6 +155,7 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `max-map-age` | `50` | test, shadow and audit modes: commits a map may be behind the merge base (0: only an exact map) |
 | `drift-fallback` | `all` | test, shadow and audit modes: `all` runs test projects completely when the changes since an older map include a build file or configuration; `name` decides them by name |
 | `non-code-files` | | test, shadow and audit modes: `readers` runs only the test classes that read a changed non-code file the build does not use; `project` runs its project and the projects depending on it completely; empty keeps the default (`readers`) |
+| `not-build-inputs` | | test, shadow and audit modes: non-code files the build does not use, as repository-relative patterns separated by `;`; like documentation files, they count as build inputs only on an exact sign (MSBuild builds, embeds or copies them, or a target names them) |
 | `shadow-analysis-timeout`, `shadow-rerun-timeout`, `shadow-rerun-idle-timeout`, `shadow-base-timeout`, `shadow-base-idle-timeout`, `shadow-classify-budget` | `10m`, `15m`, `5m`, `30m`, `10m`, `45m` | shadow mode: time limits of the analysis and of the reruns that classify failures |
 | `shadow-artifact-suffix` | | shadow mode: added to the report artifact's name, to tell matrix jobs apart |
 | `audit-target-broken` | `100` | audit mode: stop once this many changes broke tests |

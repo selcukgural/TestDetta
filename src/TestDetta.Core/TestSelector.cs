@@ -25,7 +25,8 @@ public sealed partial class TestSelector(ILogger<TestSelector> logger, CodeChang
         }
 
         (request, var driftRunAll) = WithoutDriftedMaps(request);
-        var uses = new ProjectLevelUses([], [], request.NonCodeFiles == NonCodeFileRule.Readers ? new NonCodeFileUses(Paths.Normalize(request.RepoRoot)) : null);
+        var root = Paths.Normalize(request.RepoRoot);
+        var uses = new ProjectLevelUses([], [], request.NonCodeFiles == NonCodeFileRule.Readers ? new NonCodeFileUses(root, new NotBuildInputs(root, request.NotBuildInputs)) : null);
         var projectLevel = FindProjectLevelChanges(request.Graph, request.RepoRoot, request.ChangedFiles, request.Impact, uses);
         // Projects that run completely on their own, without what depends on them.
         var runAlone = new Dictionary<string, string>(driftRunAll, Paths.Comparer);

@@ -166,6 +166,22 @@ public sealed class CliOptionsTests
         Assert.Contains("readers or project", wrong, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Not_build_inputs_split_on_semicolons_and_add_up_over_repeats()
+    {
+        Assert.True(CliOptions.TryParse(["test"], "/repo", out var defaults, out _));
+        Assert.Empty(defaults.Analysis.NotBuildInputs);
+
+        foreach (var command in (string[])["affected", "test", "record", "audit"])
+        {
+            Assert.True(CliOptions.TryParse([command, "--not-build-inputs", "docs/**; *.yaml", "--not-build-inputs", "samples/**"], "/repo", out var chosen, out var error), error);
+            Assert.Equal(["docs/**", "*.yaml", "samples/**"], chosen.Analysis.NotBuildInputs);
+        }
+
+        Assert.False(CliOptions.TryParse(["test", "--not-build-inputs", " ; "], "/repo", out _, out var wrong));
+        Assert.Contains("one or more file patterns", wrong, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("affected", "--no-build")]
     [InlineData("affected", "--dry-run")]

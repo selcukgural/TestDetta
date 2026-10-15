@@ -126,6 +126,9 @@ public sealed record TestSelectionRequest(
     /// <summary>What a changed non-code file inside a project folder runs; see <see cref="NonCodeFileRule"/>.</summary>
     public NonCodeFileRule NonCodeFiles { get; init; } = AnalysisOptions.DefaultNonCodeFiles;
 
+    /// <summary>See <see cref="AnalysisOptions.NotBuildInputs"/>.</summary>
+    public IReadOnlyList<string> NotBuildInputs { get; init; } = [];
+
     /// <summary>
     /// Runtime identifier of the platform the selected tests run on, this machine's by default. A test
     /// class whose tests were all skipped while a map was recorded on another platform may run here,

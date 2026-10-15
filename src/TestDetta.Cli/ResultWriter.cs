@@ -38,6 +38,9 @@ internal sealed record ResultReport(
     /// <summary>See <see cref="AnalysisResult.UnmappedFilesRead"/>.</summary>
     public IReadOnlyList<string>? UnmappedFilesRead { get; init; }
 
+    /// <summary>See <see cref="AnalysisResult.NotBuildInputs"/>.</summary>
+    public IReadOnlyList<NotBuildInputFile> NotBuildInputs { get; init; } = [];
+
     /// <summary>Colour and characters of the text format; the other formats are never styled.</summary>
     public ConsoleStyle Style { get; init; } = ConsoleStyle.Plain;
 }
@@ -106,6 +109,24 @@ internal static class ResultWriter
         {
             stdout.WriteLine(CommandLine(invocation));
         }
+    }
+
+    /// <summary>
+    /// The note for changed non-code files the scan's guesses did not make build inputs (<see cref="AnalysisResult.NotBuildInputs"/>),
+    /// or null when there are none; <paramref name="code"/> formats each path (a code span in Markdown).
+    /// </summary>
+    /// <param name="files">The files and why.</param>
+    /// <param name="code">Formats a path.</param>
+    internal static string? NotBuildInputsLine(IReadOnlyList<NotBuildInputFile> files, Func<string, string> code)
+    {
+        if (files.Count == 0)
+        {
+            return null;
+        }
+
+        var listed = string.Join(", ", files.Take(5).Select(f => $"{code(f.File)} ({f.Reason})"));
+        var more = files.Count > 5 ? $" and {files.Count - 5} more" : string.Empty;
+        return $"Not taken as build inputs unless MSBuild builds them or a target names them: {listed}{more}.";
     }
 
     /// <summary>One line on an older coverage map in use, for text output and the Markdown summary.</summary>
@@ -286,6 +307,16 @@ internal static class ResultWriter
 
             WriteStringArray(json, "unmappedFiles"u8, report.Result.UnmappedFiles);
             WriteStringArray(json, "cosmeticFiles"u8, report.Result.CosmeticFiles);
+            json.WriteStartArray("notBuildInputs"u8);
+            foreach (var file in report.NotBuildInputs)
+            {
+                json.WriteStartObject();
+                json.WriteString("file"u8, file.File);
+                json.WriteString("reason"u8, file.Reason);
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
             WriteCodeChanges(json, report.Result.CodeChanges);
 
             json.WriteEndObject();

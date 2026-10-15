@@ -41,6 +41,13 @@ internal static class MarkdownSummary
             writer.WriteLine();
         }
 
+        // Paths come from the pull request: code spans, so a file name cannot inject links or mentions.
+        if (ResultWriter.NotBuildInputsLine(analysis.NotBuildInputs, Code) is { } notBuilt)
+        {
+            writer.WriteLine(notBuilt);
+            writer.WriteLine();
+        }
+
         if (tests.Count == 0)
         {
             writer.WriteLine("No test project is affected; no tests ran.");

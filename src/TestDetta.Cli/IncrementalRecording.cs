@@ -41,6 +41,9 @@ internal sealed record IncrementalContext(string Root, ProjectGraph Graph, Recor
 {
     /// <summary>What a changed non-code file runs in the selection the step is planned with, as <c>td test</c> would decide it.</summary>
     public NonCodeFileRule NonCodeFiles { get; init; } = AnalysisOptions.DefaultNonCodeFiles;
+
+    /// <summary>The team's <c>--not-build-inputs</c> patterns; see <see cref="AnalysisOptions.NotBuildInputs"/>.</summary>
+    public IReadOnlyList<string> NotBuildInputs { get; init; } = [];
 }
 
 /// <summary>
@@ -167,7 +170,7 @@ internal sealed partial class IncrementalRecording(ILoggerFactory loggerFactory,
     /// <param name="group">Projects whose previous map is at that commit.</param>
     private IEnumerable<ProjectStep> Select(IncrementalContext context, string commit, List<(ProjectNode Project, CoverageMap Map)> group)
     {
-        var analysis = new AnalysisPipeline(loggerFactory, evaluator).Run(context.Root, commit, new AnalysisOptions { MaxMapAge = 0, NonCodeFiles = context.NonCodeFiles });
+        var analysis = new AnalysisPipeline(loggerFactory, evaluator).Run(context.Root, commit, new AnalysisOptions { MaxMapAge = 0, NonCodeFiles = context.NonCodeFiles, NotBuildInputs = context.NotBuildInputs });
         var changes = analysis.Impact.CodeChanges.SelectMany(static c => c.Symbols).ToList();
         foreach (var (project, map) in group)
         {
