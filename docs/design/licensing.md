@@ -51,10 +51,12 @@ A license is a small JSON document signed with ECDSA P-256 (SHA-256; built into 
   never in a repository or in CI. TestDetta embeds the public keys by key id (`kid`), so a key can be
   rotated: new TestDetta versions trust the new key, and licenses are reissued under it.
 - **Kinds:**
-  - `subscription`: valid for the billing period plus 7 days, renewed by refresh, and never more than 40 days
+  - `subscription`: valid for the billing period plus 15 days (more than the 14 days of expiry warnings, so a
+    paying customer never sees one before the renewal arrives; 7 until 2026-10-15), renewed by refresh, and never more than 40 days
     ahead of its signing (`LicenseIssuer.MaxAhead`, 2026-10-08), so a yearly plan's string cannot outlive a
     refund or revocation by months;
-  - `annual`: offline customers, valid for the term plus 30 days;
+  - `annual`: offline customers, valid for the term plus 30 days, with no refresh link, so TestDetta never calls
+    the service for it (until 2026-10-15 it carried one like every other kind);
   - `trial`: 30 days, one per scope.
 - **Scopes** are patterns over normalised git remote URLs: host and path, without scheme, user,
   password or `.git`. An air-gapped company's license names its internal git server.
@@ -159,7 +161,7 @@ license:
   keep it between runs. Ephemeral runners refresh again on every run, which is why the service must answer
   within the timeout from idle (a cold start counts).
 - A failed refresh changes nothing: TestDetta uses the best valid license it has. The service is an
-  update channel, not a gate. That is why `subscription` licenses include 7 days of slack.
+  update channel, not a gate. That is why `subscription` licenses include 15 days of slack.
 
 Offline customers get `annual` licenses. Renewals and seat changes are delivered as a new license
 string or file, and their administrators replace the secret.
@@ -248,8 +250,8 @@ as a file and never baked in or passed as a variable). Hosting: Cloud Run (see "
 - **Records** (`licenses`) are the source of truth. Every change also writes an `audit` row with its
   reason, in the same transaction.
 - **Signing:** `SigningKey` loads the ECDSA P-256 key from a PEM file and never logs it. A cloud KMS
-  can replace it behind the same members. `LicenseIssuer` adds the slack: 7 days for a subscription,
-  30 for annual, none for a trial.
+  can replace it behind the same members. `LicenseIssuer` adds the slack: 15 days for a subscription,
+  30 for annual, none for a trial, and leaves the refresh link out of annual licenses.
 - **Refresh:** `GET /v1/licenses/{id}` with `Authorization: TestDetta <license>`. The presented license
   must be genuine (current or retired key) and for the same id; it may have expired. Unknown,
   revoked, mismatched and unproven requests get the same 404. The response is `no-store`. There is

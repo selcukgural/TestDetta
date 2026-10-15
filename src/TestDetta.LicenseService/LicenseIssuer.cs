@@ -17,13 +17,16 @@ public sealed class LicenseIssuer(SigningKey key, Uri publicBaseUrl, TimeProvide
     }
 
     /// <summary>
-    /// Slack added to the paid period: a subscription keeps working for 7 days while a renewal is on its
-    /// way, an annual (offline) license for 30 days while a new file is delivered; a trial has none.
+    /// Slack added to the paid period: a subscription keeps working for 15 days while a renewal is on its
+    /// way, an annual (offline) license for 30 days while a new file is delivered; a trial has none. A
+    /// subscription's slack stays above <see cref="LicenseCheck.ExpiryWarningDays"/>: the provider renews at
+    /// the period's end, so with less every paying customer's job summaries would say the license expires
+    /// during the last days of each period.
     /// </summary>
     /// <param name="kind">License kind.</param>
     public static TimeSpan Slack(LicenseKind kind) => kind switch
     {
-        LicenseKind.Subscription => TimeSpan.FromDays(7),
+        LicenseKind.Subscription => TimeSpan.FromDays(15),
         LicenseKind.Annual => TimeSpan.FromDays(30),
         _ => TimeSpan.Zero,
     };
@@ -33,8 +36,9 @@ public sealed class LicenseIssuer(SigningKey key, Uri publicBaseUrl, TimeProvide
     /// otherwise put a whole year into a string nobody can recall offline, so a refund or a revocation would
     /// leave the customer a working license for months. Capped, the string runs out within this time and the
     /// daily refresh (docs/design/licensing.md, "Refresh") keeps handing out a new one while the subscription
-    /// runs. 40 days keeps a monthly subscription's full period and its 7 days of slack (at most 38 days).
-    /// Annual (offline) licenses and trials are not capped: they never refresh, or end sooner anyway.
+    /// runs. Late in a monthly period the period's end plus its slack comes first, so the string never has
+    /// fewer than 15 days left before the renewal.
+    /// Annual (offline) licenses are not capped, since they carry no refresh link; trials end sooner anyway.
     /// </summary>
     public static readonly TimeSpan MaxAhead = TimeSpan.FromDays(40);
 
@@ -59,11 +63,20 @@ public sealed class LicenseIssuer(SigningKey key, Uri publicBaseUrl, TimeProvide
             record.Scopes,
             record.ValidFrom,
             until,
-            new Uri(publicBaseUrl, $"v1/licenses/{Uri.EscapeDataString(record.Id)}"))
+            Refresh(record))
         {
             Issued = now,
         };
     }
+
+    /// <summary>
+    /// Where TestDetta fetches a newer version of the license: none for an annual (offline) license, which
+    /// is sold for networks that cannot or must not reach this service and is renewed by a new file, so
+    /// TestDetta makes no call for it at all.
+    /// </summary>
+    /// <param name="record">The license record.</param>
+    private Uri? Refresh(LicenseRecord record) =>
+        record.Kind == LicenseKind.Annual ? null : new Uri(publicBaseUrl, $"v1/licenses/{Uri.EscapeDataString(record.Id)}");
 
     /// <summary>The signed license string for <paramref name="record"/>.</summary>
     /// <param name="record">The license record.</param>
