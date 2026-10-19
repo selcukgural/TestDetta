@@ -317,6 +317,14 @@ public sealed record CoverageMap(
     public IReadOnlyDictionary<string, IReadOnlyList<string>>? FixtureBuilders { get; init; }
 
     /// <summary>
+    /// Collection fixture name to the test classes (runtime names) of the xUnit collections it serves, as the recorder read
+    /// them from the test assembly: a class in a collection may depend on what the fixture's setup did (a container started,
+    /// a connection string set) without naming the fixture, which the name trace of its users cannot see. Null when
+    /// the test assembly has no collection fixture (map format 4; a format 3 map is not read).
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>>? CollectionFixtureUsers { get; init; }
+
+    /// <summary>
     /// Methods (indexes into <see cref="Methods"/>) whose users no recording at <see cref="Commit"/> could name: members that
     /// were added, belong to a type whose declaration changed, or whose metadata changed since the last full recording, in a
     /// map built by incremental steps (docs/design/incremental-recording.md). Carried-over classes were recorded before such

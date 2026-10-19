@@ -33,6 +33,9 @@ internal sealed record InstrumentationResult(IReadOnlyList<CoveredMethod> Method
 
     /// <summary>The users of each shared data source bucket, repository attributes the tests use included; see <see cref="CoverageMap.DataSourceUsers"/>.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> DataSourceUsers { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+
+    /// <summary>The test classes of the xUnit collections each collection fixture serves; see <see cref="CoverageMap.CollectionFixtureUsers"/>.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> CollectionFixtureUsers { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
 }
 
 /// <summary>
@@ -94,6 +97,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         var nested = new List<int>();
         var dataUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var collectionUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var extensions = FindExtensions(testAssemblies, ownAssemblies, dataUsers);
         var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks, NestedMethods = nested };
         try
@@ -107,11 +111,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 InstrumentOne(assembly, testAssemblies.Contains(assembly), productAssemblies?.Contains(assembly) == true, new MethodTables(methods, fields, callbacks, ownAssemblies)
                 {
                     CoreLibrary = coreLibrary, Nested = nested, DataSourceUsers = dataUsers, ExtensionBuckets = extensions,
+                    CollectionFixtureUsers = collectionUsers,
                 });
                 LogInstrumented(assembly, methods.Count - before);
             }
 
-            result = result with { DataSourceUsers = dataUsers.ToDictionary(static d => d.Key, static IReadOnlyList<string> (d) => d.Value, StringComparer.Ordinal) };
+            result = result with
+            {
+                DataSourceUsers = dataUsers.ToDictionary(static d => d.Key, static IReadOnlyList<string> (d) => d.Value, StringComparer.Ordinal),
+                CollectionFixtureUsers = collectionUsers.ToDictionary(static c => c.Key, static IReadOnlyList<string> (c) => c.Value, StringComparer.Ordinal),
+            };
 
             if (thirdParty is not null)
             {
@@ -297,6 +306,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         /// <summary>Users of each shared data source bucket; see <see cref="InstrumentationResult.DataSourceUsers"/>.</summary>
         public Dictionary<string, List<string>> DataSourceUsers { get; init; } = new(StringComparer.Ordinal);
 
+        /// <summary>Users of each collection fixture; see <see cref="InstrumentationResult.CollectionFixtureUsers"/>.</summary>
+        public Dictionary<string, List<string>> CollectionFixtureUsers { get; init; } = new(StringComparer.Ordinal);
+
         /// <summary>The shared bucket of each repository attribute type the tests use, by full name; see <see cref="ExtensionAttributes"/>.</summary>
         public IReadOnlyDictionary<string, string> ExtensionBuckets { get; init; } = new Dictionary<string, string>();
     }
@@ -384,6 +396,11 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0), tables.DataSourceUsers) : [];
+        if (containsTests)
+        {
+            CollectionFixtures.Find(module, static type => IsTestClass(type, depth: 0), tables.CollectionFixtureUsers);
+        }
+
         probes = probes with { ReusedCollections = ReusedCollections(module), Tracked = tracked, Registering = RegisteringConstructors(module, tracked), Initializers = initializers };
 
         foreach (var type in module.GetTypes())
@@ -1974,7 +1991,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// </summary>
     /// <param name="type">A type as written inside a generic type definition.</param>
     /// <param name="context">The generic instance it is seen through; other references bind nothing.</param>
-    private static TypeReference Bind(TypeReference type, TypeReference context)
+    internal static TypeReference Bind(TypeReference type, TypeReference context)
     {
         if (context is not GenericInstanceType instance)
         {
@@ -2225,7 +2242,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
     /// <summary>Resolves a type reference, or null when its assembly cannot be found.</summary>
     /// <param name="type">Type reference.</param>
-    private static TypeDefinition? TryResolve(TypeReference type)
+    internal static TypeDefinition? TryResolve(TypeReference type)
     {
         try
         {

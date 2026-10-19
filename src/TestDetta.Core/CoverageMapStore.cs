@@ -13,9 +13,11 @@ public static class CoverageMapStore
     /// the names each generated type mentions. 3 (2026-10-12): the same fields, recorded by a recorder that
     /// keeps a test's own code in its class when the test builds a fixture type itself; a map of format 2 could
     /// credit what followed to the fixture's users and miss that test, and nothing in the map tells the two apart.
+    /// 4 (2026-10-19): <c>collectionFixtureUsers</c>, the classes of each xUnit collection fixture's collections; a map of
+    /// format 3 has none, and a change to the fixture's setup could miss a member that never names the fixture.
     /// A map of another format is not read, and its project is selected without coverage until it is recorded again.
     /// </summary>
-    public const int Version = 3;
+    public const int Version = 4;
 
     /// <summary>Path of the map for <paramref name="testProjectPath"/>.</summary>
     /// <param name="repoRoot">Repository root.</param>
@@ -285,6 +287,23 @@ public static class CoverageMapStore
             json.WriteEndObject();
         }
 
+        if (map.CollectionFixtureUsers is { } collectionUsers)
+        {
+            json.WriteStartObject("collectionFixtureUsers"u8);
+            foreach (var (fixture, classes) in collectionUsers.OrderBy(static f => f.Key, StringComparer.Ordinal))
+            {
+                json.WriteStartArray(fixture);
+                foreach (var testClass in classes.Order(StringComparer.Ordinal))
+                {
+                    json.WriteStringValue(testClass);
+                }
+
+                json.WriteEndArray();
+            }
+
+            json.WriteEndObject();
+        }
+
         if (map.LeakedReads is { } leaked)
         {
             json.WriteStartObject("leakedReads"u8);
@@ -441,6 +460,12 @@ public static class CoverageMapStore
                     : null,
                 FixtureBuilders = root.TryGetProperty("fixtureBuilders", out var fixtureBuilders)
                     ? fixtureBuilders.EnumerateObject().ToDictionary(
+                        static f => f.Name,
+                        static IReadOnlyList<string> (f) => [.. f.Value.EnumerateArray().Select(static c => c.GetString()!)],
+                        StringComparer.Ordinal)
+                    : null,
+                CollectionFixtureUsers = root.TryGetProperty("collectionFixtureUsers", out var collectionUsers)
+                    ? collectionUsers.EnumerateObject().ToDictionary(
                         static f => f.Name,
                         static IReadOnlyList<string> (f) => [.. f.Value.EnumerateArray().Select(static c => c.GetString()!)],
                         StringComparer.Ordinal)

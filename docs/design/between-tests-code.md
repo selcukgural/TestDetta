@@ -131,6 +131,28 @@ declares the data is among them although it never names that base. The selection
 (`CoverageSelection.ClassesUsing`). A member a generic class uses keeps the old rule (its runtime names may differ from
 the map's), and so does a map recorded before (no `dataSourceUsers`).
 
+## Members of an xUnit collection (2026-10-19)
+
+xUnit sets a collection's fixtures (`ICollectionFixture<T>` on the `[CollectionDefinition]` class) up for every class
+of the collection, also for a class that never asks for the fixture in its constructor. Such a class may still depend on
+what the setup did: Wolverine's NATS tests (37 classes) find the container `NatsContainerFixture` started through an
+environment variable, and a class can read a static field the setup filled. The setup's code was already in the
+fixture's bucket, but the selection found the fixture's users by name only (`CoverageSelection.ClassesUsing`), so a
+change to the setup, or to code only the setup runs, missed these classes. A reader of the dev.to introduction asked
+about it; a sample confirmed it (a class reading the filled field was missed for both changes, one calling a method on
+it only for the second).
+
+`CollectionFixtures.Find` reads the membership from the test assembly, where constants and `nameof` in collection names
+are resolved: `[Collection("name")]` naming a `[CollectionDefinition("name")]`, or in xUnit v3 `[Collection(typeof(T))]`
+and `[Collection<T>]` naming the definition type, on the class or a base class in the module. Each concrete member goes
+into the map under the fixture's name as the tracker spells it (`collectionFixtureUsers`), and the selection adds them to
+the fixture's users, as it does for `dataSourceUsers` and `fixtureBuilders`. A member that does not depend on the fixture
+is selected for a change to its setup too: the framework sets the fixture up for it, which is the evidence. The corpus
+repositories with collection fixtures (alba, automapper, fastendpoints, graphql, unitsnet) have no member that does not
+name its fixture, so their shares do not move. Maps are of format 4 since: a format 3 map has no `collectionFixtureUsers`
+and nothing tells it from one of a suite without collections, so it is not read and its project is selected by names until
+recorded again. `CollectionFixtureTests` (xUnit v2 and v3).
+
 ## Test framework extensions the repository ships (2026-10-12)
 
 Some repositories ship extensions of a test framework and use them on their own tests: AutoFixture's
