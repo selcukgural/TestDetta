@@ -61,6 +61,9 @@ and README pinned to it.
 option and `not-build-inputs` input, #83; an unresolved reference in an item pattern stands for a part of a path,
 #81; no map format change): `TestDetta/action` at `a2f55a8` with tags `v0.2.2` and `v0`, GitHub release created, the
 site and README pinned to it.
+0.3.0 (2026-10-20, every class of an xUnit collection uses its collection fixture, #85; map format 4, so maps recorded
+by 0.2.x are ignored until recorded again): `TestDetta/action` at `e596523` with tags `v0.3.0` and `v0`, GitHub release
+created, the site and README pinned to it.
 
 1. **Trust the production key and enforce.** Add the public half of `td-2026-10` to `LicenseKeys.Trusted`
    (`admin.sh production public-key`, or `openssl pkey -pubout` from the secret; the private key is never
