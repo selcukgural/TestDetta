@@ -71,7 +71,8 @@ internal sealed partial class CoverageSelection
 
     /// <summary>
     /// Test classes of <paramref name="project"/> whose code names the fixture type and each of its
-    /// generic arguments, typically in a constructor parameter or base list:
+    /// generic arguments, typically in a constructor parameter or base list, with the classes that built it themselves and the
+    /// members of the xUnit collections it serves (<see cref="CoverageMap.CollectionFixtureUsers"/>):
     /// <c>ApiHost`1[BlogProfile]</c> is used by classes that name both <c>ApiHost</c> and <c>BlogProfile</c>.
     /// A setup scope (<see cref="CoverageMap.SetUpScopePrefix"/>) is used by every class in its namespace.
     /// </summary>
@@ -108,6 +109,12 @@ internal sealed partial class CoverageSelection
         if (map.FixtureBuilders?.GetValueOrDefault(fixture) is { } builders)
         {
             classes.AddRange(builders);
+        }
+
+        // xUnit sets a collection fixture up for every class of its collections, also those that never name it.
+        if (map.CollectionFixtureUsers?.GetValueOrDefault(fixture) is { } members)
+        {
+            classes.AddRange(members);
         }
 
         var names = FixtureNames(fixture);

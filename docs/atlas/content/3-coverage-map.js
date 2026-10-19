@@ -77,12 +77,13 @@ const CH_MAP = {
     {
       title: "Fixture'ın kodu, onu kullanan sınıflara dağıtılır", nodes: ["m_fix", "i_use", "i_run"], edges: ["x_fix", "x_use"],
       who: "<code>ClassesUsing(index, project, fixture)</code>, <code>FixtureNames</code>",
-      file: "src/TestDetta.Core/CoverageSelection.cs:78",
-      input: "<code>\"App.Tests.ApiHost`1[App.Tests.BlogProfile]\"</code> gibi bir fixture adı ve kaynak dizini",
-      output: "Kodu hem <code>ApiHost</code>'u hem <code>BlogProfile</code>'ı anan test sınıfları (genelde kurucu parametresi ya da <code>IClassFixture&lt;…&gt;</code>)",
+      file: "src/TestDetta.Core/CoverageSelection.cs:83",
+      input: "<code>\"App.Tests.ApiHost`1[App.Tests.BlogProfile]\"</code> gibi bir fixture adı, kaynak dizini ve harita (<code>fixtureBuilders</code>, <code>collectionFixtureUsers</code>)",
+      output: "Kodu hem <code>ApiHost</code>'u hem <code>BlogProfile</code>'ı anan test sınıfları (genelde kurucu parametresi ya da <code>IClassFixture&lt;…&gt;</code>), fixture'ı kendisi kuran sınıflar ve fixture'ın xUnit collection'larındaki her sınıf",
       purpose: "Fixture kurulumu bir kez çalışır ama onu kullanan her sınıf ona bağımlıdır; kurulumun çalıştırdığı her üye bu sınıfların hepsine yazılır.",
       body: ul([
         "<code>[setup-scope]Ns</code> (NUnit <code>[SetUpFixture]</code>, MSTest <code>[AssemblyInitialize]</code>): o isim alanındaki ve altındaki her test sınıfı.",
+        "<b>Collection fixture'ı (2026-10-19):</b> xUnit, <code>ICollectionFixture&lt;T&gt;</code>'yi collection'ın her sınıfı için kurar; fixture'ı kurucusunda istemeyen, yalnız kurulumun bıraktığına (başlattığı container, ayarladığı ortam değişkeni ya da statik bağlantı dizesi) dayanan sınıf da kullanıcıdır. Adını anmadığı için isim izi onu bulamaz; kayıt üyeliği test derlemesinden okur (<code>collectionFixtureUsers</code>, <code>CollectionFixtures.Find</code>) ve seçim bu sınıfları da ekler (Wolverine'in NATS testleri; dev.to tanıtım yazısına gelen soru).",
         "<b>Kullananı bulunamayan fixture'ın kodu <code>_ambient</code>'e gider:</b> \"testlerin dışında çalıştı\" sayılır, yani cevaplanamaz.",
       ]),
     },
