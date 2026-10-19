@@ -8,7 +8,7 @@ it cannot see are listed under [Limitations](#limitations).
 
 ```
 $ td test --base origin/main
-TestDetta 0.2.2 · 1 changed file · 2 affected test projects
+TestDetta 0.3.0 · 1 changed file · 2 affected test projects
 Tests to run
 ┌──────────────────┬──────────┬─────────┬───────┬──────────────────────────────────────────────────────────┐
 │ Test project     │ Run      │ Classes │ Saved │ Why                                                      │
@@ -125,14 +125,14 @@ jobs:
       # Also the full test run of main. Leave out projects that cannot run here, such as
       # integration tests that need a database; they are then decided by name on pull requests.
       - if: github.event_name == 'push'
-        uses: TestDetta/action@a2f55a8252840a367f2f7a9ebd6733de3ebfb2f5 # v0.2.2
+        uses: TestDetta/action@e596523b78cb69f9ad4846d0f0bce7eb60e25ec0 # v0.3.0
         with:
           mode: record
           projects: |
             tests/Shop.Tests/Shop.Tests.csproj
 
       - if: github.event_name == 'pull_request'
-        uses: TestDetta/action@a2f55a8252840a367f2f7a9ebd6733de3ebfb2f5 # v0.2.2
+        uses: TestDetta/action@e596523b78cb69f9ad4846d0f0bce7eb60e25ec0 # v0.3.0
         with:
           mode: test
           dotnet-test-args: --logger trx
