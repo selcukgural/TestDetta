@@ -320,7 +320,7 @@ public sealed record CoverageMap(
     /// Collection fixture name to the test classes (runtime names) of the xUnit collections it serves, as the recorder read
     /// them from the test assembly: a class in a collection may depend on what the fixture's setup did (a container started,
     /// a connection string set) without naming the fixture, which the name trace of its users cannot see. Null when
-    /// the test assembly has no collection fixture (map format 4; a format 3 map is not read).
+    /// the test assembly has no collection fixture (map format 4 and later; a format 3 map is not read).
     /// </summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>>? CollectionFixtureUsers { get; init; }
 

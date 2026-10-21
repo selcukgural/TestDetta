@@ -239,7 +239,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
   `IClassFixture<T>`/`ICollectionFixture<T>`/`IAssemblyFixture<T>` implemented by a base class,
   also in another library, with the fixture as a generic argument (FastEndpoints.Testing's
   `TestBase<TAppFixture>`) now marks the fixture; xUnit v3 assembly fixtures are an assembly setup
-  scope (see below). ~~Still not exact: objects a DI-based extension (Xunit.DependencyInjection and
+  scope (see below), also when declared in a shared test library (2026-10-21). ~~Still not exact: objects a DI-based extension (Xunit.DependencyInjection and
   the like) builds once and injects through constructor parameters~~ (done 2026-10-02,
   docs/design/between-tests-code.md: code between tests goes to the next class and is run-once
   evidence; a constructor change selects every user of the type). Analysis
@@ -258,7 +258,7 @@ Interim fixes that are safe for the common case; come back for the complete solu
   stays for imports and for projects MSBuild cannot evaluate.
 - ~~Setup that runs before every test of a scope~~: NUnit `[SetUpFixture]` setup (also inherited
   from a base class elsewhere), MSTest `[AssemblyInitialize]`, xUnit v3
-  `[assembly: AssemblyFixture(typeof(X))]`, `[ModuleInitializer]` in test assemblies, and TUnit
+  `[assembly: AssemblyFixture(typeof(X))]` (`X` from any repository assembly since 2026-10-21), `[ModuleInitializer]` in test assemblies, and TUnit
   `[Before(Assembly|TestSession|TestDiscovery)]` and `[BeforeEvery(...)]` hooks record under a setup
   scope that selects every class of the namespace or assembly. Still ambient: discovery-time data
   and setup of custom frameworks TestDetta does not know; classify ambient code by what entered it if

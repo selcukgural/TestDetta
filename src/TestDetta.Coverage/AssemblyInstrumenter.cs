@@ -99,6 +99,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         var dataUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var collectionUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var extensions = FindExtensions(testAssemblies, ownAssemblies, dataUsers);
+        var assemblyFixtures = FindAssemblyFixtures(testAssemblies, ownAssemblies);
         var result = new InstrumentationResult(methods, backups) { Fields = fields, ExternalCallbacks = callbacks, NestedMethods = nested };
         try
         {
@@ -111,7 +112,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 InstrumentOne(assembly, testAssemblies.Contains(assembly), productAssemblies?.Contains(assembly) == true, new MethodTables(methods, fields, callbacks, ownAssemblies)
                 {
                     CoreLibrary = coreLibrary, Nested = nested, DataSourceUsers = dataUsers, ExtensionBuckets = extensions,
-                    CollectionFixtureUsers = collectionUsers,
+                    CollectionFixtureUsers = collectionUsers, AssemblyFixtureTypes = assemblyFixtures,
                 });
                 LogInstrumented(assembly, methods.Count - before);
             }
@@ -311,6 +312,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         /// <summary>The shared bucket of each repository attribute type the tests use, by full name; see <see cref="ExtensionAttributes"/>.</summary>
         public IReadOnlyDictionary<string, string> ExtensionBuckets { get; init; } = new Dictionary<string, string>();
+
+        /// <summary>Types whose setup an assembly fixture of the test assemblies runs; see <see cref="AssemblyFixtures"/>.</summary>
+        public IReadOnlySet<(string Assembly, string Type)> AssemblyFixtureTypes { get; init; } = new HashSet<(string Assembly, string Type)>();
     }
 
     /// <summary>Rewrites one assembly, appending its methods to the shared tables.</summary>
@@ -395,6 +399,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
         var fixtures = containsTests ? FixtureTypes(module) : [];
         var scopes = containsTests ? SetUpScopes(module) : [];
+        AddAssemblyFixtureSetups(module, tables.AssemblyFixtureTypes, scopes);
         var dataSources = containsTests ? DataSources.Find(module, static type => IsTestClass(type, depth: 0), tables.DataSourceUsers) : [];
         if (containsTests)
         {
@@ -2021,33 +2026,16 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// Setup methods whose effect reaches a whole namespace or assembly, with the fixture name they
     /// record under: the constructor and <c>[OneTimeSetUp]</c> methods of an NUnit <c>[SetUpFixture]</c>
     /// (scoped to its namespace; none means the assembly); for the assembly, MSTest
-    /// <c>[AssemblyInitialize]</c> methods, the constructors and <c>InitializeAsync</c> of an xUnit v3
-    /// <c>[assembly: AssemblyFixture(typeof(X))]</c>, <c>[ModuleInitializer]</c> methods, and TUnit hooks
+    /// <c>[AssemblyInitialize]</c> methods, <c>[ModuleInitializer]</c> methods, and TUnit hooks
     /// that run for the assembly, the session, discovery, or before every class or test
     /// (<c>[Before(Assembly)]</c>, <c>[BeforeEvery(...)]</c>). Their code would otherwise count as
-    /// running outside every test, or for the one test class that declares it.
+    /// running outside every test, or for the one test class that declares it. xUnit v3 assembly
+    /// fixtures, which may live in any assembly of the repository, are added by <see cref="AddAssemblyFixtureSetups"/>.
     /// </summary>
     /// <param name="module">Test module.</param>
     private static Dictionary<MethodDefinition, string> SetUpScopes(ModuleDefinition module)
     {
         var scopes = new Dictionary<MethodDefinition, string>();
-        foreach (var attribute in module.Assembly.CustomAttributes.Where(static a => a.AttributeType.FullName == "Xunit.AssemblyFixtureAttribute"))
-        {
-            if (attribute.ConstructorArguments is not [{ Value: TypeReference fixture }])
-            {
-                continue;
-            }
-
-            for (var type = fixture.Module == module ? TryResolve(fixture) : null;
-                 type is not null;
-                 type = type.BaseType is { } baseType && baseType.Module == module ? TryResolve(baseType) : null)
-            {
-                foreach (var method in type.Methods.Where(static m => m.HasBody && IsFixtureSetup(m)))
-                {
-                    scopes[method] = CoverageMap.SetUpScopePrefix;
-                }
-            }
-        }
 
         // A [SetUpFixture] may inherit its [OneTimeSetUp] from a base class elsewhere; that code runs
         // for the fixture's scope. A base shared by fixtures of several namespaces serves all of them,
@@ -2156,6 +2144,73 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The test assemblies could not be read for the test framework extensions they use ({Reason}); their code counts as outside every test")]
     private partial void LogExtensionsUnread(string reason);
+
+    /// <summary>
+    /// <see cref="AssemblyFixtures.Find"/>, or none when the test assemblies cannot be read for it: the fixtures' setup then
+    /// counts as code outside every test, which selection follows by name, and the recording goes on.
+    /// </summary>
+    /// <param name="testAssemblies">Paths of the test assemblies.</param>
+    /// <param name="ownAssemblies">Names of the repository's assemblies.</param>
+    private HashSet<(string Assembly, string Type)> FindAssemblyFixtures(IReadOnlySet<string> testAssemblies, IReadOnlySet<string> ownAssemblies)
+    {
+        try
+        {
+            var types = AssemblyFixtures.Find(testAssemblies, ownAssemblies);
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                foreach (var (assembly, type) in types)
+                {
+                    LogAssemblyFixture(type, assembly);
+                }
+            }
+
+            return types;
+        }
+        catch (Exception ex) when (ex is AssemblyResolutionException or BadImageFormatException or IOException or InvalidOperationException)
+        {
+            LogAssemblyFixturesUnread(ex.Message);
+            return [];
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Assembly fixture setup in {Type} ({Assembly}) records under the assembly's setup scope")]
+    private partial void LogAssemblyFixture(string type, string assembly);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The test assemblies could not be read for their assembly fixtures ({Reason}); the fixtures' setup counts as outside every test")]
+    private partial void LogAssemblyFixturesUnread(string reason);
+
+    /// <summary>
+    /// Puts the constructors and <c>InitializeAsync</c> of the types of <paramref name="module"/> listed in
+    /// <paramref name="fixtures"/> under the assembly's setup scope, replacing a narrower scope a method may already have:
+    /// xUnit sets an assembly fixture up for every class of the test assembly, whichever assembly declares the type.
+    /// </summary>
+    /// <param name="module">Any module being rewritten.</param>
+    /// <param name="fixtures">See <see cref="AssemblyFixtures.Find"/>.</param>
+    /// <param name="scopes">Setup scopes of the module's methods; updated in place.</param>
+    private static void AddAssemblyFixtureSetups(ModuleDefinition module, IReadOnlySet<(string Assembly, string Type)> fixtures, Dictionary<MethodDefinition, string> scopes)
+    {
+        if (fixtures.Count == 0)
+        {
+            return;
+        }
+
+        var assembly = module.Assembly.Name.Name;
+        foreach (var type in module.GetTypes())
+        {
+            if (!fixtures.Contains((assembly, type.FullName)))
+            {
+                continue;
+            }
+
+            foreach (var method in type.Methods)
+            {
+                if (method.HasBody && IsFixtureSetup(method))
+                {
+                    scopes[method] = CoverageMap.SetUpScopePrefix;
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// The shared bucket of the repository attribute type <paramref name="type"/> belongs to (itself, or the type around a
