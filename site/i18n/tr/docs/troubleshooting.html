@@ -1,4 +1,4 @@
-<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: e0bc3fa6614d -->
+<!-- title: Sorun giderme; layout: docs; description: {{name}} beklenenden fazlasını seçtiğinde, kapsam haritası bulamadığında ya da base commit'i bulamadığında ne yapmalı.; source: 0f818e06e8c1 -->
 <h1>Sorun giderme</h1>
 <p class="lead">Her başlık gördüğünüz durumdan yola çıkar. Hepsi için <code>-v</code>, her kararı gerekçesiyle birlikte stderr'e yazar; bu log çoğu soruyu yanıtlar ve bize göndermeniz gereken de odur.</p>
 <pre><code>td affected --base origin/main -v</code></pre>
@@ -11,7 +11,7 @@
 <ul>
   <li><code>No coverage maps within 50 commits before the merge base</code> (<code>--maps-dir</code> ile yazdırılır): varsayılan branch'te yakın zamanda hiçbir şey kaydedilmemiş. Oradaki her push'ta bir harita kaydedin; action'ın <code>record</code> modu bunu yapar.</li>
   <li><code>Ignoring the coverage map of … which is not an ancestor of the base</code>: harita başka bir branch'ten, ya da bir force push'tan veya uzun süre yaşamış bir branch'ten öncesinden geliyor. Varsayılan branch'te yeniden kaydedin ya da <code>--max-map-age</code> değerini yükseltin.</li>
-  <li><code>Ignoring the coverage map of … is a coverage map of format 3, this TestDetta reads format 4; record the maps again.</code>: harita {{name}}'nın önceki bir sürümüyle kaydedilmiş (0.1.x format 2, 0.2.0–0.2.2 format 3 yazar); her sürüm yalnızca kendi biçimindeki haritaları okur. Yükselttikten sonra varsayılan branch'te bir kez kayıt alın; o zamana kadar bu test projeleri isimlere göre seçilir. <a href="/docs/limitations/#map-format">Önceki bir sürümün kaydettiği haritalar</a>.</li>
+  <li><code>Ignoring the coverage map of … is a coverage map of format 4, this TestDetta reads format 5; record the maps again.</code>: harita {{name}}'nın önceki bir sürümüyle kaydedilmiş (0.1.x format 2, 0.2.0–0.2.2 format 3, 0.3.0 format 4 yazar); her sürüm yalnızca kendi biçimindeki haritaları okur. Yükselttikten sonra varsayılan branch'te bir kez kayıt alın; o zamana kadar bu test projeleri isimlere göre seçilir. <a href="/docs/limitations/#map-format">Önceki bir sürümün kaydettiği haritalar</a>.</li>
   <li><code>--maps-dir … does not exist</code>: haritaları içeren klasör koşudan önce geri yüklenmemiş.</li>
   <li>GitHub Actions'ta, haritaları tutan önbellek kayıtlarını listeleyebilmek için job'un <code>actions: read</code> iznine ihtiyacı vardır.</li>
 </ul>

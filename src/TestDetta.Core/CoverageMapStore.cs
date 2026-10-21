@@ -15,9 +15,13 @@ public static class CoverageMapStore
     /// credit what followed to the fixture's users and miss that test, and nothing in the map tells the two apart.
     /// 4 (2026-10-19): <c>collectionFixtureUsers</c>, the classes of each xUnit collection fixture's collections; a map of
     /// format 3 has none, and a change to the fixture's setup could miss a member that never names the fixture.
+    /// 5 (2026-10-21): the same fields, recorded by a recorder that puts the setup of an xUnit v3 assembly fixture declared
+    /// in another assembly of the repository (a shared test library) under the assembly's setup scope; a map of format 4
+    /// counted it as code outside every test, could miss every class that names nothing of it, and nothing in the map tells
+    /// the two apart.
     /// A map of another format is not read, and its project is selected without coverage until it is recorded again.
     /// </summary>
-    public const int Version = 4;
+    public const int Version = 5;
 
     /// <summary>Path of the map for <paramref name="testProjectPath"/>.</summary>
     /// <param name="repoRoot">Repository root.</param>

@@ -153,6 +153,25 @@ name its fixture, so their shares do not move. Maps are of format 4 since: a for
 and nothing tells it from one of a suite without collections, so it is not read and its project is selected by names until
 recorded again. `CollectionFixtureTests` (xUnit v2 and v3).
 
+## Assembly fixtures from a shared library (2026-10-21)
+
+xUnit v3 sets an assembly fixture (`[assembly: AssemblyFixture(typeof(X))]`) up for every class of the test assembly,
+one level above a collection fixture. Its constructors and `InitializeAsync` recorded under the assembly's setup scope
+(`[setup-scope]`, every class) since 2026-10-02, but `SetUpScopes` looked for `X` only in the test module, and for its
+base types only there. A fixture declared in a shared test library the test project references, which is common for
+test infrastructure, ran as code outside every test: the map could not answer for it, the selection fell back to names,
+and a class naming nothing of the setup was missed. The same reader asked after the collection fix; a sample confirmed
+it (a plain and a generic fixture from a library: nothing selected; a fixture in the test assembly deriving from a library
+base: selected, since its own constructor enters the scope).
+
+`AssemblyFixtures.Find` reads the attribute from the test assemblies before any assembly is rewritten, as
+`ExtensionAttributes` does, and lists `X` (a generic one by its definition) and its base types up to the first one
+outside the repository, by assembly name and type name. Each assembly's rewrite then marks the setup methods of the
+listed types it declares (`AddAssemblyFixtureSetups`), replacing a narrower scope. A base type that also serves elsewhere
+in that recording records under the assembly scope too, which selects more. No corpus repository uses assembly fixtures,
+so shares do not move. Maps are of format 5: a format 4 map cannot tell a fixture from a library from code outside
+every test. `SetUpFixtureTests.Assembly_fixture_from_a_shared_library_selects_every_class`.
+
 ## Test framework extensions the repository ships (2026-10-12)
 
 Some repositories ship extensions of a test framework and use them on their own tests: AutoFixture's

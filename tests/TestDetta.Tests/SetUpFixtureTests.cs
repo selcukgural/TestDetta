@@ -159,5 +159,75 @@ public sealed class SetUpFixtureTests : IDisposable
         Assert.Contains(new CoveredMethod("Mail.Setup", framework == "xunit" ? "Module" : "Each"), scope);
     }
 
+    // xUnit v3 sets an assembly fixture up for every class, also when the fixture type comes from a shared test library
+    // and no class names it or what its setup runs. Before, the library's setup counted as code outside every test, and the
+    // name fallback found no class (a reader's question under the dev.to introduction, 2026-10-21).
+    [Theory]
+    [InlineData("Shared.Testing.Host")]
+    [InlineData("Shared.Testing.GenericHost<Mail.Tests.Marker>")]
+    [InlineData("Mail.Tests.DerivedHost")]
+    public void Assembly_fixture_from_a_shared_library_selects_every_class(string fixture)
+    {
+        _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" }, "test": { "runner": "Microsoft.Testing.Platform" } }""");
+        _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
+        _repo.Write("src/Mail/Mail.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>
+            """);
+        _repo.Write("src/Mail/Setup.cs", """
+            namespace Mail;
+            public static class Setup { public static int Calls; public static void Start() => Calls++; }
+            public static class Parser { public static int Parse(string s) => s.Length; }
+            """);
+        _repo.Write("tests/Shared.Testing/Shared.Testing.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup><ProjectReference Include="../../src/Mail/Mail.csproj" /></ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Shared.Testing/Host.cs", """
+            namespace Shared.Testing;
+            public class Host { public Host() => Mail.Setup.Start(); }
+            public class GenericHost<T> { public GenericHost() => Mail.Setup.Start(); }
+            public class HostBase { public System.Threading.Tasks.ValueTask InitializeAsync() { Mail.Setup.Start(); return default; } }
+            """);
+        _repo.Write("tests/Mail.Tests/Mail.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="xunit.v3" Version="4.0.1" />
+                <ProjectReference Include="../../src/Mail/Mail.csproj" />
+                <ProjectReference Include="../Shared.Testing/Shared.Testing.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        _repo.Write("tests/Mail.Tests/Tests.cs", $$"""
+            using Xunit;
+            [assembly: AssemblyFixture(typeof({{fixture}}))]
+            namespace Mail.Tests;
+            public sealed class Marker;
+            public sealed class DerivedHost : Shared.Testing.HostBase, IAsyncLifetime { public System.Threading.Tasks.ValueTask DisposeAsync() => default; }
+            public class ATests { [Fact] public void Parses() => Assert.Equal(2, Parser.Parse("ab")); }
+            public class BTests { [Fact] public void Parses() => Assert.Equal(1, Parser.Parse("a")); }
+            """);
+        _repo.Commit("base");
+
+        var graph = new ProjectGraphLoader(NullLogger<ProjectGraphLoader>.Instance).Load(_repo.Root);
+        var testProject = graph.Projects.Single(p => p.IsTestProject);
+        using var output = new StringWriter();
+        var (map, passed) = new CoverageRecorder(NullLoggerFactory.Instance)
+            .Record(new RecordRequest(_repo.Root, graph, testProject, new RecordOptions(Parallelism: 1)), output);
+
+        Assert.True(passed, output.ToString());
+        var scope = Assert.Contains(CoverageMap.SetUpScopePrefix, map.Fixtures).Select(id => map.Methods[id]);
+        Assert.Contains(new CoveredMethod("Mail.Setup", "Start"), scope);
+        CoverageMapStore.Write(CoverageMapStore.PathFor(_repo.Root, testProject.Path), map);
+
+        _repo.Replace("src/Mail/Setup.cs", "=> Calls++;", "=> Calls += 2;");
+        var selection = new AnalysisPipeline(NullLoggerFactory.Instance).Run(_repo.Root, "main").Tests.Single();
+
+        // The assembly's setup scope reaches every class, so the whole project runs.
+        Assert.Equal(TestRunMode.All, selection.Mode);
+    }
+
     public void Dispose() => _repo.Dispose();
 }
