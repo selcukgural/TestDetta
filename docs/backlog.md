@@ -343,8 +343,9 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    the report, and the Action's `mode: shadow` with the artifact, are built (as-built section of the
    design); every classification time limit is an option and an Action input, with defaults, under an
    overall budget (45 min) that never touches the full run. Since the owner's decisions of 2026-10-07:
-   TestDetta makes no network call in shadow mode, which shows decisions only for the
-   classes the job ran (nothing of the selection before the full run ends), runs the team's own `dotnet test`
+   TestDetta makes no network call in shadow mode, which showed decisions only for the classes the job ran
+   until 2026-10-24 (since then every decision, compared where it ran; nothing of the selection before the
+   full run ends), runs the team's own `dotnet test`
    command as given (a solution, a project, a directory or no argument; otherwise per project, with the
    reason in the report), and reports the whole run's wall time. Review fixes (2026-10-07, schema 3): the
    team's results directory and files are never touched (reports are read in place and copied); fail-open

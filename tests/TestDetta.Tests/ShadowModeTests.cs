@@ -231,7 +231,7 @@ public sealed class ShadowModeTests : IDisposable
 
         Assert.True(exit == 3, log.Text);
         var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"))).RootElement;
-        Assert.Equal(4, report.GetProperty("schema").GetInt32());
+        Assert.Equal(5, report.GetProperty("schema").GetInt32());
         var run = report.GetProperty("run");
         Assert.Equal("verbatim", run.GetProperty("kind").GetString());
         Assert.Equal("dotnet test --logger trx", run.GetProperty("command").GetString());
@@ -263,7 +263,7 @@ public sealed class ShadowModeTests : IDisposable
         Assert.StartsWith("Would have run 1 of 5 test classes", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
         Assert.Contains("the whole test run took", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
 
-        // Nothing of the selection before the full run has ended; the analysis's log comes after it, since everything ran.
+        // Nothing of the selection before the full run has ended; the analysis's log comes after it.
         var ended = log.Lines.FindIndex(static l => l.Contains("TestRunner: dotnet test", StringComparison.Ordinal) && l.Contains(" exited with ", StringComparison.Ordinal));
         Assert.True(ended > 0, log.Text);
         Assert.DoesNotContain(log.Lines.Take(ended), static l => RevealsSelection(l));
@@ -273,7 +273,7 @@ public sealed class ShadowModeTests : IDisposable
     }
 
     [Fact]
-    public void A_single_project_runs_as_given_and_a_partial_filter_shows_decisions_only_for_the_classes_that_ran()
+    public void A_single_project_runs_as_given_and_a_partial_filter_still_shows_the_decisions_of_the_classes_left_out()
     {
         WriteMap(new()
         {
@@ -299,8 +299,15 @@ public sealed class ShadowModeTests : IDisposable
         var project = report.GetProperty("projects").EnumerateArray().Single();
         var classes = project.GetProperty("classes").EnumerateArray().Select(static c => c.GetProperty("name").GetString()).ToList();
         Assert.Equal(["Shop.Tests.DiscountTests", "Shop.Tests.FlakyTests", "Shop.Tests.TaxTests"], classes);
-        Assert.Equal(["Shop.Tests.BrokenTests"], project.GetProperty("notRun").EnumerateArray().Select(static c => c.GetString()));
-        Assert.False(project.TryGetProperty("estimatedFullSeconds", out _));
+        var notRun = project.GetProperty("notRun").EnumerateArray().Single();
+        Assert.Equal("Shop.Tests.BrokenTests", notRun.GetProperty("name").GetString());
+        Assert.False(notRun.GetProperty("selected").GetBoolean());
+        Assert.False(string.IsNullOrEmpty(notRun.GetProperty("evidence").GetString()));
+
+        // The project's own decision, whatever ran: no class the map knows runs the changed member.
+        Assert.Equal("skipped", project.GetProperty("mode").GetString());
+        Assert.False(project.TryGetProperty("partial", out _));
+        Assert.False(project.TryGetProperty("notCompared", out _));
         var totals = report.GetProperty("totals");
         Assert.Equal(3, totals.GetProperty("classes").GetInt32());
         Assert.Equal(1, totals.GetProperty("notRunClasses").GetInt32());
@@ -315,7 +322,7 @@ public sealed class ShadowModeTests : IDisposable
     }
 
     [Fact]
-    public void A_filter_that_matches_nothing_reveals_no_decision_and_shadow_mode_reads_only_console_settings()
+    public void A_filter_that_matches_nothing_still_shows_every_decision_and_shadow_mode_reads_only_console_settings()
     {
         WriteMap(new()
         {
@@ -349,18 +356,26 @@ public sealed class ShadowModeTests : IDisposable
         var json = File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"));
         var report = JsonDocument.Parse(json).RootElement;
         var project = report.GetProperty("projects").EnumerateArray().Single();
-        Assert.Equal("not-shown", project.GetProperty("mode").GetString());
+        Assert.Equal("skipped", project.GetProperty("mode").GetString());
+        Assert.Equal("it wrote no test report in this run", project.GetProperty("notCompared").GetString());
         Assert.Empty(project.GetProperty("classes").EnumerateArray());
-        Assert.Equal(4, project.GetProperty("notRun").GetArrayLength());
+        var notRun = project.GetProperty("notRun").EnumerateArray().ToList();
+        Assert.Equal(4, notRun.Count);
+        Assert.All(notRun, static c =>
+        {
+            Assert.False(c.GetProperty("selected").GetBoolean());
+            Assert.False(string.IsNullOrEmpty(c.GetProperty("decision").GetString()));
+            Assert.False(string.IsNullOrEmpty(c.GetProperty("evidence").GetString()));
+        });
+
+        // Nothing ran, so nothing is compared.
         Assert.Equal(0, report.GetProperty("totals").GetProperty("classes").GetInt32());
         Assert.Equal(0, report.GetProperty("totals").GetProperty("selectedClasses").GetInt32());
-        Assert.DoesNotContain("\"decision\"", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"evidence\"", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("filtered", json, StringComparison.Ordinal);
+        Assert.Equal(4, report.GetProperty("totals").GetProperty("notRunClasses").GetInt32());
 
-        // Neither the console nor the logs say anything about the selection, before or after the run.
-        Assert.DoesNotContain(log.Lines, static l => RevealsSelection(l));
-        Assert.Contains("the analysis's log is not shown", log.Text, StringComparison.Ordinal);
+        // The analysis's log follows the run, whatever ran.
+        Assert.Contains(log.Lines, static l => l.Contains("] TestSelector:", StringComparison.Ordinal));
+        Assert.DoesNotContain("log is not shown", log.Text, StringComparison.Ordinal);
 
         // Nor does td test without --shadow: no license, no refresh, nothing about the repository.
         Assert.Equal(0, CliApp.Run(["test", "--dry-run", "--repo", _repo.Root, "--base", "HEAD"], new StringWriter(), new StringWriter(), host));
@@ -442,11 +457,11 @@ public sealed class ShadowModeTests : IDisposable
         var project = report.GetProperty("projects").EnumerateArray().Single();
         Assert.True(project.GetProperty("notBuilt").GetBoolean());
         Assert.False(project.GetProperty("reported").GetBoolean());
-        Assert.StartsWith("no test report: the project was not built before the run (tests/Shop.Tests/bin/Debug/net10.0 did not exist)", project.GetProperty("reason").GetString(), StringComparison.Ordinal);
-        Assert.EndsWith("build first and run dotnet test --no-build", project.GetProperty("reason").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith("no test report: the project was not built before the run (tests/Shop.Tests/bin/Debug/net10.0 did not exist)", project.GetProperty("notCompared").GetString(), StringComparison.Ordinal);
+        Assert.EndsWith("build first and run dotnet test --no-build", project.GetProperty("notCompared").GetString(), StringComparison.Ordinal);
         Assert.Equal(1, report.GetProperty("totals").GetProperty("notBuiltProjects").GetInt32());
         Assert.Contains("1 testing-platform project(s) were not built before the run", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
-        Assert.Contains("tests/Shop.Tests/Shop.Tests.csproj: not shown, no test report: the project was not built before the run", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Contains("; not compared: no test report: the project was not built before the run", stdout.ToString(), StringComparison.Ordinal);
         Assert.Contains("- `tests/Shop.Tests/Shop.Tests.csproj`: no test report: the project was not built before the run", File.ReadAllText(summary), StringComparison.Ordinal);
     }
 
@@ -899,11 +914,18 @@ public sealed class ShadowReportTests
     }
 
     [Fact]
-    public void A_project_none_of_whose_tests_ran_shows_no_decision_anywhere()
+    public void A_project_none_of_whose_tests_ran_shows_its_decisions_without_comparing_them()
     {
-        var ran = Project("filtered", 10, ("A", true, 2, false), ("B", false, 5, false)) with { NotRun = ["C"] };
-        var hidden = new ShadowProject("tests/B.Tests/B.Tests.csproj", ShadowProject.NotShown, "no test of it ran in this job", 0, 1, true, []) { NotRun = ["Secret.Tests.Kept"] };
-        var result = Result(ran, hidden) with { Run = new ShadowRunInfo(ShadowRunKind.Verbatim, "dotnet test Shop.slnx --logger trx", null, 12, 0) };
+        var ran = Project("filtered", 10, ("A", true, 2, false), ("B", false, 5, false)) with
+        {
+            NotRun = [new ShadowClass("C", true, "Coverage", "ran Cart.Add", null, false)],
+        };
+        var notCompared = new ShadowProject("tests/B.Tests/B.Tests.csproj", "skipped", "no test class runs or references the changed code", 0, 1, true, [])
+        {
+            NotRun = [new ShadowClass("B.Tests.Kept", false, "Skipped", "no path from the change", null, false)],
+            NotCompared = "no test of it ran in this job",
+        };
+        var result = Result(ran, notCompared) with { Run = new ShadowRunInfo(ShadowRunKind.Verbatim, "dotnet test Shop.slnx --logger trx", null, 12, 0) };
         var path = Path.Combine(Path.GetTempPath(), "testdetta-shadow-" + Guid.NewGuid().ToString("N") + ".json");
         try
         {
@@ -915,9 +937,18 @@ public sealed class ShadowReportTests
             Assert.Equal(10, totals.GetProperty("fullSeconds").GetDouble());
             Assert.Equal(12, totals.GetProperty("wallSeconds").GetDouble());
             var second = report.GetProperty("projects")[1];
-            Assert.Equal("not-shown", second.GetProperty("mode").GetString());
+            Assert.Equal("skipped", second.GetProperty("mode").GetString());
+            Assert.Equal("no test class runs or references the changed code", second.GetProperty("reason").GetString());
+            Assert.Equal("no test of it ran in this job", second.GetProperty("notCompared").GetString());
+            Assert.False(second.TryGetProperty("partial", out _));
             Assert.Empty(second.GetProperty("classes").EnumerateArray());
             Assert.Equal(0, second.GetProperty("selectedSeconds").GetDouble());
+            var kept = second.GetProperty("notRun")[0];
+            Assert.Equal("B.Tests.Kept", kept.GetProperty("name").GetString());
+            Assert.False(kept.GetProperty("selected").GetBoolean());
+            Assert.Equal("Skipped", kept.GetProperty("decision").GetString());
+            Assert.Equal("no path from the change", kept.GetProperty("evidence").GetString());
+            Assert.False(report.GetProperty("projects")[0].TryGetProperty("notCompared", out _));
             Assert.Equal("verbatim", report.GetProperty("run").GetProperty("kind").GetString());
         }
         finally
@@ -927,14 +958,16 @@ public sealed class ShadowReportTests
 
         var console = new StringWriter();
         ShadowReport.WriteConsole(result, console);
-        Assert.Contains("  tests/B.Tests/B.Tests.csproj: not shown, no test of it ran in this job", console.ToString(), StringComparison.Ordinal);
-        Assert.Contains("1 class(es) did not run in this job", console.ToString(), StringComparison.Ordinal);
+        Assert.Contains(
+            "  tests/B.Tests/B.Tests.csproj: skipped (no test class runs or references the changed code); not compared: no test of it ran in this job; 1 class(es) did not run in this job, 0 of them selected",
+            console.ToString(), StringComparison.Ordinal);
+        Assert.Contains("(reason); 1 class(es) did not run in this job, 1 of them selected", console.ToString(), StringComparison.Ordinal);
         Assert.Contains("the whole test run took 12.0 s", result.Verdict(), StringComparison.Ordinal);
         Assert.Contains("2 class(es) the selection knows did not run in this job", result.Verdict(), StringComparison.Ordinal);
         var markdown = WriteMarkdown(result);
-        Assert.Contains("| `tests/B.Tests/B.Tests.csproj` | not shown: `no test of it ran in this job` |", markdown, StringComparison.Ordinal);
+        Assert.Contains("| `tests/B.Tests/B.Tests.csproj` | skipped | none: `no test of it ran in this job` | 1 (0 selected) |", markdown, StringComparison.Ordinal);
+        Assert.Contains("| `tests/A.Tests/A.Tests.csproj` | filtered | 1 of 2 | 1 (1 selected) |", markdown, StringComparison.Ordinal);
         Assert.Contains("Ran your own command as given, adding only a test report per project: `dotnet test Shop.slnx --logger trx`", markdown, StringComparison.Ordinal);
-        Assert.DoesNotContain("Secret.Tests.Kept", console + markdown, StringComparison.Ordinal);
     }
 
     [Fact]
