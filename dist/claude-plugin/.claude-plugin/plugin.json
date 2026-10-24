@@ -3,9 +3,11 @@
   "description": "Run only the .NET tests a change can affect: the agent uses td instead of a full dotnet test, and the tests a session's changes reach run before it hands back",
   "version": "0.1.0",
   "author": {
-    "name": "TestDetta",
-    "url": "https://github.com/TestDetta"
+    "name": "Selçuk Güral",
+    "url": "https://github.com/selcukgural"
   },
-  "homepage": "https://github.com/TestDetta",
+  "homepage": "https://testdetta.com",
+  "repository": "https://github.com/selcukgural/TestDetta",
+  "license": "Apache-2.0",
   "keywords": ["dotnet", "testing", "test-impact-analysis", "csharp"]
 }

@@ -55,6 +55,6 @@ ones to look at.
 
 ## The Stop hook
 
-This plugin also runs `td test` when you finish a turn, if the working tree changed since the last run. A failure
+Installed as the Claude Code plugin, TestDetta also runs `td test` when you finish a turn, if the working tree changed since the last run. A failure
 comes back to you as a short excerpt with the path of the full log; fix it, or tell the user why it is not caused
 by your change. The user can turn the hook off with `TESTDETTA_AGENT_HOOK=off`.
