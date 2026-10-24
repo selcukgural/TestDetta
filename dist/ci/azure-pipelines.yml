@@ -1,0 +1,67 @@
+# TestDetta on Azure DevOps, Windows agent (docs/ci.md).
+#
+# Copy dist/ci/testdetta.ps1 into your repository as build/testdetta.ps1, then merge these steps into your
+# pipeline. The default branch records coverage maps; pull requests run in shadow mode first: every test runs as
+# today, and the shadow report says what the selection would have left out. Once the reports show no misses, set
+# TESTDETTA_PR_MODE to test, and pull requests run only the affected tests.
+#
+# Maps live in a pipeline cache here (Microsoft-hosted agents keep no files). On self-hosted agents, point
+# TESTDETTA_MAPS at a share every agent reaches (\\fileserver\testdetta-maps\<repository>) and drop the Cache@2 step.
+
+trigger:
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  TESTDETTA_MAPS: $(Pipeline.Workspace)\testdetta-maps
+  TESTDETTA_PR_MODE: shadow          # shadow while you evaluate TestDetta, then test
+  TESTDETTA_VERSION: 0.5.1           # pin it; raise it on purpose
+
+steps:
+  - checkout: self
+    fetchDepth: 0                    # full history: TestDetta compares with the merge base
+
+  # td runs on .NET 10; your tests keep the SDK your global.json names.
+  - task: UseDotNet@2
+    inputs:
+      packageType: sdk
+      version: 10.0.x
+
+  # The newest maps of the default branch: the key never matches, so restoreKeys restores the latest cache and the
+  # job saves a new one. Pull requests read the target branch's cache.
+  - task: Cache@2
+    displayName: Restore TestDetta coverage maps
+    inputs:
+      key: '"testdetta-maps" | "$(Build.SourceVersion)"'
+      restoreKeys: '"testdetta-maps"'
+      path: $(TESTDETTA_MAPS)
+
+  - task: PowerShell@2
+    displayName: TestDetta record (default branch)
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    inputs:
+      filePath: build/testdetta.ps1
+      arguments: -Mode record -KeepMaps 60 -- -c Release
+
+  - task: PowerShell@2
+    displayName: TestDetta (pull request)
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    inputs:
+      filePath: build/testdetta.ps1
+      arguments: -Mode $(TESTDETTA_PR_MODE) -SummaryFile $(Agent.TempDirectory)\testdetta.md -- -c Release
+
+  # The shadow report, for the evaluation: what the selection would have run, and any test it would have missed.
+  - task: PublishPipelineArtifact@1
+    displayName: Keep the TestDetta shadow report
+    condition: and(always(), eq(variables['Build.Reason'], 'PullRequest'), eq(variables['TESTDETTA_PR_MODE'], 'shadow'))
+    continueOnError: true
+    inputs:
+      targetPath: .testdetta/testdetta-shadow.json
+      artifact: testdetta-shadow-$(System.JobAttempt)
