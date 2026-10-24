@@ -1,4 +1,4 @@
-<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: f34791d98f82 -->
+<!-- title: Uyumluluk; layout: docs; description: {{name}}'nın desteklediği test framework'leri, runner'lar, diller, işletim sistemleri ve CI sistemleri.; source: 6641dca807dc -->
 <h1>Uyumluluk</h1>
 <p class="lead">{{name}}'nın neye ihtiyaç duyduğu ve neyle test edildiği. Bu tabloların dışında kalan bir şey desteklenmiyor demek değildir, ancak uçtan uca test edilmemiştir.</p>
 
@@ -8,7 +8,7 @@
   <tbody>
     <tr><td>.NET SDK</td><td>{{name}}'nın kendisini .NET 10 SDK çalıştırır. Testleriniz, deponuzun zaten kullandığı SDK ve runner ile çalışmaya devam eder.</td></tr>
     <tr><td>Git geçmişi</td><td>Merge base'in bulunabilmesi için branch'inizin ve hedef branch'inin tam geçmişi. Shallow clone'larla çalışmaz.</td></tr>
-    <tr><td>İşletim sistemi</td><td>Linux x64 (bizim CI'ımız) ve macOS arm64 (değerlendirme) üzerinde test edildi. Diğer mimariler test edilmedi, Windows da henüz test edilmedi.</td></tr>
+    <tr><td>İşletim sistemi</td><td>Windows x64 ve Linux x64 (CI'ımız her pull request'te tüm test paketini ikisinde de çalıştırır) ve macOS arm64 (değerlendirme). Diğer mimariler test edilmedi.</td></tr>
     <tr><td>Eski tip proje dosyaları</td><td><code>packages.config</code> kullanan SDK olmayan <code>.csproj</code> dosyaları tam MSBuild ile geri yüklenir ve derlenir: Windows'ta Visual Studio ya da Build Tools (<code>vswhere</code> ile bulunur), macOS ve Linux'ta Mono'nun <code>msbuild</code>'i, ya da <code>TESTDETTA_MSBUILD</code>'in gösterdiği çalıştırılabilir dosya. Testleri, derlenmiş assembly'den <code>vstest.console.exe</code>'nin motoru olan VSTest ile çalışır. macOS'ta Mono ile test edildi.</td></tr>
   </tbody>
 </table>
@@ -35,7 +35,7 @@
     <tr><td>Test edilen kod: .NET Framework 3.5 ve üzeri, .NET Standard 1.0 ve üzeri, .NET Core, .NET 5 ve üzeri</td><td>Destekleniyor; .NET Framework 4.8 testleri altındaki bir .NET Framework 3.5 kütüphanesi test edildi</td></tr>
     <tr><td>.NET 8 ve üzerindeki test projeleri</td><td>Test edildi, değerlendirme korpusunun tamamı</td></tr>
     <tr><td>.NET 6 ve 7'deki test projeleri</td><td>.NET 6, xUnit v2, NUnit 3 ve MSTest 3 ile, Microsoft.NET.Test.Sdk 17.13 (onlar için son sürüm) üzerinde test edildi</td></tr>
-    <tr><td>.NET Framework 4.6.2 ile 4.8.1 arasındaki test projeleri</td><td>macOS'ta Mono altında xUnit v2 (4.6.2 ve 4.8) ve MSTest 1 ve 3 (4.8) ile test edildi; Windows henüz test edilmedi. NUnit 2 adaptörü henüz desteklenmiyor.</td></tr>
+    <tr><td>.NET Framework 4.6.2 ile 4.8.1 arasındaki test projeleri</td><td>Windows'ta xUnit v2 (4.6.2 ve 4.8) ve MSTest 1 ve 3 (4.8) ile, SDK olmayan eski tip çözümler dahil test edildi; aynıları macOS'ta Mono altında da. NUnit 2 adaptörü henüz desteklenmiyor.</td></tr>
     <tr><td>.NET Framework 3.5 ile 4.6.1 arasındaki test projeleri</td><td>Desteklenmiyor: güncel test platformları .NET Framework 4.6.2 gerektirir</td></tr>
   </tbody>
 </table>
