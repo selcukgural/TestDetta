@@ -30,14 +30,8 @@ internal static class AssemblyFixtures
         foreach (var path in testAssemblies)
         {
             // The fixture and its bases live in the other assemblies of the output, as for instrumenting.
-            using var resolver = new DefaultAssemblyResolver();
-            resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
-            foreach (var directory in AssemblyInstrumenter.SharedFrameworkDirectories.Value)
-            {
-                resolver.AddSearchDirectory(directory);
-            }
-
-            using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, AssemblyResolver = resolver });
+            using var resolver = new OutputAssemblyResolver(path);
+            using var module = ModuleDefinition.ReadModule(path, resolver.Parameters());
             foreach (var attribute in module.Assembly.CustomAttributes)
             {
                 if (attribute.AttributeType.FullName != "Xunit.AssemblyFixtureAttribute"

@@ -246,20 +246,14 @@ internal static class MutationInjector
     /// <param name="guarded">True to put each mutant behind the switch.</param>
     private static Dictionary<int, int> RewriteOne(string path, IReadOnlyList<SchemaTarget> targets, bool guarded)
     {
-        using var resolver = new DefaultAssemblyResolver();
-        resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
-
         // Writing resolves the types of constants, such as an ASP.NET Core enum as a default
         // parameter value (FastEndpoints), whose assemblies live in the shared framework.
-        foreach (var directory in AssemblyInstrumenter.SharedFrameworkDirectories.Value)
-        {
-            resolver.AddSearchDirectory(directory);
-        }
+        using var resolver = new OutputAssemblyResolver(path);
 
         // A .pdb left next to a rewritten assembly no longer matches it, and tools that read symbols
         // (PublicApiGenerator in approval tests) then fail for every mutant, so it is rewritten too.
         var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
-        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, ReadSymbols = hasSymbols, AssemblyResolver = resolver });
+        using var module = ModuleDefinition.ReadModule(path, resolver.Parameters(hasSymbols));
 
         var exception = new TypeReference("System", nameof(InvalidOperationException), module, module.TypeSystem.CoreLibrary);
         var constructor = new MethodReference(".ctor", module.TypeSystem.Void, exception) { HasThis = true };
