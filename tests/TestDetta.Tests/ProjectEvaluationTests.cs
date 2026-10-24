@@ -289,7 +289,7 @@ public sealed class ProjectEvaluationTests : IDisposable
         }
         finally
         {
-            Directory.Delete(copy, recursive: true);
+            Paths.DeleteTree(copy);
         }
     }
 

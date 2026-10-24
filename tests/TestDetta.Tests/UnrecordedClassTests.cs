@@ -430,7 +430,7 @@ public sealed class UnrecordedClassTests : IDisposable
         _repo.Dispose();
         if (Directory.Exists(_directory))
         {
-            Directory.Delete(_directory, recursive: true);
+            Paths.DeleteTree(_directory);
         }
     }
 }

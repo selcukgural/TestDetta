@@ -89,7 +89,7 @@ public sealed class UserFilterTests : IDisposable
         Assert.Null(invocation.UnfilteredArguments);
     }
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 
     private TestInvocation Build(ProjectNode project, IReadOnlyList<string> userArguments)
     {

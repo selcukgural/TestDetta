@@ -82,7 +82,7 @@ internal static partial class MapDirectory
         var folder = Path.Combine(mapsDir, head);
         if (Directory.Exists(folder))
         {
-            Directory.Delete(folder, recursive: true);
+            Paths.DeleteTree(folder);
         }
 
         Directory.Move(temporary, folder);

@@ -207,7 +207,7 @@ internal sealed partial class TestExecutor(ExecutionContext context, ILogger log
                 // tests and failures to this run.
                 if (Directory.Exists(results))
                 {
-                    Directory.Delete(results, recursive: true);
+                    Paths.DeleteTree(results);
                 }
 
                 var reportName = $"testdetta-{id:000}-{label}.trx";

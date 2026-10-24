@@ -149,5 +149,5 @@ public sealed class MutantSchemaTests : IDisposable
         }
     }
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 }

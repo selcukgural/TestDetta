@@ -139,5 +139,5 @@ public sealed class ImpactAnalyzerTests : IDisposable
             """);
     }
 
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_root);
 }

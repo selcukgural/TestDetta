@@ -17,7 +17,7 @@ public sealed class TeamTestConfigurationTests : IDisposable
 
     public TeamTestConfigurationTests() => Directory.CreateDirectory(_directory);
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 
     [Fact]
     public void Recording_adds_its_settings_to_a_copy_of_the_teams_run_settings()

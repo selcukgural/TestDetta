@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -54,5 +55,5 @@ public sealed class GitRepoFixture : IDisposable
         Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)}: {process.StandardError.ReadToEnd()}");
     }
 
-    public void Dispose() => Directory.Delete(Root, recursive: true);
+    public void Dispose() => Paths.DeleteTree(Root);
 }

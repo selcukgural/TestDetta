@@ -781,7 +781,7 @@ public sealed class ShadowReportTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            Paths.DeleteTree(directory);
         }
     }
 
@@ -802,7 +802,7 @@ public sealed class ShadowReportTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            Paths.DeleteTree(directory);
         }
     }
 
@@ -880,7 +880,7 @@ public sealed class ShadowReportTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            Paths.DeleteTree(directory);
         }
     }
 

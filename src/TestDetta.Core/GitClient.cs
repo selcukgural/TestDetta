@@ -148,7 +148,7 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
             var gitdir = Path.Combine(entry, "gitdir");
             if (!File.Exists(gitdir) || Paths.ResolveLinks(File.ReadAllText(gitdir).Trim()) == target)
             {
-                Directory.Delete(entry, recursive: true);
+                Paths.DeleteTree(entry);
             }
         }
     }
@@ -201,7 +201,7 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
         {
             if (Directory.Exists(path))
             {
-                Directory.Delete(path, recursive: true);
+                Paths.DeleteTree(path);
             }
 
             PruneWorktrees(repoRoot);

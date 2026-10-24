@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using TestDetta.Coverage;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -60,7 +61,7 @@ public sealed class DotnetProcessTests : IDisposable
     {
         if (Directory.Exists(_directory))
         {
-            Directory.Delete(_directory, recursive: true);
+            Paths.DeleteTree(_directory);
         }
     }
 }

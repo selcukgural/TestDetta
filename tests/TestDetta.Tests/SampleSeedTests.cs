@@ -1,4 +1,5 @@
 using TestDetta.Eval;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -11,7 +12,7 @@ public sealed class SampleSeedTests : IDisposable
 {
     private readonly string _directory = Directory.CreateTempSubdirectory("testdetta-seed-").FullName;
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 
     [Fact]
     public void A_run_draws_a_new_seed_unless_one_is_given()

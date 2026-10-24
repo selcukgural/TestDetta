@@ -309,7 +309,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         {
             deployment?.Dispose();
             instrumenter.Restore(instrumentation);
-            Directory.Delete(work, recursive: true);
+            Paths.DeleteTree(work);
         }
     }
 
@@ -914,7 +914,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
 
         try
         {
-            Directory.Delete(temporary, recursive: true);
+            Paths.DeleteTree(temporary);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

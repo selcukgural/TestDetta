@@ -277,7 +277,7 @@ public sealed class AuditUnitTests
         }
         finally
         {
-            Directory.Delete(parent, recursive: true);
+            Paths.DeleteTree(parent);
         }
     }
 
@@ -301,8 +301,8 @@ public sealed class AuditUnitTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
-            Directory.Delete(parent, recursive: true);
+            Paths.DeleteTree(root);
+            Paths.DeleteTree(parent);
         }
     }
 
@@ -338,7 +338,7 @@ public sealed class AuditUnitTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            Paths.DeleteTree(folder);
         }
     }
 
@@ -369,7 +369,7 @@ public sealed class AuditUnitTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            Paths.DeleteTree(folder);
         }
     }
 
@@ -395,7 +395,7 @@ public sealed class AuditUnitTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Paths.DeleteTree(root);
         }
     }
 
@@ -528,7 +528,7 @@ public sealed class AuditUnitTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            Paths.DeleteTree(folder);
         }
 
         Assert.Equal("the test host crashed", TestDetta.Coverage.TestRunCompleteness.Problem(1, crashLine: true, reportProblem: null, failedClasses: 3));
@@ -570,7 +570,7 @@ public sealed class AuditUnitTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            Paths.DeleteTree(folder);
         }
     }
 

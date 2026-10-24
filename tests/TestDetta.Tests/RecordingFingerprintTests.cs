@@ -17,7 +17,7 @@ public sealed class RecordingFingerprintTests : IDisposable
 
     public RecordingFingerprintTests() => Directory.CreateDirectory(_directory);
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 
     [Fact]
     public void Real_recorder_reaches_graph_and_map_code_but_not_selection()

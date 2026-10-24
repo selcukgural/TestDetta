@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using TestDetta.Core;
 
 namespace TestDetta.Mutants;
 
@@ -74,7 +75,7 @@ internal static class TreeCopy
         }
     }
 
-    /// <summary>Deletes a copy, read-only files included (git objects are read-only).</summary>
+    /// <summary>Deletes a copy, read-only files included (git objects are read-only); a missing copy is left alone.</summary>
     /// <param name="copy">The copy.</param>
     public static void Remove(string copy)
     {
@@ -83,11 +84,6 @@ internal static class TreeCopy
             return;
         }
 
-        foreach (var file in Directory.EnumerateFiles(copy, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }))
-        {
-            File.SetAttributes(file, FileAttributes.Normal);
-        }
-
-        Directory.Delete(copy, recursive: true);
+        Paths.DeleteTree(copy);
     }
 }

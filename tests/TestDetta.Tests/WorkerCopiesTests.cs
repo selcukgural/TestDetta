@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using TestDetta.Eval;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -86,7 +87,7 @@ public sealed class WorkerCopiesTests : IDisposable
                 File.SetAttributes(file, FileAttributes.Normal);
             }
 
-            Directory.Delete(_root, recursive: true);
+            Paths.DeleteTree(_root);
         }
     }
 }

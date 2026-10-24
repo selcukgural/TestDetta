@@ -118,7 +118,7 @@ public sealed class EvalHangTests : IDisposable
         _repo.Dispose();
         if (Directory.Exists(_output))
         {
-            Directory.Delete(_output, recursive: true);
+            Paths.DeleteTree(_output);
         }
     }
 }

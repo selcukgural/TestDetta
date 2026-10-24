@@ -1,4 +1,5 @@
 using TestDetta.Eval;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -61,5 +62,5 @@ public sealed class BatchHistoryTests : IDisposable
         return path;
     }
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 }

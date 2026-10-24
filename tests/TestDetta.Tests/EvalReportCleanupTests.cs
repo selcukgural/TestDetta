@@ -13,7 +13,7 @@ public sealed class EvalReportCleanupTests : IDisposable
     {
         if (Directory.Exists(_directory))
         {
-            Directory.Delete(_directory, recursive: true);
+            Paths.DeleteTree(_directory);
         }
     }
 
