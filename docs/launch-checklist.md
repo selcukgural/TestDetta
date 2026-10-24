@@ -7,10 +7,11 @@ How a release is made: docs/release.md.
 
 ## Open source (owner, 2026-10-24)
 
-- [ ] `LICENSE` (Apache-2.0) at the repository root.
-- [ ] The next release without licensing: `td` reads no license and makes no network call, `td license` is
+- [x] `LICENSE` (Apache-2.0) at the repository root.
+- [x] The next release without licensing (0.4.0): `td` reads no license and makes no network call, `td license` is
       gone, the Action's `license` input is deprecated and ignored (docs/release-notes-unreleased.md).
-- [ ] The source repository public at https://github.com/selcukgural/TestDetta.
+- [x] The source repository public at https://github.com/selcukgural/TestDetta (2026-10-24), with rulesets on `main` and
+      `v*` tags, secret scanning, push protection, CodeQL and private vulnerability reporting; `TestDetta/action` the same.
 - [x] Donations through GitHub Sponsors (https://github.com/sponsors/selcukgural), linked from the README.
 
 ## Distribution
@@ -54,6 +55,12 @@ option and `not-build-inputs` input, #83; an unresolved reference in an item pat
 site and README pinned to it.
 0.3.0 (2026-10-20, every class of an xUnit collection uses its collection fixture, #85; map format 4, so maps recorded
 by 0.2.x are ignored until recorded again): `TestDetta/action` at `e596523` with tags `v0.3.0` and `v0`, GitHub release
+created, the site and README pinned to it.
+v0.3.1 (tagged 2026-10-21) was never published: its release run failed while Actions could not run on the private
+repository; 0.4.0 carries its fix.
+0.4.0 (2026-10-24, free and open source under Apache-2.0: licensing removed, `td` makes no network call; an xUnit v3
+assembly fixture from a shared library serves every class, #89; map format 5, so maps recorded by 0.3.0 are ignored until
+recorded again; a Claude Code plugin, #90): `TestDetta/action` at `da0e18e` with tags `v0.4.0` and `v0`, GitHub release
 created, the site and README pinned to it.
 
 ## Later (known, not blocking)
