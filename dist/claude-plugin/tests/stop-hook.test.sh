@@ -70,7 +70,9 @@ run_hook() {
   out="$(printf '{"session_id":"s","stop_hook_active":%s}' "$2" \
     | CLAUDE_PROJECT_DIR="$1" PATH="${HOOK_PATH:-$work/bin:$PATH}" bash "$hook" 2>"$work/err")"
   code=$?
-  err="$(cat "$work/err")"
+  # bash warns at start-up when LC_ALL names a locale the machine lacks (the quick CI job sets tr_TR.UTF-8 on a
+  # runner without it); that is the environment talking, not the hook.
+  err="$(grep -v 'warning: setlocale: ' "$work/err" || true)"
   calls="$(grep -c . "$FAKE_TD_CALLS")"
 }
 
