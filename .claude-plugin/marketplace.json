@@ -1,0 +1,21 @@
+{
+  "name": "testdetta",
+  "description": "TestDetta for AI coding agents: run only the .NET tests a change can affect",
+  "owner": {
+    "name": "Selçuk Güral",
+    "url": "https://github.com/selcukgural"
+  },
+  "plugins": [
+    {
+      "name": "testdetta",
+      "description": "Agents run td test instead of a full dotnet test, and the tests a session's changes can affect run before the agent hands back",
+      "source": "./dist/claude-plugin",
+      "version": "0.1.0",
+      "category": "testing",
+      "tags": ["dotnet", "testing", "test-impact-analysis", "csharp"],
+      "homepage": "https://testdetta.com",
+      "repository": "https://github.com/selcukgural/TestDetta",
+      "license": "Apache-2.0"
+    }
+  ]
+}

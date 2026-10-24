@@ -11,6 +11,31 @@ A Claude Code plugin that lets the agent run only the .NET tests its changes can
 
 It needs the `td` tool (`dotnet tool install -g TestDetta`).
 
+## Install
+
+In Claude Code (2.1.275 or later), one step:
+
+```
+/plugin install testdetta --marketplace selcukgural/TestDetta
+```
+
+On earlier versions, add the marketplace first:
+
+```
+/plugin marketplace add selcukgural/TestDetta
+/plugin install testdetta@testdetta
+```
+
+`/plugin update testdetta@testdetta` takes a newer version. For a whole team, add the marketplace and the plugin to
+the repository's `.claude/settings.json` (`extraKnownMarketplaces` and `enabledPlugins`), so everyone who opens it
+is offered the plugin.
+
+### Other agents
+
+The skill follows the open Agent Skills format, so agents that read `SKILL.md` folders can use it; the Stop hook is
+Claude Code's own. For Codex, copy [`skills/testdetta`](skills/testdetta) into `~/.codex/skills/testdetta` (or
+`$CODEX_HOME/skills`) and restart Codex.
+
 ## Settings
 
 Environment variables, e.g. under `env` in `.claude/settings.json`:
@@ -41,5 +66,9 @@ bash dist/claude-plugin/tests/stop-hook.test.sh # hook tests, against a fake td 
 
 The icon is `brand/social/github-avatar.svg` rendered at 1024 px (`rsvg-convert -w 1024 -h 1024`).
 
-Not published yet. Customers will install it from a public marketplace repository, like the action is copied to
-`TestDetta/action` (docs/release.md); that repository and its `marketplace.json` come with the first release.
+## Releasing
+
+The marketplace is this repository: [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json) at its
+root lists the plugin from `dist/claude-plugin`, so what is on `main` is what users install. For a new version, raise
+`version` in both `plugin.json` and the marketplace entry (`claude plugin validate .` checks they agree), merge, and
+tag it with `claude plugin tag dist/claude-plugin` (`testdetta--v<version>`). Users get it with `/plugin update`.

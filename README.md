@@ -73,8 +73,12 @@ Jenkins, Azure DevOps and Bitbucket: [Other CI systems](https://testdetta.com/do
 
 ### Claude Code
 
-[`dist/claude-plugin`](dist/claude-plugin) is a Claude Code plugin: agents run `td test` instead of a full
+A Claude Code plugin ([`dist/claude-plugin`](dist/claude-plugin)): agents run `td test` instead of a full
 `dotnet test`, and the affected tests run before the agent hands back.
+
+```
+/plugin install testdetta --marketplace selcukgural/TestDetta
+```
 
 ## How it decides
 
