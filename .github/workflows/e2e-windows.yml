@@ -1,7 +1,7 @@
 name: E2E Windows
 
 # End to end on real repositories with .NET Framework test projects, the way a team on Windows agents would run it:
-# the released TestDetta from NuGet, driven by dist/ci/testdetta.ps1. Each repository is cloned shallowly (the
+# TestDetta built from this branch, driven by dist/ci/testdetta.ps1. Each repository is cloned shallowly (the
 # script fetches the history), recorded on its default branch, then changed on a pull request branch so that tests
 # break; test mode runs with Azure DevOps's environment and shadow mode with Jenkins's.
 on:
@@ -63,6 +63,15 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
+
+      # TestDetta from this branch, as the next release would ship it, under a version no release has; the script finds
+      # it already installed in its tools folder.
+      - name: Build TestDetta from this branch
+        shell: pwsh
+        run: |
+          dotnet pack testdetta/src/TestDetta.Cli/TestDetta.Cli.csproj -c Release -o "$env:RUNNER_TEMP\nupkg" --nologo -p:Version=0.0.0-e2e
+          dotnet tool install TestDetta --version 0.0.0-e2e --add-source "$env:RUNNER_TEMP\nupkg" --tool-path "$env:AGENT_TOOLSDIRECTORY\testdetta\0.0.0-e2e"
+          "TESTDETTA_VERSION=0.0.0-e2e" >> $env:GITHUB_ENV
 
       - name: Clone shallowly
         shell: pwsh
