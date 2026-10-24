@@ -71,6 +71,12 @@ every test framework, legacy ones especially. Step 1 (test hosts) is done, see "
   not from TestDetta's own folder: .NET Framework keeps an assembly loaded from two paths as two instances, so test
   classes marked themselves in one while the collector wrote the other's empty results, and Windows recorded no class
   (MSTest always, xUnit v2 when the collector wrote last). .NET and Mono bind both to one instance by name.
+- Every TestDetta assembly has a strong name (`TestDetta.snk`, set in `Directory.Build.props`, 2026-10-24).
+  Recording adds calls to the tracker into the output's third-party assemblies, and .NET Framework refuses to load a
+  strong-named assembly that references one without a strong name: on Windows a net462 test project, whose output
+  holds the signed `System.Runtime.InteropServices.RuntimeInformation` facade, ran no test at all, and so would any
+  project with Newtonsoft.Json, EntityFramework or log4net in its output. The rewritten assemblies' own signatures
+  no longer match, which full-trust .NET Framework does not check (strong-name bypass, on by default).
 - Recording turns test AppDomains off in its run settings (`RunConfiguration/DisableAppDomain`, xUnit
   `AppDomain=denied`, `ShadowCopy=false`); before, xUnit v2 on .NET Framework recorded no class. A tracker
   in a non-default domain still writes its own results file (process id and domain id) at unload and

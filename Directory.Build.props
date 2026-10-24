@@ -24,6 +24,19 @@
     <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 
+  <!--
+    Strong names, for the tracker above all: recording adds calls to it into the output's assemblies, and .NET
+    Framework refuses to load a strong-named assembly (Newtonsoft.Json, EntityFramework, a package's facade) that
+    references one without a strong name, so no test ran. Its friends must be signed for InternalsVisibleTo, and a
+    signed assembly references only signed ones, so every project is signed. The key is public on purpose: a strong
+    name is an identity, not a security boundary. The SDK adds $(PublicKey) to every InternalsVisibleTo.
+  -->
+  <PropertyGroup>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)TestDetta.snk</AssemblyOriginatorKeyFile>
+    <PublicKey>00240000048000009400000006020000002400005253413100040000010001008552625ba4dbbbf1efa09a3b7cb308f65666f186f0f6c49eb2803c17afd2c2ea3c2639d1cfc7b77027326459f247b8fcc4c1463d87e7a5eac8b9d6f6d4b2df5bf5a2d613874aae32efbafa2b5e0d49092574095b09ea093a2b0e681b7e6ce0191fb1d9cbbd93b7e1aea7a73a901fbce4a1342b761c747af72334a72faacf07e2</PublicKey>
+  </PropertyGroup>
+
   <PropertyGroup>
     <IsTestProject Condition="$(MSBuildProjectName.EndsWith('.Tests'))">true</IsTestProject>
   </PropertyGroup>
