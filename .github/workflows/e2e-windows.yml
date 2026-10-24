@@ -48,7 +48,6 @@ jobs:
             powershell: powershell
     env:
       TESTDETTA_VERSION: 0.5.1
-      MAPS: ${{ runner.temp }}\maps
       SCRIPT: ${{ github.workspace }}\testdetta\dist\ci\testdetta.ps1
       SHELL_EXE: ${{ matrix.powershell }}
       PROJECT: ${{ matrix.project }}
@@ -70,7 +69,9 @@ jobs:
         env:
           REPO: ${{ matrix.repo }}
           BRANCH: ${{ matrix.branch }}
-        run: git clone --depth 1 --branch $env:BRANCH "https://github.com/$env:REPO.git" target
+        run: |
+          git clone --depth 1 --branch $env:BRANCH "https://github.com/$env:REPO.git" target
+          "MAPS=$env:RUNNER_TEMP\maps" >> $env:GITHUB_ENV
 
       - name: Record on the default branch
         shell: pwsh
