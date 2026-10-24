@@ -94,6 +94,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         Directory.CreateDirectory(backupDirectory);
         var ownAssemblies = assemblies.Select(static a => Path.GetFileNameWithoutExtension(a)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var coreLibrary = TestHostCoreLibrary(testAssemblies);
+        var netFramework = testAssemblies.Any(RuntimeDeployment.IsNetFramework);
 
         var nested = new List<int>();
         var dataUsers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -111,7 +112,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
                 var before = methods.Count;
                 InstrumentOne(assembly, testAssemblies.Contains(assembly), productAssemblies?.Contains(assembly) == true, new MethodTables(methods, fields, callbacks, ownAssemblies)
                 {
-                    CoreLibrary = coreLibrary, Nested = nested, DataSourceUsers = dataUsers, ExtensionBuckets = extensions,
+                    CoreLibrary = coreLibrary, NetFramework = netFramework, Nested = nested, DataSourceUsers = dataUsers, ExtensionBuckets = extensions,
                     CollectionFixtureUsers = collectionUsers, AssemblyFixtureTypes = assemblyFixtures,
                 });
                 LogInstrumented(assembly, methods.Count - before);
@@ -125,7 +126,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
 
             if (thirdParty is not null)
             {
-                result = result with { ReadsUnseen = WrapThirdPartyReads(thirdParty, backupDirectory, backups, coreLibrary) };
+                result = result with { ReadsUnseen = WrapThirdPartyReads(thirdParty, backupDirectory, backups, coreLibrary, netFramework) };
             }
         }
         catch
@@ -153,7 +154,8 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <param name="backups">Original to backup mapping; updated in place.</param>
     /// <param name="coreLibrary">Version of the test host's core library; see <see cref="AddCoreLibraryReference"/>.</param>
     /// <returns>File names of the assemblies that read files and could not be rewritten, sorted.</returns>
-    private List<string> WrapThirdPartyReads(IReadOnlyList<string> assemblies, string backupDirectory, Dictionary<string, string> backups, Version? coreLibrary)
+    /// <param name="netFramework">True when the output runs on .NET Framework; see <see cref="OutputAssemblyResolver"/>.</param>
+    private List<string> WrapThirdPartyReads(IReadOnlyList<string> assemblies, string backupDirectory, Dictionary<string, string> backups, Version? coreLibrary, bool netFramework)
     {
         var unseen = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var wrapped = 0;
@@ -168,7 +170,7 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
             BackUp(assembly, backupDirectory, backups);
             try
             {
-                WrapReadsOf(assembly, coreLibrary);
+                WrapReadsOf(assembly, coreLibrary, netFramework);
                 wrapped++;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -206,17 +208,13 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     /// <summary>Wraps the file-read calls of one third-party assembly in place; see <see cref="WrapThirdPartyReads"/>.</summary>
     /// <param name="path">Assembly file.</param>
     /// <param name="coreLibrary">Version of the test host's core library.</param>
-    private static void WrapReadsOf(string path, Version? coreLibrary)
+    /// <param name="netFramework">True when the output runs on .NET Framework; see <see cref="OutputAssemblyResolver"/>.</param>
+    private static void WrapReadsOf(string path, Version? coreLibrary, bool netFramework)
     {
-        using var resolver = new DefaultAssemblyResolver();
-        resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
-        foreach (var directory in SharedFrameworkDirectories.Value)
-        {
-            resolver.AddSearchDirectory(directory);
-        }
+        using var resolver = new OutputAssemblyResolver(path, netFramework);
 
         // Symbols stay as they are: a package's PDB only serves a debugger, and a stale one is ignored.
-        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, AssemblyResolver = resolver });
+        using var module = ModuleDefinition.ReadModule(path, resolver.Parameters());
         if ((module.Attributes & ModuleAttributes.ILOnly) == 0)
         {
             throw new NotSupportedException("it holds native code (mixed-mode), which a rewrite would lose");
@@ -301,6 +299,9 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
         /// <summary>Version of the test host's System.Private.CoreLib (<see cref="TestHostCoreLibrary"/>); null when unknown.</summary>
         public Version? CoreLibrary { get; init; }
 
+        /// <summary>True when the output runs on .NET Framework; see <see cref="OutputAssemblyResolver"/>.</summary>
+        public bool NetFramework { get; init; }
+
         /// <summary>Ids of methods compiled from lambdas and local functions; see <see cref="InstrumentationResult.NestedMethods"/>.</summary>
         public List<int> Nested { get; init; } = [];
 
@@ -326,23 +327,10 @@ internal sealed partial class AssemblyInstrumenter(ILogger logger)
     {
         var (methods, fields, callbacks, ownAssemblies) = tables;
         var hasSymbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
-        using var resolver = new DefaultAssemblyResolver();
-        resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
-
-        // Framework assemblies (System.Threading.RateLimiting, Microsoft.AspNetCore.*) live in the
-        // shared framework, not in the test output, and Cecil resolves some of them while writing.
-        foreach (var directory in SharedFrameworkDirectories.Value)
-        {
-            resolver.AddSearchDirectory(directory);
-        }
+        using var resolver = new OutputAssemblyResolver(path, tables.NetFramework);
 
         // InMemory so the file is not locked while it is written back to the same path.
-        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters
-        {
-            InMemory = true,
-            ReadSymbols = hasSymbols,
-            AssemblyResolver = resolver,
-        });
+        using var module = ModuleDefinition.ReadModule(path, resolver.Parameters(hasSymbols));
 
         var tracker = module.ImportReference(typeof(TestDettaTracker));
         AddCoreLibraryReference(module, tables.CoreLibrary);

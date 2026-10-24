@@ -32,22 +32,16 @@ internal static class ExtensionAttributes
         var owners = new Dictionary<string, HashSet<TypeDefinition>>(StringComparer.Ordinal);
         var derived = new Dictionary<TypeDefinition, List<TypeDefinition>>();
         var modules = new List<ModuleDefinition>();
-        var resolvers = new List<DefaultAssemblyResolver>();
+        var resolvers = new List<OutputAssemblyResolver>();
         try
         {
             foreach (var path in testAssemblies)
             {
                 // Telling a test class needs its base types and attributes, which live in the other assemblies of the
                 // output and the shared framework, as for instrumenting.
-                var resolver = new DefaultAssemblyResolver();
+                var resolver = new OutputAssemblyResolver(path);
                 resolvers.Add(resolver);
-                resolver.AddSearchDirectory(Path.GetDirectoryName(path)!);
-                foreach (var directory in AssemblyInstrumenter.SharedFrameworkDirectories.Value)
-                {
-                    resolver.AddSearchDirectory(directory);
-                }
-
-                var module = ModuleDefinition.ReadModule(path, new ReaderParameters { InMemory = true, AssemblyResolver = resolver });
+                var module = ModuleDefinition.ReadModule(path, resolver.Parameters());
                 modules.Add(module);
                 Collect(module, ownAssemblies, isTestClass, owners, derived);
             }
