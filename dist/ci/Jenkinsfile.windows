@@ -1,0 +1,40 @@
+// TestDetta in a declarative multibranch pipeline on a Windows agent (docs/ci.md).
+//
+// Copy dist/ci/testdetta.ps1 into your repository as build/testdetta.ps1. The default branch records coverage
+// maps into a share every agent reaches; pull requests run in shadow mode first (every test runs as today, and the
+// shadow report says what the selection would have left out). Once the reports show no misses, change -Mode shadow
+// to -Mode test, and pull requests run only the affected tests. The script finds the target branch in
+// CHANGE_TARGET and fetches it; TestDetta needs the full history, so the checkout is not shallow.
+pipeline {
+  agent { label 'windows' }
+  environment {
+    TESTDETTA_MAPS = "\\\\fileserver\\testdetta-maps\\${env.JOB_NAME.split('/')[0]}"
+    TESTDETTA_VERSION = '0.5.1'
+  }
+  options { skipDefaultCheckout() }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scmGit(branches: scm.branches, userRemoteConfigs: scm.userRemoteConfigs,
+                        extensions: [cloneOption(shallow: false, depth: 0, noTags: true, reference: '')])
+      }
+    }
+    stage('Record coverage') {
+      when { branch 'main' }
+      steps {
+        powershell '& .\\build\\testdetta.ps1 -Mode record -KeepMaps 60 -- -c Release; exit $LASTEXITCODE'
+      }
+    }
+    stage('Affected tests') {
+      when { changeRequest() }
+      steps {
+        powershell '& .\\build\\testdetta.ps1 -Mode shadow -SummaryFile testdetta.md -- -c Release; exit $LASTEXITCODE'
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: '.testdetta/testdetta-shadow.json, testdetta.md', allowEmptyArchive: true
+        }
+      }
+    }
+  }
+}

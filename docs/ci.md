@@ -117,6 +117,15 @@ steps:
 `TESTDETTA_MAPS` points to a share on self-hosted agents. On Microsoft-hosted agents, sync it with Azure
 Blob storage (see below).
 
+## Windows agents and PowerShell
+
+The examples above use a POSIX shell. On Windows agents, `dist/ci/testdetta.ps1` does the same: copy it into the
+repository (`build/testdetta.ps1`) and run `-Mode record`, `-Mode test` or `-Mode shadow` with `-MapsDir`; everything
+after `--` goes to `dotnet test`. It installs the pinned version into a folder of its own, fetches the full history
+when the clone is shallow, and finds and fetches the pull request's target branch (Azure DevOps, Jenkins, GitLab,
+Bitbucket, GitHub). Windows PowerShell 5.1 and PowerShell 7. Examples: `dist/ci/azure-pipelines.yml` (Microsoft-hosted
+Windows agent, maps in `Cache@2`) and `dist/ci/Jenkinsfile.windows` (maps on a share), both with shadow mode first.
+
 ## Bitbucket Pipelines
 
 ```yaml
