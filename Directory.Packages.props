@@ -10,6 +10,7 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.VisualBasic" Version="5.9.0" />
     <PackageVersion Include="FSharp.Compiler.Service" Version="43.12.402" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
     <PackageVersion Include="Microsoft.TestPlatform.ObjectModel" Version="18.11.0" />
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
