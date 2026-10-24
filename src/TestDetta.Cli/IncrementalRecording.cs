@@ -36,8 +36,7 @@ internal sealed record ProjectStep(ProjectNode Project, StepKind Kind, string Re
 /// <param name="Graph">Projects of the repository at the current commit.</param>
 /// <param name="Settings">Options of <c>td record</c>.</param>
 /// <param name="MaxMapAge">How many first-parent commits the previous map may be behind.</param>
-/// <param name="SelectionLicensed">False when no license covers selection: every project is then recorded in full.</param>
-internal sealed record IncrementalContext(string Root, ProjectGraph Graph, RecordSettings Settings, int MaxMapAge, bool SelectionLicensed)
+internal sealed record IncrementalContext(string Root, ProjectGraph Graph, RecordSettings Settings, int MaxMapAge)
 {
     /// <summary>What a changed non-code file runs in the selection the step is planned with, as <c>td test</c> would decide it.</summary>
     public NonCodeFileRule NonCodeFiles { get; init; } = AnalysisOptions.DefaultNonCodeFiles;
@@ -59,7 +58,7 @@ internal sealed partial class IncrementalRecording(ILoggerFactory loggerFactory,
     private readonly ILogger _logger = loggerFactory.CreateLogger<IncrementalRecording>();
 
     /// <summary>Decides what to record for every test project.</summary>
-    /// <param name="context">Repository, settings and license.</param>
+    /// <param name="context">Repository and settings.</param>
     /// <param name="projects">Test projects to record.</param>
     /// <param name="now">The current time, for the age threshold.</param>
     public List<ProjectStep> Plan(IncrementalContext context, IReadOnlyList<ProjectNode> projects, DateTimeOffset now)
@@ -115,7 +114,7 @@ internal sealed partial class IncrementalRecording(ILoggerFactory loggerFactory,
     }
 
     /// <summary>Why a project is recorded in full before any selection, or null when its map can start an incremental step.</summary>
-    /// <param name="context">Repository, settings and license.</param>
+    /// <param name="context">Repository and settings.</param>
     /// <param name="map">The project's previous map, or null.</param>
     /// <param name="now">The current time.</param>
     private static string? FullReason(IncrementalContext context, CoverageMap? map, DateTimeOffset now)
@@ -123,11 +122,6 @@ internal sealed partial class IncrementalRecording(ILoggerFactory loggerFactory,
         if (map is null)
         {
             return "it has no previous map";
-        }
-
-        if (!context.SelectionLicensed)
-        {
-            return "no license covers selection";
         }
 
         // A map that cannot tell which classes it saw, or which failed, cannot say which entries are safe to carry over.
@@ -165,7 +159,7 @@ internal sealed partial class IncrementalRecording(ILoggerFactory loggerFactory,
     /// <summary>
     /// Selects with the maps at <paramref name="commit"/> as exact maps and turns each project's selection into a step.
     /// </summary>
-    /// <param name="context">Repository, settings and license.</param>
+    /// <param name="context">Repository and settings.</param>
     /// <param name="commit">Commit of the previous maps.</param>
     /// <param name="group">Projects whose previous map is at that commit.</param>
     private IEnumerable<ProjectStep> Select(IncrementalContext context, string commit, List<(ProjectNode Project, CoverageMap Map)> group)

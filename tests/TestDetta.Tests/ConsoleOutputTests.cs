@@ -159,7 +159,7 @@ public sealed class ConsoleOutputTests : IDisposable
     private string Run(params string[] args)
     {
         var stdout = new StringWriter();
-        var host = new CliHost(static name => name == "CI_PROJECT_VISIBILITY" ? "public" : null, Path.Combine(_repo.Root, ".testdetta", "home"));
+        var host = new CliHost(static _ => null);
         var exit = CliApp.Run([.. args, "--repo", _repo.Root], stdout, TextWriter.Null, host);
         Assert.Equal(0, exit);
         return stdout.ToString();

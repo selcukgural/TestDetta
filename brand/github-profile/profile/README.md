@@ -8,8 +8,7 @@ Everything else is skipped, so CI gets faster without guessing. When the analysi
 it runs more tests, not fewer: a missed test is a bug, an extra test only costs CI time.
 [Where it still has limits →](https://testdetta.com/docs/limitations/)
 
-> **Not released yet.** The `td` tool and the GitHub Action are published at launch. Until then you
-> can read how it works, how it decides, and how it was measured.
+Install the tool with `dotnet tool install -g TestDetta`, or use the GitHub Action [`TestDetta/action`](https://github.com/TestDetta/action).
 
 ## A real change
 
@@ -39,12 +38,14 @@ The 8 classes run or reference the changed code; the other 266 have no path from
 GitHub Actions, GitLab CI, Jenkins, Azure DevOps and Bitbucket. Your source code, coverage maps and
 test results stay on your machines and in your CI; TestDetta does not upload them.
 
-**Planned at launch:** free for public repositories, 30 days free for private ones, no card. A license
-problem never fails a build: every test runs instead. Licensing is not switched on yet.
+**Free and open source** ([Apache-2.0](https://github.com/selcukgural/TestDetta/blob/main/LICENSE)) for every repository,
+public or private. If it saves your team time, you can support it through
+[GitHub Sponsors](https://github.com/sponsors/selcukgural).
 
 <p>
   <a href="https://testdetta.com/docs/">Docs</a> ·
-  <a href="https://testdetta.com/pricing/">Pricing</a> ·
+  <a href="https://github.com/selcukgural/TestDetta">Source</a> ·
+  <a href="https://github.com/sponsors/selcukgural">Sponsor</a> ·
   <a href="https://x.com/testdetta">X</a> ·
   <a href="https://bsky.app/profile/testdetta.com">Bluesky</a> ·
   <a href="https://www.linkedin.com/company/testdetta/">LinkedIn</a> ·

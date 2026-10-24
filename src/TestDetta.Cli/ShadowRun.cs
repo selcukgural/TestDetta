@@ -34,8 +34,8 @@ internal sealed class ShadowHooks
 /// only TestDetta's added report option made are deleted once read. A failed class the
 /// selection left out is rerun before it is called a miss: alone with the change, then in its project's full-run
 /// context, then on the base commit in a separate worktree. The exit code is the full run's alone: any TestDetta error
-/// before that run leaves the team's plain command to run, and any error after it only costs the comparison. No
-/// license is read and TestDetta sends nothing anywhere; in return, decisions are shown only for the classes this job ran.
+/// before that run leaves the team's plain command to run, and any error after it only costs the comparison. TestDetta
+/// sends nothing anywhere. Decisions are shown only for the classes this job ran.
 /// </summary>
 /// <param name="loggerFactory">Creates the loggers.</param>
 /// <param name="stdout">Receives the test output and the report.</param>
@@ -1429,10 +1429,10 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     }
 
     /// <summary>
-    /// What a reader needs to check the result: versions, commits, maps and two commands. The first needs no license:
+    /// What a reader needs to check the result: versions, commits, maps and two commands. The first is
     /// the same <c>td test --shadow</c> at the head commit, compared with the merge base itself, with the same maps
     /// (their hashes are listed to compare), makes the same decisions and shows them for the classes it runs. The
-    /// second lists every decision without running tests, which is the paid selection, so it needs a license.
+    /// second lists every decision without running tests.
     /// </summary>
     /// <param name="options">Parsed command line.</param>
     /// <param name="root">Repository root, or null.</param>

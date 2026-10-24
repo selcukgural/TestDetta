@@ -89,15 +89,13 @@ public sealed class MapDirectoryTests : IDisposable
     }
 
     [Fact]
-    public void Maps_dir_is_an_option_of_record_affected_and_test_only()
+    public void Maps_dir_is_an_option_of_every_command()
     {
-        foreach (var command in (string[])["record", "affected", "test"])
+        foreach (var command in (string[])["record", "affected", "test", "audit"])
         {
             Assert.True(CliOptions.TryParse([command, "--maps-dir", "/maps"], "/cwd", out var options, out var error), error);
             Assert.Equal("/maps", options.Analysis.MapsDir);
         }
-
-        Assert.False(CliOptions.TryParse(["license", "status", "--maps-dir", "/maps"], "/cwd", out _, out _));
     }
 
     public void Dispose()

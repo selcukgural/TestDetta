@@ -69,13 +69,10 @@ audit could not run or was cancelled (the reason is in the report when one could
   (`.testdetta/cache`), the report by default, and with `--maps-dir` the restored maps, as `td test` does.
 - **Executes** `cp` (the copy), `dotnet test`, `dotnet build` (testing-platform projects) and `dotnet msbuild`
   (a driver project that only evaluates where the projects write) in the copy, `git` read-only.
-- **No license, and no network call of TestDetta's own.** Owner decision 2026-10-07: shadow mode needs no license
-  because it skips nothing; the audit skips nothing either (every test that could see a change runs, with and
-  without it), so it is dispatched before the license refresh like `td test --shadow`: no license variable or file
-  is read, nothing is refreshed or sent. The `dotnet build` and `dotnet test` runs it starts restore packages as
-  the team's own do (from the local cache, or from the team's feeds when a package is missing there). The report
-  says both. Like shadow mode, it shows decisions only for classes that ran and
-  failed, never a selection for tests that did not run.
+- **No network call of TestDetta's own.** Nothing is sent anywhere. The `dotnet build` and `dotnet test` runs it
+  starts restore packages as the team's own do (from the local cache, or from the team's feeds when a package is
+  missing there). Like shadow mode, it shows decisions only for classes that ran and failed, never a selection
+  for tests that did not run (docs/design/shadow-mode.md, "Decisions only for what ran").
 
 ## Mutating binaries without touching the team's build output
 
@@ -273,7 +270,7 @@ for both (`AuditJudgingTests`, `EvalJudgingTests`).
 
 ## As built (2026-10-07)
 
-- **Code**: `CliApp.Audit` (dispatched before the license refresh, with SIGINT and SIGTERM registered through
+- **Code**: `CliApp.Audit` (with SIGINT and SIGTERM registered through
   `PosixSignalRegistration` so the process lives on to clean up), `AuditRun` (checks, sample, baseline, report),
   `AuditWorkspace` (work folder, locked owner file, stale sweep, copies, free-space checks, `Detach` and
   `MaterializeLinks`), `AuditOutputPaths` (where every project of the copy writes, one MSBuild driver),
@@ -353,22 +350,23 @@ for both (`AuditJudgingTests`, `EvalJudgingTests`).
   copy and baseline included; a change that did not break anything costs a full run of the projects that load it
   plus an analysis (1 s there), a caught or missed one two filtered runs more (2.2 s).
 
-### `testdetta-audit.json` (schema 3)
+### `testdetta-audit.json` (schema 4)
 
 Schema 2 (2026-10-07): `totals.unjudged`, `totals.worstCaseN`, `totals.worstCaseUpperBound95`; a `broken` or
 `notCounted` entry can be a part of a project (`class: null`, `part`, `crash: true`); `caughtByCrash` means a
 catch that rests on a repeated crash of the selected part; the verdict names the inconclusive and stopped counts
 and the worst case; `edits` positions come from the audited commit's text. Schema 3 (2026-10-07): `graduation`
 (whether the run meets the graduation criterion, and why not); `run.overBudgetSeconds`, `run.finishedAfterBudget`
-and `run.overBudget`. Nothing else changed meaning.
+and `run.overBudget`. Schema 4 (2026-10-24): `license` replaced by `network`, the note that TestDetta itself
+made no network call, since TestDetta reads no license any more. Nothing else changed meaning.
 
 ```jsonc
 {
-  "schema": 3,
+  "schema": 4,
   "verdict": "On your code: 112 changes, 103 broke tests, 0 missed (95% upper bound 2.9%, n = 103); 2 inconclusive, 0 stopped (worst case, counting them as misses: 95% upper bound 5.9%, n = 105); target of 100 reached.",
   "stopReason": "target",             // target | max-mutants | budget | sample | cancelled | error
   "error": "…",                       // only with an error
-  "license": "No license is needed and none was read: … TestDetta itself made no network call; the dotnet builds and test runs it started may restore packages, as your own do.",
+  "network": "TestDetta itself made no network call; …",
   "totals": {
     "changes": 112,                   // changes that ran tests to a judgement (caught + missed + didNotBreak + inconclusive)
     "broke": 103,                     // n: caught + missed
@@ -440,7 +438,7 @@ and `run.overBudget`. Nothing else changed meaning.
 
 ### For the owner
 
-- **No license, no network call of its own** (as decided for shadow mode): the audit reveals decisions only for classes that ran
+- **No network call of its own** (as in shadow mode): the audit reveals decisions only for classes that ran
   and failed with a change, never a selection for a pull request. Someone could still learn from it which test
   classes cover which member; that is what a coverage map already says, on their own machine.
 - **Cost**: a change runs every test project that loads the member's assembly, completely; on a large suite with

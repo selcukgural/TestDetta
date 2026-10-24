@@ -1,4 +1,4 @@
-<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 3626f99c081d -->
+<!-- title: {{name}}; description: {{name}} git diff'inizi okur ve yalnızca bir değişikliğin etkileyebileceği .NET test sınıflarını çalıştırır. Emin olamadığında daha fazlasını çalıştırır, asla daha azını değil.; source: 5fd73d2c309d -->
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
@@ -10,8 +10,8 @@
         <a class="button button-ghost button-large" href="/docs/how-it-works/">Nasıl karar verir</a>
       </div>
       <ul class="trust-points">
-        <li>GitHub Actions ve GitLab CI üzerindeki açık depolar için ücretsiz</li>
-        <li><a href="/trial/">{{trialDays}} günlük ücretsiz deneme, kart gerekmez</a></li>
+        <li><a href="/docs/license/">Ücretsiz ve açık kaynak, Apache-2.0</a></li>
+        <li>Açık ve özel depolar, her CI'da</li>
         <li>CI'ınızın içinde çalışır</li>
       </ul>
     </div>
@@ -190,9 +190,9 @@
     </div>
     <dl class="promise-list" data-reveal>
       <div><dt>0</dt><dd><strong>satır kodunuz CI'ınızın dışına çıkar</strong>Analiz, kapsam haritaları ve test sonuçları makinelerinizde kalır.</dd></div>
-      <div><dt>0</dt><dd><strong>derleme bir lisans sorunu yüzünden başarısız olur</strong>Geçerli bir lisans olmadan, {{name}}'dan önceki gibi tüm testler çalışır.</dd></div>
+      <div><dt>0</dt><dd><strong>ağ çağrısını kendisi yapar</strong>{{name}} hiçbir yere bir şey göndermez. Aracı indirmek ve haritaları geri yüklemek, her paket ve önbellek gibi CI'ınızın işidir.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>test framework'ü ve runner</strong>VSTest ve Microsoft.Testing.Platform üzerinde xUnit v2 ve v3, NUnit, MSTest ve TUnit.</dd></div>
-      <div><dt>1</dt><dd><strong>tür ağ çağrısı, isteğe bağlı</strong>Lisansın kendisinden başka hiçbir şey göndermeyen, makine başına günde en fazla bir kez (temiz başlayan runner'larda job başına bir kez) yapılan bir lisans yenilemesi.</dd></div>
+      <div><dt>0</dt><dd><strong>lisans anahtarı, hesap ya da kayıt gerekir</strong>Açık ya da özel, her depo için Apache-2.0. Kurun, çalışsın.</dd></div>
     </dl>
   </div>
   <div class="wrap">
@@ -231,7 +231,7 @@
       </ol>
       <figure class="editor">
         <div class="editor-bar"><span class="editor-dots"><i></i><i></i><i></i></span><span class="editor-tab">.github/workflows/ci.yml</span></div>
-<pre class="editor-code" data-lang="yaml" data-lines data-mark="18-21:a,23-27:b">on:
+<pre class="editor-code" data-lang="yaml" data-lines data-mark="18-21:a,23-26:b">on:
   push:
     branches: [main]
   pull_request:
@@ -256,21 +256,32 @@ jobs:
       - if: github.event_name == 'pull_request'
         uses: {{actionRef}}
         with:
-          mode: test
-          license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+          mode: test</pre>
       </figure>
     </div>
     <p class="gha-links" data-reveal><a href="/docs/github-actions/">GitHub Actions rehberi →</a><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
   </div>
 </section>
 
+<section class="section-soft" id="sponsor">
+  <div class="wrap center">
+    <div class="section-head" data-reveal>
+      <h2>Projeyi destekleyin</h2>
+      <p>{{name}} herkes için ücretsizdir. Ekibinize zaman kazandırıyorsa, geliştirilmesini GitHub Sponsors üzerinden aylık ya da tek seferlik olarak destekleyebilirsiniz. Sponsorluk hiçbir şeyin kilidini açmaz: her özellik zaten kurduğunuz sürümde vardır.</p>
+    </div>
+    <div class="hero-actions" data-reveal>
+      <a class="button button-large" href="{{sponsorUrl}}" rel="noopener">GitHub'da sponsor olun</a>
+    </div>
+  </div>
+</section>
+
 <section class="cta">
   <div class="wrap center">
-    <h2>GitHub Actions ve GitLab CI üzerindeki açık depolar için ücretsiz. Özel depolar için {{trialDays}} günlük ücretsiz deneme.</h2>
-    <p>Ardından aktif committer başına aylık {{currency}}{{priceMonthly}}. Deneme için kart gerekmez.</p>
+    <h2>Her depo için ücretsiz ve açık kaynak.</h2>
+    <p>Apache-2.0. Açık ya da özel, her CI'da ve kendi makinenizde.</p>
     <div class="hero-actions">
-      <a class="button button-large button-light" href="/pricing/">Fiyatları görün</a>
-      <a class="button button-large button-outline-light" href="/trial/">Ücretsiz denemeyi başlat</a>
+      <a class="button button-large button-light" href="/docs/">Başlayın</a>
+      <a class="button button-large button-outline-light" href="{{sourceUrl}}" rel="noopener">GitHub'daki kaynak kod</a>
     </div>
   </div>
 </section>

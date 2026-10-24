@@ -306,7 +306,7 @@ public sealed class ShadowModeTests : IDisposable
         Assert.Equal(1, totals.GetProperty("notRunClasses").GetInt32());
         Assert.Contains("1 class(es) the selection knows did not run in this job", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
 
-        // The reproduction needs no license: it is td test --shadow again, with the same arguments.
+        // The reproduction is td test --shadow again, with the same arguments.
         var command = report.GetProperty("reproduction").GetProperty("command").GetString()!;
         Assert.DoesNotContain("affected", command, StringComparison.Ordinal);
         Assert.True(CliOptions.TryParse([.. command.Split(' ').Skip(1)], _repo.Root, out var again, out var error), error);
@@ -315,7 +315,7 @@ public sealed class ShadowModeTests : IDisposable
     }
 
     [Fact]
-    public void A_filter_that_matches_nothing_reveals_no_decision_and_shadow_mode_reads_no_license()
+    public void A_filter_that_matches_nothing_reveals_no_decision_and_shadow_mode_reads_only_console_settings()
     {
         WriteMap(new()
         {
@@ -326,7 +326,6 @@ public sealed class ShadowModeTests : IDisposable
         });
         _repo.Replace("src/Shop/Calc.cs", "price - 1m", "price - 2m");
         var read = new List<string>();
-        var home = Path.Combine(_repo.Root, ".testdetta", "home");
         var host = new CliHost(name =>
         {
             lock (read)
@@ -334,9 +333,8 @@ public sealed class ShadowModeTests : IDisposable
                 read.Add(name);
             }
 
-            // A license and a refresh setting are there to be read; shadow mode must not look.
-            return name.StartsWith("TESTDETTA_LICENSE", StringComparison.Ordinal) ? "testdetta1.not-a-real-license" : null;
-        }, home);
+            return null;
+        });
         var log = new OrderedLog();
 
         var exit = CliApp.Run(
@@ -346,9 +344,8 @@ public sealed class ShadowModeTests : IDisposable
             host);
 
         Assert.True(exit is 0 or 3, log.Text);
-        // Only how the console output looks (docs/design/console-output.md); nothing about a license or the repository.
+        // Only how the console output looks (docs/design/console-output.md); nothing about the repository.
         Assert.All(read, static name => Assert.Contains(name, (string[])["NO_COLOR", "FORCE_COLOR", "TERM", "GITHUB_ACTIONS", "TESTDETTA_THEME", "COLUMNS"]));
-        Assert.False(Directory.Exists(home));
         var json = File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json"));
         var report = JsonDocument.Parse(json).RootElement;
         var project = report.GetProperty("projects").EnumerateArray().Single();
@@ -365,10 +362,9 @@ public sealed class ShadowModeTests : IDisposable
         Assert.DoesNotContain(log.Lines, static l => RevealsSelection(l));
         Assert.Contains("the analysis's log is not shown", log.Text, StringComparison.Ordinal);
 
-        // td test without --shadow still checks the license.
+        // Nor does td test without --shadow: no license, no refresh, nothing about the repository.
         Assert.Equal(0, CliApp.Run(["test", "--dry-run", "--repo", _repo.Root, "--base", "HEAD"], new StringWriter(), new StringWriter(), host));
-        Assert.Contains("TESTDETTA_LICENSE", read);
-        Assert.Contains("TESTDETTA_LICENSE_REFRESH", read);
+        Assert.All(read, static name => Assert.Contains(name, (string[])["NO_COLOR", "FORCE_COLOR", "TERM", "GITHUB_ACTIONS", "TESTDETTA_THEME", "COLUMNS"]));
     }
 
     [Fact]

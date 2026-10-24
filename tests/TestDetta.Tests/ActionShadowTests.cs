@@ -25,7 +25,6 @@ public sealed class ActionShadowTests
         Assert.Contains("dotnet test -c \"$CONFIGURATION\" \"${extra[@]}\"", shadow, StringComparison.Ordinal);
         Assert.Contains("if [ \"$status\" = 0 ] || [ \"$status\" = 3 ]; then exit \"$status\"; fi", shadow, StringComparison.Ordinal);
         Assert.Contains("--shadow-analysis-timeout", shadow, StringComparison.Ordinal);
-        Assert.DoesNotContain("TESTDETTA_LICENSE", shadow, StringComparison.Ordinal);
     }
 
     [Fact]

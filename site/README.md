@@ -2,7 +2,7 @@
 
 Static site, no dependencies: `node build.mjs` writes `dist/`, `node build.mjs --serve` also serves it
 on http://localhost:4321. Pages are HTML fragments in `src/` wrapped in `partials/`; the product
-name, prices, contact and legal details come from `site.json` (`{{key}}` in any page).
+name, links, contact and legal details come from `site.json` (`{{key}}` in any page).
 
 The build also writes `sitemap.xml` (every page in every language, with hreflang alternates) and
 `robots.txt`, and gives each page a canonical link; a page with its own `url` in the front matter
@@ -14,6 +14,10 @@ English (`src/`) is the source. Turkish lives in `i18n/tr/` with the same paths,
 (menus, footer, docs navigation) in `i18n/strings/<lang>.json`. English is served at `/`, Turkish at `/tr/`.
 German, Japanese and Spanish were removed on 2026-10-10 (owner); `firebase.json` redirects their old
 addresses (`/de/`, `/ja/`, `/es/`) to the English page, so indexed links keep working.
+
+TestDetta became free and open source (Apache-2.0) on 2026-10-24 (owner): the pricing, trial and refund pages were
+removed, and `firebase.json` redirects their old addresses in both languages (`/pricing/` to the license page,
+`/trial/` to getting started, `/legal/refunds/` to the terms).
 
 **Every change to a page updates both languages in the same commit.** The Turkish translation records
 the English page it was made from (`source: <hash>` in its front matter; `node build.mjs --hashes` prints

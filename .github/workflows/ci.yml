@@ -1,7 +1,6 @@
 name: CI
 
-# The repository is private and Actions minutes are limited (about 3,000 a month): every push gets
-# only the quick job; the coverage map is recorded by hand.
+# Every push gets only the quick job; the coverage map is recorded by hand.
 # The weekly recording (Mondays 02:00) is off: the tests that record or start their own test runs
 # fail under the outer recorder (12 of 949 in October 2026), so each run spent about 70 minutes on a
 # known failure. Restore `schedule: - cron: '0 2 * * 1'` once those tests pass under recording.
@@ -23,18 +22,6 @@ jobs:
       contents: read
       # Pull requests list the Actions caches to find the newest coverage map.
       actions: read
-    # The license service's tests need a Postgres; each test makes and drops its own database.
-    services:
-      postgres:
-        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
-        env:
-          POSTGRES_PASSWORD: ci-only
-        ports:
-          - 127.0.0.1:5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      TESTDETTA_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,38 +75,25 @@ jobs:
             echo "args=--filter $(IFS='&'; echo "${filters[*]}")" >> "$GITHUB_OUTPUT"
           fi
 
-      # Pull requests run only the tests their changes affect. The repository is private, so selection
-      # needs the license; without it every test runs. Pull requests from forks and Dependabot get no
-      # secrets and run every test.
+      # Pull requests run only the tests their changes affect.
       - name: Run affected tests
         if: github.event_name == 'pull_request'
         uses: ./
         with:
           mode: test
           setup-dotnet: 'false'
-          license: ${{ secrets.TESTDETTA_LICENSE }}
           dotnet-test-args: ${{ steps.eval.outputs.args }}
 
   # The pass/fail signal within three minutes on every push. The Slow tests build and run real
   # projects; they run in the recording above and before every push locally. It runs under a
   # Turkish locale (dotted and dotless i, comma decimals), where culture-sensitive code breaks first:
-  # customers run TestDetta on any locale, and the recording job keeps the runner's default one covered.
+  # users run TestDetta on any locale, and the recording job keeps the runner's default one covered.
   quick:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    services:
-      postgres:
-        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
-        env:
-          POSTGRES_PASSWORD: ci-only
-        ports:
-          - 127.0.0.1:5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      TESTDETTA_TEST_POSTGRES: Host=localhost;Username=postgres;Password=ci-only;Database=postgres
       CI: 'true'
       LC_ALL: tr_TR.UTF-8
       LANG: tr_TR.UTF-8
@@ -135,3 +109,6 @@ jobs:
 
       - name: Test
         run: dotnet test --nologo --filter "Category!=Slow&Category!=Legacy"
+
+      - name: Test the Claude Code plugin's Stop hook
+        run: bash dist/claude-plugin/tests/stop-hook.test.sh

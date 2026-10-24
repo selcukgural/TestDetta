@@ -24,8 +24,7 @@ jobs:
         with:
           global-json-file: global.json
 
-      # The tool's own tests: the license service is not in the package, and its tests need the Postgres
-      # service container that ci.yml gives them (they ran there on the same commit).
+      # The tool's own tests (the Slow ones ran in ci.yml on the same commit).
       - name: Test
         env:
           CI: 'true'
@@ -96,7 +95,7 @@ jobs:
           cp action.yml bundle/action.yml
           # The README's example names the release it ships with.
           sed "s/{{version}}/$version/g" dist/action/README.md > bundle/README.md
-          cp dist/LICENSE.txt bundle/LICENSE.txt
+          cp LICENSE bundle/LICENSE
           cat bundle/tool.lock
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

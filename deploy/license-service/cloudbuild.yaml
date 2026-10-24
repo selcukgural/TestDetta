@@ -1,7 +1,0 @@
-# Builds the license service image from the repository root (deploy.sh passes _IMAGE).
-steps:
-  - name: gcr.io/cloud-builders/docker
-    args: ["build", "-f", "src/TestDetta.LicenseService/Dockerfile", "-t", "${_IMAGE}", "."]
-images: ["${_IMAGE}"]
-options:
-  logging: CLOUD_LOGGING_ONLY

@@ -124,8 +124,6 @@ old credit. The union keeps both, which can only select more.
 - **No usable previous map**: none within `max-map-age` on main's first-parent line, or a map recorded
   by a different TestDetta map format, platform or framework. The map must also come from main itself;
   see "Trust".
-- **No covering license**: without a license, selection runs every project (docs/design/licensing.md),
-  and the recording follows it, so it is a full recording, as today.
 
 ### The full recording checks the map it replaces
 
@@ -236,8 +234,7 @@ but maps would then come from pull request runs, which forks and untrusted branc
 - CLI: `td record --incremental` with `--max-map-age`, `--full-record-every`, `--full-record-days`,
   `--full-record-share` (and `--maps-dir`, restored before planning). `IncrementalRecording.Plan` decides
   `Full`, `Partial`, `Carry` or `Current` per project with the reasons above; selection runs once per
-  distinct map commit through `AnalysisPipeline.Run(root, A)` with exact maps only. The license check
-  is the one `td test` uses; without a covering license every project is recorded in full. The summary
+  distinct map commit through `AnalysisPipeline.Run(root, A)` with exact maps only. The summary
   names each project's step and reason; a full recording after incremental steps lists divergences.
 - Tests: `CoverageMapMergeTests` (merge rules, unobserved members, lineage, divergence),
   `UnobservedMemberTests` (selection traces an unobserved member by name; without the mark the carried

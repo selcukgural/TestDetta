@@ -1,6 +1,6 @@
 <!-- title: Validate on your repository; layout: docs; description: Check that {{name}} selects every test your changes break, on your own code, before you rely on it. -->
 <h1>Validate on your repository</h1>
-<p class="lead">Our evaluation runs on open-source libraries. Your code has its own patterns, so check {{name}} on it before you let it decide what runs. This takes a couple of weeks of normal pull requests and changes nothing for your team. The GitHub Action's <a href="/docs/github-actions/#shadow">shadow mode</a> and <a href="/docs/github-actions/#audit">audit</a> do these checks for you and need no license; the steps below do them by hand with <code>td affected</code>, which reads the license. On a private repository they need one: without it every test project comes out as <code>All</code> and the comparison proves nothing. A <a href="/trial/">free trial</a> will do.</p>
+<p class="lead">Our evaluation runs on open-source libraries. Your code has its own patterns, so check {{name}} on it before you let it decide what runs. This takes a couple of weeks of normal pull requests and changes nothing for your team. The GitHub Action's <a href="/docs/github-actions/#shadow">shadow mode</a> and <a href="/docs/github-actions/#audit">audit</a> do these checks for you; the steps below do them by hand with <code>td affected</code>.</p>
 
 <h2 id="idea">The idea</h2>
 <p>Keep running the full suite as the gate. Next to it, ask {{name}} what it would have selected. Every test class that fails in the full run must be in that selection. If one is not, that is a miss, and we want to hear about it.</p>
@@ -8,7 +8,7 @@
 <h2 id="steps">Steps</h2>
 <ol>
   <li><strong>Record maps on the default branch.</strong> With GitHub Actions, add the <code>record</code> step from the <a href="/docs/github-actions/">workflow</a>; elsewhere, run <code>td record</code> on every commit to the default branch and keep the maps (<a href="/docs/other-ci/">other CI systems</a>).</li>
-  <li><strong>On every pull request, write down the selection.</strong> Without changing your test step, and with the license in <code>TESTDETTA_LICENSE</code> on a private repository:
+  <li><strong>On every pull request, write down the selection.</strong> Without changing your test step:
 <pre><code>td affected --format json &gt; selection.json</code></pre></li>
   <li><strong>Run the full suite as you do today</strong>, with a TRX report so failures can be read:
 <pre><code>dotnet test --logger trx --results-directory TestResults</code></pre></li>

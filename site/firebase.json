@@ -8,7 +8,7 @@
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; connect-src 'self' https://license.testdetta.com; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+            "value": "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
           },
           {
             "key": "X-Content-Type-Options",
@@ -80,6 +80,66 @@
       {
         "source": "/es",
         "destination": "/",
+        "type": 301
+      },
+      {
+        "source": "/pricing",
+        "destination": "/docs/license/",
+        "type": 301
+      },
+      {
+        "source": "/pricing/",
+        "destination": "/docs/license/",
+        "type": 301
+      },
+      {
+        "source": "/trial",
+        "destination": "/docs/",
+        "type": 301
+      },
+      {
+        "source": "/trial/",
+        "destination": "/docs/",
+        "type": 301
+      },
+      {
+        "source": "/legal/refunds",
+        "destination": "/legal/terms/",
+        "type": 301
+      },
+      {
+        "source": "/legal/refunds/",
+        "destination": "/legal/terms/",
+        "type": 301
+      },
+      {
+        "source": "/tr/pricing",
+        "destination": "/tr/docs/license/",
+        "type": 301
+      },
+      {
+        "source": "/tr/pricing/",
+        "destination": "/tr/docs/license/",
+        "type": 301
+      },
+      {
+        "source": "/tr/trial",
+        "destination": "/tr/docs/",
+        "type": 301
+      },
+      {
+        "source": "/tr/trial/",
+        "destination": "/tr/docs/",
+        "type": 301
+      },
+      {
+        "source": "/tr/legal/refunds",
+        "destination": "/tr/legal/terms/",
+        "type": 301
+      },
+      {
+        "source": "/tr/legal/refunds/",
+        "destination": "/tr/legal/terms/",
         "type": 301
       }
     ]

@@ -29,12 +29,6 @@ internal sealed record ResultReport(
     /// <summary>Older coverage maps in use and what changed since they were recorded.</summary>
     public IReadOnlyList<MapDrift> Drifts { get; init; } = [];
 
-    /// <summary>The license check of the run; null when it was not checked.</summary>
-    public TestDetta.Core.Licensing.LicenseStatus? License { get; init; }
-
-    /// <summary>True when the license decided the run (see <see cref="AnalysisResult.LicenseEnforced"/>).</summary>
-    public bool LicenseEnforced { get; init; }
-
     /// <summary>See <see cref="AnalysisResult.UnmappedFilesRead"/>.</summary>
     public IReadOnlyList<string>? UnmappedFilesRead { get; init; }
 
@@ -193,18 +187,6 @@ internal static class ResultWriter
     }
 
     /// <summary>
-    /// A line about the license when it matters to the reader: only when the license is enforced and
-    /// it is not simply valid (a warning, or every test running). Null otherwise, so runs with a valid
-    /// license, and runs before licensing was enforced, stay quiet.
-    /// </summary>
-    /// <param name="license">The license check, or null.</param>
-    /// <param name="enforced">True when the license decides the run.</param>
-    internal static string? LicenseLine(TestDetta.Core.Licensing.LicenseStatus? license, bool enforced) =>
-        enforced && license is { State: not (TestDetta.Core.Licensing.LicenseState.Valid or TestDetta.Core.Licensing.LicenseState.PublicRepository) }
-            ? $"License: {license.Message}"
-            : null;
-
-    /// <summary>
     /// JSON written with <see cref="Utf8JsonWriter"/> directly: no reflection-based serializer and
     /// no intermediate objects for the shape.
     /// </summary>
@@ -282,28 +264,6 @@ internal static class ResultWriter
                 json.WriteEndObject();
             }
             json.WriteEndArray();
-
-            if (report.License is { } license)
-            {
-                json.WriteStartObject("license"u8);
-                json.WriteString("state"u8, JsonNamingPolicy.CamelCase.ConvertName(license.State.ToString()));
-                json.WriteString("message"u8, license.Message);
-                json.WriteBoolean("allowsSelection"u8, license.AllowsSelection);
-                json.WriteBoolean("enforced"u8, report.LicenseEnforced);
-                if (license.Claims is { } claims)
-                {
-                    json.WriteString("id"u8, claims.Id);
-                    json.WriteNumber("seats"u8, claims.Seats);
-                    json.WriteString("validUntil"u8, claims.ValidUntil.UtcDateTime);
-                }
-
-                if (license.ActiveCommitters is { } active)
-                {
-                    json.WriteNumber("activeCommitters"u8, active);
-                }
-
-                json.WriteEndObject();
-            }
 
             WriteStringArray(json, "unmappedFiles"u8, report.Result.UnmappedFiles);
             WriteStringArray(json, "cosmeticFiles"u8, report.Result.CosmeticFiles);

@@ -358,57 +358,12 @@ public sealed partial class GitClient(ILogger<GitClient> logger)
         }
     }
 
-    /// <summary>
-    /// The URL of the <c>origin</c> remote, or null when there is none. It may embed credentials
-    /// (Jenkins clones with them), so it is never logged.
-    /// </summary>
-    /// <param name="repoRoot">Repository root.</param>
-    public string? OriginUrl(string repoRoot)
-    {
-        try
-        {
-            return Run(repoRoot, logOutput: false, "remote", "get-url", "origin").FirstOrDefault();
-        }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
-    }
-
     /// <summary><paramref name="commit"/> and its first-parent ancestors, newest first, at most <paramref name="count"/>.</summary>
     /// <param name="repoRoot">Repository root.</param>
     /// <param name="commit">A commit or ref.</param>
     /// <param name="count">How many commits to list.</param>
     public IReadOnlyList<string> FirstParentAncestors(string repoRoot, string commit, int count) =>
         Run(repoRoot, "rev-list", "--first-parent", "-n", count.ToString(System.Globalization.CultureInfo.InvariantCulture), commit);
-
-    /// <summary>The committer time of HEAD, as Unix seconds.</summary>
-    /// <param name="repoRoot">Repository root.</param>
-    public long HeadCommitTime(string repoRoot) =>
-        long.Parse(Run(repoRoot, "log", "-1", "--format=%ct", "HEAD").Single(), System.Globalization.CultureInfo.InvariantCulture);
-
-    /// <summary>
-    /// Author time (Unix seconds), email and name of every commit reachable from HEAD whose committer
-    /// time is at or after <paramref name="since"/>, with <c>.mailmap</c> applied. A commit is committed
-    /// no earlier than it is authored, so this includes every commit authored since then. The output
-    /// holds personal data and is never logged.
-    /// </summary>
-    /// <param name="repoRoot">Repository root.</param>
-    /// <param name="since">Unix seconds.</param>
-    public IReadOnlyList<(long AuthorTime, string Email, string Name)> AuthorsSince(string repoRoot, long since)
-    {
-        var authors = new List<(long, string, string)>();
-        foreach (var line in Run(repoRoot, logOutput: false, "log", "HEAD", $"--since=@{since}", "--format=%at%x09%aE%x09%aN"))
-        {
-            var fields = line.Split('\t');
-            if (fields.Length == 3 && long.TryParse(fields[0], System.Globalization.CultureInfo.InvariantCulture, out var time))
-            {
-                authors.Add((time, fields[1], fields[2]));
-            }
-        }
-
-        return authors;
-    }
 
     /// <summary>Creates the start info shared by every git invocation.</summary>
     /// <param name="workingDirectory">Directory git runs in.</param>

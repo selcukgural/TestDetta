@@ -36,8 +36,7 @@ jobs:
         uses: {{actionRef}}
         with:
           mode: test
-          dotnet-test-args: --logger trx
-          license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
+          dotnet-test-args: --logger trx</code></pre>
 
 <div class="callout"><p><strong>Full history is required.</strong> In test, record and audit modes the action stops with an error on a shallow clone; shadow mode warns and runs your plain <code>dotnet test</code> instead. Check out with <code>fetch-depth: 0</code>.</p></div>
 
@@ -65,7 +64,7 @@ jobs:
 <table>
   <thead><tr><th>Input</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>mode</code></td><td></td><td><code>test</code> on pull requests (run affected tests), <code>shadow</code> on pull requests while you evaluate {{name}} (run every test and report what the selection would have left out; no license needed), <code>record</code> on the default branch (record coverage maps), <code>audit</code> on a schedule (break your code one change at a time in a copy and check the selection ran every test that failed; no license needed). Required.</td></tr>
+    <tr><td><code>mode</code></td><td></td><td><code>test</code> on pull requests (run affected tests), <code>shadow</code> on pull requests while you evaluate {{name}} (run every test and report what the selection would have left out), <code>record</code> on the default branch (record coverage maps), <code>audit</code> on a schedule (break your code one change at a time in a copy and check the selection ran every test that failed). Required.</td></tr>
     <tr><td><code>base</code></td><td>the PR's base branch</td><td>Branch to compare with in test and shadow modes. Outside pull requests, set it.</td></tr>
     <tr><td><code>configuration</code></td><td><code>Debug</code></td><td>Build configuration for building and running the tests.</td></tr>
     <tr><td><code>projects</code></td><td>all test projects</td><td>Record mode: <code>.csproj</code> paths, one per line.</td></tr>
@@ -83,7 +82,7 @@ jobs:
     <tr><td><code>audit-budget</code></td><td><code>4h</code></td><td>Audit mode: start no change after this long (<code>90s</code>, <code>15m</code>, <code>1h30m</code>; <code>none</code> for no limit); a change still running then finishes, so the audit can end after the budget, and the report says by how much. Leave that headroom below the job's <code>timeout-minutes</code>.</td></tr>
     <tr><td><code>audit-parallel</code></td><td><code>1</code></td><td>Audit mode: changes tested at once, each in its own copy; memory use grows with it.</td></tr>
     <tr><td><code>github-token</code></td><td><code>github.token</code></td><td>Test, shadow and audit modes: lists the Actions caches to find the newest map (needs <code>actions: read</code>).</td></tr>
-    <tr><td><code>license</code></td><td></td><td>Test mode: the license string, from a repository or organization secret such as <code>TESTDETTA_LICENSE</code>. Public repositories need none. Without a valid license every test runs; the job never fails because of it. Shadow and audit modes never read it.</td></tr>
+    <tr><td><code>license</code></td><td></td><td>Deprecated and ignored: {{name}} needs no license. Still accepted so existing workflows keep working; the step writes a notice to the log when it is set. Remove it from your workflow.</td></tr>
     <tr><td><code>working-directory</code></td><td><code>.</code></td><td>Any directory inside the repository to analyze.</td></tr>
     <tr><td><code>setup-dotnet</code></td><td><code>true</code></td><td>Install the .NET 10 SDK {{name}} runs on. Set to <code>false</code> if the job already has it.</td></tr>
   </tbody>
@@ -91,7 +90,7 @@ jobs:
 
 <h2 id="shadow">Shadow mode</h2>
 <p>To try {{name}} without skipping anything, use <code>mode: shadow</code> on pull requests. Every test your command runs, runs, and the job's result is that run's; the job summary and the report artifact show what the selection would have run, the measured minutes, and any failing class it would have left out. The artifact is named <code>testdetta-shadow-&lt;run&gt;-&lt;attempt&gt;-&lt;job&gt;-…</code>, one per job and matrix leg (<code>shadow-artifact-suffix</code> adds your own part), and is kept for up to 90 days (your repository's artifact retention setting can shorten it). Name your solution in <code>dotnet-test-args</code> to run it as one command, as your own job does; see <a href="/docs/cli/#shadow"><code>td test --shadow</code></a>.</p>
-<p>It needs no license, so the license secret is not passed to it, and {{name}} itself makes no network call in shadow mode. The Action downloads the {{name}} package from nuget.org (checked against its SHA-512) and lists and restores the maps in your Actions cache, as in test mode. No step before the tests fails the job: if one cannot do its part (a shallow checkout, the download, a missing base branch, an invalid input), or {{name}} ends without a result of the tests, the step runs your plain <code>dotnet test</code> with the same arguments instead, and the job summary says why. A package that does not match its checksum is never run. A failed upload of the report never fails the job either.</p>
+<p>{{name}} itself makes no network call in shadow mode. The Action downloads the {{name}} package from nuget.org (checked against its SHA-512) and lists and restores the maps in your Actions cache, as in test mode. No step before the tests fails the job: if one cannot do its part (a shallow checkout, the download, a missing base branch, an invalid input), or {{name}} ends without a result of the tests, the step runs your plain <code>dotnet test</code> with the same arguments instead, and the job summary says why. A package that does not match its checksum is never run. A failed upload of the report never fails the job either.</p>
 <pre><code>      - if: github.event_name == 'pull_request'
         uses: {{actionRef}}
         with:
@@ -109,7 +108,7 @@ jobs:
           dotnet-test-args: Shop.slnx --no-build</code></pre>
 
 <h2 id="audit">Audit on a schedule</h2>
-<p>To check the selection on your own code, use <code>mode: audit</code> on a schedule, for example weekly on the branch record mode records. It breaks members of your code one change at a time in a copy of the working tree, runs every test that can see each change, and checks that the selection ran every test class that failed; see <a href="/docs/cli/#audit"><code>td audit</code></a>. Your checkout and its build output are only read. The job summary shows the verdict and every miss with its decision chain; the artifact <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> keeps the JSON report for up to 90 days. It uses the newest map within <code>max-map-age</code> of the commit it runs on. It needs no license, so the license secret is not passed to it, and {{name}} itself makes no network call: the Action downloads the package and finds the maps as in test mode, and the builds in the copy restore packages as yours do. It runs for hours on your runners: give the job a <code>timeout-minutes</code> well above <code>audit-budget</code>, since a change still running when the budget ends finishes first (all its runs, which can take several times the full run of the test projects that load it); the summary then says how long the audit ran past the budget and which changes ran on. A job killed at its timeout reports the change it cut short as stopped.</p>
+<p>To check the selection on your own code, use <code>mode: audit</code> on a schedule, for example weekly on the branch record mode records. It breaks members of your code one change at a time in a copy of the working tree, runs every test that can see each change, and checks that the selection ran every test class that failed; see <a href="/docs/cli/#audit"><code>td audit</code></a>. Your checkout and its build output are only read. The job summary shows the verdict and every miss with its decision chain; the artifact <code>testdetta-audit-&lt;run&gt;-&lt;attempt&gt;</code> keeps the JSON report for up to 90 days. It uses the newest map within <code>max-map-age</code> of the commit it runs on. {{name}} itself makes no network call: the Action downloads the package and finds the maps as in test mode, and the builds in the copy restore packages as yours do. It runs for hours on your runners: give the job a <code>timeout-minutes</code> well above <code>audit-budget</code>, since a change still running when the budget ends finishes first (all its runs, which can take several times the full run of the test projects that load it); the summary then says how long the audit ran past the budget and which changes ran on. A job killed at its timeout reports the change it cut short as stopped.</p>
 <pre><code>on:
   schedule:
     - cron: '0 3 * * 1' # Mondays, 03:00 UTC
@@ -142,7 +141,7 @@ jobs:
 <p>Shadow mode's graduation asks for one audit run with at least 100 changes that broke tests, none missed, and a worst-case 95% upper bound of the miss rate of at most 3.0%: the worst case counts every change whose runs could not tell (inconclusive) or that was cut short (stopped) as a miss, and the bound is shown rounded up. The summary and the report say in one line whether the run meets this and, if not, why, for example "not yet: 87 changes broke tests, 100 needed" or "no: worst case 4.1% > 3.0% because 5 inconclusive and 0 stopped are counted as misses". A run limited to some members with <code>--member</code> never counts.</p>
 
 <h2>Job summary</h2>
-<p>In test mode, {{name}} writes its selection to the job summary: the changed files and the base it compared with, each test project with whether it ran filtered, completely or not at all and why, the test results, and the license state when it matters. Paths, class names and reasons from the repository are written as code, so file names in a pull request cannot inject links or mentions into the page.</p>
+<p>In test mode, {{name}} writes its selection to the job summary: the changed files and the base it compared with, each test project with whether it ran filtered, completely or not at all and why, and the test results. Paths, class names and reasons from the repository are written as code, so file names in a pull request cannot inject links or mentions into the page.</p>
 
 <h2>Recording only part of the suite</h2>
 <p>Recording runs the whole suite once with coverage, which on the default branch is also your full test run. Leave out projects that cannot run on the runner, such as integration tests that need a database, with <code>projects</code>. Pull requests then decide those projects by name.</p>

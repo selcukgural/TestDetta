@@ -15,6 +15,7 @@ td affected -v            # what would run, and why
 - Runs inside your CI; no source, coverage or test results leave your machines.
 - xUnit v2 and v3, NUnit, MSTest and TUnit, on VSTest and Microsoft.Testing.Platform.
 - GitHub Actions, GitLab CI, Azure DevOps, Jenkins and Bitbucket.
-- Free for public repositories; private repositories get a 30-day trial, then a license per active committer.
+- Free and open source (Apache-2.0) for every repository, public or private: https://github.com/selcukgural/TestDetta
 
 Documentation: https://testdetta.com/docs/
+Sponsor its development: https://github.com/sponsors/selcukgural

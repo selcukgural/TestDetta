@@ -18,7 +18,7 @@ settings, and those set in your project files, in every run it starts and while 
 - a disk shared by the agents (common on-premises: `/srv/testdetta-maps/<repository>`);
 - object storage (S3, Azure Blob, GCS, MinIO) synced before and after.
 
-TestDetta itself never uses the network for maps.
+TestDetta itself makes no network calls, for maps or anything else.
 
 ## What every setup needs
 
@@ -28,14 +28,6 @@ TestDetta itself never uses the network for maps.
   (`+refs/heads/<target>:refs/remotes/origin/<target>`): CI clones often limit the remote's refspecs to
   the pipeline's own branch (GitLab's and Bitbucket's do), and then `git fetch origin <target>`
   alone updates only `FETCH_HEAD` and `origin/<target>` stays missing.
-- **The license** in `TESTDETTA_LICENSE` (a masked or secret variable) or a file named by
-  `TESTDETTA_LICENSE_FILE`.
-  - Public repositories need none on GitLab CI (`CI_PROJECT_VISIBILITY`) and GitHub Actions. Jenkins,
-    Azure DevOps and Bitbucket do not tell TestDetta, so there every repository needs one.
-  - Without a valid license every test runs, and the build never fails because of it.
-  - A subscription's license runs at most 40 days ahead and renews only through the daily refresh. On a
-    network that cannot reach the license service, use an annual license (its file runs for the whole term)
-    and set `TESTDETTA_LICENSE_REFRESH=off` (docs/design/licensing.md).
 - **Exit codes:**
   - `0` success;
   - `1` the analysis failed (`td audit`: it could not run or was cancelled);
@@ -72,16 +64,12 @@ affected-tests:
     paths: [testdetta-summary.md]
 ```
 
-Set `TESTDETTA_LICENSE` under Settings → CI/CD → Variables, masked and protected as needed. TestDetta detects
-public projects through `CI_PROJECT_VISIBILITY`.
-
 ## Jenkins (declarative pipeline, multibranch)
 
 ```groovy
 pipeline {
   agent any
   environment {
-    TESTDETTA_LICENSE = credentials('testdetta-license')          // a "secret text" credential
     TESTDETTA_MAPS = "/srv/testdetta-maps/${env.JOB_NAME.split('/')[0]}"
   }
   options { skipDefaultCheckout() }
@@ -107,10 +95,6 @@ pipeline {
 }
 ```
 
-Jenkins often clones with credentials in the remote URL. TestDetta strips them before matching the license
-scope and never logs them. If the remote does not name the repository the license covers (a local
-mirror, for example), set `TESTDETTA_LICENSE_SCOPE`, such as `git.acme.corp/scm/pay/app`.
-
 ## Azure DevOps Pipelines
 
 ```yaml
@@ -122,16 +106,12 @@ steps:
     fetchDepth: 0
   - script: td record --maps-dir "$(TESTDETTA_MAPS)"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-    env:
-      TESTDETTA_LICENSE: $(TestDettaLicense)          # a secret pipeline variable
   - script: |
       target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
       git fetch --no-tags origin "+refs/heads/$target:refs/remotes/origin/$target"
       td test --base "origin/$target" --maps-dir "$(TESTDETTA_MAPS)" --summary-file "$(Agent.TempDirectory)/testdetta.md"
       echo "##vso[task.uploadsummary]$(Agent.TempDirectory)/testdetta.md"
     condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
-    env:
-      TESTDETTA_LICENSE: $(TestDettaLicense)
 ```
 
 `TESTDETTA_MAPS` points to a share on self-hosted agents. On Microsoft-hosted agents, sync it with Azure
@@ -158,8 +138,6 @@ pipelines:
             - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - td test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps
 ```
-
-Set `TESTDETTA_LICENSE` as a secured repository variable.
 
 ## Object storage instead of a shared disk
 

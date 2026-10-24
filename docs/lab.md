@@ -1,8 +1,8 @@
 # The lab
 
 `tools/TestDetta.Lab` answers the questions we ask while developing TestDetta, the same way every time. Each one used
-to be a script written on the spot: a Python pass over a map's JSON, a scratch repository with a license variable set
-so `td affected` would narrow, a comparison of two `synthetic.json` files. Owner's decision, 2026-10-12: a small lab,
+to be a script written on the spot: a Python pass over a map's JSON, a scratch repository to see what `td affected`
+selects, a comparison of two `synthetic.json` files. Owner's decision, 2026-10-12: a small lab,
 command line first, for our own use; nothing of it ships.
 
 ```
@@ -16,7 +16,7 @@ dotnet run --project tools/TestDetta.Lab -- ab <run A> <run B>
   read a value it built (`builtValues`); the ones that loaded, loaded by name or scanned an output; the ones that read a
   file. It reads maps of the current format only (a recording cache folder or `.testdetta/coverage`).
 - **whatif**: what the working tree's change against the base selects with the repository's maps, with every class's
-  decision kind and evidence. No license check.
+  decision kind and evidence.
 - **ab**: two evaluation runs mutant by mutant: common mutants and the ones only one side has (a comparison on one
   sample has none, docs/evaluation.md "Seeds and replays"), mean shares, narrower and wider changes with the largest
   ones listed, and misses on either side.

@@ -8,7 +8,7 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <PackageId>TestDetta</PackageId>
     <RootNamespace>TestDetta.Cli</RootNamespace>
-    <!-- The maker and rights holder is a person until there is a company (the terms name the same licensor). -->
+    <!-- The maker and copyright holder is a person until there is a company. -->
     <Authors>Selçuk Güral</Authors>
     <Copyright>Copyright (c) 2026 Selçuk Güral</Copyright>
     <Description>Run only the .NET tests a change can affect: test impact analysis from your git diff, project graph and per-test-class coverage, inside your CI.</Description>
@@ -16,15 +16,16 @@
     <PackageProjectUrl>https://testdetta.com</PackageProjectUrl>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/selcukgural/TestDetta</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
-  <!-- The package page on nuget.org: icon, README and the license notice live in dist/. -->
+  <!-- The package page on nuget.org: icon and README live in dist/nuget. -->
   <ItemGroup>
     <None Include="..\..\dist\nuget\icon.png" Pack="true" PackagePath="\" Visible="false" />
     <None Include="..\..\dist\nuget\README.md" Pack="true" PackagePath="\" Visible="false" />
-    <None Include="..\..\dist\LICENSE.txt" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

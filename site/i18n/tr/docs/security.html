@@ -1,13 +1,12 @@
-<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve yaptığı tek ağ çağrısı.; source: b94ddf438db3 -->
+<!-- title: Güvenlik ve veri; layout: docs; description: {{name}} neleri saklar, bunları nerede tutar ve neden hiçbir ağ çağrısı yapmaz.; source: 6c5144b9c2c2 -->
 <h1>Güvenlik ve veri</h1>
-<p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz ve test sonuçlarınız oradan hiç çıkmaz; kapsam haritalarınız oradan yalnızca CI'ınızın önbellek deposuna gider. Bu sayfa sakladığı her şeyi ve yaptığı her ağ çağrısını listeler.</p>
+<p class="lead">{{name}} sizin CI'ınızda ve sizin makinelerinizde çalışır. Kaynak kodunuz ve test sonuçlarınız oradan hiç çıkmaz; kapsam haritalarınız oradan yalnızca CI'ınızın önbellek deposuna gider. Bu sayfa sakladığı her şeyi listeler. {{name}}'nın kendisi hiçbir ağ çağrısı yapmaz.</p>
 
 <h2 id="stays">CI'ınızda kalanlar</h2>
 <ul>
   <li>Diff'inizin ve kaynak kodunuzun analizi.</li>
   <li>Kapsam haritaları: hangi test sınıfının hangi metodu çalıştırdığı ve her sınıfın ne kadar sürdüğü. Tiplerinizi, metotlarınızı ve test sınıflarınızı adlandırırlar; bu yüzden onlara derleme artifact'ları gibi davranın.</li>
   <li>Test koşuları ve sonuçları.</li>
-  <li>Aktif committer sayısı. Sayım için yazar e-postaları git geçmişinden sizin makinenizde okunur; hiçbir isim ya da e-posta bir yere gönderilmez.</li>
   <li><code>td record</code> çalışırken test projesinin derleme çıktısındaki assembly'lere ölçüm kodu ekler: deponuzunkilere ve orada dosya okuyan üçüncü taraf assembly'lere. Önce orijinalleri geçici bir <code>testdetta-record-*</code> klasörüne yedekler ve sonunda, kayıt başarısız olsa da, yerlerine geri koyar. Ayrıca kendi çalışma zamanını derleme çıktısına kopyalar ve test projesinin <code>deps.json</code> dosyasına ekler (ikisi de sonunda geri alınır), test süreci de testlerin başlattığı .NET süreçleri için bir startup hook (<code>DOTNET_STARTUP_HOOKS</code>) ayarlar; böylece her biri kendisini hangi testin başlattığını bildirir.</li>
   <li><code>td audit</code> assembly'leri yalnızca çalışma ağacının kendi kopyasında yeniden yazar; kaynak kodunuz ve derleme çıktınız yalnızca okunur ve kopya sonunda silinir.</li>
 </ul>
@@ -18,10 +17,6 @@
   <tbody>
     <tr><td><code>.testdetta/coverage/</code></td><td>Geçerli commit'in kapsam haritaları, test projesi başına bir tane</td></tr>
     <tr><td><code>.testdetta/cache/</code></td><td>Değerlendirilmiş proje grafiğinin önbelleği</td></tr>
-    <tr><td><code>.testdetta/license.json</code></td><td>İsteğe bağlı: committer sayımının dışında bırakılacak ek bot hesapları</td></tr>
-    <tr><td><code>~/.testdetta/license</code></td><td><code>td license install</code> ile kurulmuş ya da otomatik olarak yenilenmiş bir lisans</td></tr>
-    <tr><td><code>.testdetta/license</code></td><td>İsteğe bağlı: depoda tutulan bir lisans</td></tr>
-    <tr><td><code>~/.testdetta/license-refresh</code></td><td>Son yenilemenin ne zaman denendiği</td></tr>
     <tr><td><code>--maps-dir</code> klasörü</td><td>Önceki commit'lerin haritaları, commit başına bir klasör, sizin seçtiğiniz yerde tutulur</td></tr>
     <tr><td><code>.testdetta/testdetta-audit.json</code></td><td><code>td audit</code> raporu (ya da <code>--report</code>); <code>.testdetta/testdetta-shadow.json</code> shadow mode'unki</td></tr>
     <tr><td>geçici klasörde <code>testdetta-record-*</code></td><td><code>td record</code> çalışırken: test projesinin derleme çıktısındaki orijinal assembly'ler; sonunda yerlerine konur ve silinir</td></tr>
@@ -31,23 +26,14 @@
 </table>
 <p>GitHub Actions'ta haritalar deponuzun Actions önbelleğinde saklanır. <code>.testdetta/coverage/</code> ve <code>.testdetta/cache/</code> otomatik üretilir; bunları sürüm kontrolünün dışında tutun.</p>
 
-<h2 id="network">Tek ağ çağrısı</h2>
-<p>Deneme ya da abonelik lisansıyla {{name}}, lisans servisinden makine başına günde en fazla bir kez (boş bir ana dizinle başlayan CI runner'larında job başına bir kez) yenilenmiş bir lisans ister; böylece yenilemeler, kimsenin bir secret'ı güncellemesi gerekmeden CI'a ulaşır.</p>
-<ul>
-  <li>Yalnızca lisansın kendisini bir header içinde gönderir, başka hiçbir şeyi değil: depo adı, kod, yollar ya da sayılar gönderilmez.</li>
-  <li>Analizle birlikte çalışır ve en fazla 6 saniye bekler. Geçebilecek bir hata bir saat sonra yeniden denenir; servise ulaşılamazsa mevcut lisans çalışmaya devam eder.</li>
-  <li><code>HTTPS_PROXY</code> dikkate alınır.</li>
-  <li><code>TESTDETTA_LICENSE_REFRESH=off</code> bu çağrıyı kapatır; eldeki lisans süresi dolana kadar çalışmaya devam eder.</li>
-  <li>Yıllık (çevrimdışı ve kurumsal) bir lisans yenileme adresi taşımaz; bu yüzden {{name}} onun için hiçbir zaman dışarıya çağrı yapmaz.</li>
-</ul>
-<p>Lisanssız bir çalıştırma hiçbir çağrı yapmaz ve açık depolar lisansa ihtiyaç duymaz. Hiç lisans okumayan shadow mode (<code>td test --shadow</code>) ve audit (<code>td audit</code>) da çağrı yapmaz. Böyle bir job'da ağı kullanan şey {{name}}'nın kendisi değildir: GitHub Action, {{name}} paketini nuget.org'dan indirir ve sabitlediği SHA-512'ye karşı doğrular, kapsam haritalarını da Actions önbelleğinizde listeler ve geri yükler; derlemeleriniz paketleri her zaman olduğu gibi restore eder; shadow mode'un base commit üzerindeki yeniden çalıştırması o commit'in paketlerini her derleme gibi restore eder ve audit'in kopyasındaki derlemeleri ve test çalıştırmaları da paketleri aynı şekilde restore eder.</p>
+<h2 id="network">Ağ çağrısı yok</h2>
+<p>{{name}}'nın kendisi hiçbir ağ çağrısı yapmaz: lisans kontrolü, yenileme ya da kullanım verisi yoktur. Bir job'da ağı kullanan şey {{name}}'nın kendisi değildir: GitHub Action, {{name}} paketini nuget.org'dan indirir ve sabitlediği SHA-512'ye karşı doğrular, kapsam haritalarını da Actions önbelleğinizde listeler ve geri yükler; derlemeleriniz paketleri her zaman olduğu gibi restore eder; shadow mode'un base commit üzerindeki yeniden çalıştırması o commit'in paketlerini her derleme gibi restore eder ve audit'in kopyasındaki derlemeleri ve test çalıştırmaları da paketleri aynı şekilde restore eder.</p>
 
-<h2 id="license-check">Lisans nasıl kontrol edilir</h2>
-<p>Lisans imzalı bir dizedir ve {{name}}'ya gömülü bir açık anahtarla sizin makinenizde doğrulanır. Kapsadığı depoları adlandırır; bunlar, içindeki kimlik bilgileri önce çıkarılarak <code>origin</code> remote'uyla eşleştirilir. Bir lisans sorunu hiçbir zaman bir derlemeyi başarısız kılmaz: bunun yerine, tıpkı {{name}}'dan önceki gibi tüm testler çalışır. <a href="/docs/license/">Lisanslar hakkında daha fazlası</a>.</p>
+<h2 id="source">Kaynak kod</h2>
+<p>{{name}}, Apache License 2.0 ile açık kaynaktır; ne yaptığını çalıştırmadan önce okuyabilir ve kendiniz derleyebilirsiniz. Kaynak kod <a href="{{sourceUrl}}">GitHub'da</a>; bkz. <a href="/docs/license/">Lisans</a>.</p>
 
 <h2 id="us">Bizim tuttuklarımız</h2>
-<p>Bir abonelik için: lisans sahibinin adı, kapsadığı depolar, koltuk sayısı ve süresi. Ödeme, satış aracımız (merchant of record) {{seller}} tarafından yönetilir. Lisans servisi e-posta adresini {{seller}} aracılığıyla alır ve lisansı taşıyan tek ileti için e-posta sağlayıcımıza iletir; adresi saklamaz.</p>
-<p>Bir deneme için: e-posta adresi, tek hatırlatma için denemenin bitiminden 7 gün sonrasına kadar; adresin anahtarlı bir hash'i ve belirttiğiniz kuruluşlar, 12 ayda adres ve kuruluş başına tek deneme kuralı için 13 ay boyunca; ve denemenin lisans kaydı (kuruluşunuzu anan lisans sahibi adı ve depo kalıpları), her lisans kaydı gibi saklanır. Bkz. <a href="/legal/privacy/">gizlilik politikası</a>.</p>
+<p>{{name}}'yı kullanımınızla ilgili hiçbir şey. Lisans, hesap ya da deneme olmadığından kimin, nerede kullandığına dair hiçbir kayıt tutmayız. Bu web sitesinin ve e-posta desteğinin işlediği veriler <a href="/legal/privacy/">gizlilik politikasında</a> yer alır.</p>
 
 <h2 id="report">Bir güvenlik açığını bildirmek</h2>
-<p><a href="mailto:{{supportEmail}}">{{supportEmail}}</a> adresine e-posta gönderin. Lütfen yayımlamadan önce açığı düzeltmemiz için bize zaman tanıyın.</p>
+<p>Herkese açık bir issue açmak yerine <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> adresine e-posta gönderin. Lütfen yayımlamadan önce açığı düzeltmemiz için bize zaman tanıyın.</p>

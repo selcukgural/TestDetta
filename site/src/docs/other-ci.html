@@ -17,7 +17,6 @@
 <ul>
   <li><strong>Full git history.</strong> {{name}} compares with the merge base and walks history to find maps. Shallow clones cannot do either.</li>
   <li><strong>The target branch fetched</strong>, so <code>origin/&lt;target&gt;</code> exists. Fetch it with an explicit refspec, <code>+refs/heads/&lt;target&gt;:refs/remotes/origin/&lt;target&gt;</code>. CI clones often limit the remote's refspecs to the pipeline's own branch (GitLab's and Bitbucket's do), and then <code>git fetch origin &lt;target&gt;</code> alone updates only <code>FETCH_HEAD</code>, and <code>origin/&lt;target&gt;</code> stays missing.</li>
-  <li><strong>The license</strong> in <code>TESTDETTA_LICENSE</code> (a masked or secret variable) or a file named by <code>TESTDETTA_LICENSE_FILE</code>. Public repositories need none on GitLab CI and GitHub Actions; Jenkins, Azure DevOps and Bitbucket do not say whether a repository is public, so there every repository needs one. Without a valid license every test runs, and the build never fails because of it. See <a href="/docs/license/">License</a>.</li>
   <li><strong>Exit codes:</strong> <code>0</code> success, <code>1</code> the analysis failed, <code>2</code> invalid command line, <code>3</code> tests failed.</li>
   <li><strong>Clean-up:</strong> maps of old commits are only needed for 50 commits. Delete older folders with a scheduled job or a storage lifecycle rule.</li>
 </ul>
@@ -55,14 +54,12 @@ affected-tests:
   artifacts:
     when: always
     paths: [testdetta-summary.md]</code></pre>
-<p>Set <code>TESTDETTA_LICENSE</code> under Settings → CI/CD → Variables, masked and protected as needed. {{name}} detects public projects through <code>CI_PROJECT_VISIBILITY</code>.</p>
 
 <h2>Jenkins</h2>
 <p>A declarative multibranch pipeline:</p>
 <pre><code>pipeline {
   agent any
   environment {
-    TESTDETTA_LICENSE = credentials('testdetta-license')          // a "secret text" credential
     TESTDETTA_MAPS = "/srv/testdetta-maps/${env.JOB_NAME.split('/')[0]}"
   }
   options { skipDefaultCheckout() }
@@ -98,7 +95,7 @@ affected-tests:
     }
   }
 }</code></pre>
-<p>The agent needs the .NET 10 SDK. The checkout's credentials are not kept for later steps, so on a private repository the <code>git fetch</code> runs inside <code>withCredentials</code> with the <code>gitUsernamePassword</code> binding of the Git plugin; name the credential your checkout uses. When the remote URL carries credentials, as some Jenkins setups do, {{name}} strips them before matching the license scope and never logs them. If the remote does not name the repository the license covers (a local mirror, for example), set <code>TESTDETTA_LICENSE_SCOPE</code>, such as <code>git.acme.corp/scm/pay/app</code>.</p>
+<p>The agent needs the .NET 10 SDK. The checkout's credentials are not kept for later steps, so on a private repository the <code>git fetch</code> runs inside <code>withCredentials</code> with the <code>gitUsernamePassword</code> binding of the Git plugin; name the credential your checkout uses.</p>
 
 <h2>Azure DevOps Pipelines</h2>
 <pre><code>trigger: [main]
@@ -119,16 +116,12 @@ steps:
       echo "##vso[task.prependpath]$HOME/.dotnet/tools"
   - script: td record --maps-dir "$(TESTDETTA_MAPS)"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-    env:
-      TESTDETTA_LICENSE: $(TestDettaLicense)          # a secret pipeline variable
   - script: |
       target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
       git fetch --no-tags origin "+refs/heads/$target:refs/remotes/origin/$target"
       td test --base "origin/$target" --maps-dir "$(TESTDETTA_MAPS)" --summary-file "$(Agent.TempDirectory)/testdetta.md"
       echo "##vso[task.uploadsummary]$(Agent.TempDirectory)/testdetta.md"
-    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
-    env:
-      TESTDETTA_LICENSE: $(TestDettaLicense)</code></pre>
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))</code></pre>
 <p><code>TESTDETTA_MAPS</code> points to a share on self-hosted agents. On Microsoft-hosted agents, sync it with Azure Blob storage (see <a href="#object-storage">Object storage</a>).</p>
 
 <h2>Bitbucket Pipelines</h2>
@@ -155,7 +148,7 @@ pipelines:
             - git fetch --no-tags origin "+refs/heads/$BITBUCKET_PR_DESTINATION_BRANCH:refs/remotes/origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - ./sync-maps.sh download maps "origin/$BITBUCKET_PR_DESTINATION_BRANCH"
             - td test --base "origin/$BITBUCKET_PR_DESTINATION_BRANCH" --maps-dir maps</code></pre>
-<p>Set <code>TESTDETTA_LICENSE</code> as a secured repository variable. <code>sync-maps.sh</code> needs its storage tool, such as the AWS CLI, in the step's image.</p>
+<p><code>sync-maps.sh</code> needs its storage tool, such as the AWS CLI, in the step's image.</p>
 
 <h2 id="object-storage">Object storage instead of a shared disk</h2>
 <p>On hosted runners there is no shared disk. Upload the new folder after recording. Before testing, download only the folders that can be used: the merge base and up to 50 first-parent commits before it. Download them newest first, and stop at the first one that exists. An example for S3; any tool with <code>cp</code> and <code>ls</code> works the same way:</p>

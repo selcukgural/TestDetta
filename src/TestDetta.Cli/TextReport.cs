@@ -95,11 +95,6 @@ internal static class TextReport
         var dot = style.Paint(Role.Muted, $" {style.Glyphs.Dot} ");
         writer.WriteLine(Brand(style) + dot + style.Paint(Role.Number, Count(analysis.ChangedFiles.Count, "changed file")) + dot
                          + style.Paint(Role.Number, Count(analysis.Tests.Count, "affected test project")));
-        if (ResultWriter.LicenseLine(analysis.License, analysis.LicenseEnforced) is { } license)
-        {
-            writer.WriteLine(style.Paint(Role.Notice, $"{style.Glyphs.Warn} {license}"));
-        }
-
         if (analysis.Tests.Count == 0)
         {
             return;
@@ -227,17 +222,12 @@ internal static class TextReport
         }
     }
 
-    /// <summary>The license, drift, ignored-file and cosmetic-change notes below the header.</summary>
+    /// <summary>The drift, ignored-file and cosmetic-change notes below the header.</summary>
     /// <param name="report">What to print.</param>
     /// <param name="writer">Destination.</param>
     /// <param name="style">Colour, characters and width.</param>
     private static void WriteNotes(ResultReport report, TextWriter writer, ConsoleStyle style)
     {
-        if (ResultWriter.LicenseLine(report.License, report.LicenseEnforced) is { } license)
-        {
-            writer.WriteLine(style.Paint(Role.Notice, $"{style.Glyphs.Warn} {license}"));
-        }
-
         foreach (var drift in report.Drifts)
         {
             writer.WriteLine(style.Paint(Role.Muted, ResultWriter.DriftLine(drift)));

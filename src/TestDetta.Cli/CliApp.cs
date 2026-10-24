@@ -37,7 +37,7 @@ internal static partial class CliApp
     /// <param name="args">Raw command line arguments.</param>
     /// <param name="stdout">Receives the result.</param>
     /// <param name="stderr">Receives usage help, errors and diagnostic logs.</param>
-    /// <param name="host">The environment variables and home directory the license is read from.</param>
+    /// <param name="host">The environment variables the console style is read from.</param>
     internal static int Run(string[] args, TextWriter stdout, TextWriter stderr, CliHost host)
     {
         if (args is ["--version", ..])
@@ -68,25 +68,17 @@ internal static partial class CliApp
             return RecordCoverage(options, loggerFactory, stdout, stderr, host);
         }
 
-        if (options.Command is CliCommand.LicenseStatus or CliCommand.LicenseInstall)
-        {
-            return LicenseCommand(options, loggerFactory, stdout, stderr, host);
-        }
-
-        // Shadow mode needs no license: it reads none, refreshes none and sends nothing (docs/design/shadow-mode.md).
+        // Shadow mode runs every test and compares (docs/design/shadow-mode.md).
         if (options.Command == CliCommand.Test && options.Test.Shadow)
         {
             return Shadow(options, loggerFactory, stdout, stderr);
         }
 
-        // Nor does the audit, which skips nothing either (docs/design/audit.md).
+        // The audit breaks members one at a time in a copy of the working tree (docs/design/audit.md).
         if (options.Command == CliCommand.Audit)
         {
             return Audit(options, loggerFactory, stdout);
         }
-
-        // The license refresh waits on the network while the analysis works; the check below waits for it.
-        var refresh = LicenseGate.Refresh(options.Analysis.RepoPath, loggerFactory, host.Environment, host.Home);
 
         AnalysisResult analysis;
         try
@@ -101,9 +93,6 @@ internal static partial class CliApp
             return Failure;
         }
 
-        var license = LicenseGate.Check(analysis.RepoRoot, loggerFactory, host.Environment, host.Home, refresh);
-        analysis = LicenseGate.Apply(analysis, license, TestDetta.Core.Licensing.LicenseKeys.Enforced, logger);
-
         if (options.Command == CliCommand.Test)
         {
             return RunTests(options, analysis, loggerFactory, stdout, outStyle);
@@ -114,8 +103,6 @@ internal static partial class CliApp
             new ResultReport(options, analysis.RepoRoot, stats, analysis.Impact, analysis.Plan)
             {
                 Drifts = analysis.Drifts,
-                License = analysis.License,
-                LicenseEnforced = analysis.LicenseEnforced,
                 UnmappedFilesRead = analysis.UnmappedFilesRead,
                 NotBuildInputs = analysis.NotBuildInputs,
                 Style = outStyle,
@@ -190,8 +177,7 @@ internal static partial class CliApp
     }
 
     /// <summary>
-    /// Carries out <c>td test --shadow</c> (<see cref="ShadowRun"/>). No license is checked, refreshed or read, and
-    /// TestDetta itself sends nothing anywhere. The analysis runs before the full run, on the tree as the pull request
+    /// Carries out <c>td test --shadow</c> (<see cref="ShadowRun"/>). TestDetta itself sends nothing anywhere. The analysis runs before the full run, on the tree as the pull request
     /// has it, but nothing of it is shown until that run has finished: its log is held, and the plan is printed with
     /// the report, for the classes that ran. An analysis that fails, or runs past <c>--shadow-analysis-timeout</c>,
     /// leaves the full run as it is and the report says why it has no shadow result. Ctrl+C and SIGTERM stop the
@@ -289,7 +275,7 @@ internal static partial class CliApp
     }
 
     /// <summary>
-    /// Carries out <c>td audit</c> (<see cref="AuditRun"/>) without a license, cancelled by Ctrl+C or SIGTERM: the running
+    /// Carries out <c>td audit</c> (<see cref="AuditRun"/>), cancelled by Ctrl+C or SIGTERM: the running
     /// tests are killed, the work folder with the working copy is deleted and the partial report is written.
     /// </summary>
     /// <param name="options">Parsed command line.</param>
@@ -308,66 +294,6 @@ internal static partial class CliApp
         using var interrupt = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGINT, Stop);
         using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, Stop);
         return new AuditRun(loggerFactory, stdout, new AuditHooks(), cancel.Token).Run(options);
-    }
-
-    /// <summary>
-    /// Carries out <c>td license status</c> (what the check finds, without personal data) and
-    /// <c>td license install</c> (stores a license that verifies in <c>~/.testdetta/license</c>).
-    /// </summary>
-    /// <param name="options">Parsed command line.</param>
-    /// <param name="loggerFactory">Creates the git client's logger.</param>
-    /// <param name="stdout">Receives the result.</param>
-    /// <param name="stderr">Receives errors.</param>
-    /// <param name="host">The environment variables and home directory the license is read from.</param>
-    private static int LicenseCommand(CliOptions options, ILoggerFactory loggerFactory, TextWriter stdout, TextWriter stderr, CliHost host)
-    {
-        var home = host.Home;
-        if (options.Command == CliCommand.LicenseInstall)
-        {
-            var value = options.License.Install!;
-            var text = TestDetta.Core.Licensing.License.Normalize(File.Exists(value) ? File.ReadAllText(value) : value);
-            if (TestDetta.Core.Licensing.License.Verify(text, TestDetta.Core.Licensing.LicenseKeys.Trusted, out var error) is not { } claims)
-            {
-                stderr.WriteLine($"td: the license is not valid: {error}");
-                return Failure;
-            }
-
-            var path = TestDetta.Core.Licensing.LicenseInputs.InstalledPath(home);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, text);
-            stdout.WriteLine($"Installed license {claims.Id} ({claims.Licensee}, {claims.Seats} seats, until {claims.ValidUntil:yyyy-MM-dd}) in {path}.");
-            return Success;
-        }
-
-        string root;
-        try
-        {
-            root = new GitClient(loggerFactory.CreateLogger<GitClient>()).TopLevel(options.Analysis.RepoPath);
-        }
-        catch (InvalidOperationException ex)
-        {
-            stderr.WriteLine($"td: {ex.Message}");
-            return Failure;
-        }
-
-        var status = LicenseGate.Check(root, loggerFactory, host.Environment, home);
-        stdout.WriteLine($"License: {status.State}");
-        stdout.WriteLine($"  {status.Message}");
-        if (status.Claims is { } license)
-        {
-            stdout.WriteLine($"  id {license.Id}, {license.Licensee}, plan {license.Plan}, {license.Kind}, {license.Seats} seats, valid {license.ValidFrom:yyyy-MM-dd} to {license.ValidUntil:yyyy-MM-dd}");
-            stdout.WriteLine($"  scopes: {string.Join(", ", license.Scopes)}");
-        }
-
-        if (status.ActiveCommitters is { } active)
-        {
-            stdout.WriteLine($"  active committers in the last 30 days: {active} (bots excluded: {string.Join(", ", TestDetta.Core.Licensing.ActiveCommitters.BuiltInBots)}, plus .testdetta/license.json)");
-        }
-
-        stdout.WriteLine(status.AllowsSelection
-            ? "  Tests are selected."
-            : TestDetta.Core.Licensing.LicenseKeys.Enforced ? "  Every test runs until this is fixed." : "  Not enforced yet: tests are still selected, whatever the check above finds.");
-        return Success;
     }
 
     /// <summary>Carries out <c>td test</c>: prints the plan, runs (or only prints) the invocations, prints a summary.</summary>
@@ -434,7 +360,7 @@ internal static partial class CliApp
     /// <param name="loggerFactory">Creates the recorder's loggers.</param>
     /// <param name="stdout">Receives build and test output and the summary.</param>
     /// <param name="stderr">Receives errors.</param>
-    /// <param name="host">Environment and home directory, for the license an incremental recording's selection needs.</param>
+    /// <param name="host">Environment, for the style of the summary.</param>
     private static int RecordCoverage(
         CliOptions options,
         StderrLoggerFactory loggerFactory,
@@ -466,10 +392,8 @@ internal static partial class CliApp
                     MapDirectory.Restore(Path.GetFullPath(restoreFrom), root, "HEAD", options.Analysis.MaxMapAge, git, logger);
                 }
 
-                var license = LicenseGate.Check(root, loggerFactory, host.Environment, host.Home);
-                var licensed = license.AllowsSelection || !TestDetta.Core.Licensing.LicenseKeys.Enforced;
                 steps = new IncrementalRecording(loggerFactory, evaluator)
-                    .Plan(new IncrementalContext(root, graph, options.Record, options.Analysis.MaxMapAge, licensed) { NonCodeFiles = options.Analysis.NonCodeFiles, NotBuildInputs = options.Analysis.NotBuildInputs }, testProjects, now);
+                    .Plan(new IncrementalContext(root, graph, options.Record, options.Analysis.MaxMapAge) { NonCodeFiles = options.Analysis.NonCodeFiles, NotBuildInputs = options.Analysis.NotBuildInputs }, testProjects, now);
             }
             else
             {
