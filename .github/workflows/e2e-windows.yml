@@ -1,0 +1,130 @@
+name: E2E Windows
+
+# End to end on real repositories with .NET Framework test projects, the way a team on Windows agents would run it:
+# the released TestDetta from NuGet, driven by dist/ci/testdetta.ps1. Each repository is cloned shallowly (the
+# script fetches the history), recorded on its default branch, then changed on a pull request branch so that tests
+# break; test mode runs with Azure DevOps's environment and shadow mode with Jenkins's.
+on:
+  push:
+    branches: ['e2e/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: nlog
+            repo: NLog/NLog
+            branch: dev
+            project: tests/NLog.UnitTests/NLog.UnitTests.csproj
+            file: src/NLog/LayoutRenderers/Wrappers/LowercaseLayoutRendererWrapper.cs
+            old: 'char.ToLower(target[i], culture)'
+            new: 'char.ToUpper(target[i], culture)'
+            powershell: powershell
+          - name: log4net
+            repo: apache/logging-log4net
+            branch: master
+            project: src/log4net.Tests/log4net.Tests.csproj
+            file: src/log4net/Util/CyclicBuffer.cs
+            old: '      return discardedLoggingEvent;'
+            new: '      return null;'
+            powershell: pwsh
+          - name: castle
+            repo: castleproject/Core
+            branch: master
+            project: src/Castle.Core.Tests/Castle.Core.Tests.csproj
+            file: src/Castle.Core/Core/ReflectionBasedDictionaryAdapter.cs
+            old: 'get { return properties.Count; }'
+            new: 'get { return properties.Count + 1; }'
+            powershell: powershell
+    env:
+      TESTDETTA_VERSION: 0.5.1
+      MAPS: ${{ runner.temp }}\maps
+      SCRIPT: ${{ github.workspace }}\testdetta\dist\ci\testdetta.ps1
+      SHELL_EXE: ${{ matrix.powershell }}
+      PROJECT: ${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: testdetta
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Clone shallowly
+        shell: pwsh
+        env:
+          REPO: ${{ matrix.repo }}
+          BRANCH: ${{ matrix.branch }}
+        run: git clone --depth 1 --branch $env:BRANCH "https://github.com/$env:REPO.git" target
+
+      - name: Record on the default branch
+        shell: pwsh
+        working-directory: target
+        run: |
+          & $env:SHELL_EXE -NoProfile -ExecutionPolicy Bypass -Command "& '$env:SCRIPT' -Mode record -MapsDir '$env:MAPS' -TdOptions '--project','$env:PROJECT','-f','net462' -- -c Release; exit `$LASTEXITCODE"
+          "record exit code: $LASTEXITCODE"
+          Get-ChildItem -Recurse $env:MAPS | Select-Object -ExpandProperty FullName
+
+      - name: Break the code on a pull request branch
+        shell: pwsh
+        working-directory: target
+        env:
+          FILE: ${{ matrix.file }}
+          OLD: ${{ matrix.old }}
+          NEW: ${{ matrix.new }}
+        run: |
+          git switch -c pull-request
+          $bytes = [IO.File]::ReadAllBytes($env:FILE)
+          $bom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+          $text = [IO.File]::ReadAllText($env:FILE)
+          if (-not $text.Contains($env:OLD)) { throw "$env:OLD not found in $env:FILE" }
+          [IO.File]::WriteAllText((Resolve-Path $env:FILE), $text.Replace($env:OLD, $env:NEW), [Text.UTF8Encoding]::new($bom))
+          git -c user.name=e2e -c user.email=e2e@example.invalid commit -qam "Break it"
+          git show --stat HEAD
+
+      - name: Test mode, as on Azure DevOps
+        shell: pwsh
+        working-directory: target
+        env:
+          SYSTEM_PULLREQUEST_TARGETBRANCH: refs/heads/${{ matrix.branch }}
+          TF_BUILD: 'True'
+        run: |
+          & $env:SHELL_EXE -NoProfile -ExecutionPolicy Bypass -Command "& '$env:SCRIPT' -Mode test -MapsDir '$env:MAPS' -SummaryFile '$env:RUNNER_TEMP\summary-test.md' -- '$env:PROJECT' -c Release -f net462; exit `$LASTEXITCODE"
+          "test exit code: $LASTEXITCODE (3 = tests failed, expected: the change breaks tests)"
+          Get-Content "$env:RUNNER_TEMP\summary-test.md" -ErrorAction SilentlyContinue
+          exit 0
+
+      - name: Shadow mode, as on Jenkins
+        shell: pwsh
+        working-directory: target
+        env:
+          CHANGE_TARGET: ${{ matrix.branch }}
+        run: |
+          & $env:SHELL_EXE -NoProfile -ExecutionPolicy Bypass -Command "& '$env:SCRIPT' -Mode shadow -MapsDir '$env:MAPS' -SummaryFile '$env:RUNNER_TEMP\summary-shadow.md' -- '$env:PROJECT' -c Release -f net462; exit `$LASTEXITCODE"
+          "shadow exit code: $LASTEXITCODE (the full run's: 3 expected)"
+          Get-Content "$env:RUNNER_TEMP\summary-shadow.md" -ErrorAction SilentlyContinue
+          exit 0
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: e2e-${{ matrix.name }}
+          path: |
+            ${{ runner.temp }}\summary-*.md
+            target\.testdetta\testdetta-shadow.json
+          retention-days: 14
