@@ -1,10 +1,17 @@
 # TestDetta
 
+[![NuGet](https://img.shields.io/nuget/v/TestDetta?label=NuGet)](https://www.nuget.org/packages/TestDetta)
+[![NuGet downloads](https://img.shields.io/nuget/dt/TestDetta?label=downloads)](https://www.nuget.org/packages/TestDetta)
+[![CI](https://github.com/selcukgural/TestDetta/actions/workflows/ci.yml/badge.svg)](https://github.com/selcukgural/TestDetta/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 Run only the .NET tests a change can affect.
 
 TestDetta compares your branch with its base, works out which test projects and which test classes can
-observe the change, and runs just those. When it cannot be sure, it runs more, never less; the patterns
-it cannot see are listed under [Limitations](#limitations).
+observe the change, and runs just those. When it cannot be sure, it runs more, never less. It runs inside
+your CI and on your machine; your source, coverage and test results never leave them.
+
+**Documentation: [testdetta.com/docs](https://testdetta.com/docs/)**
 
 ```
 $ td test --base origin/main
@@ -16,226 +23,85 @@ Tests to run
 │ tests/Shop.Tests │ filtered │  3 / 41 │     - │ 3 of 41 test class(es) run or reference the changed code │
 │ tests/Api.Tests  │ skipped  │  0 / 12 │     - │ no test class runs or references the changed code        │
 └──────────────────┴──────────┴─────────┴───────┴──────────────────────────────────────────────────────────┘
-  tests/Shop.Tests → 3 classes
-    Shop.Tests.CartTests
-    Shop.Tests.CheckoutTests
-    Shop.Tests.OrderTests
-
-...
-
-td summary
-┌──────────────────┬──────────┬──────────────────┬───────┐
-│ Test project     │ Result   │ Ran              │  Time │
-├──────────────────┼──────────┼──────────────────┼───────┤
-│ tests/Shop.Tests │ ✓ passed │ 3 classes        │ 4.1 s │
-│ tests/Api.Tests  │ skipped  │ nothing affected │       │
-└──────────────────┴──────────┴──────────────────┴───────┘
-1 project run · 0 failed · 1 skipped
 ```
+
+## Install
+
+TestDetta is the [`TestDetta` package on nuget.org](https://www.nuget.org/packages/TestDetta), a .NET tool with the
+command `td`. The .NET 10 SDK runs `td` itself; your tests keep the SDK and runner your repository already uses.
+Tested on Linux and macOS; Windows is not tested yet.
+
+```sh
+dotnet tool install --global TestDetta      # or: dotnet tool install TestDetta (local tool manifest)
+dotnet tool update --global TestDetta       # to the latest version
+```
+
+xUnit v2 and v3, NUnit, MSTest and TUnit, on VSTest and Microsoft.Testing.Platform, in C#, Visual Basic and F#
+([compatibility](https://testdetta.com/docs/compatibility/)).
+
+## Use
+
+```sh
+td record                    # on the default branch: run every test once and record coverage maps
+td test --base origin/main   # on a branch: run only the affected tests
+td affected -v               # what would run, and why, without running anything
+```
+
+Add `.testdetta/` to `.gitignore`. Without a coverage map TestDetta still works, deciding by name, which
+selects more. Every command and option: [CLI reference](https://testdetta.com/docs/cli/).
+
+### GitHub Actions
+
+```yaml
+- uses: actions/checkout@v7          # pin to a commit SHA
+  with:
+    fetch-depth: 0                   # TestDetta compares with the merge base
+
+- if: github.event_name == 'push'    # default branch: record the maps
+  uses: TestDetta/action@e596523b78cb69f9ad4846d0f0bce7eb60e25ec0 # v0.3.0
+  with:
+    mode: record
+
+- if: github.event_name == 'pull_request'   # pull requests: run the affected tests
+  uses: TestDetta/action@e596523b78cb69f9ad4846d0f0bce7eb60e25ec0 # v0.3.0
+  with:
+    mode: test
+```
+
+The whole workflow, permissions and inputs: [GitHub Actions](https://testdetta.com/docs/github-actions/). GitLab CI,
+Jenkins, Azure DevOps and Bitbucket: [Other CI systems](https://testdetta.com/docs/other-ci/).
+
+### Claude Code
+
+[`dist/claude-plugin`](dist/claude-plugin) is a Claude Code plugin: agents run `td test` instead of a full
+`dotnet test`, and the affected tests run before the agent hands back.
 
 ## How it decides
 
-1. **Projects.** Changed files are mapped to their projects and followed through `ProjectReference`s.
-   Build-wide files (`Directory.Build.props`, `global.json`, `.editorconfig`, ...) affect every
-   project below them.
-2. **Symbols.** For C#, Visual Basic and F# files, the old and new syntax trees are compared. Comment and whitespace
-   edits select nothing; otherwise TestDetta knows which types and members changed.
-3. **Coverage** (after `td record`). A map of which test class ran which method, recorded at the
-   base commit, gives the test classes for changed methods, properties and constructors directly.
-4. **Names.** What coverage cannot see (new code, fields, constants) is traced through the source by
-   name until it reaches test classes or code the coverage map knows.
-5. **Fallbacks.** A whole test project runs when a change cannot be traced: files in a project
-   that are not C#, Visual Basic or F# source (`appsettings.json`, `.csproj`, `.resx`, F# `.fsi` signature files), global usings and assembly attributes, and types
-   a framework discovers through reflection (controllers, message handlers, EF configurations).
+1. **Projects.** Changed files are followed through project references; build-wide files affect every project below them.
+2. **Symbols.** Old and new syntax trees are compared, so a comment or whitespace edit selects nothing.
+3. **Coverage.** A map of which test class ran which method gives the classes for changed code directly.
+4. **Names.** New code, fields and constants are traced through the source by name.
+5. **Fallbacks.** A change that cannot be traced (`appsettings.json`, a `.csproj`, reflection-found types) runs the whole test project.
 
-A filter that matches no test is treated as a TestDetta bug: the project is run again without it.
-
-## Commands
-
-| Command | What it does |
-|---|---|
-| `td affected [--format text\|json\|paths\|commands] [--build]` | Print what a change affects and why. `--build` builds the test projects that use a changed source generator, to compare what it generates; without it, an existing build newer than the sources is read. |
-| `td test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
-| `td test --shadow [--shadow-no-classify] [--shadow-*-timeout <time>] [--shadow-classify-budget <time>] [-- <dotnet test args>]` | Shadow mode: run every test your own `dotnet test` arguments run, compare the run with what the selection would have run, and rerun each failing class it would have left out to tell a miss from a flaky or pre-existing failure. Testing-platform projects need a build first and `--no-build`. See [docs/design/shadow-mode.md](docs/design/shadow-mode.md). |
-| `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build] [-- <dotnet test args>]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. Arguments after `--` are your own `dotnet test` arguments: recording runs under their filter and settings. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. A test project that does not build or run on the machine (a mobile app without its workload) gets no map and is decided by name; the command fails only when no map could be written. |
-| `td audit [--target-broken <n>] [--max-mutants <n>] [--budget <time>] [--parallel <n>] [--member <Type.Member>]... [-- <dotnet test args>]` | Check the selection on your own code: break members one at a time with IL mutants in a copy of the working tree (your sources and build output are only read), run every test that can see each change, and report every failing class the selection left out, with the 95% upper bound of the miss rate, the worst case counting unjudged changes as misses, and whether the run meets shadow mode's graduation criterion. Exit code 3 on a miss. See [docs/design/audit.md](docs/design/audit.md). |
-
-Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `--maps-dir <dir>` (coverage
-maps outside the repository, see [docs/ci.md](docs/ci.md)), `-v` for debug logs on stderr,
-`--log-level <level>` for any other level, `--color auto|always|never` and `--theme default|colorblind|mono`
-for the console tables (colour only in a terminal or a GitHub Actions log; `NO_COLOR` is respected). Exit codes: `0` success, `1` the analysis failed (`td audit`: it
-could not run or was cancelled), `2` invalid command line, `3` tests failed (`td audit`: a miss).
-
-Coverage maps are best recorded at the merge base of your branch. A map recorded up to 50 commits
-earlier (`--max-map-age`) is still used: code changed in between could have created calls the map
-does not know, so TestDetta also selects the classes that ran any changed-since member that can reach
-your change, and traces new code by name. When something in between cannot be described by members
-(a build file, `appsettings.json`), the affected test projects run completely; `--drift-fallback name`
-decides them by name instead, as without a map (faster, but blind to calls wired by configuration).
-Add `.testdetta/` to `.gitignore`.
-
-TestDetta narrows your test runs and never widens them: a test case filter (`VSTestTestCaseFilter`, your
-`--filter`) is combined with its class filter, recording runs under a copy of your run settings with only its own
-elements added, and testing platform arguments you set are left to the platform. Pass the arguments your test job
-uses (`td test -- …`, `td record -- …`, the action's `dotnet-test-args`). See
-[docs/design/team-test-configuration.md](docs/design/team-test-configuration.md) and the site's "Your test
-configuration" page.
-
-A changed file in a project folder that is not code (`README.md`, `CHANGELOG.md`, a JSON file) runs
-only the test classes the map saw read it, when the build neither compiles, embeds, copies nor hands it
-to a tool (`--non-code-files readers`, the default). Recording sees the reads of your code and of the
-libraries your tests use (a snapshot library reading its `.verified` files). A file the build uses, or a
-test project whose map was recorded before reads of libraries were, still runs completely, and so does
-everything under `--non-code-files project`. Documentation files (`README`, `CHANGELOG`, `LICENSE`, …) and
-the files you name with `--not-build-inputs` count as build inputs only when MSBuild builds, embeds or copies
-them or a target names them, not on a guess from an item pattern. See [docs/design/non-code-files.md](docs/design/non-code-files.md)
-for what the rule relies on and what it cannot see.
-
-## GitHub Actions
-
-Record a map for every commit on the default branch, and let pull requests run only the tests
-their changes affect. The action fetches the TestDetta package its `tool.lock` pins from nuget.org and
-checks its SHA-512 before running it:
-
-```yaml
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-permissions:
-  contents: read
-  actions: read # lets pull requests find the newest coverage map in the Actions cache
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7 # pin to a commit SHA
-        with:
-          fetch-depth: 0 # TestDetta compares with the merge base
-          persist-credentials: false
-
-      - uses: actions/setup-dotnet@v6 # pin to a commit SHA
-        with:
-          global-json-file: global.json
-
-      # Also the full test run of main. Leave out projects that cannot run here, such as
-      # integration tests that need a database; they are then decided by name on pull requests.
-      - if: github.event_name == 'push'
-        uses: TestDetta/action@e596523b78cb69f9ad4846d0f0bce7eb60e25ec0 # v0.3.0
-        with:
-          mode: record
-          projects: |
-            tests/Shop.Tests/Shop.Tests.csproj
-
-      - if: github.event_name == 'pull_request'
-        uses: TestDetta/action@e596523b78cb69f9ad4846d0f0bce7eb60e25ec0 # v0.3.0
-        with:
-          mode: test
-          dotnet-test-args: --logger trx
-```
-
-Maps are stored in the Actions cache under `testdetta-coverage-<commit>`. Pull requests can read caches
-of their base branch. A pull request uses the map of its merge base, or the newest one recorded
-up to `max-map-age` commits before it (finding that one lists the caches, which needs
-`actions: read`). Without a map, `mode: test` still works, deciding by name only.
-
-| Input | Default | |
-|---|---|---|
-| `mode` | | `test` (run affected tests), `shadow` (run every test and report what the selection would have left out), `record` (record coverage maps), `audit` (break your code one change at a time in a copy and check the selection) |
-| `base` | the PR's base branch | branch to compare with in test and shadow modes |
-| `configuration` | `Debug` | build configuration |
-| `projects` | all test projects | record mode: `.csproj` paths, one per line |
-| `parallel` | `1` | record mode: test processes per project (the suite must tolerate several at once) |
-| `no-build` | `false` | record mode: `true` to record the build an earlier step made with the same `configuration` |
-| `dotnet-test-args` | | test, shadow, audit and record modes: extra `dotnet test` arguments (your test job's filter and settings are kept in every run and while recording); in shadow mode name your solution here to run it as one command, and with testing-platform projects build in a step before and add `--no-build` |
-| `max-map-age` | `50` | test, shadow and audit modes: commits a map may be behind the merge base (0: only an exact map) |
-| `drift-fallback` | `all` | test, shadow and audit modes: `all` runs test projects completely when the changes since an older map include a build file or configuration; `name` decides them by name |
-| `non-code-files` | | test, shadow and audit modes: `readers` runs only the test classes that read a changed non-code file the build does not use; `project` runs its project and the projects depending on it completely; empty keeps the default (`readers`) |
-| `not-build-inputs` | | test, shadow and audit modes: non-code files the build does not use, as repository-relative patterns separated by `;`; like documentation files, they count as build inputs only on an exact sign (MSBuild builds, embeds or copies them, or a target names them) |
-| `shadow-analysis-timeout`, `shadow-rerun-timeout`, `shadow-rerun-idle-timeout`, `shadow-base-timeout`, `shadow-base-idle-timeout`, `shadow-classify-budget` | `10m`, `15m`, `5m`, `30m`, `10m`, `45m` | shadow mode: time limits of the analysis and of the reruns that classify failures |
-| `shadow-artifact-suffix` | | shadow mode: added to the report artifact's name, to tell matrix jobs apart |
-| `audit-target-broken` | `100` | audit mode: stop once this many changes broke tests |
-| `audit-max-mutants` | no limit | audit mode: stop after this many changes ran tests |
-| `audit-budget` | `4h` | audit mode: start no change after this long; a change still running finishes, so leave headroom under `timeout-minutes` (the report says by how much it ran over) |
-| `audit-parallel` | `1` | audit mode: changes tested at once, each in its own copy |
-| `github-token` | `github.token` | test, shadow and audit modes: lists the Actions caches to find the newest map |
-| `license` | | deprecated and ignored: TestDetta needs no license; still accepted so existing workflows keep working, with a notice in the log |
-| `working-directory` | `.` | any directory inside the repository |
-| `setup-dotnet` | `true` | install the .NET 10 SDK TestDetta runs on |
-
-## Other CI systems
-
-GitLab CI, Jenkins, Azure DevOps, Bitbucket and on-premises setups use the same two commands with a
-folder of per-commit coverage maps (`--maps-dir`) kept on a shared disk or object storage. Examples
-and the details are in [docs/ci.md](docs/ci.md).
-
-## Limitations
-
-- Both `dotnet test` runners are supported. The runner is read from `global.json`
-  (`"test": { "runner": "Microsoft.Testing.Platform" }`, required for xUnit v3 on the .NET 10 SDK).
-  Each test project is built and run in the directory of the nearest `global.json` at or above it,
-  so a file kept next to the solution (`src/global.json`) counts as it does for a developer there;
-  `--dry-run` prints such commands as `(cd src && dotnet test ...)`. Recording and selection are
-  tested end to end with xUnit v2 (VSTest), xUnit v3 and TUnit (Microsoft.Testing.Platform), and
-  MSTest and NUnit under both runners, including projects that turn on their framework's own
-  parallelization.
-- Test classes that fail while recording are always selected when their project is affected: a
-  failing test stops early, so its coverage is incomplete. When tests fail and no TRX report says
-  which (NUnit under Microsoft.Testing.Platform without `Microsoft.Testing.Extensions.TrxReport`),
-  the map is not used and selection falls back to names.
-- Code that runs once per process (caches, lazy singletons, EF model building) is credited to the
-  first test class that triggers it. Changes to code that ran inside a static constructor or a
-  cache-filling call (`ConcurrentDictionary.GetOrAdd`, `Lazy<T>.Value`, `LazyInitializer`,
-  `ConditionalWeakTable`, `IMemoryCache.GetOrCreate`), and to constructors and static members that
-  only one test class per recording process ran, are traced by name instead. A cache written by
-  hand (a `Dictionary` checked with `TryGetValue`) can still hide its users. Keep running the full suite on the default branch; recording does that.
-- Project files are evaluated by MSBuild (one `dotnet msbuild` call, cached in `.testdetta/cache`) for
-  references, compiled and embedded items, assembly names and target frameworks, in the default
-  configuration and without a restore. Items only a package's props add, or only a `Release`
-  condition adds, are not seen. A project MSBuild cannot evaluate is read as XML, as are imports.
-  A changed file inside a project folder that the project does not compile counts as a change to
-  that project; a file outside every project folder (README, `.github/`, shared test data) selects
-  only the test classes that read it by a path while the map was recorded (reads in the repository's
-  own code; docs/design/runtime-file-reads.md), and nothing when no test read it. Test
-  projects are also recognised by a `*.Tests`/`*.Test` name.
-- C# files are parsed with each target framework's real preprocessor symbols, and also with no
-  symbols and with every symbol their `#if`s name, so code under any active condition is seen.
-- Tests skipped while a map was recorded have no coverage. A class whose tests were all skipped is
-  selected on another platform (it may run there) and skipped on the recording platform. Tests
-  skipped for other reasons, such as a missing Docker daemon, are covered only by recording where
-  the tests run.
-- Code written by source generators is not in the source tree; `td record` reads it from the
-  PDBs of the recorded assemblies (portable or embedded) and keeps it in the map, where it is
-  analysed like the project's own code. Assemblies built without a portable PDB give nothing.
-- A change that reaches a source generator in the repository (a project used with
-  `OutputItemType="Analyzer"`) is decided by what the generator writes: `td test` builds the test
-  projects that use it and compares their generated code with the map, so only generated code that
-  really changed counts, framework by framework. A test project without a map, without a portable
-  PDB, or recorded with `-f` for one of several frameworks still runs completely; a build that fails
-  stops `td test` with the compiler's errors.
-  A project referenced with `ReferenceOutputAssembly="false"` is decided by how its output is used:
-  the classes whose recording started it as a process, loaded it as an assembly or read a build output
-  named after it run. When the consumer's build uses the output (an `OutputItemType`, a target that
-  names the project, a compile input from it), `td test` builds the test project and compares what the
-  build fed the consumer's compiler from outside git with the map; a difference, or a map recorded
-  before such uses were, runs the consumer completely.
-- Visual Basic is analysed like C# (member changes, coverage, name tracing ignoring case, the
-  project's root namespace), and so is F# (modules as classes and their `let` functions as members,
-  as the compiler names them; indentation counts; an `inline` function's callers are traced by
-  name). F# signature files (`.fsi`) are not analysed: a change to one runs its project's dependents.
+Details: [How it decides](https://testdetta.com/docs/how-it-works/) ·
+[Limitations](https://testdetta.com/docs/limitations/) ·
+[Validate on your repository](https://testdetta.com/docs/validate/) (shadow mode and `td audit`) ·
+[Your test configuration](https://testdetta.com/docs/test-configuration/) ·
+[Troubleshooting](https://testdetta.com/docs/troubleshooting/) ·
+[Security and data](https://testdetta.com/docs/security/)
 
 ## Building
 
-.NET 10 SDK. `dotnet build`, `dotnet test` (the `Category=Slow` test builds and records a sample
-project). Coding guidelines: [CONTRIBUTING.md](CONTRIBUTING.md).
+.NET 10 SDK: `dotnet build`, `dotnet test` (`Category=Slow` tests build and record sample projects). Coding
+guidelines: [CONTRIBUTING.md](CONTRIBUTING.md). Design notes: [docs/design](docs/design). Security reports:
+[SECURITY.md](SECURITY.md).
 
 ## Sponsors
 
-TestDetta is free and open source for every repository, public or private, on any CI and on
-developer machines. It is built by one person; if it saves your team test time, you can help it go
-on through [GitHub Sponsors](https://github.com/sponsors/selcukgural): monthly or once.
+TestDetta is free and open source for every repository, public or private. It is built by one person; if it
+saves your team test time, you can help it go on through [GitHub Sponsors](https://github.com/sponsors/selcukgural):
+monthly or once.
 
 ## License
 
