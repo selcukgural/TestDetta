@@ -15,7 +15,7 @@ your CI and on your machine; your source, coverage and test results never leave 
 
 ```
 $ td test --base origin/main
-TestDetta 0.4.0 · 1 changed file · 2 affected test projects
+TestDetta 0.5.0 · 1 changed file · 2 affected test projects
 Tests to run
 ┌──────────────────┬──────────┬─────────┬───────┬──────────────────────────────────────────────────────────┐
 │ Test project     │ Run      │ Classes │ Saved │ Why                                                      │
@@ -58,12 +58,12 @@ selects more. Every command and option: [CLI reference](https://testdetta.com/do
     fetch-depth: 0                   # TestDetta compares with the merge base
 
 - if: github.event_name == 'push'    # default branch: record the maps
-  uses: TestDetta/action@da0e18e941d8a61ee73907d1ac0b85ca14247c6b # v0.4.0
+  uses: TestDetta/action@6afa8c0f324f1f3626d14d71a6f37899533441f0 # v0.5.0
   with:
     mode: record
 
 - if: github.event_name == 'pull_request'   # pull requests: run the affected tests
-  uses: TestDetta/action@da0e18e941d8a61ee73907d1ac0b85ca14247c6b # v0.4.0
+  uses: TestDetta/action@6afa8c0f324f1f3626d14d71a6f37899533441f0 # v0.5.0
   with:
     mode: test
 ```

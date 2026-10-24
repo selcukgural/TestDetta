@@ -62,6 +62,9 @@ repository; 0.4.0 carries its fix.
 assembly fixture from a shared library serves every class, #89; map format 5, so maps recorded by 0.3.0 are ignored until
 recorded again; a Claude Code plugin, #90): `TestDetta/action` at `da0e18e` with tags `v0.4.0` and `v0`, GitHub release
 created, the site and README pinned to it.
+0.5.0 (2026-10-24, shadow mode shows every decision and its JSON report moves to schema 5, #92; a Claude Code plugin
+marketplace and a skill for Codex and ChatGPT, #94-#96; no map format change): `TestDetta/action` at `6afa8c0` with tags
+`v0.5.0` and `v0`, GitHub release created, the site and README pinned to it.
 
 ## Later (known, not blocking)
 
