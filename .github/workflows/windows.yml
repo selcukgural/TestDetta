@@ -3,11 +3,13 @@ name: Windows
 # The whole suite on a Windows runner, where most enterprise .NET teams build: .NET Framework 4.8,
 # msbuild.exe from the Visual Studio Build Tools and vstest.console.exe come with the image, so the
 # Legacy tests run without Mono. Git keeps the image's core.autocrlf=true, as on a developer's Windows
-# machine. Windows minutes are free on a public repository; it runs by hand and on ci/windows* branches
-# until the suite is green there.
+# machine. Paths ('\' and drive letters), CRLF, file locks, strong names and two load contexts for one
+# assembly are what macOS and Linux never show, so every pull request runs here too, next to CI.
+# Windows minutes are free on a public repository.
 on:
   push:
-    branches: ['ci/windows*']
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
