@@ -296,7 +296,7 @@ public sealed class ShadowRunTests : IDisposable
         Assert.Contains("Shop.Tests.DiscountTests.New passes alone on the base commit", discount.GetProperty("note").GetString(), StringComparison.Ordinal);
         Assert.Equal(["Shop.Tests.DiscountTests.New", "Shop.Tests.DiscountTests.Old"], discount.GetProperty("failedTests").EnumerateArray().Select(static t => t.GetString()));
         Assert.Single(_dotnet.OnBase);
-        Assert.Equal(4, report.GetProperty("schema").GetInt32());
+        Assert.Equal(5, report.GetProperty("schema").GetInt32());
     }
 
     [Fact]
@@ -388,7 +388,7 @@ public sealed class ShadowRunTests : IDisposable
     }
 
     [Fact]
-    public void A_project_some_of_whose_classes_did_not_run_shows_neither_its_mode_nor_its_reason()
+    public void A_project_some_of_whose_classes_did_not_run_keeps_its_own_mode_reason_and_decisions()
     {
         _dotnet.Classes["Shop.Tests.csproj"]["Shop.Tests.HiddenTests"] = ["Hidden"];
         var analysis = Analysis(new Selection("Shop.Tests", TestRunMode.Filtered, "1 of 3 test class(es) run or reference the changed code",
@@ -399,11 +399,14 @@ public sealed class ShadowRunTests : IDisposable
         var (_, report, stdout) = Run(["tests/Shop.Tests/Shop.Tests.csproj", "--filter", "FullyQualifiedName~Shop.Tests.TaxTests.|FullyQualifiedName~Shop.Tests.DiscountTests."], analysis, "--summary-file", summary);
 
         var project = report.GetProperty("projects").EnumerateArray().Single(static p => p.GetProperty("path").GetString() == "tests/Shop.Tests/Shop.Tests.csproj");
-        Assert.True(project.GetProperty("partial").GetBoolean());
+        Assert.False(project.TryGetProperty("partial", out _));
         Assert.Equal("filtered", project.GetProperty("mode").GetString());
-        Assert.Equal(["Shop.Tests.HiddenTests"], project.GetProperty("notRun").EnumerateArray().Select(static c => c.GetString()));
-        var everything = File.ReadAllText(Path.Combine(_repo.Root, ".testdetta", "testdetta-shadow.json")) + stdout + File.ReadAllText(summary);
-        Assert.DoesNotContain("1 of 3 test class(es)", everything, StringComparison.Ordinal);
+        Assert.Equal("1 of 3 test class(es) run or reference the changed code", project.GetProperty("reason").GetString());
+        var hidden = project.GetProperty("notRun").EnumerateArray().Single();
+        Assert.Equal("Shop.Tests.HiddenTests", hidden.GetProperty("name").GetString());
+        Assert.False(hidden.GetProperty("selected").GetBoolean());
+        Assert.Contains("1 of 3 test class(es) run or reference the changed code", stdout, StringComparison.Ordinal);
+        Assert.Contains("| filtered | 1 of 2 | 1 (0 selected) |", File.ReadAllText(summary), StringComparison.Ordinal);
     }
 
     [Fact]

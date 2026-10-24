@@ -4,7 +4,7 @@ Status: first sketch 2026-10-05; widened 2026-10-07 at the owner's request: shad
 cautious organisations, and it must put the evidence in front of them in full detail, with no room
 for misreading. Owner decisions (2026-10-07, all as proposed): classification on by default; history in
 CI artifacts for v1. Later the same day: shadow mode shows decisions only for the tests the job ran (decided
-while the selection was sold; see "Decisions only for what ran"); the team's own `dotnet test` command runs as given; graduation is 40 pull
+while the selection was sold; lifted 2026-10-24, see "Every decision, compared where it ran"); the team's own `dotnet test` command runs as given; graduation is 40 pull
 requests in 30 days plus a `td audit` run on the team's code (below); `td audit` is part of v1. Reviewed
 2026-10-07 and fixed: the team's results are never touched, fail-open holds before and after the full run
 and in the Action, the per-project run keeps to the command's projects, and verdicts compare failing tests
@@ -59,32 +59,26 @@ reported.
 4. **Every decision can be checked.** Each skipped class that ran says why, and the same decision can be
    reproduced locally from the same commit and maps.
 
-## Decisions only for what ran
+## Every decision, compared where it ran
 
-Decided 2026-10-07, while the selection was sold and shadow mode was the free way to try it: shadow mode was
-not to hand out the selection for tests the job did not run. TestDetta has been free and open source since
-2026-10-24 (`td affected` lists every decision for anyone); the behaviour below is unchanged.
+From 2026-10-07 until TestDetta became free and open source (2026-10-24), shadow mode showed decisions only for
+the classes in the job's own test reports, so that it would not hand out the paid selection for tests the job did
+not run: a project none of whose tests ran showed no decision (`not-shown`), a project some of whose classes did
+not run showed a mode and reason derived from those that ran (`partial`) and no estimate, and the analysis's log
+was held back when it named a class that did not run. That reason is gone (`td affected` lists every decision for
+anyone), and the owner lifted the restriction on 2026-10-24 (schema 5):
 
-- **Nothing about the selection appears before the full run has finished**: not the plan, not the
-  analysis's log (any level, debug included), not a file. The analysis still runs first, on the tree as the
-  pull request has it, but its log is held in memory; someone who cancels the job during the full run has
-  seen nothing. The plan is printed with the report.
-- **Decisions are shown only for classes in this job's own test reports.** A filter that matches nothing
-  (`td test --shadow -- --filter "FullyQualifiedName~Nothing"`) makes the full run cost nothing, so the
-  report then shows no decision at all: classes the selection knows that did not run are listed by name only
-  ("not run in this job"), a project with no test in the reports shows its run's result but no decision
-  (`not-shown`), and every total (classes, test time, the selection's part) counts only classes that ran.
-  TestDetta's own estimate is shown only for a project all of whose known classes ran, since it covers them
-  all; for such a project neither its own mode nor its reason is shown either (a filter that runs one cheap
-  class per project would otherwise reveal every project's decision for nothing): what is shown is derived
-  from the classes that ran (`partial`). The analysis's held log is written after the run only when every
-  class it decided about ran; otherwise one line says it is not shown. A real filter such as
-  `Category!=Integration` keeps working for the classes that ran.
-- **Limit.** Which classes ran is read from the test reports the run wrote: the `.trx` files written or
-  rewritten during the full run anywhere under the repository or in the team's results directory. A job whose
-  own steps write such files during the run can make classes look as if they ran, and so see their
-  decisions. The protection is meant against a cheap run of the team's ordinary job, not against a job built
-  to fake its reports.
+- **A project's mode, reason and estimate are the selection's own,** whatever ran.
+- **The classes in this job's reports are compared** with the selection (caught, miss, flaky, pre-existing,
+  unclassified), as before.
+- **The classes the selection knows that did not run are listed with their decisions** (`notRun`: selected or
+  not, the kind and the evidence), not compared, since no test of them ran here.
+- **A project none of whose classes ran** says why in `notCompared` (no test of it ran in this job, it wrote no
+  report, it was not built before the run, the command does not run it); its decisions are in `notRun`.
+- **Totals count the compared classes:** `classes`, `selectedClasses` and the times cover the classes that ran,
+  `notRunClasses` the others; the verdict names both.
+- **The analysis's log** is still held until the full run ends, so the team's test output comes first and in one
+  piece, and is then always written.
 
 ## Per pull request
 
@@ -219,10 +213,9 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   variables a command reads.
 - **Held until the full run ends**: the analysis logs into a `StderrLoggerFactory` over a `StringWriter`
   (`ShadowAnalysis.Log`) instead of stderr; nothing is printed before the full run (the plan is no longer
-  printed first). After the run the held log goes to stderr only when every class the selection decided
-  about appears in the job's reports and every project's selection is shown; otherwise one line says it is
-  not shown. The plan is printed with the report: per project its mode, the selected classes among those
-  that ran, and how many known classes did not run.
+  printed first), so the team's test output comes first and in one piece. After the run the held log goes to
+  stderr. The plan is printed with the report: per project its mode and reason, the selected classes among
+  those that ran, and how many known classes did not run and how many of them would have been selected.
 - **The team's command as given** (`ShadowCommand.Target`, `ShadowRun.Verbatim`): the `--` arguments are
   read for their target, in both runners' spelling and every form the `dotnet` command line takes
   (`--project x`, `--project=x`, `--project:x`; the same for `--solution`, `--directory`, `--test-modules`;
@@ -355,9 +348,9 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   reports give (`TestRun/Times`), which is the test host's time without the build the command shares, and
   overlaps other projects' time when they run in parallel. A class's `seconds` is the sum of its tests'
   durations in the report. The selection's part of a project: everything for `all`, nothing for `skipped`,
-  `not-affected` and `not-shown`, and for `filtered` the project's time minus its classes' time (build in a
+  `not-affected` and `unknown`, and for `filtered` the project's time minus its classes' time (build in a
   per-project run; start-up and discovery in both) plus the selected classes' time. `totals.fullSeconds`
-  and `totals.selectedSeconds` add these up over the projects whose selection is shown, so in a verbatim run
+  and `totals.selectedSeconds` add these up over the projects some of whose classes ran, so in a verbatim run
   they are test-host time summed over processes, not wall time; the share in the verdict is
   `selectedSeconds / fullSeconds`, and the whole run's wall time stands next to it, not divided.
 - **Reports**: commands are quoted for a shell (`TestRunArguments.Quoted`: spaces, quotes, `;`, `&`, `|`,
@@ -378,7 +371,7 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   same name; the upload has `continue-on-error`. It passes `-c <configuration>` and `dotnet-test-args` after
   `--`; naming the solution there makes it one command.
 
-### `testdetta-shadow.json` (schema 4)
+### `testdetta-shadow.json` (schema 5)
 
 Schema 2 (2026-10-07) against 1: decisions only for classes in the job's reports (`notRun` lists the rest
 by name), the project mode `not-shown`, a project `exitCode` that may be null, estimates only for projects
@@ -397,9 +390,14 @@ TestDetta added.
 Schema 4 (2026-10-07) against 3: a project's `notBuilt` (a testing-platform project whose build output did not
 exist when its run started, so no report could be asked for; its `reason` says so) and `totals.notBuiltProjects`.
 
+Schema 5 (2026-10-24) against 4: every decision is shown ("Every decision, compared where it ran"). A project's
+`mode`, `reason` and estimate are the selection's own: no `not-shown` mode and no `partial`. `notRun` holds objects
+(`name`, `selected`, `decision`, `evidence`) instead of names. `notCompared` says why a project has no class to
+compare; a not-built project's message moved there from `reason`.
+
 ```jsonc
 {
-  "schema": 4,
+  "schema": 5,
   "verdict": "Would have run 14 of 212 test classes (6.6%), 1 m 10 s of 18 m 30 s of test time; the whole test run took 9 m 40 s; …",
   "compared": true,                 // false: no selection, see noResultReason
   "noResultReason": "…",            // only when compared is false (the analysis failed or ran past its limit, a TestDetta error, a cancellation)
@@ -421,7 +419,7 @@ exist when its run started, so no report could be asked for; its `reason` says s
     "budgetSeconds": 2700, "spentSeconds": 48.6,
     "budgetRanOut": false           // true: the budget left failures unclassified or stopped a rerun
   },
-  "totals": {                       // classes and times: only classes that ran, in projects whose selection is shown
+  "totals": {                       // classes and times: only the classes that ran (compared); notRunClasses: the others
     "projects": 3, "failedProjects": 1, "classes": 212, "selectedClasses": 14, "notRunClasses": 0,
     "fullSeconds": 1110.0, "selectedSeconds": 70.0, "wallSeconds": 580.2,
     "estimatedFullSeconds": 900.0, "estimatedSelectedSeconds": 55.0,   // when maps have timings
@@ -430,16 +428,16 @@ exist when its run started, so no report could be asked for; its `reason` says s
   },
   "projects": [{
     "path": "tests/Shop.Tests/Shop.Tests.csproj",
-    "mode": "filtered",             // all | filtered | skipped | not-affected | unknown | not-shown
-    "reason": "…",                  // for not-shown: why (no test of it ran, no report, not in the command)
+    "mode": "filtered",             // the selection's own: all | filtered | skipped | not-affected | unknown
+    "reason": "…",                  // the selection's reason for the project
     "exitCode": 1,                  // null: not known (no report from one command)
     "wallSeconds": 30.5, "selectedSeconds": 4.0,
-    "estimatedFullSeconds": 25.0, "estimatedSelectedSeconds": 3.1,   // only when every known class ran
+    "estimatedFullSeconds": 25.0, "estimatedSelectedSeconds": 3.1,   // when the map has timings
     "reported": true,               // false: no test report, failures per class unknown
-    "partial": false,               // true: some known classes did not run; mode and reason come from those that ran
+    "notCompared": "…",             // only when none of its classes ran: why (no test of it ran, no report, not built, not in the command)
     "missingReport": false,         // true: the command failed and this project, which it runs, wrote no report
     "notBuilt": false,              // true: testing platform, not built before the run, so no report could be asked for
-    "classes": [{                   // only classes in this job's reports
+    "classes": [{                   // the classes in this job's reports, compared
       "name": "Shop.Tests.TaxTests", "selected": true,
       "decision": "Coverage",       // ClassDecisionKind, or not-affected / unknown
       "evidence": "ran Shop.Calc.Tax, which changed (map 9f3c…)",
@@ -448,7 +446,9 @@ exist when its run started, so no report could be asked for; its `reason` says s
       "verdict": "caught",          // failed classes only: caught | miss | flaky | pre-existing | unclassified
       "note": "…"                   // what the reruns showed
     }],
-    "notRun": ["Shop.Tests.SlowTests"]   // classes the selection knows that did not run here: names only
+    "notRun": [{                    // classes the selection knows that did not run here: decided, not compared
+      "name": "Shop.Tests.SlowTests", "selected": false, "decision": "Skipped", "evidence": "…"
+    }]
   }],
   "reproduction": {
     "testDettaVersion": "…", "testDettaSha256": "…", "baseRef": "origin/main",

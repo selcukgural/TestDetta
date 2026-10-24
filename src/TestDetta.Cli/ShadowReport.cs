@@ -50,10 +50,9 @@ internal sealed record ShadowClass(string Name, bool Selected, string Decision, 
 /// <param name="Path">Project path relative to the repository root, with '/' separators.</param>
 /// <param name="Mode">
 /// What the selection would have done: <c>all</c>, <c>filtered</c>, <c>skipped</c>, <c>not-affected</c>; <c>unknown</c>
-/// without a selection; <c>not-shown</c> when no test of the project appears in this job's reports, so its selection
-/// is kept back (see <see cref="ShadowResult"/>).
+/// without a selection.
 /// </param>
-/// <param name="Reason">The selection's reason for the project, or why it is not shown.</param>
+/// <param name="Reason">The selection's reason for the project.</param>
 /// <param name="ExitCode">
 /// Exit code of its own run when it ran on its own; in one command over a solution, 1 when its report says the run
 /// failed and 0 when it says it passed; null when that is not known (no report from that command).
@@ -64,32 +63,27 @@ internal sealed record ShadowClass(string Name, bool Selected, string Decision, 
 /// which that command shares between projects).
 /// </param>
 /// <param name="Reported">True when a test report of it was read; false leaves failures per class unknown.</param>
-/// <param name="Classes">The classes in its reports, ordered by name; only these carry the selection's decisions.</param>
+/// <param name="Classes">The classes in its reports, ordered by name: the ones compared with the selection.</param>
 internal sealed record ShadowProject(string Path, string Mode, string Reason, int? ExitCode, double WallSeconds, bool Reported, IReadOnlyList<ShadowClass> Classes)
 {
-    /// <summary>The mode of a project whose selection is not shown.</summary>
-    public const string NotShown = "not-shown";
-
-    /// <summary>
-    /// TestDetta's own estimate from the recorded timings; null without a map with timings, and null when some of its
-    /// classes did not run here, since the estimate covers them too.
-    /// </summary>
+    /// <summary>TestDetta's own estimate from the recorded timings, for all of the project; null without a map with timings.</summary>
     public TimeEstimate? Estimate { get; init; }
 
     /// <summary>
-    /// Classes the selection decided about that appear in none of this job's reports: listed by name, without a
-    /// decision, because a decision is shown only for a class whose tests this job ran.
+    /// Classes the selection decided about that appear in none of this job's reports, with their decisions (no
+    /// <see cref="ShadowClass.Seconds"/>, never <see cref="ShadowClass.Failed"/>): not compared, since no test of them
+    /// ran here, but shown, so the report holds every decision the selection made.
     /// </summary>
-    public IReadOnlyList<string> NotRun { get; init; } = [];
-
-    /// <summary>True when the selection's decisions are shown for this project.</summary>
-    public bool Shown => Mode != NotShown;
+    public IReadOnlyList<ShadowClass> NotRun { get; init; } = [];
 
     /// <summary>
-    /// True when some classes the selection knows did not run (<see cref="NotRun"/>): <see cref="Mode"/> and
-    /// <see cref="Reason"/> are then derived from the classes that ran, not the project's own decision.
+    /// Why none of its classes can be compared with the selection (no test of it ran in this job, it wrote no report
+    /// that could be read, it was not built before the run); null when some of them ran.
     /// </summary>
-    public bool Partial { get; init; }
+    public string? NotCompared { get; init; }
+
+    /// <summary>True when some of its classes ran in this job, so the run can be compared with the selection.</summary>
+    public bool Ran => Classes.Count > 0;
 
     /// <summary>
     /// True when the team's command, which runs this project, failed and the project wrote no test report: a build
@@ -101,7 +95,7 @@ internal sealed record ShadowProject(string Path, string Mode, string Reason, in
     /// True for a testing-platform project that was not built before the run: its build output did not exist, so
     /// TestDetta could not tell which report option it takes (options are never guessed: one the project does not know
     /// fails its run), it ran without a report, and its results cannot be compared with the selection.
-    /// <see cref="Reason"/> then says so (<see cref="NotBuiltReason"/>).
+    /// <see cref="NotCompared"/> then says so (<see cref="NotBuiltReason"/>).
     /// </summary>
     public bool NotBuilt { get; init; }
 
@@ -268,17 +262,17 @@ internal sealed record ShadowResult(bool Compared, string? NoResultReason, IRead
     /// <summary>Classes the selection knows that did not run in this job, over every project.</summary>
     public int NotRunClasses => Projects.Sum(static p => p.NotRun.Count);
 
-    /// <summary>Test classes compared: those in the reports of projects whose selection is shown.</summary>
-    public int Classes => Projects.Where(static p => p.Shown).Sum(static p => p.Classes.Count);
+    /// <summary>Test classes compared: those in this job's reports.</summary>
+    public int Classes => Projects.Where(static p => p.Ran).Sum(static p => p.Classes.Count);
 
     /// <summary>The compared classes the selection would have run.</summary>
-    public int SelectedClasses => Projects.Where(static p => p.Shown).Sum(static p => p.Classes.Count(static c => c.Selected));
+    public int SelectedClasses => Projects.Where(static p => p.Ran).Sum(static p => p.Classes.Count(static c => c.Selected));
 
     /// <summary>Test time of the projects compared (<see cref="ShadowProject.WallSeconds"/> added up).</summary>
-    public double FullSeconds => Projects.Where(static p => p.Shown).Sum(static p => p.WallSeconds);
+    public double FullSeconds => Projects.Where(static p => p.Ran).Sum(static p => p.WallSeconds);
 
     /// <summary>The part of <see cref="FullSeconds"/> the selection would have spent.</summary>
-    public double SelectedSeconds => Projects.Where(static p => p.Shown).Sum(static p => p.SelectedSeconds);
+    public double SelectedSeconds => Projects.Where(static p => p.Ran).Sum(static p => p.SelectedSeconds);
 
     /// <summary>The first line of every report.</summary>
     public string Verdict()
@@ -337,8 +331,11 @@ internal static class ShadowReport
     /// mode and reason derived from the classes that ran; <c>missingReport</c>; <c>run.scopeKnown</c> and
     /// <c>run.scope</c>; <c>analysisTimeoutSeconds</c>. 4 (2026-10-07): a project's <c>notBuilt</c> and
     /// <c>totals.notBuiltProjects</c> (a testing-platform project not built before the run, which wrote no report).
+    /// 5 (2026-10-24): every decision is shown, since TestDetta is free: a project's <c>mode</c>, <c>reason</c> and
+    /// estimate are always the selection's own (no <c>not-shown</c> mode, no <c>partial</c>), <c>notRun</c> holds objects
+    /// with each class's decision, and <c>notCompared</c> says why a project has no class to compare.
     /// </summary>
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
 
     /// <summary>Writes the JSON report.</summary>
     /// <param name="result">What to write.</param>
@@ -413,7 +410,7 @@ internal static class ShadowReport
             json.WriteNumber("wallSeconds"u8, Math.Round(whole.WallSeconds, 3));
         }
 
-        var estimates = result.Projects.Where(static p => p.Shown && p.Estimate is not null).ToList();
+        var estimates = result.Projects.Where(static p => p.Estimate is not null).ToList();
         if (estimates.Count > 0)
         {
             json.WriteNumber("estimatedFullSeconds"u8, Math.Round(estimates.Sum(static p => p.Estimate!.FullSeconds), 3));
@@ -471,7 +468,7 @@ internal static class ShadowReport
         json.WriteEndObject();
     }
 
-    /// <summary>Writes one project of the JSON report; a project whose selection is not shown gets no decision or estimate.</summary>
+    /// <summary>Writes one project of the JSON report: the classes that ran, compared, and those that did not, with their decisions.</summary>
     /// <param name="json">Writer.</param>
     /// <param name="project">The project.</param>
     private static void WriteProject(Utf8JsonWriter json, ShadowProject project)
@@ -491,14 +488,14 @@ internal static class ShadowReport
 
         json.WriteNumber("wallSeconds"u8, Math.Round(project.WallSeconds, 3));
         json.WriteNumber("selectedSeconds"u8, Math.Round(project.SelectedSeconds, 3));
-        if (project.Estimate is { } estimate && project.Shown)
+        if (project.Estimate is { } estimate)
         {
             json.WriteNumber("estimatedFullSeconds"u8, Math.Round(estimate.FullSeconds, 3));
             json.WriteNumber("estimatedSelectedSeconds"u8, Math.Round(estimate.SelectedSeconds, 3));
         }
 
         json.WriteBoolean("reported"u8, project.Reported);
-        json.WriteBoolean("partial"u8, project.Partial);
+        WriteOptional(json, "notCompared"u8, project.NotCompared);
         json.WriteBoolean("missingReport"u8, project.MissingReport);
         json.WriteBoolean("notBuilt"u8, project.NotBuilt);
         json.WriteStartArray("classes"u8);
@@ -537,9 +534,14 @@ internal static class ShadowReport
 
         json.WriteEndArray();
         json.WriteStartArray("notRun"u8);
-        foreach (var name in project.NotRun)
+        foreach (var testClass in project.NotRun)
         {
-            json.WriteStringValue(name);
+            json.WriteStartObject();
+            json.WriteString("name"u8, testClass.Name);
+            json.WriteBoolean("selected"u8, testClass.Selected);
+            json.WriteString("decision"u8, testClass.Decision);
+            json.WriteString("evidence"u8, testClass.Evidence);
+            json.WriteEndObject();
         }
 
         json.WriteEndArray();
@@ -601,7 +603,7 @@ internal static class ShadowReport
 
         foreach (var project in result.Projects.Where(static p => p.NotBuilt))
         {
-            writer.WriteLine($"- {code(project.Path)}: {project.Reason}{(project.ExitCode is { } exit and not 0 ? $" (it failed with exit code {exit})" : string.Empty)}.");
+            writer.WriteLine($"- {code(project.Path)}: {project.NotCompared}{(project.ExitCode is { } exit and not 0 ? $" (it failed with exit code {exit})" : string.Empty)}.");
         }
 
         foreach (var project in result.Unexplained.Where(static p => !p.NotBuilt))
@@ -627,15 +629,11 @@ internal static class ShadowReport
         writer.WriteLine("| --- | --- | --- | --- | --- | --- | --- |");
         foreach (var project in result.Projects)
         {
-            if (!project.Shown)
-            {
-                writer.WriteLine($"| {cell(project.Path)} | not shown: {cell(project.Reason)} | | {project.NotRun.Count} | {Durations.Format(project.WallSeconds)} | | |");
-                continue;
-            }
-
-            var estimate = project.Estimate is { } e ? Durations.Describe(e) : project.NotRun.Count > 0 ? "not all of it ran" : "no timings";
-            var mode = project.Partial ? $"{project.Mode}, among the classes that ran" : project.Mode;
-            writer.WriteLine($"| {cell(project.Path)} | {mode} | {project.Classes.Count(static c => c.Selected)} of {project.Classes.Count} | {project.NotRun.Count} | {Durations.Format(project.WallSeconds)} | {Durations.Format(project.SelectedSeconds)} | {estimate} |");
+            var estimate = project.Estimate is { } e ? Durations.Describe(e) : "no timings";
+            var notRun = project.NotRun.Count == 0 ? "0" : $"{project.NotRun.Count} ({project.NotRun.Count(static c => c.Selected)} selected)";
+            var ran = project.NotCompared is { } why ? $"none: {cell(why)}" : $"{project.Classes.Count(static c => c.Selected)} of {project.Classes.Count}";
+            var part = project.Ran ? Durations.Format(project.SelectedSeconds) : string.Empty;
+            writer.WriteLine($"| {cell(project.Path)} | {project.Mode} | {ran} | {notRun} | {Durations.Format(project.WallSeconds)} | {part} | {estimate} |");
         }
 
         writer.WriteLine();
@@ -664,10 +662,12 @@ internal static class ShadowReport
 
         foreach (var project in result.Compared ? result.Projects : [])
         {
-            var notRun = project.NotRun.Count > 0 ? $"; {project.NotRun.Count} class(es) did not run in this job" : string.Empty;
-            stdout.WriteLine(project.Shown
-                ? $"  {project.Path}: {project.Mode}, would have run {project.Classes.Count(static c => c.Selected)} of the {project.Classes.Count} class(es) that ran ({project.Reason}){notRun}"
-                : $"  {project.Path}: not shown, {project.Reason}");
+            var notRun = project.NotRun.Count > 0
+                ? $"; {project.NotRun.Count} class(es) did not run in this job, {project.NotRun.Count(static c => c.Selected)} of them selected"
+                : string.Empty;
+            stdout.WriteLine(project.NotCompared is { } why
+                ? $"  {project.Path}: {project.Mode} ({project.Reason}); not compared: {why}{notRun}"
+                : $"  {project.Path}: {project.Mode}, would have run {project.Classes.Count(static c => c.Selected)} of the {project.Classes.Count} class(es) that ran ({project.Reason}){notRun}");
         }
 
         foreach (var (label, verdict) in (ReadOnlySpan<(string, ShadowVerdict)>)[

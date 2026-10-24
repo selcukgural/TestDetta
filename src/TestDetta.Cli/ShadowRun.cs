@@ -10,8 +10,8 @@ namespace TestDetta.Cli;
 /// <param name="Error">Why there is no selection, or null.</param>
 /// <param name="Seconds">How long the analysis took.</param>
 /// <param name="Log">
-/// What the analysis logged, held back until the full run has finished: its debug lines name the decisions, and
-/// nothing that reveals the selection may appear before the run that pays for it is over.
+/// What the analysis logged, held back until the full run has finished, so the team's test output comes first and in
+/// one piece.
 /// </param>
 internal sealed record ShadowAnalysis(AnalysisResult? Result, string? Error, double Seconds, string Log);
 
@@ -35,7 +35,8 @@ internal sealed class ShadowHooks
 /// selection left out is rerun before it is called a miss: alone with the change, then in its project's full-run
 /// context, then on the base commit in a separate worktree. The exit code is the full run's alone: any TestDetta error
 /// before that run leaves the team's plain command to run, and any error after it only costs the comparison. TestDetta
-/// sends nothing anywhere. Decisions are shown only for the classes this job ran.
+/// sends nothing anywhere. The report holds every decision: compared for the classes this job ran, listed for the
+/// others.
 /// </summary>
 /// <param name="loggerFactory">Creates the loggers.</param>
 /// <param name="stdout">Receives the test output and the report.</param>
@@ -100,7 +101,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
                 return RunPlain(options, input, directory, $"shadow mode failed before the tests ran ({ex.GetType().Name}: {ex.Message})");
             }
 
-            ReleaseLog(input, state, everythingRan: input.Result is null);
+            ReleaseLog(input, state);
             var result = new ShadowResult(false, reason, [], Reproduce(options, plan.Root, plan.Graph), input.Seconds)
             {
                 Run = state.Info,
@@ -187,7 +188,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         var root = Try(() => _git.TopLevel(options.Analysis.RepoPath));
-        ReleaseLog(input, new RunState(string.Empty), everythingRan: input.Result is null);
+        ReleaseLog(input, new RunState(string.Empty));
         var run = new ShadowRunInfo(ShadowRunKind.Plain, "dotnet " + CommandLine(["test", .. userArguments]), null, stopwatch.Elapsed.TotalSeconds, exitCode);
         var result = new ShadowResult(false, reason, [], Reproduce(options, root, null), input.Seconds)
         {
@@ -210,8 +211,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var compared = analysis is not null && !cancel.IsCancellationRequested;
         var projects = full.Runs.Select(r => Compare(plan.Root, analysis, r, full.Info.ExitCode)).ToList();
 
-        // The analysis's log names decisions; it is shown only when this job ran every class it decided about.
-        ReleaseLog(input, state, everythingRan: analysis is null || projects.All(static p => p.Shown && p.NotRun.Count == 0));
+        ReleaseLog(input, state);
         ShadowClassification? classification = null;
         if (compared && options.Test.ShadowClassify)
         {
@@ -248,11 +248,13 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         return full.Info.ExitCode == 0 ? 0 : 3;
     }
 
-    /// <summary>Writes the analysis's held log to stderr, or one line saying why it is not shown; only once.</summary>
+    /// <summary>
+    /// Writes the analysis's held log to stderr, once. It is held while the team's tests run so that their output comes
+    /// first and in one piece, and the analysis's lines follow next to the report.
+    /// </summary>
     /// <param name="input">The analysis.</param>
     /// <param name="state">Records that it was done.</param>
-    /// <param name="everythingRan">True when it can reveal nothing beyond what the report shows.</param>
-    private void ReleaseLog(ShadowAnalysis input, RunState state, bool everythingRan)
+    private void ReleaseLog(ShadowAnalysis input, RunState state)
     {
         if (state.LogDone || input.Log.Length == 0)
         {
@@ -260,13 +262,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         }
 
         state.LogDone = true;
-        if (everythingRan)
-        {
-            stderr.Write(input.Log);
-            return;
-        }
-
-        stderr.WriteLine("td shadow: the analysis's log is not shown, because it names decisions for tests that did not run in this job.");
+        stderr.Write(input.Log);
     }
 
     /// <summary>Runs the team's command, or one <c>dotnet test</c> of the full run, in <paramref name="directory"/>.</summary>
@@ -837,11 +833,10 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
     }
 
     /// <summary>
-    /// The full run of one project next to the selection's decisions for it. Decisions are given only for the classes
-    /// in the project's report: those the selection knows that did not run are listed by name, and a project none of
-    /// whose tests ran shows no decision at all (see <see cref="ShadowResult"/>). When some known classes did not run,
-    /// the project's own mode and reason are not shown either (a one-class filter would reveal them for free): what is
-    /// shown is derived from the classes that ran.
+    /// The full run of one project next to the selection's decisions for it: the classes in the project's report are
+    /// compared with the selection; the classes the selection knows that did not run are listed with their decisions
+    /// but not compared, since no test of them ran here. The project's mode, reason and estimate are the selection's
+    /// own, whatever ran.
     /// </summary>
     /// <param name="root">Repository root.</param>
     /// <param name="analysis">The selection, or null without one.</param>
@@ -855,24 +850,6 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
         var selection = analysis?.Tests.FirstOrDefault(t => string.Equals(t.Project.Path, run.Project.Path, StringComparison.Ordinal));
         var decisions = selection?.Decisions.ToDictionary(static d => d.TestClass, StringComparer.Ordinal) ?? [];
         var reported = run.Outcome?.ReportedClasses ?? new HashSet<string>(StringComparer.Ordinal);
-        if (reported.Count == 0)
-        {
-            var why = run.NotBuiltOutput is { } output ? ShadowProject.NotBuiltReason(Path.GetRelativePath(root, output).Replace('\\', '/'))
-                : run.Outcome is not null ? "no test of it ran in this job"
-                : run.ReadError is { } error ? error
-                : run.ExitCode is not null ? "it wrote no test report that could be read"
-                : run.InScope ? "it wrote no test report in this run"
-                : "your command does not run it";
-            return new ShadowProject(path, analysis is null ? "unknown" : ShadowProject.NotShown, why, run.ExitCode, run.WallSeconds, run.Outcome is not null, [])
-            {
-                NotRun = [.. decisions.Keys.Order(StringComparer.Ordinal)],
-                MissingReport = run.ExitCode is null && run.InScope && commandExitCode != 0,
-                NotBuilt = run.NotBuiltOutput is not null,
-            };
-        }
-
-        List<string> notRun = [.. decisions.Keys.Where(k => !reported.Contains(k)).Order(StringComparer.Ordinal)];
-        var partial = notRun.Count > 0;
         var mode = (analysis, selection?.Mode) switch
         {
             (null, _) => "unknown",
@@ -882,15 +859,14 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
             _ => "not-affected",
         };
         var reason = analysis is null ? "no selection" : selection?.Reason ?? "the change does not reach this project";
-        const string Withheld = "the project's own decision is not shown, because some of its classes did not run in this job";
         var selectedClasses = new HashSet<string>(selection?.TestClasses ?? [], StringComparer.Ordinal);
-        var classes = new List<ShadowClass>(reported.Count);
-        foreach (var name in reported.Order(StringComparer.Ordinal))
+
+        // A class without a decision of its own (the selection decided the project as a whole) takes the project's.
+        ShadowClass Decided(string name)
         {
             var selected = mode == "all" || mode == "filtered" && selectedClasses.Contains(name);
-            (string Kind, string Evidence) said = decisions.TryGetValue(name, out var decision)
+            var (kind, evidence) = decisions.TryGetValue(name, out var decision)
                 ? (decision.Kind.ToString(), decision.Evidence)
-                : partial ? (selected ? nameof(ClassDecisionKind.WholeProject) : nameof(ClassDecisionKind.Skipped), $"no decision of its own; {Withheld}")
                 : mode switch
                 {
                     "all" => (nameof(ClassDecisionKind.WholeProject), reason),
@@ -898,28 +874,47 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
                     "unknown" => ("unknown", reason),
                     _ => (nameof(ClassDecisionKind.Skipped), reason),
                 };
-            var failed = run.Outcome!.FailedClasses.Contains(name);
-            ShadowVerdict? verdict = !failed || analysis is null ? null : selected ? ShadowVerdict.Caught : ShadowVerdict.Miss;
-            classes.Add(new ShadowClass(name, selected, said.Kind, said.Evidence, run.Outcome.ClassSeconds.GetValueOrDefault(name), failed)
+            return new ShadowClass(name, selected, kind, evidence, null, false);
+        }
+
+        List<ShadowClass> notRun = [.. decisions.Keys.Where(k => !reported.Contains(k)).Order(StringComparer.Ordinal).Select(Decided)];
+        if (reported.Count == 0)
+        {
+            var why = run.NotBuiltOutput is { } output ? ShadowProject.NotBuiltReason(Path.GetRelativePath(root, output).Replace('\\', '/'))
+                : run.Outcome is not null ? "no test of it ran in this job"
+                : run.ReadError is { } error ? error
+                : run.ExitCode is not null ? "it wrote no test report that could be read"
+                : run.InScope ? "it wrote no test report in this run"
+                : "your command does not run it";
+            return new ShadowProject(path, mode, reason, run.ExitCode, run.WallSeconds, run.Outcome is not null, [])
             {
+                Estimate = selection?.Estimate,
+                NotRun = notRun,
+                NotCompared = why,
+                MissingReport = run.ExitCode is null && run.InScope && commandExitCode != 0,
+                NotBuilt = run.NotBuiltOutput is not null,
+            };
+        }
+
+        var classes = new List<ShadowClass>(reported.Count);
+        foreach (var name in reported.Order(StringComparer.Ordinal))
+        {
+            var failed = run.Outcome!.FailedClasses.Contains(name);
+            var decided = Decided(name);
+            ShadowVerdict? verdict = !failed || analysis is null ? null : decided.Selected ? ShadowVerdict.Caught : ShadowVerdict.Miss;
+            classes.Add(decided with
+            {
+                Seconds = run.Outcome.ClassSeconds.GetValueOrDefault(name),
+                Failed = failed,
                 Verdict = verdict,
                 FailedTests = [.. run.Outcome.FailedTestsOf(name).Order(StringComparer.Ordinal)],
             });
         }
 
-        if (partial)
-        {
-            // Derived from the classes that ran, so it says nothing about those that did not.
-            mode = classes.All(static c => c.Selected) ? "all" : classes.Any(static c => c.Selected) ? "filtered" : "skipped";
-            reason = $"shown per class for the classes that ran; {Withheld}";
-        }
-
         return new ShadowProject(path, mode, reason, run.ExitCode, run.WallSeconds, run.Outcome is not null, classes)
         {
-            // The estimate covers every class, so it would say something about those that did not run.
-            Estimate = partial ? null : selection?.Estimate,
+            Estimate = selection?.Estimate,
             NotRun = notRun,
-            Partial = partial,
         };
     }
 

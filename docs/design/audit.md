@@ -71,8 +71,8 @@ audit could not run or was cancelled (the reason is in the report when one could
   (a driver project that only evaluates where the projects write) in the copy, `git` read-only.
 - **No network call of TestDetta's own.** Nothing is sent anywhere. The `dotnet build` and `dotnet test` runs it
   starts restore packages as the team's own do (from the local cache, or from the team's feeds when a package is
-  missing there). Like shadow mode, it shows decisions only for classes that ran and failed, never a selection
-  for tests that did not run (docs/design/shadow-mode.md, "Decisions only for what ran").
+  missing there). Its report names the selection's decisions for the classes that failed with a change, which is
+  what it measures.
 
 ## Mutating binaries without touching the team's build output
 
@@ -438,9 +438,9 @@ made no network call, since TestDetta reads no license any more. Nothing else ch
 
 ### For the owner
 
-- **No network call of its own** (as in shadow mode): the audit reveals decisions only for classes that ran
-  and failed with a change, never a selection for a pull request. Someone could still learn from it which test
-  classes cover which member; that is what a coverage map already says, on their own machine.
+- **No network call of its own** (as in shadow mode). Its report names decisions for the classes that failed
+  with a change; which test classes cover which member is what a coverage map already says, on the team's own
+  machine.
 - **Cost**: a change runs every test project that loads the member's assembly, completely; on a large suite with
   one big test project that is the whole suite per change. 100 breaking changes with about 30% of changes not
   breaking anything means 130 or more full runs; the budget (4 h) and the target bound it. Teams with long suites
