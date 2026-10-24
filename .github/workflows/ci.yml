@@ -87,7 +87,7 @@ jobs:
   # The pass/fail signal within three minutes on every push. The Slow tests build and run real
   # projects; they run in the recording above and before every push locally. It runs under a
   # Turkish locale (dotted and dotless i, comma decimals), where culture-sensitive code breaks first:
-  # customers run TestDetta on any locale, and the recording job keeps the runner's default one covered.
+  # users run TestDetta on any locale, and the recording job keeps the runner's default one covered.
   quick:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
