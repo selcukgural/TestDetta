@@ -286,7 +286,7 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
         foreach (var assembly in assemblies)
         {
             var full = Path.Combine(copy, assembly);
-            if (!Paths.IsUnder(Paths.ResolveLinks(Path.GetDirectoryName(full)!), copy))
+            if (!Paths.IsUnder(Paths.ResolveLinks(Path.GetDirectoryName(full)!), Paths.Normalize(copy)))
             {
                 throw new AuditRefused($"{full} lies outside the working copy once its links are resolved; td audit rewrites nothing outside it");
             }
@@ -406,8 +406,8 @@ internal sealed partial class AuditRun(ILoggerFactory loggerFactory, TextWriter 
             }
 
             // The output folders as they are now, links resolved, so they compare with the folders of rewritten assemblies.
-            outputs = [.. outputs.Select(static o => Directory.Exists(o) ? Paths.Normalize(AuditWorkspace.RealPath(o)) : o)];
-            if (outputs.FirstOrDefault(o => !Paths.IsUnder(o, copy)) is { } outside)
+            outputs = [.. outputs.Select(static o => Paths.Normalize(Directory.Exists(o) ? AuditWorkspace.RealPath(o) : o))];
+            if (outputs.FirstOrDefault(o => !Paths.IsUnder(o, Paths.Normalize(copy))) is { } outside)
             {
                 throw new AuditRefused($"the build output of {relative} ({outside}) lies outside the working copy, so the copy cannot keep it apart; td audit rewrites nothing outside it");
             }

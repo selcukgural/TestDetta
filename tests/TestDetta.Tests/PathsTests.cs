@@ -32,7 +32,54 @@ public sealed class PathsTests
         finally
         {
             Directory.Delete(link);
-            Directory.Delete(real, recursive: true);
+            Paths.DeleteTree(real);
         }
+    }
+
+    [Fact]
+    public void DeleteTree_removes_read_only_files_as_git_writes_its_objects()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "testdetta-tree-" + Guid.NewGuid().ToString("N"));
+        var objects = Path.Combine(root, ".git", "objects", "11");
+        Directory.CreateDirectory(objects);
+        var blob = Path.Combine(objects, "9ccbabf5097c452fc3d129f91a35b707fd4d");
+        File.WriteAllText(blob, "blob");
+        File.SetAttributes(blob, FileAttributes.ReadOnly);
+
+        Paths.DeleteTree(root);
+
+        Assert.False(Directory.Exists(root));
+    }
+
+    [Fact]
+    public void DeleteTree_leaves_the_target_of_a_link_inside_the_tree_alone()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "testdetta-tree-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(Path.GetTempPath(), "testdetta-outside-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        var kept = Path.Combine(outside, "kept.txt");
+        File.WriteAllText(kept, "kept");
+        File.SetAttributes(kept, FileAttributes.ReadOnly);
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(root, "link"), outside);
+
+            Paths.DeleteTree(root);
+
+            Assert.False(Directory.Exists(root));
+            Assert.True(File.Exists(kept));
+            Assert.True(File.GetAttributes(kept).HasFlag(FileAttributes.ReadOnly));
+        }
+        finally
+        {
+            Paths.DeleteTree(outside);
+        }
+    }
+
+    [Fact]
+    public void DeleteTree_of_a_missing_directory_throws_as_Directory_Delete_does()
+    {
+        Assert.Throws<DirectoryNotFoundException>(() => Paths.DeleteTree(Path.Combine(Path.GetTempPath(), "testdetta-missing-" + Guid.NewGuid().ToString("N"))));
     }
 }

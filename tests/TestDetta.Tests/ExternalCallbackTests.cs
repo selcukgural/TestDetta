@@ -185,7 +185,7 @@ public sealed class ExternalCallbackTests : IDisposable
     public void Dispose()
     {
         _repo.Dispose();
-        Directory.Delete(_vendor, recursive: true);
-        Directory.Delete(_castle, recursive: true);
+        Paths.DeleteTree(_vendor);
+        Paths.DeleteTree(_castle);
     }
 }

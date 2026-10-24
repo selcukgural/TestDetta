@@ -14,7 +14,7 @@ public sealed class EvalReportsTests : IDisposable
 
     public EvalReportsTests() => Directory.CreateDirectory(_directory);
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 
     [Fact]
     public void Findings_are_counted_once_per_batch_where_they_first_showed()

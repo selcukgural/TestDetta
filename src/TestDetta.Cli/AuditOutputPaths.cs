@@ -139,7 +139,10 @@ internal static class AuditOutputPaths
     /// <param name="relative">Makes a copy path readable for the report (relative to the copy's root).</param>
     internal static string? Outside(string copy, IReadOnlyCollection<string> projects, IReadOnlyList<AuditOutputPath> paths, Func<string, string> relative)
     {
-        var answered = paths.Select(static p => p.Project).ToHashSet(Paths.Comparer);
+        // Resolved paths come back with '/' separators; on Windows the copy's own path has '\', and compared as given
+        // every path would lie outside it.
+        copy = Paths.Normalize(copy);
+        var answered = paths.Select(static p => Paths.Normalize(p.Project)).ToHashSet(Paths.Comparer);
         if (projects.FirstOrDefault(p => !answered.Contains(Paths.Normalize(p))) is { } silent)
         {
             return $"MSBuild did not say where {relative(silent)} writes, so the audit cannot check that its build stays inside the working copy";
@@ -170,6 +173,7 @@ internal static class AuditOutputPaths
     /// <param name="userArguments">The user's <c>dotnet test</c> arguments.</param>
     internal static string? OutsideOption(string copy, string runDirectory, IReadOnlyList<string> userArguments)
     {
+        copy = Paths.Normalize(copy);
         var options = BeforeRunSettings(userArguments);
         foreach (var option in WrittenPathOptions)
         {

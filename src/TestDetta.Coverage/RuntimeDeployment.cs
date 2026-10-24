@@ -50,7 +50,7 @@ internal sealed class RuntimeDeployment : IDisposable
             throw new InvalidOperationException($"{depsFile} does not exist; TestDetta needs it to load its runtime into the tests.");
         }
 
-        _copiedRuntime = Path.Combine(directory, RuntimeFileName);
+        _copiedRuntime = DeployedPath(testAssembly);
         _runtimeExisted = File.Exists(_copiedRuntime);
 
         File.Copy(TrackerFor(testAssembly), _copiedRuntime, overwrite: true);
@@ -74,6 +74,17 @@ internal sealed class RuntimeDeployment : IDisposable
             File.WriteAllText(applicationDeps, AddRuntime(original));
         }
     }
+
+    /// <summary>
+    /// Where the runtime goes for <paramref name="testAssembly"/>: next to it. The VSTest collector is loaded from this
+    /// copy too (its run settings name it), so the collector and the instrumented code are one assembly instance
+    /// sharing <see cref="TestDettaTracker"/>'s statics. .NET Framework keeps an assembly loaded from two paths as two
+    /// instances: with the collector loaded from TestDetta's own folder, test classes marked themselves in the
+    /// output's copy while the collector wrote the other copy's empty results, and no class was recorded. .NET and
+    /// Mono bind both to one instance by name, which is why only Windows showed it.
+    /// </summary>
+    /// <param name="testAssembly">The compiled test assembly.</param>
+    internal static string DeployedPath(string testAssembly) => Path.Combine(Path.GetDirectoryName(testAssembly)!, RuntimeFileName);
 
     /// <summary>
     /// The build of the tracker assembly a test host of <paramref name="testAssembly"/> loads: the net462

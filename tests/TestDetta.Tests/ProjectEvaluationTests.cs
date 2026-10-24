@@ -239,9 +239,9 @@ public sealed class ProjectEvaluationTests : IDisposable
             "GeneratorReference\t/r/T.csproj\t/r/Gen.csproj\t\t\t",
         ]);
 
-        Assert.Equal(["/r/Gen.csproj", "/r/Lib.csproj", "/r/Tool.csproj"], evaluated["/r/T.csproj"].References);
-        Assert.Equal(["/r/Gen.csproj", "/r/Tool.csproj"], evaluated["/r/T.csproj"].OpaqueReferences.Order(StringComparer.Ordinal));
-        Assert.Equal(["/r/Gen.csproj"], evaluated["/r/T.csproj"].GeneratorReferences);
+        Assert.Equal([Rooted("/r/Gen.csproj"), Rooted("/r/Lib.csproj"), Rooted("/r/Tool.csproj")], evaluated[Rooted("/r/T.csproj")].References);
+        Assert.Equal([Rooted("/r/Gen.csproj"), Rooted("/r/Tool.csproj")], evaluated[Rooted("/r/T.csproj")].OpaqueReferences.Order(StringComparer.Ordinal));
+        Assert.Equal([Rooted("/r/Gen.csproj")], evaluated[Rooted("/r/T.csproj")].GeneratorReferences);
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public sealed class ProjectEvaluationTests : IDisposable
         }
         finally
         {
-            Directory.Delete(copy, recursive: true);
+            Paths.DeleteTree(copy);
         }
     }
 
@@ -323,9 +323,9 @@ public sealed class ProjectEvaluationTests : IDisposable
         ]);
 
         // net9.0 compiles with the same symbols as net8.0 here: one set.
-        Assert.Equal(["NET;NET8_0_OR_GREATER", "NETSTANDARD2_0"], evaluated["/r/Lib.csproj"].SymbolSets.Select(static s => string.Join(';', s)));
+        Assert.Equal(["NET;NET8_0_OR_GREATER", "NETSTANDARD2_0"], evaluated[Rooted("/r/Lib.csproj")].SymbolSets.Select(static s => string.Join(';', s)));
         // By framework, every framework keeps its own (docs/design/framework-only-code.md).
-        var byFramework = evaluated["/r/Lib.csproj"].FrameworkSymbols;
+        var byFramework = evaluated[Rooted("/r/Lib.csproj")].FrameworkSymbols;
         Assert.Equal(["net8.0", "net9.0", "netstandard2.0"], byFramework.Keys.Order(StringComparer.Ordinal));
         Assert.Equal(["NET", "NET8_0_OR_GREATER"], byFramework["net9.0"]);
         Assert.Equal(["NETSTANDARD2_0"], byFramework["NETSTANDARD2.0"]);
@@ -497,4 +497,7 @@ public sealed class ProjectEvaluationTests : IDisposable
 
         public IReadOnlyDictionary<string, EvaluatedProject>? Evaluate(string repoRoot, IReadOnlyCollection<string> projects) => Fails ? null : this;
     }
+
+    /// <summary>A Unix-style test path as TestDetta normalizes it on this machine (a drive letter on Windows).</summary>
+    private static string Rooted(string path) => Paths.Normalize(path);
 }

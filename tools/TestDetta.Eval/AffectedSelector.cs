@@ -68,7 +68,7 @@ internal static class AffectedSelector
         }
         finally
         {
-            Directory.Delete(output, recursive: true);
+            Paths.DeleteTree(output);
         }
     }
 

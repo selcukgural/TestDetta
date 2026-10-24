@@ -16,6 +16,9 @@
   <ItemGroup>
     <!-- The test host provides this assembly at run time; only compile against it. -->
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" ExcludeAssets="runtime" PrivateAssets="all" />
+    <!-- The SDK adds the net462 reference assemblies itself only where no .NET Framework targeting pack is
+         installed (Linux, macOS), so the lock file differed on Windows and a locked restore failed there. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net462'" />
   </ItemGroup>
 
   <ItemGroup>

@@ -157,7 +157,7 @@ internal sealed partial class ShadowRun(ILoggerFactory loggerFactory, TextWriter
 
         if (Directory.Exists(state.Work))
         {
-            TryDo(() => Directory.Delete(state.Work, recursive: true));
+            TryDo(() => Paths.DeleteTree(state.Work));
         }
     }
 

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using TestDetta.Coverage;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -7,8 +8,9 @@ namespace TestDetta.Tests;
 /// A process TestDetta starts may leave a child behind that keeps its output open: an MSBuild node or a
 /// compiler server kept for reuse. Waiting for the output to close then never ends (a test of TestDetta
 /// hung for ten minutes at 0 % CPU). Once the process itself has exited, its output is drained for a
-/// short while only. The fake dotnet is a shell script that starts a long sleep sharing its output and
-/// exits, so the tests need a Unix shell.
+/// short while only. The fake dotnet starts a long-running child sharing its output and exits: a shell script with
+/// <c>sleep</c>, or on Windows a batch file with <c>ping</c> (<c>timeout</c> refuses redirected input), started in
+/// another folder: Windows does not delete a folder a running process has as its working directory.
 /// </summary>
 [Collection(nameof(ProcessEnvironment))]
 public sealed class DotnetProcessTests : IDisposable
@@ -37,8 +39,10 @@ public sealed class DotnetProcessTests : IDisposable
     private async Task<T> WithFakeDotnet<T>(Func<T> action)
     {
         Directory.CreateDirectory(_directory);
-        var script = Path.Combine(_directory, "dotnet");
-        await File.WriteAllTextAsync(script, "#!/bin/sh\nsleep 120 &\necho built\nexit 0\n");
+        var script = Path.Combine(_directory, OperatingSystem.IsWindows() ? "dotnet.cmd" : "dotnet");
+        await File.WriteAllTextAsync(script, OperatingSystem.IsWindows()
+            ? "@echo off\r\nstart \"\" /b /d \"%SystemRoot%\" ping -n 121 127.0.0.1\r\necho built\r\nexit /b 0\r\n"
+            : "#!/bin/sh\nsleep 120 &\necho built\nexit 0\n");
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -60,7 +64,7 @@ public sealed class DotnetProcessTests : IDisposable
     {
         if (Directory.Exists(_directory))
         {
-            Directory.Delete(_directory, recursive: true);
+            Paths.DeleteTree(_directory);
         }
     }
 }

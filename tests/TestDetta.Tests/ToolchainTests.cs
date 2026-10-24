@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using TestDetta.Eval;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -69,7 +70,7 @@ public sealed class ToolchainTests : IDisposable
         // The same architecture as Pinned: the machine's may differ (x64 on CI, arm64 on this Mac).
         Installer(locked: false).Install(Pinned with { Runtimes = [] });
         File.WriteAllText(LockPath, File.ReadAllText(LockPath).Replace(_releases.Hash($"dotnet-sdk-{Pinned.Rid}.tar.gz"), new string('0', 128), StringComparison.Ordinal));
-        Directory.Delete(Path.Combine(_root, Pinned.Rid), recursive: true);
+        Paths.DeleteTree(Path.Combine(_root, Pinned.Rid));
 
         var error = Assert.Throws<InvalidOperationException>(() => Installer(locked: true).Install(Pinned));
 
@@ -104,7 +105,7 @@ public sealed class ToolchainTests : IDisposable
     [Fact]
     public void Two_installs_of_one_toolchain_at_once_both_get_the_complete_one()
     {
-        Directory.Delete(Installer(locked: false).Install(Pinned), recursive: true);
+        Paths.DeleteTree(Installer(locked: false).Install(Pinned));
 
         var results = new string[2];
         Parallel.For(0, 2, i => results[i] = Installer(locked: true).Install(Pinned));
@@ -159,7 +160,7 @@ public sealed class ToolchainTests : IDisposable
     {
         if (Directory.Exists(_root))
         {
-            Directory.Delete(_root, recursive: true);
+            Paths.DeleteTree(_root);
         }
     }
 

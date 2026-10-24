@@ -281,7 +281,7 @@ call    TestDettaTracker.Hit(int32)`) + ul([
       file: "src/TestDetta.Coverage/RuntimeDeployment.cs",
       input: "Test dll'inin yolu",
       output: "Çıktıda <code>TestDetta.Coverage.Runtime.dll</code> ve güncellenmiş <code>deps.json</code>",
-      purpose: "Yeniden yazılan dll'ler <code>TestDettaTracker</code>'ı çağırıyor; test host'unun onu yükleyebilmesi gerekir. İzleyici iki derlemeyle gelir: .NET Framework test assembly'si için <code>runtime/net462</code>, diğerleri için netstandard2.0 (<code>RuntimeDeployment.TrackerFor</code>). .NET Framework çıktısında <code>deps.json</code> yoktur; dosyayı kopyalamak yeter.",
+      purpose: "Yeniden yazılan dll'ler <code>TestDettaTracker</code>'ı çağırıyor; test host'unun onu yükleyebilmesi gerekir. İzleyici iki derlemeyle gelir: .NET Framework test assembly'si için <code>runtime/net462</code>, diğerleri için netstandard2.0 (<code>RuntimeDeployment.TrackerFor</code>). .NET Framework çıktısında <code>deps.json</code> yoktur; dosyayı kopyalamak yeter. VSTest collector'ı da run settings'te bu kopyadan yüklenir (<code>RuntimeDeployment.DeployedPath</code>): .NET Framework iki yoldan yüklenen aynı assembly'yi iki ayrı örnek tutar, collector TestDetta'nın kendi klasöründen yüklendiğinde test sınıfları bir kopyaya işaretlenip sonuçları öbür kopya yazıyordu.",
     },
     {
       title: "Testler parçalara bölünüp tek tek koşturulur", nodes: ["instr", "run", "host"], edges: ["r", "h"],

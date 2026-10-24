@@ -76,7 +76,7 @@ public sealed class AuditTests : IDisposable
         _repo.Dispose();
         if (Directory.Exists(_work))
         {
-            Directory.Delete(_work, recursive: true);
+            Paths.DeleteTree(_work);
         }
     }
 
@@ -278,7 +278,7 @@ public sealed class AuditTests : IDisposable
     public void An_assembly_the_team_built_as_a_link_into_its_own_output_is_never_written_through()
     {
         // The team builds with links instead of copies: the test project's Shop.dll points into src/Shop/bin.
-        Directory.Delete(Path.Combine(_repo.Root, "tests", "Shop.Tests", "bin"), recursive: true);
+        Paths.DeleteTree(Path.Combine(_repo.Root, "tests", "Shop.Tests", "bin"));
         Build("tests/Shop.Tests/Shop.Tests.csproj", "-p:CreateSymbolicLinksForCopyLocalIfPossible=true");
         var linked = Path.Combine(_repo.Root, "tests", "Shop.Tests", "bin", "Debug", "net10.0", "Shop.dll");
         Assert.NotNull(new FileInfo(linked).LinkTarget);
@@ -317,7 +317,7 @@ public sealed class AuditTests : IDisposable
         Assert.Equal(1, exit);
         var report = Read();
         Assert.Equal("error", report.GetProperty("stopReason").GetString());
-        Assert.Contains("writes outside the working copy: its BaseOutputPath is " + outside, report.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Contains("writes outside the working copy: its BaseOutputPath is " + Paths.Normalize(outside), report.GetProperty("error").GetString(), StringComparison.Ordinal);
         Assert.DoesNotContain("without changes", stdout.ToString(), StringComparison.Ordinal);
         Assert.Equal(files, Directory.GetFiles(outside, "*", SearchOption.AllDirectories).ToDictionary(static f => f, static f => File.GetLastWriteTimeUtc(f)));
         Assert.Empty(Directory.GetDirectories(_work, AuditWorkspace.Prefix + "*"));

@@ -17,7 +17,7 @@ public sealed class EvalHonestReportTests : IDisposable
 
     public EvalHonestReportTests() => Directory.CreateDirectory(_directory);
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 
     [Fact]
     public void The_repository_report_names_the_judging_the_inconclusive_mutants_the_worst_case_and_the_incidents()

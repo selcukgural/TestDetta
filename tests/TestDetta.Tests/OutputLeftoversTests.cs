@@ -1,4 +1,5 @@
 using TestDetta.Coverage;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -19,7 +20,7 @@ public sealed class OutputLeftoversTests : IDisposable
         File.WriteAllText(Path.Combine(_folder, "runtimes", "osx", "native.dylib"), "native");
     }
 
-    public void Dispose() => Directory.Delete(_folder, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_folder);
 
     [Fact]
     public void Files_and_folders_a_run_created_are_removed_and_what_was_there_stays()

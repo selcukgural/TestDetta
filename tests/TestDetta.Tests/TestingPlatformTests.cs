@@ -122,7 +122,7 @@ public sealed class TestingPlatformTests : IDisposable
         Assert.DoesNotContain("\\u", patched, StringComparison.Ordinal);
     }
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 }
 
 /// <summary>Records coverage for a real xUnit v3 project under Microsoft.Testing.Platform. Slow.</summary>

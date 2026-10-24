@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TestDetta.Eval;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -90,7 +91,7 @@ public sealed class EvalDataFileTests : IDisposable
         _repo.Dispose();
         if (Directory.Exists(_output))
         {
-            Directory.Delete(_output, recursive: true);
+            Paths.DeleteTree(_output);
         }
     }
 }

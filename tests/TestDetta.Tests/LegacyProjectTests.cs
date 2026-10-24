@@ -144,7 +144,7 @@ EndGlobal
         Assert.False(tests.SdkStyle);
         Assert.True(tests.IsTestProject);
         Assert.True(graph.NeedsFullMsBuild(tests));
-        Assert.Equal(Path.Combine(_repo.Root, "Legacy.sln"), FullMsBuild.SolutionOf(_repo.Root, tests.Path));
+        Assert.Equal(Paths.Normalize(Path.Combine(_repo.Root, "Legacy.sln")), FullMsBuild.SolutionOf(_repo.Root, tests.Path));
     }
 
     [Fact]

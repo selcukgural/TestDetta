@@ -1,4 +1,5 @@
 using TestDetta.Eval;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -159,7 +160,7 @@ public sealed class EvalOptionsTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            Paths.DeleteTree(directory);
         }
     }
 

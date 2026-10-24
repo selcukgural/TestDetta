@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TestDetta.Eval;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -123,7 +124,7 @@ public sealed class MutantKindsTests : IDisposable
         _repo.Dispose();
         if (Directory.Exists(_output) && Environment.GetEnvironmentVariable("TESTDETTA_KEEP_EVAL") is null)
         {
-            Directory.Delete(_output, recursive: true);
+            Paths.DeleteTree(_output);
         }
     }
 }

@@ -350,7 +350,7 @@ internal sealed partial class SyntheticEvaluator(EvalWorkspace workspace, RunSet
                 continue;
             }
 
-            Directory.Delete(report, recursive: true);
+            Paths.DeleteTree(report);
         }
     }
 

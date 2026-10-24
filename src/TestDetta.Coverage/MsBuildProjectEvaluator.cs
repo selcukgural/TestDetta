@@ -238,7 +238,7 @@ public sealed partial class MsBuildProjectEvaluator : IProjectEvaluator
         }
         finally
         {
-            Directory.Delete(scratch, recursive: true);
+            Paths.DeleteTree(scratch);
         }
     }
 

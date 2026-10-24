@@ -12,6 +12,9 @@ review.
   a package no other project needs. `PackageReference` items never carry a `Version`. **(enforced)**
 - **Lock files are committed.** `packages.lock.json` is generated on restore; CI restores in
   locked mode (`CI=true`).
+- **Every assembly is strong-named** with the public `TestDetta.snk` (`Directory.Build.props`). The tracker must be,
+  so that signed third-party assemblies it is added to still load on .NET Framework; its friends and everything they
+  reference follow. A new package must therefore have a strong name (CS8002 fails the build otherwise).
 - **No large libraries for small jobs.** Add a package only when it replaces a meaningful amount
   of code that would be hard to get right. Twenty lines of our own code beat a dependency tree.
   Example: the CLI has its own stderr logger instead of `Microsoft.Extensions.Logging.Console`.

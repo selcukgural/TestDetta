@@ -6,7 +6,8 @@ namespace TestDetta.Tests;
 /// </summary>
 public sealed class ActionShadowTests
 {
-    private static readonly string Action = File.ReadAllText(Path.Combine(RepositoryRoot(), "action.yml"));
+    // A Windows checkout (core.autocrlf) has CRLF line ends; the assertions are written with LF.
+    private static readonly string Action = File.ReadAllText(Path.Combine(RepositoryRoot(), "action.yml")).ReplaceLineEndings("\n");
 
     [Fact]
     public void Every_step_before_the_tests_steps_aside_in_shadow_mode_instead_of_failing_the_job()

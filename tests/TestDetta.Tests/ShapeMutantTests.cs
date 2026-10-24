@@ -54,7 +54,7 @@ public sealed class ShapeMutantTests : IDisposable
     public void Dispose()
     {
         _repo.Dispose();
-        Directory.Delete(_directory, recursive: true);
+        Paths.DeleteTree(_directory);
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using TestDetta.Core;
 
 namespace TestDetta.Eval;
 
@@ -68,7 +69,7 @@ internal sealed partial class ToolchainInstaller(string root, ToolchainLock lock
         {
             if (Directory.Exists(scratch))
             {
-                Directory.Delete(scratch, recursive: true);
+                Paths.DeleteTree(scratch);
             }
         }
     }

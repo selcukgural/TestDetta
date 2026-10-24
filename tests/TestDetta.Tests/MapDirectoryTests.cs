@@ -32,7 +32,7 @@ public sealed class MapDirectoryTests : IDisposable
         Directory.CreateDirectory(source);
         File.WriteAllText(Path.Combine(source, project + ".json"), content);
         MapDirectory.Save(_maps, commit, [Path.Combine(source, project + ".json")], NullLogger.Instance);
-        Directory.Delete(source, recursive: true);
+        Paths.DeleteTree(source);
     }
 
     private string Restored(string project) => File.ReadAllText(Path.Combine(_repo.Root, CoverageMapStore.Directory, project + ".json"));
@@ -101,6 +101,6 @@ public sealed class MapDirectoryTests : IDisposable
     public void Dispose()
     {
         _repo.Dispose();
-        Directory.Delete(_maps, recursive: true);
+        Paths.DeleteTree(_maps);
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TestDetta.Coverage.Runtime;
+using TestDetta.Core;
 
 namespace TestDetta.Tests;
 
@@ -30,5 +31,5 @@ public sealed class TestDettaTrackerTests : IDisposable
         Assert.Equal(Path.Combine("work", "coverage-2.4711.json"), TestDettaTracker.ProcessResultsPath(Path.Combine("work", "coverage-2.json"), 4711));
     }
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose() => Paths.DeleteTree(_directory);
 }

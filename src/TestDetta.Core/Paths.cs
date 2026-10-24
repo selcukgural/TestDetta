@@ -71,4 +71,30 @@ internal static class Paths
 
         return path.Length == directory.Length || path[directory.Length] == '/';
     }
+
+    /// <summary>
+    /// Deletes a directory with everything in it, as <see cref="Directory.Delete(string, bool)"/> does, read-only
+    /// entries included. Git writes its objects read-only, and Windows refuses to delete a read-only file
+    /// (<see cref="UnauthorizedAccessException"/>), so any tree holding a repository (a clone, a worktree's build, a
+    /// test repository) could not be removed there. Unix deletes read-only files, so the extra pass runs on Windows
+    /// only. Symbolic links and junctions are not followed: their targets keep their attributes.
+    /// </summary>
+    /// <param name="path">The directory.</param>
+    /// <exception cref="DirectoryNotFoundException">The directory does not exist.</exception>
+    public static void DeleteTree(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
+            foreach (var entry in new DirectoryInfo(path).EnumerateFileSystemInfos("*", options))
+            {
+                if ((entry.Attributes & FileAttributes.ReadOnly) != 0)
+                {
+                    entry.Attributes &= ~FileAttributes.ReadOnly;
+                }
+            }
+        }
+
+        Directory.Delete(path, recursive: true);
+    }
 }

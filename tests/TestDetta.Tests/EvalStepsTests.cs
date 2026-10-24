@@ -92,7 +92,7 @@ public sealed class EvalStepsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(maps, recursive: true);
+            Paths.DeleteTree(maps);
         }
     }
 
@@ -155,7 +155,7 @@ public sealed class EvalStepsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Paths.DeleteTree(root);
         }
     }
 

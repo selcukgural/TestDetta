@@ -125,7 +125,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
                 var partial = cached + ".partial";
                 if (Directory.Exists(partial))
                 {
-                    Directory.Delete(partial, recursive: true);
+                    Paths.DeleteTree(partial);
                 }
 
                 CopyDirectory(directory, partial);
@@ -464,7 +464,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             var temporary = directory + ".partial";
             if (Directory.Exists(temporary))
             {
-                Directory.Delete(temporary, recursive: true);
+                Paths.DeleteTree(temporary);
             }
 
             Directory.CreateDirectory(temporary);
@@ -537,7 +537,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
 
             if (Directory.Exists(directory))
             {
-                Directory.Delete(directory, recursive: true);
+                Paths.DeleteTree(directory);
             }
 
             Directory.Move(temporary, directory);
@@ -564,7 +564,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
         var directory = Path.Combine(workspace.RepoRoot, ".testdetta");
         if (Directory.Exists(directory))
         {
-            Directory.Delete(directory, recursive: true);
+            Paths.DeleteTree(directory);
         }
     }
 

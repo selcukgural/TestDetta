@@ -169,8 +169,8 @@ internal sealed class NonCodeFileUses(string repoRoot, NotBuildInputs notBuilt)
     /// The patterns of an item's <c>Include</c> or <c>Update</c>, as normalized full paths. A property, an item or
     /// metadata TestDetta cannot resolve becomes <c>**</c>, which matches any part of a path, and the text around it
     /// stays: <c>$(ArtifactsPath)/bin/$(MSBuildProjectName).dll.sigstore.json</c> can only match a file of that name
-    /// under a <c>bin</c> folder, while <c>$(Readme)</c> alone matches every file. A pattern that starts with one is
-    /// matched from the root, since the value may be any absolute path. Its value could hold a list (<c>a;b</c>) whose
+    /// under a <c>bin</c> folder, while <c>$(Readme)</c> alone matches every file. A pattern that starts with one
+    /// matches from the start of any path, a drive letter included, since the value may be any absolute path. Its value could hold a list (<c>a;b</c>) whose
     /// first entries stand alone, but such a property is then the whole of the item's value, not a path prefix.
     /// </summary>
     /// <param name="directory">Directory of the MSBuild file, which relative patterns start from.</param>
@@ -189,9 +189,11 @@ internal sealed class NonCodeFileUses(string repoRoot, NotBuildInputs notBuilt)
                 continue;
             }
 
-            // A leading unresolved part may be any absolute path; otherwise the literal start says where it begins.
+            // A leading unresolved part may be any absolute path, so it stays a bare "**", which matches from the start of
+            // any path: rooted at "/" it matched no Windows path (C:/...), and a file only such an item can include was
+            // taken for unused. Otherwise the literal start says where it begins.
             patterns.Add(wildcarded.StartsWith("**", StringComparison.Ordinal)
-                ? "/" + wildcarded
+                ? wildcarded
                 : Paths.Normalize(Path.IsPathRooted(wildcarded) ? wildcarded : Path.Combine(directory, wildcarded)));
         }
 
@@ -371,6 +373,6 @@ internal sealed class NonCodeFileUses(string repoRoot, NotBuildInputs notBuilt)
 
         /// <summary>True when the item can include <paramref name="file"/>.</summary>
         /// <param name="file">Normalized full path.</param>
-        public bool Matches(string file) => Patterns.Contains("/**") || _matcher.Value.Matches(file);
+        public bool Matches(string file) => Patterns.Contains("**") || _matcher.Value.Matches(file);
     }
 }
