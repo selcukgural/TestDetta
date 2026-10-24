@@ -32,6 +32,10 @@ source is public at https://github.com/selcukgural/TestDetta.
    `git log --no-merges <previous tag>..<new tag>` against the file: 0.2.0's notes missed a week of changes made before
    the file existed, among them a new action input. A README fix after tagging is a README-only commit in
    `TestDetta/action` with the version and major tags moved to it.
+6. The sample output on the site's how-it-works page names the version in both languages. A change to an English
+   page needs its Turkish page under `site/i18n/tr/` set to the new source hash (`node site/build.mjs --hashes`), and
+   `node site/build.mjs` must pass before the pull request merges: the Site check is not required, so auto-merge does
+   not wait for it. 0.5.0's pin left the hash behind, and the site was not deployed until #98.
 
 `action.yml` is the same file in both places. Here it builds TestDetta from source (this repository's
 own workflows use the action from the checkout); in the public repository, where there is no source, it
