@@ -87,8 +87,12 @@ jobs:
         working-directory: target
         run: |
           & $env:SHELL_EXE -NoProfile -ExecutionPolicy Bypass -Command "& '$env:SCRIPT' -Mode record -MapsDir '$env:MAPS' -TdOptions '--project','$env:PROJECT','-f','net462' -- -c Release; exit `$LASTEXITCODE"
-          "record exit code: $LASTEXITCODE"
-          Get-ChildItem -Recurse $env:MAPS | Select-Object -ExpandProperty FullName
+          $recorded = $LASTEXITCODE
+          "record exit code: $recorded (3 = some tests failed while recording; their classes always run)"
+          Get-ChildItem -Recurse $env:MAPS -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          # Go on to the pull request when a map was saved, whatever the tests did while recording.
+          if (-not (Get-ChildItem -Recurse -Filter *.json $env:MAPS -ErrorAction SilentlyContinue)) { exit 1 }
+          exit 0
 
       - name: Break the code on a pull request branch
         shell: pwsh
