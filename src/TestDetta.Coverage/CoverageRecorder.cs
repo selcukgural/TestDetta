@@ -520,7 +520,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
             // Only VSTest needs settings then, for the collector.
             if (run.Mode == DotnetTestMode.VSTest)
             {
-                arguments.AddRange(["--settings", WriteRunSettings(work, new SettingsParts(WithCollector: true, Sequential: false, RuntimeDeployment.TrackerFor(run.TargetPath)), run.TeamSettings)]);
+                arguments.AddRange(["--settings", WriteRunSettings(work, new SettingsParts(WithCollector: true, Sequential: false, RuntimeDeployment.DeployedPath(run.TargetPath)), run.TeamSettings)]);
             }
         }
         else if (File.Exists(Path.Combine(binaries, "TUnit.Engine.dll")))
@@ -533,7 +533,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
         }
         else
         {
-            arguments.AddRange(["--settings", WriteRunSettings(work, new SettingsParts(WithCollector: run.Mode == DotnetTestMode.VSTest, Sequential: true, RuntimeDeployment.TrackerFor(run.TargetPath)), run.TeamSettings)]);
+            arguments.AddRange(["--settings", WriteRunSettings(work, new SettingsParts(WithCollector: run.Mode == DotnetTestMode.VSTest, Sequential: true, RuntimeDeployment.DeployedPath(run.TargetPath)), run.TeamSettings)]);
         }
 
         if (run.Framework is not null && !run.Legacy)
@@ -1086,7 +1086,7 @@ public sealed partial class CoverageRecorder(ILoggerFactory loggerFactory)
     /// <summary>What recording needs in the run settings.</summary>
     /// <param name="WithCollector">True to load the in-process collector (VSTest).</param>
     /// <param name="Sequential">True to make the tests run one at a time.</param>
-    /// <param name="Tracker">The build of the tracker assembly the test host loads (<see cref="RuntimeDeployment.TrackerFor"/>).</param>
+    /// <param name="Tracker">The copy of the tracker assembly in the test output, which the test host loads the collector from (<see cref="RuntimeDeployment.DeployedPath"/>).</param>
     internal sealed record SettingsParts(bool WithCollector, bool Sequential, string Tracker);
 
     /// <summary>

@@ -67,6 +67,10 @@ every test framework, legacy ones especially. Step 1 (test hosts) is done, see "
   assembly, which needs no netstandard facades, and the netstandard2.0 build for every other host. It no
   longer uses System.Text.Json (`ResultsJsonWriter`), `Interlocked.Or` (compare-exchange), ranges or
   .NET 5+ APIs. A .NET Framework output without `deps.json` gets the tracker copied next to the tests.
+- The VSTest collector is loaded from that copy next to the tests (`RuntimeDeployment.DeployedPath`, 2026-10-24),
+  not from TestDetta's own folder: .NET Framework keeps an assembly loaded from two paths as two instances, so test
+  classes marked themselves in one while the collector wrote the other's empty results, and Windows recorded no class
+  (MSTest always, xUnit v2 when the collector wrote last). .NET and Mono bind both to one instance by name.
 - Recording turns test AppDomains off in its run settings (`RunConfiguration/DisableAppDomain`, xUnit
   `AppDomain=denied`, `ShadowCopy=false`); before, xUnit v2 on .NET Framework recorded no class. A tracker
   in a non-default domain still writes its own results file (process id and domain id) at unload and
