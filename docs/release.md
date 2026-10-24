@@ -27,7 +27,8 @@ source is public at https://github.com/selcukgural/TestDetta.
 5. Check every README before announcing: the bundled action README (its example names the new version), the NuGet
    README (`dist/nuget/README.md`: frameworks and CI systems as the site states them; a fix
    there needs the next package version), this README and `site/site.json` (`actionRef` pinned to the new action
-   commit, `toolVersion` set to the new version for the install lines), and the release notes on `TestDetta/action`, which take the items of `docs/release-notes-unreleased.md`
+   commit, `toolVersion` set to the new version for the install lines), the default `-Version` of `dist/ci/testdetta.ps1` and
+   `TESTDETTA_VERSION` in `dist/ci/azure-pipelines.yml` and `dist/ci/Jenkinsfile.windows`, and the release notes on `TestDetta/action`, which take the items of `docs/release-notes-unreleased.md`
    (behaviour users must know about first; empty the file after the release). Before copying them, read
    `git log --no-merges <previous tag>..<new tag>` against the file: 0.2.0's notes missed a week of changes made before
    the file existed, among them a new action input. A README fix after tagging is a README-only commit in

@@ -124,6 +124,13 @@ steps:
     condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))</code></pre>
 <p><code>TESTDETTA_MAPS</code> points to a share on self-hosted agents. On Microsoft-hosted agents, sync it with Azure Blob storage (see <a href="#object-storage">Object storage</a>).</p>
 
+<h2 id="windows">Windows agents and PowerShell</h2>
+<p>The examples above use a POSIX shell. On Windows agents (Azure DevOps, Jenkins, TeamCity or a pipeline of your own), use <a href="https://github.com/selcukgural/TestDetta/blob/main/dist/ci/testdetta.ps1"><code>dist/ci/testdetta.ps1</code></a>: copy it into your repository, for example as <code>build/testdetta.ps1</code>. It installs the pinned version into a folder of its own, fetches the full history when the clone is shallow (Azure DevOps clones shallowly by default), finds the pull request's target branch in the Azure DevOps, Jenkins, GitLab or Bitbucket environment and fetches it, and passes everything after <code>--</code> to <code>dotnet test</code>. It works with Windows PowerShell 5.1 and PowerShell 7.</p>
+<pre><code>.\build\testdetta.ps1 -Mode record -MapsDir \\fileserver\testdetta-maps\shop -- -c Release   # default branch
+.\build\testdetta.ps1 -Mode shadow -MapsDir \\fileserver\testdetta-maps\shop -- -c Release   # pull requests, while you evaluate
+.\build\testdetta.ps1 -Mode test   -MapsDir \\fileserver\testdetta-maps\shop -- -c Release   # pull requests, afterwards</code></pre>
+<p>Ready-made pipelines: <a href="https://github.com/selcukgural/TestDetta/blob/main/dist/ci/azure-pipelines.yml">Azure DevOps on a Microsoft-hosted Windows agent</a>, with the maps in a pipeline cache, and <a href="https://github.com/selcukgural/TestDetta/blob/main/dist/ci/Jenkinsfile.windows">a Jenkins multibranch pipeline on a Windows agent</a>, with the maps on a share. Both start pull requests in <a href="/docs/cli/#shadow">shadow mode</a>: every test runs as today, and the report says what the selection would have left out.</p>
+
 <h2>Bitbucket Pipelines</h2>
 <pre><code>image: mcr.microsoft.com/dotnet/sdk:10.0   # td runs on .NET 10; use an image that also has your tests' runtimes
 

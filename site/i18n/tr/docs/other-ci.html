@@ -1,4 +1,4 @@
-<!-- title: Diğer CI sistemleri; layout: docs; description: {{name}}'yı GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi CI'da bir kapsam haritaları klasörüyle çalıştırın.; source: 965065ae6dec -->
+<!-- title: Diğer CI sistemleri; layout: docs; description: {{name}}'yı GitLab CI, Jenkins, Azure DevOps, Bitbucket ve şirket içi CI'da bir kapsam haritaları klasörüyle çalıştırın.; source: d30b86fabcd1 -->
 <h1>Diğer CI sistemleri</h1>
 <p class="lead">{{name}}, .NET ve git çalıştıran her CI'da çalışır. GitHub Actions dışında iki komut ve bir klasör işi görür.</p>
 
@@ -123,6 +123,13 @@ steps:
       echo "##vso[task.uploadsummary]$(Agent.TempDirectory)/testdetta.md"
     condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))</code></pre>
 <p><code>TESTDETTA_MAPS</code>, self-hosted agent'larda bir paylaşıma işaret eder. Microsoft-hosted agent'larda onu Azure Blob depolamayla senkronize edin (bkz. <a href="#object-storage">Nesne depolama</a>).</p>
+
+<h2 id="windows">Windows agent'ları ve PowerShell</h2>
+<p>Yukarıdaki örnekler POSIX kabuğu kullanır. Windows agent'larında (Azure DevOps, Jenkins, TeamCity ya da kendi pipeline'ınız) <a href="https://github.com/selcukgural/TestDetta/blob/main/dist/ci/testdetta.ps1"><code>dist/ci/testdetta.ps1</code></a> betiğini kullanın: reponuza, örneğin <code>build/testdetta.ps1</code> olarak kopyalayın. Betik sabitlenen sürümü kendi klasörüne kurar, klon sığsa (Azure DevOps varsayılan olarak sığ klonlar) tam geçmişi çeker, pull request'in hedef branch'ini Azure DevOps, Jenkins, GitLab ya da Bitbucket ortamından bulup çeker ve <code>--</code> sonrasındaki her şeyi <code>dotnet test</code>'e geçirir. Windows PowerShell 5.1 ve PowerShell 7 ile çalışır.</p>
+<pre><code>.\build\testdetta.ps1 -Mode record -MapsDir \\fileserver\testdetta-maps\shop -- -c Release   # varsayılan branch
+.\build\testdetta.ps1 -Mode shadow -MapsDir \\fileserver\testdetta-maps\shop -- -c Release   # değerlendirirken pull request'ler
+.\build\testdetta.ps1 -Mode test   -MapsDir \\fileserver\testdetta-maps\shop -- -c Release   # sonrasında pull request'ler</code></pre>
+<p>Hazır pipeline'lar: haritaları pipeline önbelleğinde tutan <a href="https://github.com/selcukgural/TestDetta/blob/main/dist/ci/azure-pipelines.yml">Microsoft'un Windows agent'ında Azure DevOps</a> ve haritaları bir paylaşımda tutan <a href="https://github.com/selcukgural/TestDetta/blob/main/dist/ci/Jenkinsfile.windows">Windows agent'ında Jenkins multibranch pipeline'ı</a>. İkisi de pull request'leri <a href="/docs/cli/#shadow">shadow mode</a>'da başlatır: her test bugünkü gibi çalışır, rapor seçimin neyi dışarıda bırakacağını söyler.</p>
 
 <h2>Bitbucket Pipelines</h2>
 <pre><code>image: mcr.microsoft.com/dotnet/sdk:10.0   # td runs on .NET 10; use an image that also has your tests' runtimes
