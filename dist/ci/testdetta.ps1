@@ -26,7 +26,9 @@
     # CHANGE_TARGET (Jenkins), CI_MERGE_REQUEST_TARGET_BRANCH_NAME (GitLab) or BITBUCKET_PR_DESTINATION_BRANCH
     .\testdetta.ps1 -Mode shadow -MapsDir \\fileserver\testdetta-maps\shop -- -c Release
 #>
-[CmdletBinding()]
+# No positional binding: every argument without a parameter name goes to dotnet test (-c Release), never to
+# -Target or -Version.
+[CmdletBinding(PositionalBinding = $false)]
 param(
     # record, test or shadow.
     [Parameter(Mandatory = $true)]
