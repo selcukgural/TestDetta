@@ -8,7 +8,7 @@
   <tbody>
     <tr><td>.NET SDK</td><td>The .NET 10 SDK runs {{name}} itself. Your tests keep the SDK and runner your repository already uses.</td></tr>
     <tr><td>Git history</td><td>The full history of your branch and its target branch, so the merge base can be found. Shallow clones cannot work.</td></tr>
-    <tr><td>Operating system</td><td>Tested on Linux x64 (our CI) and macOS arm64 (the evaluation). Other architectures have not been tested, and Windows has not been tested yet.</td></tr>
+    <tr><td>Operating system</td><td>Windows x64 and Linux x64 (our CI runs the whole test suite on both for every pull request) and macOS arm64 (the evaluation). Other architectures have not been tested.</td></tr>
     <tr><td>Legacy project files</td><td>Non-SDK <code>.csproj</code> files with <code>packages.config</code> restore and build with the full MSBuild: Visual Studio or its Build Tools on Windows (found through <code>vswhere</code>), Mono's <code>msbuild</code> on macOS and Linux, or the executable that <code>TESTDETTA_MSBUILD</code> names. Their tests run from the compiled assembly through VSTest, the engine of <code>vstest.console.exe</code>. Tested on macOS with Mono.</td></tr>
   </tbody>
 </table>
@@ -35,7 +35,7 @@
     <tr><td>Code under test: .NET Framework 3.5 and later, .NET Standard 1.0 and later, .NET Core, .NET 5 and later</td><td>Supported; a .NET Framework 3.5 library under .NET Framework 4.8 tests is tested</td></tr>
     <tr><td>Test projects on .NET 8 and later</td><td>Tested, the whole evaluation corpus</td></tr>
     <tr><td>Test projects on .NET 6 and 7</td><td>.NET 6 tested with xUnit v2, NUnit 3 and MSTest 3, on Microsoft.NET.Test.Sdk 17.13 (the last version for them)</td></tr>
-    <tr><td>Test projects on .NET Framework 4.6.2 to 4.8.1</td><td>Tested with xUnit v2 (4.6.2 and 4.8) and MSTest 1 and 3 (4.8) under Mono on macOS; Windows not tested yet. NUnit 2's adapter is not supported yet.</td></tr>
+    <tr><td>Test projects on .NET Framework 4.6.2 to 4.8.1</td><td>Tested on Windows with xUnit v2 (4.6.2 and 4.8) and MSTest 1 and 3 (4.8), legacy (non-SDK) solutions included, and the same under Mono on macOS. NUnit 2's adapter is not supported yet.</td></tr>
     <tr><td>Test projects on .NET Framework 3.5 to 4.6.1</td><td>Not supported: current test platforms need .NET Framework 4.6.2</td></tr>
   </tbody>
 </table>
