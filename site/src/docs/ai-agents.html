@@ -1,0 +1,34 @@
+<!-- title: AI coding agents; layout: docs; description: Let Claude Code, Codex and other coding agents run only the .NET tests their changes can affect. -->
+<h1>AI coding agents</h1>
+<p class="lead">Coding agents run the tests after almost every change, and a full <code>dotnet test</code> is the slowest part of their loop. With {{name}} they run only the tests a change can affect, and check them before they hand back.</p>
+
+<p>Every agent needs the <code>td</code> tool on the machine where it works:</p>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
+<p>{{name}} decides on the developer's machine as it does in CI: with a coverage map recorded by <code>td record</code> it follows which test class ran which method, and without one it traces names through the source, which selects more but stays safe.</p>
+
+<h2>Claude Code</h2>
+<p>The {{name}} plugin adds a skill and a Stop hook. Install it from Claude Code (version 2.1.275 or later) in one step:</p>
+<pre><code>/plugin install testdetta --marketplace selcukgural/TestDetta</code></pre>
+<p>On earlier versions, add the marketplace first:</p>
+<pre><code>/plugin marketplace add selcukgural/TestDetta
+/plugin install testdetta@testdetta</code></pre>
+<ul>
+  <li><strong>The skill</strong> tells the agent to run <code>td test</code> where it would run <code>dotnet test</code>, to read <code>td affected</code> to find the tests that cover the code it is about to change, and to suggest <code>td record</code> to you instead of starting that long run itself.</li>
+  <li><strong>The Stop hook</strong> runs the affected tests when the agent finishes a turn with a changed working tree. A failing test or a broken build sends the agent back with a short excerpt (each failure's message, each compiler error once) and the path of the full log. Passing tests show you one line. A turn that changed no code costs a few milliseconds, and the agent is sent back at most three times in a turn.</li>
+</ul>
+<p>To offer the plugin to everyone who opens a repository, add the marketplace and the plugin to the repository's <code>.claude/settings.json</code> (<code>extraKnownMarketplaces</code> and <code>enabledPlugins</code>). The hook's settings are environment variables:</p>
+<table>
+  <thead><tr><th>Variable</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>TESTDETTA_AGENT_HOOK=off</code></td><td>Turns the Stop hook off; the skill stays.</td></tr>
+    <tr><td><code>TESTDETTA_AGENT_BASE=&lt;ref&gt;</code></td><td>Compares with this ref instead of <code>origin/main</code>.</td></tr>
+    <tr><td><code>TESTDETTA_AGENT_MAX_BLOCKS=&lt;n&gt;</code></td><td>How often one turn may be sent back for failing tests (default 3).</td></tr>
+  </tbody>
+</table>
+<p>The hook is a bash script. It is tested on macOS and Linux, not yet on Windows.</p>
+
+<h2>Codex and other agents</h2>
+<p>The skill follows the open Agent Skills format, so agents that read <code>SKILL.md</code> folders can use it; the Stop hook is Claude Code's own. For Codex, copy <a href="{{sourceUrl}}/tree/main/dist/claude-plugin/skills/testdetta"><code>dist/claude-plugin/skills/testdetta</code></a> from the source repository into <code>~/.codex/skills/testdetta</code> (or <code>$CODEX_HOME/skills</code>) and restart Codex.</p>
+
+<h2>What the agent sends</h2>
+<p>Nothing. <code>td</code> makes no network calls of its own, and the plugin only runs <code>td</code> and <code>git</code> on your machine. What your agent sends to its own provider is between you and that provider.</p>

@@ -39,6 +39,7 @@ const docsNav = [
   ["/docs/time-saved/", "docTimeSaved", "navGroupConcepts"],
   ["/docs/github-actions/", "docGitHubActions", "navGroupSetup"],
   ["/docs/other-ci/", "docOtherCi", "navGroupSetup"],
+  ["/docs/ai-agents/", "docAiAgents", "navGroupSetup"],
   ["/docs/compatibility/", "docCompatibility", "navGroupSetup"],
   ["/docs/cli/", "docCli", "navGroupReference"],
   ["/docs/troubleshooting/", "docTroubleshooting", "navGroupReference"],

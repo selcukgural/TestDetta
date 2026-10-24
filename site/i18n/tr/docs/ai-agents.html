@@ -1,0 +1,34 @@
+<!-- title: Yapay zekâ kodlama ajanları; layout: docs; description: Claude Code, Codex ve diğer kodlama ajanlarının yalnızca değişikliklerinin etkileyebileceği .NET testlerini çalıştırmasını sağlayın.; source: 5ab5f9d82d9b -->
+<h1>Yapay zekâ kodlama ajanları</h1>
+<p class="lead">Kodlama ajanları neredeyse her değişiklikten sonra testleri çalıştırır ve tam bir <code>dotnet test</code>, döngülerinin en yavaş kısmıdır. {{name}} ile yalnızca bir değişikliğin etkileyebileceği testleri çalıştırırlar ve işi size bırakmadan önce bunları kontrol ederler.</p>
+
+<p>Her ajanın, çalıştığı makinede <code>td</code> aracına ihtiyacı vardır:</p>
+<pre><code>dotnet tool install --global {{packageId}}</code></pre>
+<p>{{name}}, geliştiricinin makinesinde de CI'da olduğu gibi karar verir: <code>td record</code> ile kaydedilmiş bir kapsam haritası varsa hangi test sınıfının hangi metodu çalıştırdığını izler, yoksa adları kaynak kod içinde takip eder; bu daha fazla test seçer ama güvenli kalır.</p>
+
+<h2>Claude Code</h2>
+<p>{{name}} plugin'i bir skill ve bir Stop hook ekler. Claude Code'dan (2.1.275 veya sonrası) tek adımda kurun:</p>
+<pre><code>/plugin install testdetta --marketplace selcukgural/TestDetta</code></pre>
+<p>Daha eski sürümlerde önce marketplace'i ekleyin:</p>
+<pre><code>/plugin marketplace add selcukgural/TestDetta
+/plugin install testdetta@testdetta</code></pre>
+<ul>
+  <li><strong>Skill</strong>, ajana <code>dotnet test</code> çalıştıracağı yerde <code>td test</code> çalıştırmasını, değiştirmek üzere olduğu kodu kapsayan testleri bulmak için <code>td affected</code> çıktısını okumasını ve o uzun çalıştırmayı kendisi başlatmak yerine <code>td record</code>'u size önermesini söyler.</li>
+  <li><strong>Stop hook</strong>, ajan çalışma ağacını değiştirmiş olarak bir turu bitirdiğinde etkilenen testleri çalıştırır. Kırılan bir test ya da bozuk bir derleme, ajanı kısa bir özetle (her hatanın mesajı, her derleyici hatası bir kez) ve tam logun yoluyla geri gönderir. Geçen testler size tek bir satır gösterir. Kodu değiştirmeyen bir tur birkaç milisaniye sürer ve ajan bir turda en fazla üç kez geri gönderilir.</li>
+</ul>
+<p>Plugin'i bir depoyu açan herkese önermek için marketplace'i ve plugin'i deponun <code>.claude/settings.json</code> dosyasına ekleyin (<code>extraKnownMarketplaces</code> ve <code>enabledPlugins</code>). Hook'un ayarları ortam değişkenleridir:</p>
+<table>
+  <thead><tr><th>Değişken</th><th>Etkisi</th></tr></thead>
+  <tbody>
+    <tr><td><code>TESTDETTA_AGENT_HOOK=off</code></td><td>Stop hook'u kapatır; skill kalır.</td></tr>
+    <tr><td><code>TESTDETTA_AGENT_BASE=&lt;ref&gt;</code></td><td><code>origin/main</code> yerine bu ref ile karşılaştırır.</td></tr>
+    <tr><td><code>TESTDETTA_AGENT_MAX_BLOCKS=&lt;n&gt;</code></td><td>Bir turun, kırılan testler yüzünden en fazla kaç kez geri gönderilebileceği (varsayılan 3).</td></tr>
+  </tbody>
+</table>
+<p>Hook bir bash script'idir. macOS ve Linux'ta test edildi, Windows'ta henüz edilmedi.</p>
+
+<h2>Codex ve diğer ajanlar</h2>
+<p>Skill, açık Agent Skills biçimine uyar; bu yüzden <code>SKILL.md</code> klasörlerini okuyan ajanlar onu kullanabilir. Stop hook ise Claude Code'a özgüdür. Codex için kaynak deposundaki <a href="{{sourceUrl}}/tree/main/dist/claude-plugin/skills/testdetta"><code>dist/claude-plugin/skills/testdetta</code></a> klasörünü <code>~/.codex/skills/testdetta</code> (ya da <code>$CODEX_HOME/skills</code>) altına kopyalayın ve Codex'i yeniden başlatın.</p>
+
+<h2>Ajan ne gönderir</h2>
+<p>Hiçbir şey. <code>td</code> kendi adına hiçbir ağ çağrısı yapmaz ve plugin yalnızca makinenizde <code>td</code> ve <code>git</code> çalıştırır. Ajanınızın kendi sağlayıcısına ne gönderdiği sizinle o sağlayıcı arasındadır.</p>
