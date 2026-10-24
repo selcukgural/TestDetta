@@ -29,7 +29,8 @@ Tests to run
 
 TestDetta is the [`TestDetta` package on nuget.org](https://www.nuget.org/packages/TestDetta), a .NET tool with the
 command `td`. The .NET 10 SDK runs `td` itself; your tests keep the SDK and runner your repository already uses.
-Tested on Linux and macOS; Windows is not tested yet.
+Runs on Windows, Linux and macOS; every pull request runs the whole test suite on Windows and Linux, .NET Framework
+4.6.2 to 4.8 test projects and legacy (non-SDK) solutions included.
 
 ```sh
 dotnet tool install --global TestDetta      # or: dotnet tool install TestDetta (local tool manifest)

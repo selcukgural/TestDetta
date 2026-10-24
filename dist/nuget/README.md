@@ -14,6 +14,7 @@ td affected -v            # what would run, and why
 
 - Runs inside your CI; no source, coverage or test results leave your machines.
 - xUnit v2 and v3, NUnit, MSTest and TUnit, on VSTest and Microsoft.Testing.Platform.
+- Windows, Linux and macOS, .NET Framework 4.6.2 to 4.8 test projects and legacy (non-SDK) solutions included.
 - GitHub Actions, GitLab CI, Azure DevOps, Jenkins and Bitbucket.
 - Free and open source (Apache-2.0) for every repository, public or private: https://github.com/selcukgural/TestDetta
 
