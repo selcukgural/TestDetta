@@ -61,7 +61,7 @@ The hook is a bash script (git, awk, grep, sed, tr); it is tested on macOS and L
 ```bash
 claude --plugin-dir dist/claude-plugin          # try the plugin in a session
 claude plugin validate dist/claude-plugin       # check the manifest
-bash dist/claude-plugin/tests/stop-hook.test.sh # hook tests, against a fake td (also run in CI)
+bash tests/claude-plugin-stop-hook.test.sh     # hook tests, against a fake td (also run in CI)
 ```
 
 The icon is `brand/social/github-avatar.svg` rendered at 1024 px (`rsvg-convert -w 1024 -h 1024`).
