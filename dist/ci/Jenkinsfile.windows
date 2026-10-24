@@ -9,7 +9,7 @@ pipeline {
   agent { label 'windows' }
   environment {
     TESTDETTA_MAPS = "\\\\fileserver\\testdetta-maps\\${env.JOB_NAME.split('/')[0]}"
-    TESTDETTA_VERSION = '0.5.1'
+    TESTDETTA_VERSION = '0.5.2'
   }
   options { skipDefaultCheckout() }
   stages {
