@@ -1,0 +1,43 @@
+name: Windows
+
+# The whole suite on a Windows runner, where most enterprise .NET teams build: .NET Framework 4.8,
+# msbuild.exe from the Visual Studio Build Tools and vstest.console.exe come with the image, so the
+# Legacy tests run without Mono. Git keeps the image's core.autocrlf=true, as on a developer's Windows
+# machine. Windows minutes are free on a public repository; it runs by hand and on ci/windows* branches
+# until the suite is green there.
+on:
+  push:
+    branches: ['ci/windows*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # .NET 6 for the Legacy tests that record in a .NET 6 test host.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 6.0.x
+          global-json-file: global.json
+
+      # Eval tests clone the corpus repositories; they stay on Linux.
+      - name: Test
+        run: dotnet test --nologo --filter "Category!=Eval" --logger trx --results-directory TestResults --blame-hang-timeout 15m
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: windows-test-results
+          path: TestResults/
+          retention-days: 14
