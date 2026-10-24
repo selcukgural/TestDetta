@@ -18,6 +18,16 @@ public sealed class CliOptionsTests
     }
 
     [Fact]
+    public void The_removed_license_command_says_why_instead_of_running()
+    {
+        foreach (var args in (string[][])[["license", "status"], ["license", "install", "testdetta1.x"], ["license"]])
+        {
+            Assert.False(CliOptions.TryParse(args, "/cwd", out _, out var error));
+            Assert.Equal("td license was removed: TestDetta is free and open source (Apache-2.0) and reads no license", error);
+        }
+    }
+
+    [Fact]
     public void Test_command_passes_everything_after_double_dash_through()
     {
         var ok = CliOptions.TryParse(["test", "--base", "main", "--dry-run", "--", "-c", "Release", "--no-build"], "/repo", out var options, out _);

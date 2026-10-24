@@ -1,7 +1,8 @@
 # Releasing TestDetta
 
-Customers get TestDetta two ways: the `td` tool as the `TestDetta` package on nuget.org, and the public
-GitHub Action `testdetta/action`, which downloads that package. This repository stays private.
+Users get TestDetta two ways: the `td` tool as the `TestDetta` package on nuget.org, and the public
+GitHub Action `TestDetta/action`, which downloads that package. Both are free and open source under Apache-2.0; the
+source is public at https://github.com/selcukgural/TestDetta.
 
 ## One-time setup (owner)
 
@@ -21,10 +22,10 @@ GitHub Action `testdetta/action`, which downloads that package. This repository 
    the setup done, pushes it to nuget.org through trusted publishing (a short-lived key, no secret).
 3. The `action-bundle` job waits until nuget.org serves the package, pins its SHA-512 in `tool.lock`
    and uploads the bundle: `action.yml`, `tool.lock`, `README.md` (its `{{version}}` replaced with the tag's
-   version, so the example names the release), `LICENSE.txt`.
+   version, so the example names the release), `LICENSE` (Apache-2.0).
 4. Copy the bundle into `testdetta/action`, commit, tag `v0.1.0`, and move the major tag to it (`v0` while the version is 0.x, `v1` from 1.0.0).
 5. Check every README before announcing: the bundled action README (its example names the new version), the NuGet
-   README (`dist/nuget/README.md`: frameworks, CI systems, trial length and pricing as the site states them; a fix
+   README (`dist/nuget/README.md`: frameworks and CI systems as the site states them; a fix
    there needs the next package version), this README and `site/site.json` (`actionRef` pinned to the new action
    commit, `toolVersion` set to the new version for the install lines), and the release notes on `TestDetta/action`, which take the items of `docs/release-notes-unreleased.md`
    (behaviour users must know about first; empty the file after the release). Before copying them, read

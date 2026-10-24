@@ -14,12 +14,6 @@ internal enum CliCommand
     /// <summary><c>td record</c>: run all tests with coverage and store which code each test class runs.</summary>
     Record,
 
-    /// <summary><c>td license status</c>: check the license and show what it found.</summary>
-    LicenseStatus,
-
-    /// <summary><c>td license install &lt;license&gt;</c>: store a license in <c>~/.testdetta/license</c>.</summary>
-    LicenseInstall,
-
     /// <summary><c>td audit</c>: break members of the team's code one at a time and check the selection caught every failure.</summary>
     Audit,
 }
@@ -67,8 +61,8 @@ internal sealed record TestSettings(bool DryRun, IReadOnlyList<string> DotnetTes
 {
     /// <summary>
     /// Shadow mode (docs/design/shadow-mode.md): select as usual, run every test with the team's own command, and
-    /// report what the selection would have left out, for the tests that ran. No license is read. The exit code is
-    /// the full run's.
+    /// report what the selection would have left out, for the tests that ran. The exit code is the full
+    /// run's.
     /// </summary>
     public bool Shadow { get; init; }
 
@@ -301,10 +295,6 @@ internal sealed record AuditSettings
     public string? WorkDirectory { get; init; }
 }
 
-/// <summary>Options of <c>td license</c>.</summary>
-/// <param name="Install">For <c>install</c>: a license string, or the path of a file holding one.</param>
-internal sealed record LicenseSettings(string? Install);
-
 /// <summary>Parsed command line.</summary>
 /// <param name="Command">Which sub-command to run.</param>
 /// <param name="Analysis">Options shared by all commands.</param>
@@ -318,9 +308,6 @@ internal sealed record CliOptions(
     TestSettings Test,
     RecordSettings Record)
 {
-    /// <summary>Options of <c>td license</c>; defaults for other commands.</summary>
-    public LicenseSettings License { get; init; } = new(Install: null);
-
     /// <summary>Options of <c>td audit</c>; defaults for other commands.</summary>
     public AuditSettings Audit { get; init; } = new();
 
@@ -334,8 +321,6 @@ internal sealed record CliOptions(
           td test [options] [-- <args>]      Run only the tests a change affects
           td record [options] [-- <args>]    Run all tests with coverage and store the map in .testdetta/coverage; <args> are
                                              your own dotnet test arguments (filter, settings), kept while recording
-          td license status [options]        Check the TestDetta license and show what it covers
-          td license install <license|file>  Store a license in ~/.testdetta/license (when no CI secret can hold it)
           td --version                       Print the version of td
           td audit [options] [-- <args>]     Break members of your code one at a time (in a copy of the
                                              working tree) and check the selection ran every test that failed
@@ -380,8 +365,8 @@ internal sealed record CliOptions(
           --shadow             Shadow mode: select as usual, but run every test with your own dotnet test
                                arguments (as one command when they name a solution, a project or nothing,
                                otherwise per test project) and report what the selection would have left
-                               out, for the tests that ran; needs no license and sends nothing; the exit
-                               code is the full run's, and a TestDetta error never fails it
+                               out, for the tests that ran; sends nothing; the exit code is the full
+                               run's, and a TestDetta error never fails it
           --shadow-no-classify Do not rerun failed classes the selection left out to tell a miss from
                                a flaky or pre-existing failure
           --shadow-report <path>  Shadow report file (default: .testdetta/testdetta-shadow.json)
@@ -398,7 +383,7 @@ internal sealed record CliOptions(
                                0 or none means no limit. The full run itself has no limit.
           -- <args>            Pass the remaining arguments to every dotnet test, e.g. -- -c Release
 
-        td audit (needs no license and sends nothing; your sources and build output are never written):
+        td audit (sends nothing; your sources and build output are never written):
           --target-broken <n>  Stop once n changes broke tests (default: 100)
           --max-mutants <n>    Stop after n changes ran tests (default: no limit)
           --budget <time>      Start no change after this long (default: 4h; 0 or none: no limit)
@@ -426,9 +411,6 @@ internal sealed record CliOptions(
           --full-record-days <n>   With --incremental: record in full when the last full map is n days old (default: 7)
           --full-record-share <percent>  With --incremental: record in full when more of a project is selected (default: 60)
 
-        License: set TESTDETTA_LICENSE (or TESTDETTA_LICENSE_FILE) in CI. Public repositories need none.
-        Without a valid license every test runs. The build never fails because of it.
-
         Exit codes: 0 success, 1 analysis failed, 2 invalid command line, 3 tests failed (td audit: a miss).
         """;
 
@@ -455,18 +437,9 @@ internal sealed record CliOptions(
 
         switch (args)
         {
-            case ["license", "status", ..]:
-                options = options with { Command = CliCommand.LicenseStatus };
-                first = 2;
-                break;
-
-            case ["license", "install", var license, ..]:
-                options = options with { Command = CliCommand.LicenseInstall, License = new LicenseSettings(license) };
-                first = 3;
-                break;
-
+            // Scripts written for the paid versions may still call it; say why it is gone instead of "unknown command".
             case ["license", ..]:
-                error = "td license needs status or install <license|file>";
+                error = "td license was removed: TestDetta is free and open source (Apache-2.0) and reads no license";
                 return false;
 
             case ["affected", ..]:
@@ -584,8 +557,7 @@ internal sealed record CliOptions(
                 error = "td audit compares every change with HEAD; --base does not apply";
                 return false;
 
-            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--not-build-inputs" or "--color" or "--theme":
-            case "--maps-dir" when options.Command is CliCommand.Affected or CliCommand.Test or CliCommand.Record or CliCommand.Audit:
+            case "--base" or "--repo" or "--log-level" or "--max-map-age" or "--drift-fallback" or "--non-code-files" or "--not-build-inputs" or "--color" or "--theme" or "--maps-dir":
             case "--format" when options.Command == CliCommand.Affected:
             case "-c" or "--configuration" or "--project" or "--parallel" or "-f" or "--framework" when options.Command == CliCommand.Record:
             case "--full-record-every" or "--full-record-days" or "--full-record-share" when options.Command == CliCommand.Record:

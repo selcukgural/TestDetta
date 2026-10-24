@@ -191,10 +191,10 @@ internal sealed record ShadowRunInfo(ShadowRunKind Kind, string Command, string?
 /// <param name="Maps">Coverage maps used: test project, the commit they were recorded at, and the file's SHA-256.</param>
 /// <param name="Options">The options that shape the selection and the classification (its time limits).</param>
 /// <param name="Command">
-/// The command that repeats the run and its decisions without a license: the same <c>td test --shadow</c> at the head
+/// The command that repeats the run and its decisions: the same <c>td test --shadow</c> at the head
 /// commit, compared with the merge base, with the same maps in place (their hashes above).
 /// </param>
-/// <param name="ExplainCommand">The command that lists every decision without running tests; it needs a license.</param>
+/// <param name="ExplainCommand">The command that lists every decision without running tests.</param>
 internal sealed record ShadowReproduction(
     string Version,
     string? BinarySha256,
@@ -703,8 +703,8 @@ internal static class ShadowReport
             stdout.WriteLine($"  {classification.Describe()}");
         }
 
-        stdout.WriteLine($"  reproduce this result (no license needed): {result.Reproduction.Command}");
-        stdout.WriteLine($"  list every decision without running tests (needs a license): {result.Reproduction.ExplainCommand}");
+        stdout.WriteLine($"  reproduce this result: {result.Reproduction.Command}");
+        stdout.WriteLine($"  list every decision without running tests: {result.Reproduction.ExplainCommand}");
     }
 
     /// <summary>The verdict's name in the JSON report.</summary>
@@ -740,8 +740,8 @@ internal static class ShadowReport
         }
 
         writer.WriteLine($"- options: {code(string.Join(' ', reproduction.Options))}");
-        writer.WriteLine($"- at the head commit, with these maps in {code(".testdetta/coverage")} (compare their SHA-256), no license needed: {code(reproduction.Command)}");
-        writer.WriteLine($"- every decision without running tests, with a license: {code(reproduction.ExplainCommand)}");
+        writer.WriteLine($"- at the head commit, with these maps in {code(".testdetta/coverage")} (compare their SHA-256): {code(reproduction.Command)}");
+        writer.WriteLine($"- every decision without running tests: {code(reproduction.ExplainCommand)}");
         writer.WriteLine();
         writer.WriteLine("</details>");
         writer.WriteLine();

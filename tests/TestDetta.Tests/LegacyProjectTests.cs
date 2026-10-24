@@ -187,8 +187,8 @@ EndGlobal
 
         _repo.Replace("src/Calc/Calculator.cs", "return a + b;", "return b + a;");
         var test = new StringWriter();
-        var publicRepository = new CliHost(static name => name == "CI_PROJECT_VISIBILITY" ? "public" : null, Path.Combine(_repo.Root, ".testdetta", "home"));
-        var exit = CliApp.Run(["test", "--repo", _repo.Root, "--base", "HEAD"], test, test, publicRepository);
+        var host = new CliHost(static _ => null);
+        var exit = CliApp.Run(["test", "--repo", _repo.Root, "--base", "HEAD"], test, test, host);
 
         Assert.True(exit == 0, test.ToString());
         Assert.Contains("Calc.Tests.AddTests", test.ToString(), StringComparison.Ordinal);

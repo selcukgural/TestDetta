@@ -1,53 +1,21 @@
-<!-- title: License; layout: docs; description: Pass the {{name}} license to CI, check what it covers, and how it renews. -->
+<!-- title: License; layout: docs; description: {{name}} is free and open source under the Apache License 2.0, for every repository. What that means, and how to support its development. -->
 <h1>License</h1>
-<p class="lead">Public repositories use {{name}} for free. Private repositories pass a license string to CI. A license problem never fails a build: without a valid license, every test runs, as it did before {{name}}.</p>
+<p class="lead">{{name}} is free and open source under the Apache License 2.0. Use it on public and private repositories, on any CI and on developer machines. There is no license key, account, trial or limit.</p>
 
-<h2>Public repositories</h2>
-<p>A public repository needs no license, but {{name}} only knows a repository is public where the CI says so:</p>
+<h2 id="apache">Apache License 2.0</h2>
+<p>The source code is on GitHub at <a href="{{sourceUrl}}">selcukgural/TestDetta</a>, and the full license text is in its <a href="{{sourceUrl}}/blob/HEAD/LICENSE"><code>LICENSE</code></a> file. In short, you may use, copy, change and distribute {{name}}, in commercial and closed-source work too, as long as you pass the license on with it, keep its copyright and attribution notices, and mark the files you changed. The license text decides; this summary does not replace it.</p>
+<p>{{name}} is provided "as is", without warranties or conditions of any kind, and no contributor is liable for damages from its use, as sections 7 and 8 of the license set out. It is built to run more tests when it is unsure, but test selection can still miss a test (see <a href="/docs/limitations/">Limitations</a>), so keep running the full suite regularly, for example on your default branch.</p>
+
+<h2 id="sponsor">Sponsoring</h2>
+<p>{{name}} costs nothing. If it saves your team time, you can support its development through <a href="{{sponsorUrl}}">GitHub Sponsors</a>, monthly or once. Sponsoring is voluntary and unlocks nothing: every feature is in the version you install.</p>
+<p><a class="button" href="{{sponsorUrl}}" rel="noopener">Sponsor on GitHub</a></p>
+
+<h2 id="earlier-versions">Coming from an earlier version</h2>
+<p>Earlier versions of {{name}} read a license on private repositories. {{name}} now reads none, and selection always runs:</p>
 <ul>
-  <li><strong>GitHub Actions:</strong> from the event payload (<code>repository.private</code>);</li>
-  <li><strong>GitLab CI:</strong> from <code>CI_PROJECT_VISIBILITY</code>.</li>
+  <li><code>TESTDETTA_LICENSE</code>, <code>TESTDETTA_LICENSE_FILE</code>, <code>TESTDETTA_LICENSE_SCOPE</code>, <code>TESTDETTA_LICENSE_REFRESH</code> and <code>~/.testdetta/license</code> are ignored. You can delete the secret and the file.</li>
+  <li>The <code>td license status</code> and <code>td license install</code> commands are gone.</li>
+  <li>The GitHub Action still accepts its <code>license</code> input, so existing workflows keep working, but ignores it and says so in the log. Remove it from your workflow when convenient.</li>
+  <li><code>td affected --format json</code> no longer has a <code>license</code> field.</li>
+  <li>{{name}} makes no network calls: there is no license refresh any more.</li>
 </ul>
-<p>On Jenkins, Azure DevOps, Bitbucket, other CI systems and developer machines, every repository counts as private.</p>
-
-<h2>Passing the license</h2>
-<p>{{name}} looks for the license in this order:</p>
-<ol>
-  <li><code>TESTDETTA_LICENSE</code>: the license string, from a masked or secret variable;</li>
-  <li><code>TESTDETTA_LICENSE_FILE</code>: the path of a file holding it;</li>
-  <li><code>~/.testdetta/license</code>: written by <code>td license install</code> and by automatic refresh;</li>
-  <li><code>.testdetta/license</code> in the repository.</li>
-</ol>
-<p>When several are found, the first one that covers the run counts, so an old license left in a secret does not hide a renewed one installed next to it.</p>
-<p>A secret variable is the recommended way. In GitHub Actions, pass it through the action's <code>license</code> input:</p>
-<pre><code>- uses: {{actionRef}}
-  with:
-    mode: test
-    license: ${{ secrets.TESTDETTA_LICENSE }}</code></pre>
-<p>Only <code>td affected</code>, <code>td test</code> (not <code>td test --shadow</code>) and <code>td license status</code> read the license. <code>td record</code>, <code>td test --shadow</code> and <code>td audit</code> run every test anyway and need none.</p>
-
-<h2>Checking it</h2>
-<p><code>td license status</code> shows what the license found covers: its validity, the repositories it covers and the active committer count, without personal data. The same state appears in the log, the job summary and the JSON output whenever it matters: valid, expiring soon, over seats, not valid yet, expired, wrong scope, invalid or missing.</p>
-<pre><code>td license status</code></pre>
-
-<h2>Machines without CI secrets</h2>
-<p>Where no secret variable can hold the license, store it once per machine:</p>
-<pre><code>td license install &lt;license|file&gt;</code></pre>
-<p>It is checked first and then written to <code>~/.testdetta/license</code>.</p>
-
-<h2>Automatic renewal</h2>
-<p>A trial or subscription license carries the address it renews from. At most once a day per machine, {{name}} fetches the current version and keeps it in <code>~/.testdetta/license</code>, so renewals and added seats arrive without touching your secrets. The request sends the license in a header and nothing from your repository. It runs while the analysis does, with a 6-second timeout, and any failure is ignored. A failure that may pass (no answer, a timeout, a server error) is tried again after an hour, so a blocked network costs at most a few seconds an hour, mostly hidden behind the analysis; set <code>TESTDETTA_LICENSE_REFRESH=off</code> where the service cannot be reached. <code>HTTPS_PROXY</code> is honoured. The time of the last attempt is kept in <code>~/.testdetta/license-refresh</code>, so on CI runners that start with an empty home directory the refresh runs once per job.</p>
-<p>A subscription's license runs to the end of the paid period plus 15 days, at most 40 days ahead, and is renewed only this way: while the subscription runs, every refresh hands out a license that again runs up to 40 days ahead. The 15 days are longer than the 14 days of expiry warnings, so a CI that refreshes never sees one. A copy that cannot reach the license service runs out after at most 40 days, with warnings in the last 14. For a network that cannot reach the license service, take the <a href="/pricing/">Offline &amp; enterprise (annual) plan</a>: its license file runs for the whole term and carries no renewal address, so {{name}} never calls the license service for it and there is nothing to turn off.</p>
-
-<h2>Which repositories a license covers</h2>
-<p>A license names the repositories it covers, such as <code>github.com/acme/*</code> (every repository of <code>acme</code>) or <code>github.com/acme/app</code> (one). What you enter at checkout or in the trial form is turned into this form: a URL or SSH remote becomes host and path, and an organization alone (<code>github.com/acme</code>) covers all its repositories. {{name}} matches them against the repository's <code>origin</code> remote. Credentials embedded in the remote URL, common with Jenkins, are stripped before matching and never logged.</p>
-<p>When the remote does not name the repository the license covers, a local mirror for example, set <code>TESTDETTA_LICENSE_SCOPE</code>:</p>
-<pre><code>TESTDETTA_LICENSE_SCOPE=git.acme.corp/scm/pay/app</code></pre>
-
-<h2>Active committers</h2>
-<p>{{name}} is priced per active committer per month: a distinct commit author with at least one commit authored in the last 30 days, among the commits reachable from the analysed commit. Authors are counted locally, by email folded through <code>.mailmap</code>, and no email leaves your machines. Bots such as Dependabot, Renovate and <code>github-actions</code> are not counted; add your own patterns in <code>.testdetta/license.json</code>:</p>
-<pre><code>{ "bots": ["ci-service-account"] }</code></pre>
-<p>A license's seats cover the active committers of all the repositories it covers together. Since no identity leaves your machines, {{name}} can only count the repository it runs in, so its count and warnings look at one repository at a time; buy seats for everyone across them.</p>
-<p>Up to 20% over the license's seats (at least one person) is fine. Above that, {{name}} keeps selecting for 30 days and warns in every summary, so there is time to add seats; only if the count is still over after that does every test run, as without a license. See <a href="/pricing/">Pricing</a>.</p>
-
-<div class="callout"><p>Never a red build: an expired, missing or mismatched license makes {{name}} run every test and say why. It does not fail the job.</p></div>

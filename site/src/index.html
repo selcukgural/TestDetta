@@ -10,8 +10,8 @@
         <a class="button button-ghost button-large" href="/docs/how-it-works/">How it decides</a>
       </div>
       <ul class="trust-points">
-        <li>Free for public repositories on GitHub Actions and GitLab CI</li>
-        <li><a href="/trial/">{{trialDays}}-day free trial, no card</a></li>
+        <li><a href="/docs/license/">Free and open source, Apache-2.0</a></li>
+        <li>Public and private repositories, any CI</li>
         <li>Runs inside your CI</li>
       </ul>
     </div>
@@ -190,9 +190,9 @@
     </div>
     <dl class="promise-list" data-reveal>
       <div><dt>0</dt><dd><strong>lines of your code leave your CI</strong>Analysis, coverage maps and test results stay on your machines.</dd></div>
-      <div><dt>0</dt><dd><strong>builds failed by a license problem</strong>Without a valid license every test runs, as before {{name}}.</dd></div>
+      <div><dt>0</dt><dd><strong>network calls of its own</strong>{{name}} sends nothing anywhere. Your CI fetches the tool and restores the maps like any other package or cache.</dd></div>
       <div><dt>5<span>·</span>2</dt><dd><strong>test frameworks and runners</strong>xUnit v2 and v3, NUnit, MSTest and TUnit, on VSTest and Microsoft.Testing.Platform.</dd></div>
-      <div><dt>1</dt><dd><strong>kind of network call, optional</strong>A license renewal that sends the license and nothing else, at most once a day per machine (once per job on runners that start fresh).</dd></div>
+      <div><dt>0</dt><dd><strong>license keys, accounts or sign-ups</strong>Apache-2.0 for every repository, public or private. Install it and it runs.</dd></div>
     </dl>
   </div>
   <div class="wrap">
@@ -231,7 +231,7 @@
       </ol>
       <figure class="editor">
         <div class="editor-bar"><span class="editor-dots"><i></i><i></i><i></i></span><span class="editor-tab">.github/workflows/ci.yml</span></div>
-<pre class="editor-code" data-lang="yaml" data-lines data-mark="18-21:a,23-27:b">on:
+<pre class="editor-code" data-lang="yaml" data-lines data-mark="18-21:a,23-26:b">on:
   push:
     branches: [main]
   pull_request:
@@ -256,21 +256,32 @@ jobs:
       - if: github.event_name == 'pull_request'
         uses: {{actionRef}}
         with:
-          mode: test
-          license: ${{ secrets.TESTDETTA_LICENSE }}</pre>
+          mode: test</pre>
       </figure>
     </div>
     <p class="gha-links" data-reveal><a href="/docs/github-actions/">GitHub Actions guide →</a><a href="/docs/other-ci/">GitLab CI, Jenkins, Azure DevOps, Bitbucket →</a></p>
   </div>
 </section>
 
+<section class="section-soft" id="sponsor">
+  <div class="wrap center">
+    <div class="section-head" data-reveal>
+      <h2>Support the project</h2>
+      <p>{{name}} is free for everyone. If it saves your team time, you can support its development through GitHub Sponsors, monthly or once. Sponsoring unlocks nothing: every feature is already in the version you install.</p>
+    </div>
+    <div class="hero-actions" data-reveal>
+      <a class="button button-large" href="{{sponsorUrl}}" rel="noopener">Sponsor on GitHub</a>
+    </div>
+  </div>
+</section>
+
 <section class="cta">
   <div class="wrap center">
-    <h2>Free for public repositories on GitHub Actions and GitLab CI. A {{trialDays}}-day free trial for private ones.</h2>
-    <p>Then {{currency}}{{priceMonthly}} per active committer per month. No card for the trial.</p>
+    <h2>Free and open source, for every repository.</h2>
+    <p>Apache-2.0. Public or private, on any CI and on your own machine.</p>
     <div class="hero-actions">
-      <a class="button button-large button-light" href="/pricing/">See pricing</a>
-      <a class="button button-large button-outline-light" href="/trial/">Start a free trial</a>
+      <a class="button button-large button-light" href="/docs/">Get started</a>
+      <a class="button button-large button-outline-light" href="{{sourceUrl}}" rel="noopener">Source on GitHub</a>
     </div>
   </div>
 </section>

@@ -56,11 +56,9 @@ A filter that matches no test is treated as a TestDetta bug: the project is run 
 |---|---|
 | `td affected [--format text\|json\|paths\|commands] [--build]` | Print what a change affects and why. `--build` builds the test projects that use a changed source generator, to compare what it generates; without it, an existing build newer than the sources is read. |
 | `td test [--dry-run] [--summary-file <path>] [-- <dotnet test args>]` | Run only the affected tests. Exit code 3 when tests fail. |
-| `td test --shadow [--shadow-no-classify] [--shadow-*-timeout <time>] [--shadow-classify-budget <time>] [-- <dotnet test args>]` | Shadow mode: run every test your own `dotnet test` arguments run, compare the run with what the selection would have run, and rerun each failing class it would have left out to tell a miss from a flaky or pre-existing failure. Needs no license. Testing-platform projects need a build first and `--no-build`. See [docs/design/shadow-mode.md](docs/design/shadow-mode.md). |
+| `td test --shadow [--shadow-no-classify] [--shadow-*-timeout <time>] [--shadow-classify-budget <time>] [-- <dotnet test args>]` | Shadow mode: run every test your own `dotnet test` arguments run, compare the run with what the selection would have run, and rerun each failing class it would have left out to tell a miss from a flaky or pre-existing failure. Testing-platform projects need a build first and `--no-build`. See [docs/design/shadow-mode.md](docs/design/shadow-mode.md). |
 | `td record [--project <csproj>]... [-c <configuration>] [-f <tfm>] [--parallel <n>] [--no-build] [-- <dotnet test args>]` | Run all tests with coverage and write one map per test project to `.testdetta/coverage`. Arguments after `--` are your own `dotnet test` arguments: recording runs under their filter and settings. `--parallel` spreads the test classes over n test processes; `--no-build` records the output of an earlier build with the same configuration. A test project that does not build or run on the machine (a mobile app without its workload) gets no map and is decided by name; the command fails only when no map could be written. |
-| `td audit [--target-broken <n>] [--max-mutants <n>] [--budget <time>] [--parallel <n>] [--member <Type.Member>]... [-- <dotnet test args>]` | Check the selection on your own code: break members one at a time with IL mutants in a copy of the working tree (your sources and build output are only read), run every test that can see each change, and report every failing class the selection left out, with the 95% upper bound of the miss rate, the worst case counting unjudged changes as misses, and whether the run meets shadow mode's graduation criterion. Needs no license. Exit code 3 on a miss. See [docs/design/audit.md](docs/design/audit.md). |
-| `td license status` | Check the license and show what it covers. |
-| `td license install <license\|file>` | Store a license in `~/.testdetta/license`, for machines where no CI secret can hold it. |
+| `td audit [--target-broken <n>] [--max-mutants <n>] [--budget <time>] [--parallel <n>] [--member <Type.Member>]... [-- <dotnet test args>]` | Check the selection on your own code: break members one at a time with IL mutants in a copy of the working tree (your sources and build output are only read), run every test that can see each change, and report every failing class the selection left out, with the 95% upper bound of the miss rate, the worst case counting unjudged changes as misses, and whether the run meets shadow mode's graduation criterion. Exit code 3 on a miss. See [docs/design/audit.md](docs/design/audit.md). |
 
 Shared options: `--base <ref>` (default `origin/main`), `--repo <path>`, `--maps-dir <dir>` (coverage
 maps outside the repository, see [docs/ci.md](docs/ci.md)), `-v` for debug logs on stderr,
@@ -145,7 +143,7 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 
 | Input | Default | |
 |---|---|---|
-| `mode` | | `test` (run affected tests), `shadow` (run every test and report what the selection would have left out; no license), `record` (record coverage maps), `audit` (break your code one change at a time in a copy and check the selection; no license) |
+| `mode` | | `test` (run affected tests), `shadow` (run every test and report what the selection would have left out), `record` (record coverage maps), `audit` (break your code one change at a time in a copy and check the selection) |
 | `base` | the PR's base branch | branch to compare with in test and shadow modes |
 | `configuration` | `Debug` | build configuration |
 | `projects` | all test projects | record mode: `.csproj` paths, one per line |
@@ -163,21 +161,9 @@ up to `max-map-age` commits before it (finding that one lists the caches, which 
 | `audit-budget` | `4h` | audit mode: start no change after this long; a change still running finishes, so leave headroom under `timeout-minutes` (the report says by how much it ran over) |
 | `audit-parallel` | `1` | audit mode: changes tested at once, each in its own copy |
 | `github-token` | `github.token` | test, shadow and audit modes: lists the Actions caches to find the newest map |
-| `license` | | test mode: the TestDetta license, from a secret such as `TESTDETTA_LICENSE`; public repositories need none |
+| `license` | | deprecated and ignored: TestDetta needs no license; still accepted so existing workflows keep working, with a notice in the log |
 | `working-directory` | `.` | any directory inside the repository |
 | `setup-dotnet` | `true` | install the .NET 10 SDK TestDetta runs on |
-
-## License
-
-Public repositories need no license on GitHub Actions and GitLab CI, which say whether a repository
-is public; on other CI systems and on developer machines every repository counts as private. Private
-ones pass the license string in `TESTDETTA_LICENSE` (or a file named by `TESTDETTA_LICENSE_FILE`); in GitHub
-Actions, through the `license` input from a secret. Only `affected`, `test` (not `test --shadow`) and
-`license status` read the license; `record`, `test --shadow` and `audit` run every test anyway.
-`td license status` shows what a license covers. Without a valid license every test runs; the build never
-fails because of it. A subscription's license runs at most 40 days ahead and renews itself through the
-daily refresh; machines that cannot reach the license service use an annual license file and set
-`TESTDETTA_LICENSE_REFRESH=off` (see [docs/ci.md](docs/ci.md)).
 
 ## Other CI systems
 
@@ -244,3 +230,13 @@ and the details are in [docs/ci.md](docs/ci.md).
 
 .NET 10 SDK. `dotnet build`, `dotnet test` (the `Category=Slow` test builds and records a sample
 project). Coding guidelines: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Sponsors
+
+TestDetta is free and open source for every repository, public or private, on any CI and on
+developer machines. It is built by one person; if it saves your team test time, you can help it go
+on through [GitHub Sponsors](https://github.com/sponsors/selcukgural): monthly or once.
+
+## License
+
+[Apache-2.0](LICENSE)

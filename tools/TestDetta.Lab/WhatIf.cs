@@ -6,9 +6,8 @@ namespace TestDetta.Lab;
 
 /// <summary>
 /// Answers "what does this change select, and why?" for a working tree, with the maps the repository holds: the
-/// analysis <c>td affected</c> runs, without the license check (which made a local experiment select everything until
-/// an environment variable said the repository was public) and with every class's decision and evidence, which the
-/// CLI shows only in its debug log.
+/// analysis <c>td affected</c> runs, with every class's decision and evidence, which the CLI shows only in its debug
+/// log.
 /// </summary>
 internal static class WhatIf
 {

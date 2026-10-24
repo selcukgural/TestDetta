@@ -6,7 +6,7 @@ branding:
 
 inputs:
   mode:
-    description: "'test' on pull requests (run affected tests), 'shadow' on pull requests while you evaluate TestDetta (run every test, report what the selection would have left out, keep the report as an artifact; needs no license), 'record' on the default branch (record coverage maps), 'audit' on a schedule (break members of your code one at a time in a copy of the working tree, check the selection ran every test that failed, keep the report as an artifact; needs no license)."
+    description: "'test' on pull requests (run affected tests), 'shadow' on pull requests while you evaluate TestDetta (run every test, report what the selection would have left out, keep the report as an artifact), 'record' on the default branch (record coverage maps), 'audit' on a schedule (break members of your code one at a time in a copy of the working tree, check the selection ran every test that failed, keep the report as an artifact)."
     required: true
   base:
     description: Branch to compare with in test and shadow modes. Defaults to the pull request's base branch.
@@ -97,7 +97,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   license:
-    description: "Test mode only. The TestDetta license string, passed from a repository or organization secret such as TESTDETTA_LICENSE. Public repositories need none, and shadow and audit modes never read it. Without a valid license every test runs. The job never fails because of it."
+    description: "Deprecated and ignored: TestDetta is free and open source and reads no license. Still accepted so workflows that pass it keep working, with a notice; remove it."
     required: false
     default: ''
   working-directory:
@@ -112,6 +112,13 @@ inputs:
 runs:
   using: composite
   steps:
+    # The license input is kept only so that workflows written for the paid versions keep working. Its value is
+    # never read, printed or passed on.
+    - name: Note the deprecated license input
+      if: inputs.license != ''
+      shell: bash
+      run: echo "::notice::TestDetta is free and open source and reads no license. The license input is ignored; remove it from the workflow."
+
     # In shadow mode nothing before the tests may fail the job: a step that cannot do its part says why, sets
     # "skip", and the shadow step then runs the team's plain dotnet test instead of TestDetta.
     - name: Check git history
@@ -276,7 +283,6 @@ runs:
         DRIFT_FALLBACK: ${{ inputs.drift-fallback }}
         NON_CODE_FILES: ${{ inputs.non-code-files }}
         NOT_BUILD_INPUTS: ${{ inputs.not-build-inputs }}
-        TESTDETTA_LICENSE: ${{ inputs.license }}
       run: |
         read -r -a extra <<< "$EXTRA_ARGS"
         nonCode=()
@@ -287,7 +293,7 @@ runs:
     # Shadow mode (docs/design/shadow-mode.md): every test runs as without TestDetta and the job's result is
     # that run's; the report says what the selection would have left out. dotnet test runs as given (one command
     # for a solution) when its reports can be matched to test projects, otherwise per project, and the report
-    # says why. No license is read and TestDetta sends nothing, so the license secret is not passed to this step.
+    # says why. TestDetta itself sends nothing.
     # When a step before could not do its part, or td ends without a result of the tests (a crash, an invalid
     # option), the team's own dotnet test runs here instead, with the same arguments, and the summary says why.
     - name: Run every test in shadow mode
@@ -379,9 +385,8 @@ runs:
         retention-days: 90
 
     # The audit (docs/design/audit.md): every change is written into a copy of the working tree under RUNNER_TEMP,
-    # tested there and taken out again; the checkout and its build output are only read. No license is read and
-    # TestDetta itself sends nothing (the builds in the copy restore packages as the team's do), so the license
-    # secret is not passed to this step. Meant for a schedule: it runs for hours.
+    # tested there and taken out again; the checkout and its build output are only read. TestDetta itself
+    # sends nothing (the builds in the copy restore packages as the team's do). Meant for a schedule: it runs for hours.
     - name: Audit the selection on your code
       if: inputs.mode == 'audit'
       shell: bash

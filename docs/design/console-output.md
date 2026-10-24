@@ -53,7 +53,7 @@ background often does not on the other.
 | Heading, number | bold | bold | bold |
 | Muted (reasons, borders) | bright black | bright black | faint |
 | Good (filtered, saved, passed) | green | blue | plain |
-| Notice (all, license) | yellow | yellow | bold |
+| Notice (all) | yellow | yellow | bold |
 | Bad (failed) | bold red | bold magenta | bold underline |
 | Test project | blue | cyan | plain |
 

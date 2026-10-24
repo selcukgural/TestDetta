@@ -476,7 +476,7 @@ internal sealed partial class EvalSteps(EvalWorkspace workspace, RunSettings set
             var projects = TestProjects(graph).Where(p => full.ContainsKey(p.Path)).ToList();
             var record = new TestDetta.Cli.RecordSettings("Debug", [], settings.Parallelism, settings.Framework);
             var plan = new TestDetta.Cli.IncrementalRecording(workspace.LoggerFactory, workspace.Evaluator)
-                .Plan(new TestDetta.Cli.IncrementalContext(workspace.RepoRoot, graph, record, int.MaxValue, SelectionLicensed: true), projects, DateTimeOffset.UtcNow);
+                .Plan(new TestDetta.Cli.IncrementalContext(workspace.RepoRoot, graph, record, int.MaxValue), projects, DateTimeOffset.UtcNow);
             ClearMaps();
 
             var recorder = new CoverageRecorder(workspace.LoggerFactory);

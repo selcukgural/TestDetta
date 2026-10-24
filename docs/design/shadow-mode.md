@@ -3,8 +3,8 @@
 Status: first sketch 2026-10-05; widened 2026-10-07 at the owner's request: shadow mode is the way into
 cautious organisations, and it must put the evidence in front of them in full detail, with no room
 for misreading. Owner decisions (2026-10-07, all as proposed): classification on by default; history in
-CI artifacts for v1. Later the same day: shadow mode never needs a license, and in return shows decisions
-only for the tests the job ran; the team's own `dotnet test` command runs as given; graduation is 40 pull
+CI artifacts for v1. Later the same day: shadow mode shows decisions only for the tests the job ran (decided
+while the selection was sold; see "Decisions only for what ran"); the team's own `dotnet test` command runs as given; graduation is 40 pull
 requests in 30 days plus a `td audit` run on the team's code (below); `td audit` is part of v1. Reviewed
 2026-10-07 and fixed: the team's results are never touched, fail-open holds before and after the full run
 and in the Action, the per-project run keeps to the command's projects, and verdicts compare failing tests
@@ -13,7 +13,7 @@ and in the Action, the per-project run keeps to the command's projects, and verd
 ## Problem
 
 A team will not let a new tool skip its tests before it has seen the tool be right on its own pull
-requests. The corpus evaluation shows TestDetta is safe on open-source repositories, but a buyer wants
+requests. The corpus evaluation shows TestDetta is safe on open-source repositories, but a team wants
 to see it on their own code, with no risk while they look, and in a form they can check and forward to
 whoever signs off (a lead, an architect, security, an auditor). "Test skipping" alarms such readers;
 every claim must therefore be measured, reproducible and explained, and anything that could look like a
@@ -48,9 +48,8 @@ reported.
    covered: the team's own command failing because of something TestDetta added (an option a runner rejects;
    TestDetta adds options only when the build output shows they are known), and a runner killed from outside
    (the job's own timeout).
-2. **Nothing leaves the machine, and no license is needed.** Reports are files in the job (summary and
-   artifact). No upload, no telemetry, and in shadow mode TestDetta itself makes no network call: no license
-   is checked, refreshed or read, so the Action does not pass the license secret to that step. What does use
+2. **Nothing leaves the machine.** Reports are files in the job (summary and artifact). No upload, no
+   telemetry, and TestDetta itself makes no network call. What does use
    the network in a shadow job is not TestDetta's: the Action downloads the TestDetta package from nuget.org
    (checked against the SHA-512 in `tool.lock`) and lists and restores the maps in the Actions cache, as in
    test mode; the team's builds restore packages as without TestDetta; and the classification's rerun on the
@@ -58,12 +57,13 @@ reported.
 3. **Every number is measured, not estimated.** Time saved comes from the full run's own test reports, and
    the whole run's wall time is measured and shown next to it.
 4. **Every decision can be checked.** Each skipped class that ran says why, and the same decision can be
-   reproduced locally, without a license, from the same commit and maps.
+   reproduced locally from the same commit and maps.
 
-## Free, but no free selection
+## Decisions only for what ran
 
-Shadow mode needs no license, so it must not hand out what the license pays for: the selection, for tests
-the job did not pay to run. Two paths would do that, and both are closed.
+Decided 2026-10-07, while the selection was sold and shadow mode was the free way to try it: shadow mode was
+not to hand out the selection for tests the job did not run. TestDetta has been free and open source since
+2026-10-24 (`td affected` lists every decision for anyone); the behaviour below is unchanged.
 
 - **Nothing about the selection appears before the full run has finished**: not the plan, not the
   analysis's log (any level, debug included), not a file. The analysis still runs first, on the tree as the
@@ -84,7 +84,7 @@ the job did not pay to run. Two paths would do that, and both are closed.
   rewritten during the full run anywhere under the repository or in the team's results directory. A job whose
   own steps write such files during the run can make classes look as if they ran, and so see their
   decisions. The protection is meant against a cheap run of the team's ordinary job, not against a job built
-  to fake its reports; a team that goes that far can as well buy the license.
+  to fake its reports.
 
 ## Per pull request
 
@@ -120,10 +120,10 @@ the job did not pay to run. Two paths would do that, and both are closed.
    - time per project and class from the full run, and the part the selection would have run, next to
      TestDetta's own estimate (so the estimate's accuracy is visible too);
    - inputs for reproduction: TestDetta version and binary hash, base and head commits, map commits and
-     hashes, options; the command that reproduces the run and its decisions without a license (the same
-     `td test --shadow`, compared with the merge base, at the head commit with the same maps, whose hashes
-     are listed to compare), and, as an extra line, `td affected … --format json`, which lists every
-     decision without running tests and needs a license.
+     hashes, options; the command that reproduces the run and its decisions (the same `td test --shadow`,
+     compared with the merge base, at the head commit with the same maps, whose hashes are listed to
+     compare), and, as an extra line, `td affected … --format json`, which lists every decision without
+     running tests.
 
 ## Over time
 
@@ -147,7 +147,7 @@ Single pull requests convince nobody; a month of them does.
 
 ## `td audit`: TestDetta's own audit on the team's code (part of v1)
 
-The corpus method brought to the customer: on a schedule (nightly or weekly), `td audit` breaks members
+The corpus method brought to the team: on a schedule (nightly or weekly), `td audit` breaks members
 of the team's own code one at a time (the evaluator's IL mutants, no source change committed), runs the
 tests the full way, and checks that TestDetta's selection contains every class that failed. Result:
 "On your code: 160 changes, 104 broke tests, 0 missed (95% upper bound 2.8%)". This is the strongest
@@ -156,7 +156,7 @@ runners, so it costs their CI minutes: off by default, with a cap. It is part of
 because the graduation criteria need one run of it. Built 2026-10-07 (`td audit`, Action `mode: audit`); design and as built:
 docs/design/audit.md (the team's build output is never written: every mutant lives in a copy of the working
 tree; the selection per change is `td test`'s own, from the team's maps; the sample is uniform, not weighted
-toward covered members; no license, and no network call of TestDetta's own: the builds and test runs it starts
+toward covered members; no network call of TestDetta's own: the builds and test runs it starts
 restore packages as the team's own do).
 
 ## Next step after shadow: run first, then the rest
@@ -213,10 +213,10 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   unclassified. Tests: `ShadowRunTests` injects an unparsable and a DTD report, an unreadable folder, a
   solution filter of an unexpected shape, a broken `global.json` beside a project and in the team's
   directory, an exception before the run and one after it.
-- **No license** (owner decision 2026-10-07): `CliApp.Run` sends `--shadow` to `CliApp.Shadow` before the
-  license refresh is started, so shadow mode reads no license variable or file, refreshes nothing, and
-  TestDetta makes no network call; `td test` without `--shadow` and `td affected` check as before. `CliHost`
-  (environment and home directory) lets the tests see which variables a command reads.
+- **No network call**: `CliApp.Run` sends `--shadow` to `CliApp.Shadow`; TestDetta makes no network call
+  there, as in every command (until 2026-10-24 this dispatch also kept shadow mode clear of the license check
+  and refresh, both removed since). `CliHost` (the environment) lets the tests see which
+  variables a command reads.
 - **Held until the full run ends**: the analysis logs into a `StderrLoggerFactory` over a `StringWriter`
   (`ShadowAnalysis.Log`) instead of stderr; nothing is printed before the full run (the plan is no longer
   printed first). After the run the held log goes to stderr only when every class the selection decided
@@ -365,7 +365,7 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
   Markdown summary every repository value is a code span (`MarkdownSummary.Code`), and in a table cell its
   pipes are escaped as well (`MarkdownSummary.TableCode`), so a path with `|` cannot split a row.
 - **Action**: `mode: shadow` shares the base and map steps of `test`, runs `td test --shadow` with the
-  report in `$RUNNER_TEMP` and without the license secret. In shadow mode no step before the tests fails the
+  report in `$RUNNER_TEMP`. In shadow mode no step before the tests fails the
   job: a shallow checkout, a .NET setup that fails, a tool download, unpack or checksum failure, a missing or
   unrelated base branch, an invalid `max-map-age` and a failed cache restore each set a `skip` reason (or are
   `continue-on-error`), and the shadow step then runs the team's plain `dotnet test -c <configuration>
@@ -383,7 +383,7 @@ measures the same comparison. Skipping comes after, with the full suite kept on 
 Schema 2 (2026-10-07) against 1: decisions only for classes in the job's reports (`notRun` lists the rest
 by name), the project mode `not-shown`, a project `exitCode` that may be null, estimates only for projects
 all of whose known classes ran, the `run` object and `totals.wallSeconds`, `totals.notRunClasses` and
-`totals.unexplainedRun`, and `reproduction.command` is now the license-free `td test --shadow` with
+`totals.unexplainedRun`, and `reproduction.command` is now `td test --shadow` with
 `reproduction.explainCommand` next to it.
 
 Schema 3 (2026-10-07, review fixes) against 2: verdicts compare failing tests (`classes[].failedTests`, the
@@ -458,8 +458,8 @@ exist when its run started, so no report could be asked for; its `reason` says s
                 "--shadow-analysis-timeout 10m", "--shadow-rerun-timeout 15m", "--shadow-rerun-idle-timeout 5m",
                 "--shadow-base-timeout 30m", "--shadow-base-idle-timeout 10m", "--shadow-classify-budget 45m",   // or --shadow-no-classify
                 "-- Shop.slnx -c Release"],
-    "command": "td test --shadow --base <merge base> --max-map-age 50 --drift-fallback all … -- Shop.slnx -c Release",   // no license needed
-    "explainCommand": "td affected --base <merge base> --max-map-age 50 --drift-fallback all --format json"         // needs a license
+    "command": "td test --shadow --base <merge base> --max-map-age 50 --drift-fallback all … -- Shop.slnx -c Release",
+    "explainCommand": "td affected --base <merge base> --max-map-age 50 --drift-fallback all --format json"
   }
 }
 ```

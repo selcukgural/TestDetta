@@ -10,7 +10,7 @@ namespace TestDetta.Cli;
 /// team's library code are broken one at a time by the evaluator's IL mutants, in a copy of the working tree (the
 /// team's sources and build output are only read); every audited test project that can load a change runs completely;
 /// and TestDetta's selection for that change, made as <c>td test</c> makes it from the team's maps, must contain every
-/// class that broke. Needs no license, and TestDetta itself makes no network call (the builds and test runs it starts may restore
+/// class that broke. TestDetta itself makes no network call (the builds and test runs it starts may restore
 /// packages as the team's own do): like shadow mode it skips nothing.
 /// </summary>
 /// <param name="loggerFactory">Creates the loggers.</param>

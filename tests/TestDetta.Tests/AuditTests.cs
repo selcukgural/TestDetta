@@ -95,7 +95,7 @@ public sealed class AuditTests : IDisposable
 
         Assert.True(exit == 3, stdout.ToString());
         var report = Read();
-        Assert.Equal(3, report.GetProperty("schema").GetInt32());
+        Assert.Equal(4, report.GetProperty("schema").GetInt32());
         Assert.StartsWith("On your code: 3 changes, 2 broke tests, 1 MISSED (95% upper bound", report.GetProperty("verdict").GetString(), StringComparison.Ordinal);
         var graduation = report.GetProperty("graduation");
         Assert.False(graduation.GetProperty("met").GetBoolean());
@@ -105,7 +105,7 @@ public sealed class AuditTests : IDisposable
         Assert.Equal(0, report.GetProperty("run").GetProperty("overBudgetSeconds").GetDouble());
         Assert.False(report.GetProperty("run").TryGetProperty("overBudget", out _));
         Assert.Equal("sample", report.GetProperty("stopReason").GetString());
-        Assert.Contains("No license is needed", report.GetProperty("license").GetString(), StringComparison.Ordinal);
+        Assert.Contains("TestDetta itself made no network call", report.GetProperty("network").GetString(), StringComparison.Ordinal);
         var totals = report.GetProperty("totals");
         Assert.Equal(1, totals.GetProperty("caught").GetInt32());
         Assert.Equal(1, totals.GetProperty("missed").GetInt32());

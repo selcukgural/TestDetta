@@ -322,18 +322,14 @@ Reliability is shown (round 1: 3 misses of 2941 failing mutants, all fixed; roun
 and the rest of this file is mostly precision, which keeps growing. v1 is the finish line:
 
 1. Round 2c (every corpus repository, build of main, en-US) without a real miss.
-2. A customer can install and use TestDetta: README and docs/ci.md checked end to end, the GitHub Action
+2. A team can install and use TestDetta: README and docs/ci.md checked end to end, the GitHub Action
    (`action.yml`) run on a real repository from a fresh clone. Status 2026-10-04: README brought up
-   to date (MSBuild evaluation, symbols, license); the action runs on TestDetta itself (record mode
-   2026-10-03, pull request path 2026-09-30). Open: how customers get the action and the tool while
-   the repository is private (public action repository, released binaries or a NuGet tool).
-3. A licence can be bought and works: purchase through the Merchant of Record, key installed,
-   `td license status` green (see "Licensing independent of the payment provider"). Status: the
-   format, the check, the service, refresh and Polar webhooks are built
-   (docs/design/licensing.md), and the license string is e-mailed to the buyer through Resend
-   (2026-10-04; the portal comes later). Open: the production key (trusted at launch) and the
-   Polar product setup (tax exclusive, no trial on the products). Done 2026-10-07: the service on Cloud Run,
-   the sending domain, card-free trials from the site (docs/design/licensing.md, "Trials (as built)").
+   to date (MSBuild evaluation, symbols); the action runs on TestDetta itself (record mode
+   2026-10-03, pull request path 2026-09-30). How users get the action and the tool: the `TestDetta` package
+   on nuget.org and the public `TestDetta/action` (2026-10-08); the source repository is public since 2026-10-24.
+3. ~~Buying and using a license~~: dropped 2026-10-24: TestDetta is free and open source (Apache-2.0, every
+   repository). The license check, the license service and the payment flow were built and removed; they
+   remain in git history.
 4. A simple "what you saved" report: the existing per-class decisions and time estimate in the job
    summary, checked on a real run (item 4 below goes further after v1). Status: checked on Markdig
    2026-10-04 (16 of 177 classes, 93% of the recorded time saved, a reason per class).
@@ -347,7 +343,7 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    the report, and the Action's `mode: shadow` with the artifact, are built (as-built section of the
    design); every classification time limit is an option and an Action input, with defaults, under an
    overall budget (45 min) that never touches the full run. Since the owner's decisions of 2026-10-07:
-   shadow mode needs no license and TestDetta makes no network call in it, shows decisions only for the
+   TestDetta makes no network call in shadow mode, which shows decisions only for the
    classes the job ran (nothing of the selection before the full run ends), runs the team's own `dotnet test`
    command as given (a solution, a project, a directory or no argument; otherwise per project, with the
    reason in the report), and reports the whole run's wall time. Review fixes (2026-10-07, schema 3): the
@@ -362,14 +358,14 @@ and the rest of this file is mostly precision, which keeps growing. v1 is the fi
    shadow-mode and reviewer pages, replaying real pull request histories before a partner sees it; the base
    worktree does not see files above the repository root.
 7. **`td audit` on the team's own code** (owner, 2026-10-07: part of v1): the corpus method run on the
-   customer's repository (docs/design/shadow-mode.md, "`td audit`"): IL mutants of the team's members, the
+   team's repository (docs/design/shadow-mode.md, "`td audit`"): IL mutants of the team's members, the
    tests run the full way, and the selection checked against every class that failed. Graduation needs one
    run with at least 100 changes that broke tests, 0 missed, and the worst-case 95% upper bound (inconclusive
    and stopped changes counted as misses) at most 3.0% as shown, rounded up (owner, 2026-10-07; 2.95% at
    n = 100 with none unjudged); the report says per run whether it meets that and why not. The audit is needed
    because real failing pull requests in 30 days are too few for a meaningful bound (about 3/n for n of them). Status
    2026-10-07: built (docs/design/audit.md): `td audit` and the Action's `mode: audit` (for a schedule, the
-   report as an artifact for 90 days), no license and no network call of its own; every mutant lives in a copy of the
+   report as an artifact for 90 days), no network call of its own; every mutant lives in a copy of the
    working tree, so the team's sources and build output are only read (tested byte for byte after a normal run,
    a cancellation, a timeout and an exception); the selection per change is `td test --base HEAD` with the
    evaluator's edit given in memory (`AnalysisOptions.WorkingTreeOverlay`); the sample is uniform over every
@@ -457,12 +453,8 @@ repositories a change touches; the full corpus runs at milestones.
   (66 changes narrower by one class, 0 of 66 missed; carter, cliwrap, nodatime, serilog unchanged): too little for the
   added code. The width comes from the second channel, whose hits go to the class running at the time; separating it
   needs a rule for the test framework's frames and is open.
-- ~~**License service behind Cloud Run: forwarded headers not applied?**~~: done (2026-10-07). They were applied,
-  but `UseHsts()` ran before `UseForwardedHeaders`, so it saw plain HTTP. Forwarded headers now come first; HSTS
-  matches the site (1 year, subdomains). Checked on the deployed sandbox: HSTS sent, the per-address limit partitions
-  by client (this machine at 429 while Cloud Shell got 200 in the same minute), a forged `X-Forwarded-For` does not
-  escape it.
-- ~~**License service: `/healthz` does not reach the service on Cloud Run**~~: done (2026-10-07), now `/v1/health`.
+- ~~**Two fixes to the hosted service behind Cloud Run (forwarded headers before HSTS, the health route)**~~: done
+  2026-10-07; the service itself was dropped 2026-10-24: TestDetta is free and open source.
 - ~~**Eval: crash and confirmation rules are not symmetric**~~: done (2026-10-07, owner: switch, with a marked break
   in the round history). The evaluator judges by `td audit`'s rules (`MutantJudge`; docs/evaluation.md, "How mutants
   are judged"): a part left out that completes only without the mutant is a miss, a crash counts as caught only when
@@ -533,7 +525,7 @@ repositories a change touches; the full corpus runs at milestones.
      runs-r2c, pass `--cache` in the pool script, and measure a round.
    - ~~Tiers~~: nightly smoke corpus on GitHub done (6a1a57e; Scriban, Fluid, Carter, 20 mutants each,
      about 18 minutes on a 2-core runner; first run 0 of 47 missed). User chose nightly over per-commit
-     and kept the repository private (Actions minutes). On 2026-10-03 TestDetta had used 1,635 of the
+     (Actions minutes; the repository was private until 2026-10-24). On 2026-10-03 TestDetta had used 1,635 of the
      3,000 monthly minutes in three days, so the smoke corpus and the coverage recording became
      weekly (Monday) or by hand; a push runs only the quick job (no Slow tests, under 3 minutes). A run is compared with an earlier one
      (`--compare`, comparison.md: failures, new misses, wider or narrower selection and changed
@@ -601,13 +593,11 @@ repositories a change touches; the full corpus runs at milestones.
    - Evidence of safety: failures found on main that a PR's selection skipped (should be none), how
      often a fallback ran everything and why, so the numbers can be trusted.
    - Formats: GitHub job summary and PR comment (Markdown), JSON and CSV export, an HTML dashboard,
-     a badge, a weekly digest (Slack/e-mail), and an API for the hosted tier.
+     a badge, and a weekly digest (Slack/e-mail).
 5. **Method-level selection, measured first**: record buckets per test method as an option and
    compute how much a method-level filter would save over class-level before building it.
 
-- **Licensing independent of the payment provider** (2026-10-02): keys sold through a Merchant of
-  Record (Polar.sh primary, Paddle fallback) and keys from direct sales (Turkish corporate customers
-  with a TL e-Fatura) must work the same way, so the license check cannot depend on one provider's API.
+- ~~**Keys independent of the payment provider**~~ (2026-10-02): dropped 2026-10-24: TestDetta is free and open source.
 
 - ~~**Hang detection by idleness**~~ (done 2026-10-03): a mutant that deadlocked the test host (0% CPU)
   was only killed after the run timeout (80+ minutes on Newtonsoft.Json). Test runs of the evaluation
@@ -632,4 +622,4 @@ repositories a change touches; the full corpus runs at milestones.
 - Name: TestDetta is in use (testdetta.com, the social accounts, the GitHub organisation); the nuget.org
   package id `testdetta` and the Marketplace slug `testdetta` are free (both 404 on 2026-10-07). Open:
   a trademark search (owner: TÜRKPATENT, WIPO) and reserving the `TestDetta` ID prefix on nuget.org.
-- Paid tier: hosted map store and ROI history.
+- ~~Paid tier: hosted map store and ROI history~~: dropped 2026-10-24: TestDetta is free and open source.

@@ -15,12 +15,13 @@ internal static class AuditReport
     /// <summary>
     /// Version of the JSON report. 3 (2026-10-07): <c>graduation</c> (whether the run meets shadow mode's graduation
     /// criterion, and why not), <c>run.overBudgetSeconds</c>, <c>run.finishedAfterBudget</c> and <c>run.overBudget</c>.
+    /// 4 (2026-10-24): <c>license</c> replaced by <c>network</c>, since TestDetta reads no license any more.
     /// </summary>
-    public const int Schema = 3;
+    public const int Schema = 4;
 
-    /// <summary>What the report says about the license, for the owner and for reviewers.</summary>
-    public const string License =
-        "No license is needed and none was read: the audit runs every test that can see a change and skips nothing. TestDetta itself made no network call; the dotnet builds and test runs it started may restore packages, as your own do.";
+    /// <summary>What the report says about the network, for the owner and for reviewers.</summary>
+    public const string Network =
+        "TestDetta itself made no network call; the dotnet builds and test runs it started may restore packages, as your own do.";
 
     /// <summary>The name of an outcome in the reports.</summary>
     /// <param name="outcome">The outcome.</param>
@@ -136,7 +137,7 @@ internal static class AuditReport
             stdout.WriteLine($"  not audited: {project.Path}: {project.Reason}");
         }
 
-        stdout.WriteLine($"  {License}");
+        stdout.WriteLine($"  {Network}");
         if (result.LeftBehind is { } left)
         {
             stdout.WriteLine($"  the work folder {left} could not be deleted; the next td audit removes it");
@@ -163,7 +164,7 @@ internal static class AuditReport
             json.WriteString("error", error);
         }
 
-        json.WriteString("license", License);
+        json.WriteString("network", Network);
         json.WriteStartObject("totals");
         json.WriteNumber("changes", result.Changes);
         json.WriteNumber("broke", result.Broke);
@@ -358,7 +359,7 @@ internal static class AuditReport
 
         if (mutant.Outcome == AuditOutcome.Missed)
         {
-            // The edit to make by hand, to see the same decision with td test or td affected (which needs a license).
+            // The edit to make by hand, to see the same decision with td test or td affected.
             json.WriteStartArray("edits");
             for (var i = 0; i < mutant.Target.Edits.Count; i++)
             {
@@ -498,7 +499,7 @@ internal static class AuditReport
             writer.WriteLine();
         }
 
-        writer.WriteLine($"Reproduce: {MarkdownSummary.Code(result.Reproduction.Command)} at {MarkdownSummary.Code(result.Reproduction.Head ?? "HEAD")}. {License}");
+        writer.WriteLine($"Reproduce: {MarkdownSummary.Code(result.Reproduction.Command)} at {MarkdownSummary.Code(result.Reproduction.Head ?? "HEAD")}. {Network}");
         writer.WriteLine();
     }
 

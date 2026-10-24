@@ -46,7 +46,7 @@ internal enum Role
     /// <summary>Good news: skipped work, saved time, passed tests.</summary>
     Good,
 
-    /// <summary>Something to notice: a whole project running, a license problem.</summary>
+    /// <summary>Something to notice: a whole project running, a warning in the log.</summary>
     Notice,
 
     /// <summary>A failure.</summary>

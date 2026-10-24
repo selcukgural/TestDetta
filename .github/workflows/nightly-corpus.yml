@@ -2,8 +2,8 @@ name: Nightly corpus
 
 # A small synthetic evaluation of real repositories every night: TestDetta must miss no failing test, and
 # the summary compares the night with the previous successful one (comparison.md).
-# Kept to about 30-40 minutes on a 2-core runner and run once a week (Monday night) so the private
-# repository's Actions minutes last; the full corpus runs on a dedicated machine. A miss or an
+# Kept to about 30-40 minutes on a 2-core runner and run once a week (Monday night), sized when the repository
+# was private and its Actions minutes were limited; the full corpus runs on a dedicated machine. A miss or an
 # evaluation error fails the run.
 on:
   schedule:

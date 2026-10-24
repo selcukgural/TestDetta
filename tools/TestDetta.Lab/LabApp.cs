@@ -20,7 +20,7 @@ internal static class LabApp
               * stands for any text (NLog.Targets.*, Plugin).
           lab whatif <repository> [--base <ref>]
               What the working tree's change against the base (default HEAD) selects with the maps in the repository,
-              and the evidence for every class. No license check: this is a development tool.
+              and the evidence for every class.
           lab ab <run A> <run B>
               Compares two evaluation runs (folders with <repository>/synthetic.json) mutant by mutant: shares,
               narrower and wider changes, misses on either side, and mutants only one side has.

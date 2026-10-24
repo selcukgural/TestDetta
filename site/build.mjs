@@ -3,7 +3,7 @@
 // English pages in src/ are the source: HTML fragments with a front-matter comment, wrapped in a
 // layout from partials/. Each other language has the same pages under i18n/<lang>/, and its
 // interface strings in i18n/strings/<lang>.json. {{key}} is replaced from site.json (product name,
-// prices, contact) and the language's strings, so the name and prices change in one place.
+// links, contact) and the language's strings, so the name and links change in one place.
 //
 // A translation records the English page it was made from (`source: <hash>` in its front matter).
 // The build fails when a translation is missing or its English page changed since, so no language
@@ -73,7 +73,7 @@ const versionAssets = (html) =>
     return `${attr}="/assets/${file}?v=${versioned.get(file)}"`;
   });
 
-// Front matter: a first-line comment such as <!-- title: Pricing; layout: page; description: ... -->.
+// Front matter: a first-line comment such as <!-- title: License; layout: docs; description: ... -->.
 function parse(text) {
   const match = text.match(/^<!--([\s\S]*?)-->\s*/);
   const meta = { layout: "page" };
@@ -166,7 +166,7 @@ function loadStrings() {
     if (missing.length > 0) {
       throw new Error(`i18n/strings/${lang}.json lacks ${missing.join(", ")}`);
     }
-    // Strings may use site.json values ({{seller}}), filled before the page sees them.
+    // Strings may use site.json values ({{name}}), filled before the page sees them.
     all[lang] = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, fill(v, site, `${lang}.json`, false)]));
   }
   return all;

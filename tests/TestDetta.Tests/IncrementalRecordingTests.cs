@@ -13,12 +13,12 @@ public sealed class IncrementalRecordingTests : IDisposable
 {
     private readonly GitRepoFixture _repo = new();
 
-    // A public repository needs no license, so selection runs.
+    // No console settings from the machine.
     private readonly CliHost _host;
 
     public IncrementalRecordingTests()
     {
-        _host = new CliHost(static name => name == "CI_PROJECT_VISIBILITY" ? "public" : null, Path.Combine(_repo.Root, ".testdetta", "home"));
+        _host = new CliHost(static _ => null);
         _repo.Write("global.json", """{ "sdk": { "version": "10.0.105", "rollForward": "latestFeature" } }""");
         _repo.Write(".gitignore", "bin/\nobj/\n.testdetta/\n");
         _repo.Write("src/Lib/Lib.csproj", """

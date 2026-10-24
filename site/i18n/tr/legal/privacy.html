@@ -1,4 +1,4 @@
-<!-- title: Gizlilik politikası; description: {{name}} ve bu web sitesi neleri toplar ve neleri asla toplamaz.; source: 8ba859b7b48a -->
+<!-- title: Gizlilik politikası; description: {{name}} ve bu web sitesi neleri toplar ve neleri asla toplamaz.; source: 97c461162ed4 -->
 <div class="wrap legal prose">
 <h1>Gizlilik politikası</h1>
 <p class="muted">Bu çeviri kolaylık için sunulmuştur; çelişki halinde İngilizce metin geçerlidir.</p>
@@ -6,31 +6,10 @@
 <p class="muted">Son güncelleme: {{legalUpdated}}. Veri sorumlusu: {{licensor}}, {{licensorCountry}}. İletişim: <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
 
 <h2>{{name}} aracı</h2>
-<p>{{name}}, CI'ınızda ve geliştiricilerinizin makinelerinde çalışır. Kaynak kodu, diff'leri, kapsam haritalarını, test adlarını, test sonuçlarını ya da derleme çıktısını ne bize ne de başka birine gönderir. GitHub Actions'ta {{name}} action'ı kapsam haritalarını deponuzun Actions önbelleğinde, shadow ve audit raporlarını da workflow çalıştırmalarınızın artifact'leri olarak, GitHub hesabınızın içinde tutar.</p>
-<ul>
-  <li><strong>Committer'lar.</strong> {{name}}, koltuk sayısını kontrol etmek için farklı commit yazarı e-postalarını yerel olarak sayar. E-postalar ve isimler hiçbir zaman gönderilmez, tarafımızca saklanmaz ve loglara yazılmaz.</li>
-  <li><strong>Lisans kontrolü.</strong> Lisans, {{name}} içine gömülü bir açık anahtarla çevrimdışı olarak doğrulanır.</li>
-  <li><strong>Lisans yenileme.</strong> {{name}} makine başına günde en fazla bir kez (boş bir ana dizinle başlayan CI runner'larında job başına bir kez) lisans servisimizden lisansınızın güncel sürümünü ister. İstek, lisansın kendisini (lisans sahibini, koltukları ve depo kapsamlarını belirtir) ve her ağ isteğinde olduğu gibi IP adresinizi taşır. Adres istek hızını sınırlamak için kullanılır; servisin kendisi onu saklamaz, servisi barındıran Google Cloud ise istek loglarında 30 gün tutar. Yenilemeyi tamamen kapatmak için <code>TESTDETTA_LICENSE_REFRESH=off</code> ayarlayın.</li>
-</ul>
+<p>{{name}}, CI'ınızda ve geliştiricilerinizin makinelerinde çalışır ve kendi adına hiçbir ağ çağrısı yapmaz. Hiçbir lisans okumaz ve kullanım verisi göndermez. Kaynak kodu, diff'leri, kapsam haritalarını, test adlarını, test sonuçlarını ya da derleme çıktısını ne bize ne de başka birine gönderir. GitHub Actions'ta {{name}} action'ı kapsam haritalarını deponuzun Actions önbelleğinde, shadow ve audit raporlarını da workflow çalıştırmalarınızın artifact'leri olarak, GitHub hesabınızın içinde tutar. Paket nuget.org'dan, nuget.org'un kendi şartları ve gizlilik politikası kapsamında indirilir.</p>
 
-<h2>Lisans satın alma</h2>
-<p>Satın almalar, satış aracısı (merchant of record) olarak {{seller}} tarafından yürütülür. {{seller}}, ödeme bilgilerinizi, fatura adresinizi ve vergi bilgilerinizi kendi gizlilik politikası kapsamında toplar; kart bilgilerini biz hiçbir zaman görmeyiz.</p>
-<p>{{seller}} tarafından bize adınız veya şirket adınız, ödeme sırasında kullanılan e-posta adresi, koltuk sayısı, girdiğiniz depo kapsamları ile abonelik durumu ve tarihleri iletilir. Bunları şu amaçlarla kullanırız:</p>
-<ul>
-  <li>lisans sahibinin adını, koltukları ve kapsamları içeren, ancak asla bir e-posta adresi içermeyen lisansınızı düzenlemek;</li>
-  <li>lisansı e-posta adresinize göndermek. Adres yalnızca o mesaj için e-posta gönderim sağlayıcımıza iletilir ve lisans kayıtlarımızda tutulmaz;</li>
-  <li>muhasebe ve vergi mevzuatının gerektirdiği şekilde her lisansın ve değişikliklerinin kaydını tutmak.</li>
-</ul>
-
-<h2>Deneme başlatma</h2>
-<p>Deneme formu bize e-posta adresinizi ve girdiğiniz depo desenlerini gönderir. Bunları şunlar için kullanırız:</p>
-<ul>
-  <li>deneme lisansını size e-postayla göndermek. Lisans depo desenlerini taşır, adresinizi asla taşımaz;</li>
-  <li>o tarihe kadar abone olmadıysanız, deneme bitmeden 3 gün önce tek bir hatırlatma göndermek;</li>
-  <li>her lisansta olduğu gibi deneme lisansının da kaydını tutmak: kimin için olduğu (kuruluş ya da hesap adı), depo desenleri ve tarihleri; asla bir e-posta adresi değil;</li>
-  <li>12 ay içinde kuruluş ve adres başına tek deneme tanımak. Bunun için adresin geri çevrilemeyen anahtarlı bir özetini ve belirttiğiniz kuruluşları saklarız.</li>
-</ul>
-<p>IP adresiniz, tek bir yerden gelebilecek istek sayısını sınırlamak için kullanılır. Servis onu saklamaz; Google Cloud'un istek logları 30 gün tutar.</p>
+<h2>Sponsorluk</h2>
+<p>Sponsorluklar GitHub Sponsors üzerinden yapılır. Ödemeyi GitHub kendi gizlilik bildirimi kapsamında alır; kart bilgilerini biz hiçbir zaman görmeyiz. GitHub bize hangi hesabın hangi kademeyle sponsor olduğunu gösterir; diğer bilgileri yalnızca GitHub'ın ayarlarının ve sponsorun tercihlerinin izin verdiği ölçüde paylaşır. Bunları yalnızca sponsorlukları yönetmek için kullanırız.</p>
 
 <h2>Destek</h2>
 <p>Bize e-posta gönderdiğinizde, size yardımcı olmak ve sonraki sorularınızı yanıtlamak için yazışmayı posta kutumuzda saklarız. E-posta sağlayıcımız bu mesajları bizim adımıza işler.</p>
@@ -40,17 +19,15 @@
 
 <h2>Verileri bizim adımıza kimler işler</h2>
 <ul>
-  <li>{{seller}}: ödemeler, vergiler ve faturalar (satış aracısı / merchant of record).</li>
-  <li>E-posta gönderim sağlayıcımız: lisans e-postalarının gönderimi.</li>
-  <li>E-posta ve barındırma sağlayıcılarımız: destek e-postaları, bu web sitesi ve lisans servisi.</li>
+  <li>GitHub: kaynak deposu ve GitHub Sponsors.</li>
+  <li>E-posta ve barındırma sağlayıcılarımız: destek e-postaları ve bu web sitesi.</li>
 </ul>
 <p>Bunların bir kısmı {{licensorCountry}} ve AB dışında faaliyet gösterir. Böyle durumlarda aktarımlar, yasanın gerektirdiği güvencelere dayanır.</p>
 
 <h2>Ne kadar süre saklarız</h2>
 <ul>
-  <li>Lisans kayıtları (deneme lisansları dahil): lisansın süresi boyunca ve sonrasında vergi ve muhasebe mevzuatının gerektirdiği süre kadar.</li>
   <li>Destek e-postaları: size yardımcı olmak için gerektiği sürece; ardından talep üzerine silinir.</li>
-  <li>Deneme e-posta adresleri: deneme bittikten 7 gün sonrasına kadar. Adresin özeti ve kuruluşlar: denemenin başlangıcından itibaren 13 ay (yukarıdaki 12 ay ve silinmeden önceki bir pay).</li>
+  <li>Sponsorluk kayıtları: sponsorluk sürdüğü sürece ve sonrasında vergi ve muhasebe mevzuatının gerektirdiği süre kadar.</li>
 </ul>
 
 <h2>Haklarınız</h2>

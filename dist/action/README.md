@@ -32,7 +32,6 @@ jobs:
         uses: TestDetta/action@<sha> # v{{version}}
         with:
           mode: test
-          license: ${{ secrets.TESTDETTA_LICENSE }}
 ```
 
 Pin the action to a commit SHA. Each release pins the `TestDetta` package from nuget.org in `tool.lock`
@@ -40,7 +39,8 @@ by version and SHA-512, and the action checks it before running anything.
 
 - Every input, the permissions and the job summary: https://testdetta.com/docs/github-actions/
 - GitLab CI, Jenkins, Azure DevOps, Bitbucket: https://testdetta.com/docs/other-ci/
-- Free for public repositories; private repositories get a 30-day trial: https://testdetta.com/pricing/
+- Free and open source for every repository, public or private: https://github.com/selcukgural/TestDetta
+- Sponsor its development: https://github.com/sponsors/selcukgural
 
 TestDetta runs inside your CI. No source, coverage or test results leave your machines.
-See [LICENSE.txt](LICENSE.txt).
+Apache-2.0, see [LICENSE](LICENSE).

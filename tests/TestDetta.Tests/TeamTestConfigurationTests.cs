@@ -167,17 +167,17 @@ public sealed class TeamTestConfigurationTests : IDisposable
             """);
         repo.Commit("base");
         var root = new GitClient(NullLogger<GitClient>.Instance).TopLevel(repo.Root);
-        var publicRepository = new CliHost(static name => name == "CI_PROJECT_VISIBILITY" ? "public" : null, Path.Combine(repo.Root, ".testdetta", "home"));
+        var host = new CliHost(static _ => null);
 
         var record = new StringWriter();
-        Assert.True(CliApp.Run(["record", "--repo", repo.Root], record, record, publicRepository) == 0, record.ToString());
+        Assert.True(CliApp.Run(["record", "--repo", repo.Root], record, record, host) == 0, record.ToString());
         var map = CoverageMapStore.Read(CoverageMapStore.PathFor(root, Path.Combine(root, "tests/Shop.Tests/Shop.Tests.csproj")))!;
         Assert.Empty(map.FailedClasses!);
         Assert.Contains(new CoveredMethod("Shop.Prices", "Net"), map.Classes["Shop.Tests.PriceTests"].Select(id => map.Methods[id]));
 
         repo.Replace("src/Shop/Prices.cs", "gross - 1", "gross + 1 - 2");
         var test = new StringWriter();
-        var exit = CliApp.Run(["test", "--repo", repo.Root, "--base", "HEAD"], test, test, publicRepository);
+        var exit = CliApp.Run(["test", "--repo", repo.Root, "--base", "HEAD"], test, test, host);
 
         Assert.True(exit == 0, test.ToString());
         Assert.Contains("Shop.Tests.PriceTests", test.ToString(), StringComparison.Ordinal);

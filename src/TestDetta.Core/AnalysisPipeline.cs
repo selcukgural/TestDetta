@@ -39,11 +39,6 @@ public sealed record AnalysisResult(
     /// </summary>
     public IReadOnlyList<NotBuildInputFile> NotBuildInputs { get; init; } = [];
 
-    /// <summary>The license check of this run (docs/design/licensing.md); null when it was not checked.</summary>
-    public Licensing.LicenseStatus? License { get; init; }
-
-    /// <summary>True when the license decided this run: without a covering license, every test runs.</summary>
-    public bool LicenseEnforced { get; init; }
 }
 
 /// <summary>
