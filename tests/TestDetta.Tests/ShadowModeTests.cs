@@ -792,7 +792,7 @@ public sealed class ShadowReportTests
         try
         {
             var project = ShadowCommand.Target(["-c", "Release", "--project=tests/A.Tests/A.Tests.csproj", "--no-build"], directory);
-            Assert.Equal((ShadowTargetKind.Project, Path.Combine(directory, "tests/A.Tests/A.Tests.csproj"), 2, 1), (project.Kind, project.Path, project.Index, project.Length));
+            Assert.Equal((ShadowTargetKind.Project, Path.GetFullPath(Path.Combine(directory, "tests", "A.Tests", "A.Tests.csproj")), 2, 1), (project.Kind, project.Path, project.Index, project.Length));
             Assert.Equal(["-c", "Release", "--no-build"], project.Without(["-c", "Release", "--project=tests/A.Tests/A.Tests.csproj", "--no-build"]));
             Assert.Equal(ShadowTargetKind.Solution, ShadowCommand.Target(["--solution:Shop.slnx"], directory).Kind);
             Assert.Equal(ShadowTargetKind.Other, ShadowCommand.Target(["--test-modules=bin/**/*.Tests.dll"], directory).Kind);

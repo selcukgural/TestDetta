@@ -112,7 +112,7 @@ public sealed class AssemblyInstrumenterTests : IDisposable
         var found = ThirdPartyAssemblies.Find(_directory, ["App.dll", "App.Tests.dll", "Tool.dll"]);
 
         Assert.Equal(
-            [Path.Combine(_directory, "Verify.dll"), Path.Combine(_directory, "runtimes/win/lib/net8.0/Snap.dll")],
+            [Path.Combine(_directory, "Verify.dll"), Path.Combine(_directory, "runtimes", "win", "lib", "net8.0", "Snap.dll")],
             found.Order(StringComparer.Ordinal));
     }
 

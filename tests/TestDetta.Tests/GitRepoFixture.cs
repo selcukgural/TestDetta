@@ -19,7 +19,9 @@ public sealed class GitRepoFixture : IDisposable
 
     public string Root { get; } = Path.Combine(Path.GetTempPath(), "testdetta-repo-" + Guid.NewGuid().ToString("N"));
 
-    public void Write(string relative, string content) => WriteBytes(relative, System.Text.Encoding.UTF8.GetBytes(content));
+    // Raw string literals carry the line ends of this file's checkout (CRLF on Windows with core.autocrlf); the files
+    // a test writes have LF on every machine, so its Replace calls and expected text match. Bytes go through WriteBytes.
+    public void Write(string relative, string content) => WriteBytes(relative, System.Text.Encoding.UTF8.GetBytes(content.ReplaceLineEndings("\n")));
 
     public void WriteBytes(string relative, byte[] content)
     {

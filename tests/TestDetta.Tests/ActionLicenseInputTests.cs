@@ -6,7 +6,8 @@ namespace TestDetta.Tests;
 /// </summary>
 public sealed class ActionLicenseInputTests
 {
-    private static readonly string Action = File.ReadAllText(Path.Combine(RepositoryRoot(), "action.yml"));
+    // A Windows checkout (core.autocrlf) has CRLF line ends; the assertions are written with LF.
+    private static readonly string Action = File.ReadAllText(Path.Combine(RepositoryRoot(), "action.yml")).ReplaceLineEndings("\n");
 
     [Fact]
     public void The_license_input_is_only_checked_for_a_notice_and_never_passed_on()
