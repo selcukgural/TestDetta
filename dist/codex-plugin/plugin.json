@@ -1,0 +1,39 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "testdetta",
+  "version": "0.1.0",
+  "description": "Run only the .NET tests a change can affect: the agent uses TestDetta's td instead of a full dotnet test.",
+  "author": {
+    "name": "Selçuk Güral",
+    "email": "support@testdetta.com",
+    "url": "https://github.com/selcukgural"
+  },
+  "homepage": "https://testdetta.com",
+  "repository": "https://github.com/selcukgural/TestDetta",
+  "license": "Apache-2.0",
+  "keywords": ["dotnet", "testing", "test-impact-analysis", "csharp"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "TestDetta",
+        "shortDescription": "Run only affected .NET tests",
+        "longDescription": "TestDetta compares a branch with its base, works out which .NET test projects and test classes can observe the change, and runs just those; when it cannot be sure, it runs more, never less. With this skill the agent runs td test where it would run a full dotnet test, reads td affected to find the tests that cover the code it is about to change, and suggests recording coverage maps instead of starting that long run itself. It needs the free td tool (dotnet tool install -g TestDetta). Free and open source under Apache-2.0; td runs on your machine and makes no network calls.",
+        "developerName": "Selçuk Güral",
+        "category": "Developer Tools",
+        "capabilities": [],
+        "websiteURL": "https://testdetta.com",
+        "supportURL": "https://github.com/selcukgural/TestDetta/issues",
+        "privacyPolicyURL": "https://testdetta.com/legal/privacy/",
+        "termsOfServiceURL": "https://testdetta.com/legal/terms/",
+        "defaultPrompt": [
+          "Run only the tests my changes can affect",
+          "Which test classes cover the method I am about to change?",
+          "Why did TestDetta select these tests?"
+        ],
+        "brandColor": "#0b6b4f",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      }
+    }
+  }
+}
