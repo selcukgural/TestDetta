@@ -1,4 +1,4 @@
-<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 6f0d37497f68 -->
+<!-- title: Nasıl karar verir; layout: docs; description: {{name}} bir git diff'ini çalıştırılacak test projelerine ve test sınıflarına nasıl dönüştürür.; source: 40ec4082e716 -->
 <h1>Nasıl karar verir</h1>
 <p class="lead">{{name}} seçimi adım adım ve yalnızca kanıtı olan yerlerde daraltır. İzleyemediğini bildiği her şeyde daha fazlasını çalıştırmaya geri döner; hiç göremediği birkaç kalıp <a href="/docs/limitations/">Sınırlamalar</a> altında listelenir.</p>
 
@@ -44,7 +44,7 @@
 <h2>Nedenini görmek</h2>
 <p><code>td affected</code> ve <code>td test --dry-run</code>, etkilenen her test projesini filtreli mi, tamamen mi yoksa hiç mi çalışacağının gerekçesiyle birlikte yazdırır; <code>td affected --format json</code> her test sınıfı için verilen kararı da ekler. <code>-v</code> her kararı stderr'e yazar; örneğin bir projenin neden etkilendiğini ya da bir sınıfın hangi değişikliği çalıştırdığını.</p>
 <pre><code>$ td test --dry-run --base origin/main
-TestDetta 0.5.0 · 1 changed file · 2 affected test projects
+TestDetta 0.5.1 · 1 changed file · 2 affected test projects
 Tests to run
 ┌──────────────────┬──────────┬─────────┬───────┬──────────────────────────────────────────────────────────┐
 │ Test project     │ Run      │ Classes │ Saved │ Why                                                      │

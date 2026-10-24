@@ -65,6 +65,9 @@ created, the site and README pinned to it.
 0.5.0 (2026-10-24, shadow mode shows every decision and its JSON report moves to schema 5, #92; a Claude Code plugin
 marketplace and a skill for Codex and ChatGPT, #94-#96; no map format change): `TestDetta/action` at `6afa8c0` with tags
 `v0.5.0` and `v0`, GitHub release created, the site and README pinned to it.
+0.5.1 (2026-10-25, Windows supported: .NET Framework test projects record there and signed outputs load, the whole
+suite runs on Windows for every pull request, #100; no map format change): `TestDetta/action` at `2f1a6da` with tags
+`v0.5.1` and `v0`, GitHub release created, the site and README pinned to it.
 
 ## Later (known, not blocking)
 
