@@ -210,7 +210,7 @@ internal sealed class AuditWorkspace : IDisposable
                     {
                         pending.Push(directory.FullName);
                     }
-                    else if (!Paths.IsUnder(Paths.ResolveLinks(directory.FullName), copy))
+                    else if (!Paths.IsUnder(Paths.ResolveLinks(directory.FullName), Paths.Normalize(copy)))
                     {
                         throw new IOException($"{directory.FullName} is a link to {Paths.ResolveLinks(directory.FullName)}, outside the working copy; a build there would write your own files");
                     }
