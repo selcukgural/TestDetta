@@ -550,7 +550,7 @@ public sealed class AuditUnitTests
         try
         {
             var project = Path.Combine(copy, "src", "Lib", "Lib.csproj");
-            string Relative(string p) => Path.GetRelativePath(copy, p);
+            string Relative(string p) => Path.GetRelativePath(copy, p).Replace('\\', '/');
             List<AuditOutputPath> inside = [new(project, "net10.0", "OutputPath", Path.Combine(copy, "src", "Lib", "bin", "Debug", "net10.0"))];
             Assert.Null(AuditOutputPaths.Outside(copy, [project], inside, Relative));
 

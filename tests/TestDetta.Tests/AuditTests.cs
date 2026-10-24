@@ -317,7 +317,7 @@ public sealed class AuditTests : IDisposable
         Assert.Equal(1, exit);
         var report = Read();
         Assert.Equal("error", report.GetProperty("stopReason").GetString());
-        Assert.Contains("writes outside the working copy: its BaseOutputPath is " + outside, report.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Contains("writes outside the working copy: its BaseOutputPath is " + Paths.Normalize(outside), report.GetProperty("error").GetString(), StringComparison.Ordinal);
         Assert.DoesNotContain("without changes", stdout.ToString(), StringComparison.Ordinal);
         Assert.Equal(files, Directory.GetFiles(outside, "*", SearchOption.AllDirectories).ToDictionary(static f => f, static f => File.GetLastWriteTimeUtc(f)));
         Assert.Empty(Directory.GetDirectories(_work, AuditWorkspace.Prefix + "*"));

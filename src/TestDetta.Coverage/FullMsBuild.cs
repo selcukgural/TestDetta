@@ -92,7 +92,8 @@ internal sealed class FullMsBuild(ILogger logger, string msbuild)
                     || text.Contains(relative.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)
                     || text.Contains($"\"{fileName}\"", StringComparison.OrdinalIgnoreCase))
                 {
-                    return solution;
+                    // Enumerated under a normalized folder, the name joins it with '\' on Windows.
+                    return Paths.Normalize(solution);
                 }
             }
 
