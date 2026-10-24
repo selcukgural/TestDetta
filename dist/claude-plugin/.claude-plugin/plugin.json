@@ -1,5 +1,6 @@
 {
   "name": "testdetta",
+  "displayName": "TestDetta",
   "description": "Run only the .NET tests a change can affect: the agent uses td instead of a full dotnet test, and the tests a session's changes reach run before it hands back",
   "version": "0.1.0",
   "author": {
@@ -7,7 +8,16 @@
     "url": "https://github.com/selcukgural"
   },
   "homepage": "https://testdetta.com",
+  "documentationUrl": "https://testdetta.com/docs/ai-agents/",
+  "supportUrl": "https://github.com/selcukgural/TestDetta/issues",
+  "privacyPolicyUrl": "https://testdetta.com/legal/privacy/",
+  "termsOfServiceUrl": "https://testdetta.com/legal/terms/",
   "repository": "https://github.com/selcukgural/TestDetta",
   "license": "Apache-2.0",
-  "keywords": ["dotnet", "testing", "test-impact-analysis", "csharp"]
+  "keywords": [
+    "dotnet",
+    "testing",
+    "test-impact-analysis",
+    "csharp"
+  ]
 }

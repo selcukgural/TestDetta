@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Tests of scripts/stop-hook.sh against a fake td in a throwaway git repository.
-# Run: bash dist/claude-plugin/tests/stop-hook.test.sh
+# Tests of dist/claude-plugin/scripts/stop-hook.sh against a fake td in a throwaway git repository.
+# Run: bash tests/claude-plugin-stop-hook.test.sh
 set -u
 
 here="$(cd "$(dirname "$0")" && pwd)"
-hook="$here/../scripts/stop-hook.sh"
+hook="$here/../dist/claude-plugin/scripts/stop-hook.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 

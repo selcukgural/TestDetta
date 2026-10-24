@@ -111,4 +111,4 @@ jobs:
         run: dotnet test --nologo --filter "Category!=Slow&Category!=Legacy"
 
       - name: Test the Claude Code plugin's Stop hook
-        run: bash dist/claude-plugin/tests/stop-hook.test.sh
+        run: bash tests/claude-plugin-stop-hook.test.sh
