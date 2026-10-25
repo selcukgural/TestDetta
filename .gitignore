@@ -485,3 +485,6 @@ $RECYCLE.BIN/
 
 # TestDetta coverage maps are tied to one commit; they are recorded, not committed.
 .testdetta/
+
+# Sales material kept next to the code and never published: customer names and prices go into it.
+presentations/
