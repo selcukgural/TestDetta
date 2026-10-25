@@ -68,6 +68,9 @@ marketplace and a skill for Codex and ChatGPT, #94-#96; no map format change): `
 0.5.1 (2026-10-25, Windows supported: .NET Framework test projects record there and signed outputs load, the whole
 suite runs on Windows for every pull request, #100; no map format change): `TestDetta/action` at `2f1a6da` with tags
 `v0.5.1` and `v0`, GitHub release created, the site and README pinned to it.
+0.5.2 (2026-10-25, recording .NET Framework outputs with facades no longer overflows the stack, #103; a PowerShell
+script for Windows agents with Azure DevOps and Jenkins examples, #104; no map format change): `TestDetta/action` at
+`8750db1` with tags `v0.5.2` and `v0`, GitHub release created, the site, README and dist/ci examples pinned to it.
 
 ## Later (known, not blocking)
 

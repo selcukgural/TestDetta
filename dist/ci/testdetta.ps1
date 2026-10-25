@@ -43,7 +43,7 @@ param(
     [string] $Target,
 
     # The TestDetta version to run. Pin it, as the GitHub Action pins its package.
-    [string] $Version = $(if ($env:TESTDETTA_VERSION) { $env:TESTDETTA_VERSION } else { '0.5.1' }),
+    [string] $Version = $(if ($env:TESTDETTA_VERSION) { $env:TESTDETTA_VERSION } else { '0.5.2' }),
 
     # Where the tool is installed, one folder per version. Default: the agent's tool cache, else the user profile.
     [string] $ToolsDir,

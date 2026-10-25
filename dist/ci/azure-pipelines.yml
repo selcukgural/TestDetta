@@ -22,7 +22,7 @@ pool:
 variables:
   TESTDETTA_MAPS: $(Pipeline.Workspace)\testdetta-maps
   TESTDETTA_PR_MODE: shadow          # shadow while you evaluate TestDetta, then test
-  TESTDETTA_VERSION: 0.5.1           # pin it; raise it on purpose
+  TESTDETTA_VERSION: 0.5.2           # pin it; raise it on purpose
 
 steps:
   - checkout: self
